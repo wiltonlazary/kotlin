@@ -26,8 +26,8 @@ import org.jetbrains.jet.descriptors.serialization.descriptors.DeserializedClass
 import org.jetbrains.jet.descriptors.serialization.descriptors.DeserializedPackageMemberScope;
 import org.jetbrains.jet.lang.descriptors.ClassDescriptor;
 import org.jetbrains.jet.lang.descriptors.PackageFragmentDescriptor;
+import org.jetbrains.jet.lang.resolve.java.JavaDescriptorResolver;
 import org.jetbrains.jet.lang.resolve.java.resolver.ErrorReporter;
-import org.jetbrains.jet.lang.resolve.java.resolver.JavaClassResolver;
 import org.jetbrains.jet.lang.resolve.java.resolver.JavaPackageFragmentProvider;
 import org.jetbrains.jet.lang.resolve.kotlin.header.KotlinClassHeader;
 import org.jetbrains.jet.lang.resolve.kotlin.header.SerializedDataHeader;
@@ -51,7 +51,7 @@ public final class DeserializedDescriptorResolver {
 
     private JavaPackageFragmentProvider javaPackageFragmentProvider;
 
-    private JavaClassResolver javaClassResolver;
+    private JavaDescriptorResolver javaDescriptorResolver;
 
     private ErrorReporter errorReporter;
 
@@ -60,7 +60,7 @@ public final class DeserializedDescriptorResolver {
         @Nullable
         @Override
         public ClassDescriptor findClass(@NotNull ClassId classId) {
-            return javaClassResolver.resolveClass(kotlinFqNameToJavaFqName(classId.asSingleFqName()), INCLUDE_KOTLIN_SOURCES);
+            return javaDescriptorResolver.resolveClass(kotlinFqNameToJavaFqName(classId.asSingleFqName()), INCLUDE_KOTLIN_SOURCES);
         }
 
         @NotNull
@@ -81,8 +81,8 @@ public final class DeserializedDescriptorResolver {
     }
 
     @Inject
-    public void setJavaClassResolver(JavaClassResolver javaClassResolver) {
-        this.javaClassResolver = javaClassResolver;
+    public void setJavaDescriptorResolver(JavaDescriptorResolver javaDescriptorResolver) {
+        this.javaDescriptorResolver = javaDescriptorResolver;
     }
 
     @Inject
