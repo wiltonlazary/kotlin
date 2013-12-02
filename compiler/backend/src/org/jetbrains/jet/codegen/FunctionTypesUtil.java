@@ -152,6 +152,9 @@ public class FunctionTypesUtil {
         functionImpl.setTypeParameterDescriptors(functionInterface.getDefaultType().getConstructor().getParameters());
         functionImpl.createTypeConstructor();
 
+        //// Activate...
+        //functionImpl.getDefaultType();
+
         return functionImpl;
     }
 
