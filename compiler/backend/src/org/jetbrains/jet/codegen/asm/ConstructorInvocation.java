@@ -16,15 +16,17 @@
 
 package org.jetbrains.jet.codegen.asm;
 
+import java.util.List;
+
 public class ConstructorInvocation {
 
     private final String typeDesc;
 
-    private final boolean isInlinable;
+    private final List<InlinableAccess> access;
 
-    ConstructorInvocation(String typeDesc, boolean isInlinable) {
+    ConstructorInvocation(String typeDesc, List<InlinableAccess> access) {
         this.typeDesc = typeDesc;
-        this.isInlinable = isInlinable;
+        this.access = access;
     }
 
     public String getTypeDesc() {
@@ -32,6 +34,10 @@ public class ConstructorInvocation {
     }
 
     public boolean isInlinable() {
-        return isInlinable;
+        return !access.isEmpty();
+    }
+
+    public List<InlinableAccess> getAccess() {
+        return access;
     }
 }

@@ -16,18 +16,31 @@
 
 package org.jetbrains.jet.codegen.asm;
 
-class InlinableInvocation {
+import org.jetbrains.annotations.Nullable;
+
+class InlinableAccess {
 
     public final int index;
 
     public final boolean inlinable;
 
-    InlinableInvocation(int index, boolean isInlinable) {
+    private ClosureInfo info;
+
+    InlinableAccess(int index, boolean isInlinable) {
         this.index = index;
         inlinable = isInlinable;
     }
 
     public boolean isInlinable() {
         return inlinable;
+    }
+
+    @Nullable
+    public ClosureInfo getInfo() {
+        return info;
+    }
+
+    public void setInfo(ClosureInfo info) {
+        this.info = info;
     }
 }
