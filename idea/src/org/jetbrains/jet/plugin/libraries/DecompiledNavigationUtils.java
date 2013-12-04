@@ -100,7 +100,7 @@ public final class DecompiledNavigationUtils {
             return null;
         }
         VirtualFileFinder fileFinder = ServiceManager.getService(project, VirtualFileFinder.class);
-        VirtualFile virtualFile = fileFinder.find(containerFqName);
+        VirtualFile virtualFile = fileFinder.find(containerFqName, true);
         if (virtualFile == null) {
             return null;
         }

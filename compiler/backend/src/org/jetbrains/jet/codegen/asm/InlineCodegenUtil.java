@@ -98,7 +98,7 @@ public class InlineCodegenUtil {
     @Nullable
     public static VirtualFile findVirtualFile(@NotNull Project project, @NotNull FqName containerFqName) {
         VirtualFileFinder fileFinder = ServiceManager.getService(project, VirtualFileFinder.class);
-        return fileFinder.find(containerFqName);
+        return fileFinder.find(containerFqName, true);
     }
 
     //TODO: navigate to inner classes

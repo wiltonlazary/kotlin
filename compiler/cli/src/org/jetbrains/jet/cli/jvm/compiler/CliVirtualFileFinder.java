@@ -35,9 +35,9 @@ public class CliVirtualFileFinder implements VirtualFileFinder {
 
     @Nullable
     @Override
-    public VirtualFile find(@NotNull FqName className) {
+    public VirtualFile find(@NotNull FqName className, boolean onlyKotlin) {
         for (VirtualFile root : classPath) {
-            VirtualFile fileInRoot = findFileInRoot(className.asString(), root);
+            VirtualFile fileInRoot = findFileInRoot(className.asString(), root, onlyKotlin);
             if (fileInRoot != null) {
                 return fileInRoot;
             }
@@ -47,7 +47,7 @@ public class CliVirtualFileFinder implements VirtualFileFinder {
 
     //NOTE: copied with some changes from CoreJavaFileManager
     @Nullable
-    private static VirtualFile findFileInRoot(@NotNull String qName, @NotNull VirtualFile root) {
+    private static VirtualFile findFileInRoot(@NotNull String qName, @NotNull VirtualFile root, boolean onlyKotlin) {
         String pathRest = qName;
         VirtualFile cur = root;
 
@@ -71,7 +71,8 @@ public class CliVirtualFileFinder implements VirtualFileFinder {
                 return null;
             }
             //NOTE: currently we use VirtualFileFinder to find Kotlin binaries only
-            if (KotlinClassHeader.read(new VirtualFileKotlinClass(vFile)) != null) {
+            //HACK: lambdas class are kotlin one but they don't have headers so flag introduced
+            if (!onlyKotlin || KotlinClassHeader.read(new VirtualFileKotlinClass(vFile)) != null) {
                 return vFile;
             }
         }

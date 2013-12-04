@@ -24,5 +24,5 @@ import org.jetbrains.jet.lang.resolve.name.FqName;
 public interface VirtualFileFinder {
     // TODO: support scope
     @Nullable
-    VirtualFile find(@NotNull FqName className);
+    VirtualFile find(@NotNull FqName className, boolean onlyKotlin);
 }
