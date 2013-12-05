@@ -1,4 +1,10 @@
-inline fun calc(s: (Int) -> Int, noinline p: (Int) -> Int) : Int {
-    val z = p
-    return s(11) + z(11) + p(11)
+fun test1(): Int {
+    return calc( {(l : Int) -> 2*l},  {(l : Int) -> 4*l})
+}
+
+
+fun box(): String {
+    if (test1() != 110) return "test1: ${test1()}"
+
+    return "OK"
 }
