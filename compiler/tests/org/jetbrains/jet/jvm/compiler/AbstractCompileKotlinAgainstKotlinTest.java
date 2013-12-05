@@ -81,8 +81,8 @@ public abstract class AbstractCompileKotlinAgainstKotlinTest extends TestCaseWit
 
         ClassFileFactory factory1 = null, factory2 = null;
         try {
-            factory1 = (ClassFileFactory) compileA(new File(files.get(0)));
-            factory2 = (ClassFileFactory) compileB(new File(files.get(1)));
+            factory1 = (ClassFileFactory) compileA(new File(files.get(1)));
+            factory2 = (ClassFileFactory) compileB(new File(files.get(0)));
             invokeBox();
         } catch (Throwable e) {
             String result = "";
