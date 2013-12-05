@@ -1,11 +1,14 @@
 import test.*
 
-fun test1() : Long  {
-    val input = Input()
+
+fun Data.test1(d: Data) : Long  {
+    val input2 = Input(this)
+    val input = Input(this)
     return input.use<Input, Long>{
-        val output = Output()
+        val output = Output(d)
         output.use<Output,Long>{
-            input.copyTo(output)
+            with
+            input.copyTo(output, 10)
         }
     }
 }
@@ -13,7 +16,8 @@ fun test1() : Long  {
 
 fun box(): String {
 
-    if (test1() != 100.toLong()) return "test1: ${test1()}"
+    val result = Data().test1(Data())
+    if (result != 100.toLong()) return "test1: ${result}"
 
     return "OK"
 }

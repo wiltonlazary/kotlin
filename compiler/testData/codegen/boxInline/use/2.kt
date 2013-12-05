@@ -1,13 +1,15 @@
 package test
 
-public class Input : Closeable() {
+public class Data()
+
+public class Input(val d: Data) : Closeable {
     public fun data() : Int = 100
 }
-public  class Output : Closeable() {
+public  class Output(val d: Data) : Closeable {
     public fun doOutput(data: Int): Int = data
 }
 
-public open class Closeable {
+public open trait Closeable {
     open public fun close() {}
 }
 
@@ -31,6 +33,6 @@ public inline fun <T: Closeable, R> T.use(block: (T)-> R) : R {
 }
 
 
-public fun Input.copyTo(output: Output): Long {
+public fun Input.copyTo(output: Output, size: Int): Long {
     return output.doOutput(this.data()).toLong()
 }
