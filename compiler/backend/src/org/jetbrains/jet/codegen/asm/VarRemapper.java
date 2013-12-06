@@ -76,32 +76,40 @@ public abstract class VarRemapper {
         private final List<ParameterInfo> params;
         private final int actualParams;
 
+        private final int [] remapIndex;
+
         public ParamRemapper(int paramShift, int paramSize, int additionalParamsSize, List<ParameterInfo> params) {
             this.paramShift = paramShift;
             this.paramSize = paramSize;
             this.additionalParamsSize = additionalParamsSize;
             this.params = params;
 
-            int paramCount = 0;
+            int realSize = 0;
+            remapIndex = new int [params.size()];
+
             for (int i = 0; i < params.size(); i++) {
                 ParameterInfo info = params.get(i);
+
                 if (!info.isSkippedOrRemapped()) {
-                    paramCount += info.getType().getSize();
+                    remapIndex[i] = realSize;
+                    realSize += info.getType().getSize();
+                } else {
+                    remapIndex[i] = -1;
                 }
             }
-            actualParams = paramCount;
+            actualParams = realSize;
         }
 
         @Override
         public int doRemap(int index) {
             if (index < paramSize) {
                 ParameterInfo info = params.get(index);
-                if (info.isSkipped) {
+                if (info.isSkipped || remapIndex[index] == -1) {
                     throw new RuntimeException("Trying to access skipped parameter: " + info.type + " at " +index);
                 }
-                return info.getInlinedIndex();
+                return remapIndex[index];
             } else {
-                return paramShift + actualParams + index; //captured params not used directly in this inlined method, they used in closure
+                return actualParams - params.size() + index; //captured params not used directly in this inlined method, they used in closure
             }
         }
     }

@@ -171,7 +171,10 @@ public class InlineCodegen extends InlineTransformer implements ParentCodegenAwa
 
         InliningInfo info = new InliningInfo(expressionMap, null, null, null, state);
         MethodInliner inliner = new MethodInliner(node, tempTypes, info);
-        inliner.doTransformAndMergeWith(codegen.getInstructionAdapter());
+
+
+        ShiftAdapter adapter = new ShiftAdapter(codegen.getInstructionAdapter(), initialFrameSize);
+        inliner.doTransformAndMergeWith(adapter);
         generateClosuresBodies();
         //if (inlineClosures) {
         //    removeClosureAssertions(node);
@@ -236,7 +239,9 @@ public class InlineCodegen extends InlineTransformer implements ParentCodegenAwa
         JvmMethodSignature jvmMethodSignature = typeMapper.mapSignature(descriptor);
         Method asmMethod = jvmMethodSignature.getAsmMethod();
         MethodNode methodNode = new MethodNode(Opcodes.ASM4, getMethodAsmFlags(descriptor, context.getContextKind()), asmMethod.getName(), asmMethod.getDescriptor(), jvmMethodSignature.getGenericsSignature(), null);
-        AnalyzerAdapter adapter = new AnalyzerAdapter("fake", methodNode.access, methodNode.name, methodNode.desc, methodNode);
+        //AnalyzerAdapter adapter = new AnalyzerAdapter("fake", methodNode.access, methodNode.name, methodNode.desc, methodNode);
+        MethodNode adapter = methodNode;
+
 
         functionCodegen.generateMethodBody(adapter, descriptor, context, jvmMethodSignature, new FunctionGenerationStrategy.FunctionDefault(state, descriptor, declaration) {
             @Override
@@ -244,6 +249,7 @@ public class InlineCodegen extends InlineTransformer implements ParentCodegenAwa
                 return false;
             }
         });
+        adapter.visitMaxs(20, 20);
 
         //return transformClosure(methodNode, info);
         return methodNode;
@@ -470,7 +476,7 @@ public class InlineCodegen extends InlineTransformer implements ParentCodegenAwa
     }
 
     @NotNull
-    private static String getNodeText(@Nullable MethodNode node) {
+    public static String getNodeText(@Nullable MethodNode node) {
         if (node == null) {
             return "Not generated";
         }

@@ -43,7 +43,7 @@ public class MethodInliner {
         this.typeMapper = parent.state.getTypeMapper();
     }
 
-    public Label doTransformAndMergeWith(InstructionAdapter adapter) {
+    public void doTransformAndMergeWith(InstructionAdapter adapter) {
         //analyze body
         try {
             markPlacesForInlineAndRemoveInlinable(node);
@@ -53,11 +53,16 @@ public class MethodInliner {
         }
         Label end = new Label();
 
+        //node.instructions.resetLabels();
         MethodNode transformedNode = doInline(node, end, null);
+        removeClosureAssertions(transformedNode);
+        transformedNode.instructions.resetLabels();
+
         VarRemapper.ParamRemapper remapper = new VarRemapper.ParamRemapper(0, parameters.size(), 0, parameters);
         RemapVisitor visitor = new RemapVisitor(adapter, end, remapper);
         transformedNode.accept(visitor);
-        return end;
+        visitor.visitLabel(end);
+
     }
 
     private MethodNode doInline(MethodNode node, Label end, final Map<Integer, ClosureInfo> expressionMap) {
@@ -87,9 +92,7 @@ public class MethodInliner {
 
                     MethodInliner inliner = new MethodInliner(info.getNode(), inlinableAccess.getParameters(), new InliningInfo(null, null, null, null, parent.state));
 
-                    Label lambdaEnd = inliner.doTransformAndMergeWith(new ShiftAdapter(this, valueParamShift));
-
-                    mv.visitLabel(lambdaEnd);
+                    inliner.doTransformAndMergeWith(new ShiftAdapter(this, valueParamShift));
 
                     Method bridge = typeMapper.mapSignature(ClosureCodegen.getInvokeFunction(info.getFunctionDescriptor())).getAsmMethod();
                     Method delegate = typeMapper.mapSignature(info.getFunctionDescriptor()).getAsmMethod();
@@ -114,15 +117,7 @@ public class MethodInliner {
 
     }
 
-    public MethodNode prepareNode(@NotNull MethodNode node, final int capturedVarSize) {
-        //shift all variable to captured var size
-        //MethodNode transformedNode = new MethodNode(node.access, node.name, node.desc, node.signature, null) {
-        //    @Override
-        //    public void visitVarInsn(int opcode, int var) {
-        //        super.visitVarInsn(opcode, var + capturedVarSize);
-        //    }
-        //};
-        //node.accept(transformedNode);
+    public MethodNode prepareNode(@NotNull MethodNode node) {
         return node;
     }
 
@@ -216,4 +211,29 @@ public class MethodInliner {
         }
         return null;
     }
+
+    private void removeClosureAssertions(MethodNode node) {
+        AbstractInsnNode cur = node.instructions.getFirst();
+        while (cur != null && cur.getNext() != null) {
+            AbstractInsnNode next = cur.getNext();
+            if (next.getType() == AbstractInsnNode.METHOD_INSN) {
+                MethodInsnNode methodInsnNode = (MethodInsnNode) next;
+                if (methodInsnNode.name.equals("checkParameterIsNotNull") && methodInsnNode.owner.equals("jet/runtime/Intrinsics")) {
+                    AbstractInsnNode prev = cur.getPrevious();
+                    assert prev.getType() == AbstractInsnNode.VAR_INSN && prev.getOpcode() == Opcodes.ALOAD;
+                    int varIndex = ((VarInsnNode) prev).var;
+                    ClosureInfo closure = getLambda(varIndex);
+                    if (closure != null) {
+                        node.instructions.remove(prev);
+                        node.instructions.remove(cur);
+                        cur = next.getNext();
+                        node.instructions.remove(next);
+                        next = cur;
+                    }
+                }
+            }
+            cur = next;
+        }
+    }
+
 }
