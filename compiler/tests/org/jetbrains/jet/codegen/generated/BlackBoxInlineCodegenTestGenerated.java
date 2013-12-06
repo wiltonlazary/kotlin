@@ -106,6 +106,11 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxCodegenT
         doTestMultiFile("compiler/testData/codegen/boxInline/simpleInt");
     }
     
+    @TestMetadata("simpleLambda")
+    public void testSimpleLambda() throws Exception {
+        doTestMultiFile("compiler/testData/codegen/boxInline/simpleLambda");
+    }
+    
     @TestMetadata("simpleObject")
     public void testSimpleObject() throws Exception {
         doTestMultiFile("compiler/testData/codegen/boxInline/simpleObject");

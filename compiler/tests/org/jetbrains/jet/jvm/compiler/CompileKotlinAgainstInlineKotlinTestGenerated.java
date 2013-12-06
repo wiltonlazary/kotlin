@@ -106,6 +106,11 @@ public class CompileKotlinAgainstInlineKotlinTestGenerated extends AbstractCompi
         doBoxTest("compiler/testData/codegen/boxInline/simpleInt");
     }
     
+    @TestMetadata("simpleLambda")
+    public void testSimpleLambda() throws Exception {
+        doBoxTest("compiler/testData/codegen/boxInline/simpleLambda");
+    }
+    
     @TestMetadata("simpleObject")
     public void testSimpleObject() throws Exception {
         doBoxTest("compiler/testData/codegen/boxInline/simpleObject");
