@@ -9,11 +9,15 @@ fun test1() : Int {
     }
 }
 
+fun test2() : Int {
+    val x = 1000
+    return use2() + x
+}
+
 
 fun box(): String {
-
-    val result = test1()
-    if (result != 100) return "test1: ${result}"
+    if (test1() != 100) return "test1: ${test1()}"
+    if (test2() != 1100) return "test1: ${test2()}"
 
     return "OK"
 }
