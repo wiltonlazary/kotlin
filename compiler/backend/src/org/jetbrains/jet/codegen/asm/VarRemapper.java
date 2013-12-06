@@ -34,6 +34,18 @@ public abstract class VarRemapper {
         }
     }
 
+    public static class Identical extends VarRemapper {
+
+
+        public Identical() {
+        }
+
+        @Override
+        public int doRemap(int index) {
+            return index;
+        }
+    }
+
     public static class ClosureRemapper extends ShiftRemapper {
 
         private final ClosureInfo info;

@@ -46,6 +46,8 @@ public class InlineCodegenUtil {
 
     public final static int API = Opcodes.ASM4;
 
+    public final static String INVOKE = "invoke";
+
     @Nullable
     public static MethodNode getMethodNode(
             InputStream classData,
@@ -131,4 +133,41 @@ public class InlineCodegenUtil {
         return findVirtualFile(project, containerFqName, true);
     }
 
+
+    public static boolean isInvokeOnInlinable(String owner, String name) {
+        return INVOKE.equals(name) && /*TODO: check type*/owner.contains("Function");
+    }
+
+    public static boolean isFunctionConstructorCall(@NotNull String internalName, @NotNull String name) {
+        if (!"<init>".equals(name)) {
+            return false;
+        }
+
+        return isFunctionLiteralClass(internalName);
+    }
+
+    public static boolean isFunctionLiteralClass(String internalName) {
+        String shortName = getLastNamePart(internalName);
+        int index = shortName.lastIndexOf("$");
+
+        if (index < 0) {
+            return false;
+        }
+
+        String suffix = shortName.substring(index + 1);
+        for (char c : suffix.toCharArray()) {
+            if (!Character.isDigit(c)) return false;
+        }
+        return true;
+    }
+
+    @NotNull
+    private static String getLastNamePart(@NotNull String internalName) {
+        int index = internalName.lastIndexOf("/");
+        return index < 0 ? internalName : internalName.substring(index + 1);
+    }
+
+    public static boolean isInitCallOfFunction(String owner, String name) {
+        return "<init>".equals(name);
+    }
 }

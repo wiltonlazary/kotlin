@@ -31,6 +31,8 @@ class ParameterInfo {
 
     public final int remapIndex;
 
+    public ClosureInfo lambda;
+
     ParameterInfo(Type type, boolean skipped, int remapIndex, int index) {
         this.type = type;
         this.isSkipped = skipped;
@@ -52,5 +54,14 @@ class ParameterInfo {
 
     public Type getType() {
         return type;
+    }
+
+
+    public ClosureInfo getLambda() {
+        return lambda;
+    }
+
+    public void setLambda(ClosureInfo lambda) {
+        this.lambda = lambda;
     }
 }

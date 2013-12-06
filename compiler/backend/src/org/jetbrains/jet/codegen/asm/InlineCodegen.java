@@ -21,6 +21,7 @@ import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.asm4.*;
+import org.jetbrains.asm4.commons.AnalyzerAdapter;
 import org.jetbrains.asm4.commons.Method;
 import org.jetbrains.asm4.tree.*;
 import org.jetbrains.asm4.tree.analysis.*;
@@ -165,24 +166,31 @@ public class InlineCodegen extends InlineTransformer implements ParentCodegenAwa
     }
 
     private void inlineCall(MethodNode node, boolean inlineClosures) {
-        if (inlineClosures) {
-            removeClosureAssertions(node);
-            try {
-                markPlacesForInlineAndRemoveInlinable(node);
-            }
-            catch (AnalyzerException e) {
-                throw new RuntimeException(e);
-            }
-        }
 
-        int valueParamSize = originalFunctionFrame.getCurrentSize();
-        int originalSize = codegen.getFrameMap().getCurrentSize();
         generateClosuresBodies();
-        putClosureParametersOnStack();
-        int additionalParams = codegen.getFrameMap().getCurrentSize() - originalSize;
-        VarRemapper remapper = new VarRemapper.ParamRemapper(initialFrameSize, valueParamSize, additionalParams, tempTypes);
 
-        doInline(node.access, node.desc, codegen.getMethodVisitor(), node, remapper.doRemap(valueParamSize + additionalParams), inlineClosures, remapper);
+        InliningInfo info = new InliningInfo(expressionMap, null, null, null, state);
+        MethodInliner inliner = new MethodInliner(node, tempTypes, info);
+        inliner.doTransformAndMergeWith(codegen.getInstructionAdapter());
+        generateClosuresBodies();
+        //if (inlineClosures) {
+        //    removeClosureAssertions(node);
+        //    try {
+        //        markPlacesForInlineAndRemoveInlinable(node);
+        //    }
+        //    catch (AnalyzerException e) {
+        //        throw new RuntimeException(e);
+        //    }
+        //}
+        //
+        //int valueParamSize = originalFunctionFrame.getCurrentSize();
+        //int originalSize = codegen.getFrameMap().getCurrentSize();
+        //generateClosuresBodies();
+        //putClosureParametersOnStack();
+        //int additionalParams = codegen.getFrameMap().getCurrentSize() - originalSize;
+        //VarRemapper remapper = new VarRemapper.ParamRemapper(initialFrameSize, valueParamSize, additionalParams, tempTypes);
+        //
+        //doInline(node.access, node.desc, codegen.getMethodVisitor(), node, remapper.doRemap(valueParamSize + additionalParams), inlineClosures, remapper);
     }
 
     private void removeClosureAssertions(MethodNode node) {
@@ -228,15 +236,17 @@ public class InlineCodegen extends InlineTransformer implements ParentCodegenAwa
         JvmMethodSignature jvmMethodSignature = typeMapper.mapSignature(descriptor);
         Method asmMethod = jvmMethodSignature.getAsmMethod();
         MethodNode methodNode = new MethodNode(Opcodes.ASM4, getMethodAsmFlags(descriptor, context.getContextKind()), asmMethod.getName(), asmMethod.getDescriptor(), jvmMethodSignature.getGenericsSignature(), null);
+        AnalyzerAdapter adapter = new AnalyzerAdapter("fake", methodNode.access, methodNode.name, methodNode.desc, methodNode);
 
-        functionCodegen.generateMethodBody(methodNode, descriptor, context, jvmMethodSignature, new FunctionGenerationStrategy.FunctionDefault(state, descriptor, declaration) {
+        functionCodegen.generateMethodBody(adapter, descriptor, context, jvmMethodSignature, new FunctionGenerationStrategy.FunctionDefault(state, descriptor, declaration) {
             @Override
             public boolean generateLocalVarTable() {
                 return false;
             }
         });
 
-        return transformClosure(methodNode, info);
+        //return transformClosure(methodNode, info);
+        return methodNode;
     }
 
     @NotNull
@@ -417,6 +427,8 @@ public class InlineCodegen extends InlineTransformer implements ParentCodegenAwa
 
         ClosureInfo info = new ClosureInfo(expression, typeMapper);
         expressionMap.put(index, info);
+
+        closureInfo.setLambda(info);
     }
 
     private void putClosureParametersOnStack() {

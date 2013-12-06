@@ -57,7 +57,7 @@ public abstract class InlineTransformer implements Inliner {
         this.typeMapper = state.getTypeMapper();
     }
 
-    private static void putStackValuesIntoLocals(List<Type> directOrder, int shift, InstructionAdapter mv, String descriptor) {
+    public static void putStackValuesIntoLocals(List<Type> directOrder, int shift, InstructionAdapter mv, String descriptor) {
         Type[] actualParams = Type.getArgumentTypes(descriptor); //last param is closure itself
         assert actualParams.length == directOrder.size() : "Number of expected and actual params should be equals!";
 
@@ -94,7 +94,7 @@ public abstract class InlineTransformer implements Inliner {
         final LinkedList<InlinableAccess> infos = new LinkedList<InlinableAccess>(inlinableInvocation);
         methodNode.instructions.resetLabels();
 
-        InliningAdapter inliner = new InliningAdapter(mv, Opcodes.ASM4, desc, end, frameSize, remapper) {
+        InliningAdapter inliner = new InliningAdapter(mv, Opcodes.ASM4, end, frameSize, remapper) {
 
             @Override
             public void anew(Type type) {
@@ -129,7 +129,7 @@ public abstract class InlineTransformer implements Inliner {
                     remapper.setNestedRemap(true);
                     putStackValuesIntoLocals(info.getParamsWithoutCapturedValOrVar(), valueParamShift, this, desc);
                     Label closureEnd = new Label();
-                    InliningAdapter closureInliner = new InliningAdapter(mv, Opcodes.ASM4, desc, closureEnd, getNextLocalIndex(),
+                    InliningAdapter closureInliner = new InliningAdapter(mv, Opcodes.ASM4, closureEnd, getNextLocalIndex(),
                                                                          new VarRemapper.ClosureRemapper(info, valueParamShift, tempTypes));
 
                     info.getNode().instructions.resetLabels();
@@ -223,7 +223,7 @@ public abstract class InlineTransformer implements Inliner {
                         //remove inlinable access
                         node.instructions.remove(insnNode);
                     }
-                    inlinableInvocation.add(new InlinableAccess(varIndex, isInlinable));
+                    inlinableInvocation.add(new InlinableAccess(varIndex, isInlinable, null));
                 }
                 else if (isFunctionConstructorCall(owner, name)) {
                     Frame<SourceValue> frame = sources[index];
@@ -238,7 +238,7 @@ public abstract class InlineTransformer implements Inliner {
                                 int varIndex = ((VarInsnNode) insnNode).var;
                                 ClosureInfo closureInfo = expressionMap.get(varIndex);
                                 if (closureInfo != null) {
-                                    InlinableAccess inlinableAccess = new InlinableAccess(varIndex, true);
+                                    InlinableAccess inlinableAccess = new InlinableAccess(varIndex, true, null);
                                     inlinableAccess.setInfo(closureInfo);
                                     infos.add(inlinableAccess);
 
