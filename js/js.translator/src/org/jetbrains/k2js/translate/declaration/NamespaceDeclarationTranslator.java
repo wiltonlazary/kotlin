@@ -30,7 +30,6 @@ import org.jetbrains.k2js.translate.general.AbstractTranslator;
 import java.util.*;
 
 import static com.google.dart.compiler.backend.js.ast.JsVars.JsVar;
-import static org.jetbrains.k2js.translate.declaration.DefineInvocation.createDefineInvocation;
 
 public final class NamespaceDeclarationTranslator extends AbstractTranslator {
     private final Iterable<JetFile> files;
@@ -58,7 +57,7 @@ public final class NamespaceDeclarationTranslator extends AbstractTranslator {
             NamespaceTranslator translator = packageFragmentToTranslator.get(packageFragment);
             if (translator == null) {
                 createRootPackageDefineInvocationIfNeeded(packageFqNameToDefineInvocation);
-                translator = new NamespaceTranslator(packageFragment, packageFqNameToDefineInvocation, context());
+                translator = NamespaceTranslator.create(packageFragment, context());
                 packageFragmentToTranslator.put(packageFragment, translator);
             }
 
@@ -78,7 +77,7 @@ public final class NamespaceDeclarationTranslator extends AbstractTranslator {
     private void createRootPackageDefineInvocationIfNeeded(@NotNull Map<FqName, DefineInvocation> packageFqNameToDefineInvocation) {
         if (!packageFqNameToDefineInvocation.containsKey(FqName.ROOT)) {
             packageFqNameToDefineInvocation.put(
-                    FqName.ROOT, createDefineInvocation(FqName.ROOT, null, new JsObjectLiteral(true), context()));
+                    FqName.ROOT, DefineInvocation.create(FqName.ROOT, null, new JsObjectLiteral(true), context()));
         }
     }
 
