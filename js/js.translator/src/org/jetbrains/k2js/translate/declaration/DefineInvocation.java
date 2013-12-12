@@ -30,7 +30,7 @@ public class DefineInvocation {
 
     /* package */
     @NotNull
-    static DefineInvocation createDefineInvocation(
+    static DefineInvocation create(
             @NotNull NamespaceDescriptor descriptor,
             @Nullable JsExpression initializer,
             @NotNull JsObjectLiteral members,
