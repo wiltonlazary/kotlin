@@ -99,7 +99,6 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
     private final CodegenStatementVisitor statementVisitor;
 
     private final Stack<BlockStackElement> blockStackElements = new Stack<BlockStackElement>();
-    private final Collection<String> localVariableNames = new HashSet<String>();
 
     @Nullable
     private final MemberCodegen parentCodegen;
@@ -176,13 +175,7 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
         this.returnType = returnType;
         this.state = state;
         this.methodVisitor = v;
-        this.v = new InstructionAdapter(methodVisitor) {
-            @Override
-            public void visitLocalVariable(String name, String desc, String signature, Label start, Label end, int index) {
-                super.visitLocalVariable(name, desc, signature, start, end, index);
-                localVariableNames.add(name);
-            }
-        };
+        this.v = new InstructionAdapter(methodVisitor);
         this.bindingContext = state.getBindingContext();
         this.context = context;
         this.statementVisitor = new CodegenStatementVisitor(this);
@@ -211,10 +204,6 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
 
     public BindingContext getBindingContext() {
         return bindingContext;
-    }
-
-    public Collection<String> getLocalVariableNamesForExpression() {
-        return localVariableNames;
     }
 
     @Nullable
@@ -1782,7 +1771,7 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
         DeclarationDescriptor containingDeclaration = propertyDescriptor.getContainingDeclaration();
 
         boolean isBackingFieldInAnotherClass = AsmUtil.isPropertyWithBackingFieldInOuterClass(propertyDescriptor);
-        boolean isStatic = containingDeclaration instanceof NamespaceDescriptor;
+        boolean isStatic = containingDeclaration instanceof PackageFragmentDescriptor;
         boolean isSuper = superExpression != null;
         boolean isInsideClass = isCallInsideSameClassAsDeclared(propertyDescriptor, context);
         boolean isInsideModule = isCallInsideSameModuleAsDeclared(propertyDescriptor, context);

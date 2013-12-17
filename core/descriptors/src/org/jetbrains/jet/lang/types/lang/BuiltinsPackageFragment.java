@@ -5,12 +5,14 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.descriptors.serialization.*;
 import org.jetbrains.jet.descriptors.serialization.descriptors.DeserializedPackageMemberScope;
-import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
+import org.jetbrains.jet.lang.descriptors.*;
 import org.jetbrains.jet.lang.descriptors.annotations.AnnotationDescriptor;
-import org.jetbrains.jet.lang.descriptors.impl.AbstractNamespaceDescriptorImpl;
+import org.jetbrains.jet.lang.descriptors.impl.DeclarationDescriptorImpl;
+import org.jetbrains.jet.lang.descriptors.impl.MutablePackageFragmentDescriptor;
 import org.jetbrains.jet.lang.resolve.name.FqName;
 import org.jetbrains.jet.lang.resolve.name.Name;
 import org.jetbrains.jet.lang.resolve.scopes.JetScope;
+import org.jetbrains.jet.lang.types.TypeSubstitutor;
 import org.jetbrains.jet.storage.NotNullLazyValue;
 import org.jetbrains.jet.storage.StorageManager;
 
@@ -24,14 +26,18 @@ import java.util.List;
 
 import static org.jetbrains.jet.descriptors.serialization.descriptors.AnnotationDeserializer.UNSUPPORTED;
 
-class BuiltinsNamespaceDescriptorImpl extends AbstractNamespaceDescriptorImpl {
+class BuiltinsPackageFragment extends DeclarationDescriptorImpl implements PackageFragmentDescriptor {
     private final DeserializedPackageMemberScope members;
     private final NameResolver nameResolver;
+    private final ModuleDescriptor module;
+    final PackageFragmentProvider packageFragmentProvider;
 
-    public BuiltinsNamespaceDescriptorImpl(@NotNull StorageManager storageManager, @NotNull NamespaceDescriptor containingDeclaration) {
-        super(containingDeclaration, Collections.<AnnotationDescriptor>emptyList(), KotlinBuiltIns.BUILT_INS_PACKAGE_NAME);
-
+    public BuiltinsPackageFragment(@NotNull StorageManager storageManager, @NotNull ModuleDescriptor module) {
+        super(Collections.<AnnotationDescriptor>emptyList(), KotlinBuiltIns.BUILT_INS_PACKAGE_NAME);
+        this.module = module;
         nameResolver = NameSerializationUtil.deserializeNameResolver(getStream(BuiltInsSerializationUtil.getNameTableFilePath(this)));
+
+        packageFragmentProvider = new BuiltinsPackageFragmentProvider();
 
         members = new DeserializedPackageMemberScope(storageManager, this, UNSUPPORTED, new BuiltInsDescriptorFinder(storageManager),
                                                      loadPackage(), nameResolver);
@@ -57,6 +63,23 @@ class BuiltinsNamespaceDescriptorImpl extends AbstractNamespaceDescriptorImpl {
 
     @NotNull
     @Override
+    public ModuleDescriptor getContainingDeclaration() {
+        return module;
+    }
+
+    @Nullable
+    @Override
+    public DeclarationDescriptor substitute(@NotNull TypeSubstitutor substitutor) {
+        return this;
+    }
+
+    @Override
+    public <R, D> R accept(DeclarationDescriptorVisitor<R, D> visitor, D data) {
+        return visitor.visitPackageFragmentDescriptor(this, data);
+    }
+
+    @NotNull
+    @Override
     public FqName getFqName() {
         return KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME;
     }
@@ -75,17 +98,42 @@ class BuiltinsNamespaceDescriptorImpl extends AbstractNamespaceDescriptorImpl {
         return KotlinBuiltIns.class.getClassLoader().getResourceAsStream(path);
     }
 
+    private class BuiltinsPackageFragmentProvider implements PackageFragmentProvider {
+        private final PackageFragmentDescriptor rootPackage = new MutablePackageFragmentDescriptor(module, FqName.ROOT);
+
+        @NotNull
+        @Override
+        public List<PackageFragmentDescriptor> getPackageFragments(@NotNull FqName fqName) {
+            if (fqName.isRoot()) {
+                return Collections.singletonList(rootPackage);
+            }
+            else if (KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME.equals(fqName)) {
+                return Collections.<PackageFragmentDescriptor>singletonList(BuiltinsPackageFragment.this);
+            }
+            return Collections.emptyList();
+        }
+
+        @NotNull
+        @Override
+        public Collection<FqName> getSubPackagesOf(@NotNull FqName fqName) {
+            if (fqName.isRoot()) {
+                return Collections.singleton(KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME);
+            }
+            return Collections.emptyList();
+        }
+    }
+
     private class BuiltInsDescriptorFinder extends AbstractDescriptorFinder {
         private final NotNullLazyValue<Collection<Name>> classNames;
 
         public BuiltInsDescriptorFinder(@NotNull StorageManager storageManager) {
-            super(storageManager, UNSUPPORTED);
+            super(storageManager, UNSUPPORTED, packageFragmentProvider);
 
             classNames = storageManager.createLazyValue(new Function0<Collection<Name>>() {
                 @Override
                 @NotNull
                 public Collection<Name> invoke() {
-                    InputStream in = getStream(BuiltInsSerializationUtil.getClassNamesFilePath(BuiltinsNamespaceDescriptorImpl.this));
+                    InputStream in = getStream(BuiltInsSerializationUtil.getClassNamesFilePath(BuiltinsPackageFragment.this));
 
                     try {
                         DataInputStream data = new DataInputStream(in);
@@ -132,12 +180,6 @@ class BuiltinsNamespaceDescriptorImpl extends AbstractNamespaceDescriptorImpl {
             catch (IOException e) {
                 throw new IllegalStateException(e);
             }
-        }
-
-        @Nullable
-        @Override
-        public NamespaceDescriptor findPackage(@NotNull FqName fqName) {
-            return fqName.equals(KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME) ? BuiltinsNamespaceDescriptorImpl.this : null;
         }
 
         @NotNull

@@ -14,28 +14,20 @@
  * limitations under the License.
  */
 
-package org.jetbrains.jet.codegen.context;
+package org.jetbrains.jet.lang.descriptors;
 
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.asm4.Type;
-import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
+import org.jetbrains.jet.lang.resolve.name.FqName;
+import org.jetbrains.jet.lang.resolve.scopes.JetScope;
 
-public class NamespaceFacadeContext extends NamespaceContext {
-
-    private final Type delegateTo;
-
-    public NamespaceFacadeContext(
-            @NotNull NamespaceDescriptor contextDescriptor,
-            @Nullable CodegenContext parent,
-            @NotNull Type delegateTo
-    ) {
-        super(contextDescriptor, parent);
-        this.delegateTo = delegateTo;
-    }
+public interface PackageFragmentDescriptor extends ClassOrNamespaceDescriptor {
+    @NotNull
+    @Override
+    ModuleDescriptor getContainingDeclaration();
 
     @NotNull
-    public Type getDelegateToClassType() {
-        return delegateTo;
-    }
+    FqName getFqName();
+
+    @NotNull
+    JetScope getMemberScope();
 }

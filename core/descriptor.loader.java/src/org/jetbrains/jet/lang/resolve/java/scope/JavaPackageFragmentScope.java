@@ -14,21 +14,13 @@
  * limitations under the License.
  */
 
-package org.jetbrains.jet.lang.descriptors;
+package org.jetbrains.jet.lang.resolve.java.scope;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.jet.lang.descriptors.impl.NamespaceDescriptorParent;
 import org.jetbrains.jet.lang.resolve.name.FqName;
 import org.jetbrains.jet.lang.resolve.scopes.JetScope;
 
-public interface NamespaceDescriptor extends ClassOrNamespaceDescriptor, NamespaceDescriptorParent {
-    @NotNull
-    JetScope getMemberScope();
+import java.util.Collection;
 
-    @Override
-    @NotNull
-    NamespaceDescriptorParent getContainingDeclaration();
-
-    @NotNull
-    FqName getFqName();
+public interface JavaPackageFragmentScope extends JetScope {
+    Collection<FqName> getSubPackages();
 }

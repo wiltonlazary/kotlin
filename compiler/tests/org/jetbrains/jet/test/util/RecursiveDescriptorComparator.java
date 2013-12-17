@@ -26,10 +26,8 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.JetTestUtils;
 import org.jetbrains.jet.jvm.compiler.ExpectedLoadErrorsUtil;
 import org.jetbrains.jet.lang.descriptors.*;
-import org.jetbrains.jet.lang.resolve.DescriptorUtils;
 import org.jetbrains.jet.lang.resolve.MemberComparator;
 import org.jetbrains.jet.lang.resolve.name.FqName;
-import org.jetbrains.jet.lang.resolve.name.FqNameUnsafe;
 import org.jetbrains.jet.lang.resolve.scopes.JetScope;
 import org.jetbrains.jet.renderer.DescriptorRenderer;
 import org.jetbrains.jet.renderer.DescriptorRendererBuilder;
@@ -44,7 +42,7 @@ import java.util.List;
 
 import static org.jetbrains.jet.test.util.DescriptorValidator.ValidationVisitor.FORBID_ERROR_TYPES;
 
-public class NamespaceComparator {
+public class RecursiveDescriptorComparator {
     private static final DescriptorRenderer DEFAULT_RENDERER = new DescriptorRendererBuilder()
             .setWithDefinedIn(false)
             .setExcludedAnnotationClasses(Arrays.asList(new FqName(ExpectedLoadErrorsUtil.ANNOTATION_CLASS_NAME)))
@@ -52,14 +50,14 @@ public class NamespaceComparator {
             .setVerbose(true).build();
 
     public static final Configuration DONT_INCLUDE_METHODS_OF_OBJECT = new Configuration(false, false, false, 
-                                                                                         Predicates.<FqNameUnsafe>alwaysTrue(),
+                                                                                         Predicates.<FqName>alwaysTrue(),
                                                                                          FORBID_ERROR_TYPES, DEFAULT_RENDERER);
     public static final Configuration RECURSIVE = new Configuration(false, false, true, 
-                                                                    Predicates.<FqNameUnsafe>alwaysTrue(),
+                                                                    Predicates.<FqName>alwaysTrue(),
                                                                     FORBID_ERROR_TYPES, DEFAULT_RENDERER);
 
     public static final Configuration RECURSIVE_ALL = new Configuration(true, true, true, 
-                                                                        Predicates.<FqNameUnsafe>alwaysTrue(),
+                                                                        Predicates.<FqName>alwaysTrue(),
                                                                         FORBID_ERROR_TYPES, DEFAULT_RENDERER);
 
     private static final ImmutableSet<String> JAVA_OBJECT_METHOD_NAMES = ImmutableSet.of(
@@ -67,7 +65,7 @@ public class NamespaceComparator {
 
     private final Configuration conf;
 
-    private NamespaceComparator(@NotNull Configuration conf) {
+    private RecursiveDescriptorComparator(@NotNull Configuration conf) {
         this.conf = conf;
     }
 
@@ -78,14 +76,14 @@ public class NamespaceComparator {
     }
 
     private void appendDeclarationRecursively(@NotNull DeclarationDescriptor descriptor, @NotNull Printer printer, boolean topLevel) {
-        if (descriptor instanceof ClassOrNamespaceDescriptor && !topLevel) {
+        if ((descriptor instanceof ClassOrNamespaceDescriptor || descriptor instanceof PackageViewDescriptor) && !topLevel) {
             printer.println();
         }
 
         boolean isPrimaryConstructor = descriptor instanceof ConstructorDescriptor && ((ConstructorDescriptor) descriptor).isPrimary();
         printer.print(isPrimaryConstructor && conf.checkPrimaryConstructors ? "/*primary*/ " : "", conf.renderer.render(descriptor));
 
-        if (descriptor instanceof ClassOrNamespaceDescriptor) {
+        if (descriptor instanceof ClassOrNamespaceDescriptor || descriptor instanceof PackageViewDescriptor) {
             if (!topLevel) {
                 printer.printlnWithNoIndent(" {").pushIndent();
             }
@@ -98,8 +96,12 @@ public class NamespaceComparator {
                 ClassDescriptor klass = (ClassDescriptor) descriptor;
                 appendSubDescriptors(klass.getDefaultType().getMemberScope(), getConstructorsAndClassObject(klass), printer);
             }
-            else if (descriptor instanceof NamespaceDescriptor) {
-                appendSubDescriptors(((NamespaceDescriptor) descriptor).getMemberScope(),
+            else if (descriptor instanceof PackageFragmentDescriptor) {
+                appendSubDescriptors(((PackageFragmentDescriptor) descriptor).getMemberScope(),
+                                     Collections.<DeclarationDescriptor>emptyList(), printer);
+            }
+            else if (descriptor instanceof PackageViewDescriptor) {
+                appendSubDescriptors(((PackageViewDescriptor) descriptor).getMemberScope(),
                                      Collections.<DeclarationDescriptor>emptyList(), printer);
             }
 
@@ -142,7 +144,8 @@ public class NamespaceComparator {
                 && JAVA_OBJECT_METHOD_NAMES.contains(subDescriptor.getName().asString())
                 && !conf.includeMethodsOfJavaObject
             ||
-                subDescriptor instanceof NamespaceDescriptor && !conf.recurseIntoPackage.apply(DescriptorUtils.getFQName(subDescriptor));
+                subDescriptor instanceof PackageViewDescriptor
+                && !conf.recurseIntoPackage.apply(((PackageViewDescriptor) subDescriptor).getFqName());
     }
 
     private void appendSubDescriptors(
@@ -164,60 +167,60 @@ public class NamespaceComparator {
         }
     }
 
-    private static void compareNamespaceWithFile(
-            @NotNull NamespaceDescriptor actualNamespace,
+    private static void compareDescriptorWithFile(
+            @NotNull DeclarationDescriptor actual,
             @NotNull Configuration configuration,
             @NotNull File txtFile
     ) {
-        doCompareNamespaces(null, actualNamespace, configuration, txtFile);
+        doCompareDescriptors(null, actual, configuration, txtFile);
     }
 
-    private static void compareNamespaces(
-            @NotNull NamespaceDescriptor expectedNamespace,
-            @NotNull NamespaceDescriptor actualNamespace,
+    private static void compareDescriptors(
+            @NotNull DeclarationDescriptor expected,
+            @NotNull DeclarationDescriptor actual,
             @NotNull Configuration configuration,
             @Nullable File txtFile
     ) {
-        if (expectedNamespace == actualNamespace) {
-            throw new IllegalArgumentException("Don't invoke this method with expectedNamespace == actualNamespace." +
-                                               "Invoke compareNamespaceWithFile() instead.");
+        if (expected == actual) {
+            throw new IllegalArgumentException("Don't invoke this method with expected == actual." +
+                                               "Invoke compareDescriptorWithFile() instead.");
         }
-        doCompareNamespaces(expectedNamespace, actualNamespace, configuration, txtFile);
+        doCompareDescriptors(expected, actual, configuration, txtFile);
     }
 
-    public static void validateAndCompareNamespaceWithFile(
-            @NotNull NamespaceDescriptor actualNamespace,
+    public static void validateAndCompareDescriptorWithFile(
+            @NotNull DeclarationDescriptor actual,
             @NotNull Configuration configuration,
             @NotNull File txtFile
     ) {
-        DescriptorValidator.validate(configuration.validationStrategy, actualNamespace);
-        compareNamespaceWithFile(actualNamespace, configuration, txtFile);
+        DescriptorValidator.validate(configuration.validationStrategy, actual);
+        compareDescriptorWithFile(actual, configuration, txtFile);
     }
 
-    public static void validateAndCompareNamespaces(
-            @NotNull NamespaceDescriptor expectedNamespace,
-            @NotNull NamespaceDescriptor actualNamespace,
+    public static void validateAndCompareDescriptors(
+            @NotNull DeclarationDescriptor expected,
+            @NotNull DeclarationDescriptor actual,
             @NotNull Configuration configuration,
             @Nullable File txtFile
     ) {
-        DescriptorValidator.validate(configuration.validationStrategy, expectedNamespace, actualNamespace);
-        compareNamespaces(expectedNamespace, actualNamespace, configuration, txtFile);
+        DescriptorValidator.validate(configuration.validationStrategy, expected, actual);
+        compareDescriptors(expected, actual, configuration, txtFile);
     }
 
-    private static void doCompareNamespaces(
-            @Nullable NamespaceDescriptor expectedNamespace,
-            @NotNull NamespaceDescriptor actualNamespace,
+    private static void doCompareDescriptors(
+            @Nullable DeclarationDescriptor expected,
+            @NotNull DeclarationDescriptor actual,
             @NotNull Configuration configuration,
             @Nullable File txtFile
     ) {
-        NamespaceComparator comparator = new NamespaceComparator(configuration);
+        RecursiveDescriptorComparator comparator = new RecursiveDescriptorComparator(configuration);
 
-        String actualSerialized = comparator.serializeRecursively(actualNamespace);
+        String actualSerialized = comparator.serializeRecursively(actual);
 
-        if (expectedNamespace != null) {
-            String expectedSerialized = comparator.serializeRecursively(expectedNamespace);
+        if (expected != null) {
+            String expectedSerialized = comparator.serializeRecursively(expected);
 
-            Assert.assertEquals("Expected and actual namespaces differ", expectedSerialized, actualSerialized);
+            Assert.assertEquals("Expected and actual descriptors differ", expectedSerialized, actualSerialized);
         }
 
         if (txtFile != null) {
@@ -229,7 +232,7 @@ public class NamespaceComparator {
         private final boolean checkPrimaryConstructors;
         private final boolean checkPropertyAccessors;
         private final boolean includeMethodsOfJavaObject;
-        private final Predicate<FqNameUnsafe> recurseIntoPackage;
+        private final Predicate<FqName> recurseIntoPackage;
         private final DescriptorRenderer renderer;
 
         private final DescriptorValidator.ValidationVisitor validationStrategy;
@@ -238,7 +241,7 @@ public class NamespaceComparator {
                 boolean checkPrimaryConstructors,
                 boolean checkPropertyAccessors,
                 boolean includeMethodsOfJavaObject,
-                Predicate<FqNameUnsafe> recurseIntoPackage,
+                Predicate<FqName> recurseIntoPackage,
                 DescriptorValidator.ValidationVisitor validationStrategy,
                 DescriptorRenderer renderer
         ) {
@@ -250,7 +253,7 @@ public class NamespaceComparator {
             this.renderer = renderer;
         }
 
-        public Configuration filterRecursion(@NotNull Predicate<FqNameUnsafe> recurseIntoPackage) {
+        public Configuration filterRecursion(@NotNull Predicate<FqName> recurseIntoPackage) {
             return new Configuration(checkPrimaryConstructors, checkPropertyAccessors, includeMethodsOfJavaObject, recurseIntoPackage,
                                      validationStrategy, renderer);
         }

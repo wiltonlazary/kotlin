@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
-package org.jetbrains.jet.lang.descriptors.impl;
+package org.jetbrains.jet.lang.descriptors;
 
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.jet.lang.descriptors.DeclarationDescriptor;
-import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
+import org.jetbrains.jet.lang.resolve.name.FqName;
 
-public interface NamespaceDescriptorParent extends DeclarationDescriptor {
+import java.util.Collection;
+import java.util.List;
 
-    void addNamespace(@NotNull NamespaceDescriptor namespaceDescriptor);
+public interface PackageFragmentProvider {
+    @NotNull
+    List<PackageFragmentDescriptor> getPackageFragments(@NotNull FqName fqName);
 
+    /**
+     * @return declared subpackages of {@code fqName}
+     */
+    @NotNull
+    Collection<FqName> getSubPackagesOf(@NotNull FqName fqName);
 }

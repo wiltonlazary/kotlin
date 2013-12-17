@@ -21,6 +21,7 @@ import org.eclipse.jdt.internal.compiler.ast.MethodDeclaration
 import org.jetbrains.jet.lang.resolve.name.Name
 import org.jetbrains.jet.lang.resolve.java.descriptor.JavaPropertyDescriptor
 import org.jetbrains.jet.lang.resolve.java.descriptor.JavaClassDescriptor
+import org.jetbrains.jet.lang.resolve.java.resolver.DescriptorResolverUtils
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiModifier
@@ -256,12 +257,9 @@ private fun staticMembers(context: JetExpression, expectedType: JetType, resolve
     }
 
     if (classDescriptor is JavaClassDescriptor) {
-        val container = classDescriptor.getContainingDeclaration() //TODO: nested classes!
-        if (container is NamespaceDescriptor) {
-            val pseudoPackage: NamespaceDescriptor? = container.getMemberScope().getNamespace(classDescriptor.getName())
-            if (pseudoPackage != null) {
-              pseudoPackage.getMemberScope().getAllDescriptors().filterTo(descriptors, isSuitableCallable)
-            }
+        val pseudoPackage = DescriptorResolverUtils.getPackageForCorrespondingJavaClass(classDescriptor)
+        if (pseudoPackage != null) {
+            pseudoPackage.getMemberScope().getAllDescriptors().filterTo(descriptors, isSuitableCallable)
         }
     }
 
@@ -284,7 +282,7 @@ private fun staticMembers(context: JetExpression, expectedType: JetType, resolve
                     var builder = LookupElementBuilder.create(lookupElement.getObject(), classDescriptor.getName().asString() + "." + lookupElement.getLookupString())
                             .withIcon(presentation.getIcon())
                             .withStrikeoutness(presentation.isStrikeout())
-                            .withTailText(" (" + DescriptorUtils.getFQName(classDescriptor.getContainingDeclaration()) + ")")
+                            .withTailText(" (" + DescriptorUtils.getFqName(classDescriptor.getContainingDeclaration()) + ")")
                             .withTypeText(if (!presentation.getTypeText().isNullOrEmpty())
                                               presentation.getTypeText()
                                           else
