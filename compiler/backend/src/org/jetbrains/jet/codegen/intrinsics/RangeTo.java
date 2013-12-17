@@ -22,26 +22,21 @@ import org.jetbrains.asm4.Type;
 import org.jetbrains.asm4.commons.InstructionAdapter;
 import org.jetbrains.jet.codegen.ExpressionCodegen;
 import org.jetbrains.jet.codegen.StackValue;
-import org.jetbrains.jet.codegen.state.GenerationState;
 import org.jetbrains.jet.lang.psi.JetBinaryExpression;
 import org.jetbrains.jet.lang.psi.JetExpression;
 
 import java.util.List;
 
-public class RangeTo implements IntrinsicMethod {
-
-    public RangeTo() {
-    }
-
+public class RangeTo extends IntrinsicMethod {
+    @NotNull
     @Override
-    public StackValue generate(
-            ExpressionCodegen codegen,
-            InstructionAdapter v,
+    public Type generateImpl(
+            @NotNull ExpressionCodegen codegen,
+            @NotNull InstructionAdapter v,
             @NotNull Type returnType,
             PsiElement element,
             List<JetExpression> arguments,
-            StackValue receiver,
-            @NotNull GenerationState state
+            StackValue receiver
     ) {
         if (arguments.size() == 1) {
             Type leftType = receiver.type;
@@ -50,22 +45,16 @@ public class RangeTo implements IntrinsicMethod {
             codegen.gen(arguments.get(0), rightType);
             v.invokestatic("jet/runtime/Ranges", "rangeTo",
                            "(" + receiver.type.getDescriptor() + leftType.getDescriptor() + ")" + returnType.getDescriptor());
-            return StackValue.onStack(returnType);
         }
         else {
             JetBinaryExpression expression = (JetBinaryExpression) element;
             Type leftType = codegen.expressionType(expression.getLeft());
             Type rightType = codegen.expressionType(expression.getRight());
-            //            if (JetTypeMapper.isIntPrimitive(leftType)) {
             codegen.gen(expression.getLeft(), leftType);
             codegen.gen(expression.getRight(), rightType);
             v.invokestatic("jet/runtime/Ranges", "rangeTo",
                            "(" + leftType.getDescriptor() + rightType.getDescriptor() + ")" + returnType.getDescriptor());
-            return StackValue.onStack(returnType);
-            //            }
-            //            else {
-            //                throw new UnsupportedOperationException("ranges are only supported for int objects");
-            //            }
         }
+        return returnType;
     }
 }
