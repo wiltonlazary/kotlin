@@ -69,7 +69,7 @@ abstract class InnerDeclarationTranslator {
 
     @NotNull
     protected JsNameRef getParameterNameRefFor(@NotNull CallableDescriptor descriptor) {
-        return context.getNameForDescriptor(descriptor).makeRef();
+        return getParameterNameFor(descriptor).makeRef();
     }
 
     @NotNull
