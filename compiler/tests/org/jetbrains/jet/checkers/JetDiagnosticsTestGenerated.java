@@ -540,6 +540,11 @@ public class JetDiagnosticsTestGenerated extends AbstractJetDiagnosticsTest {
                 doTest("compiler/testData/diagnostics/tests/annotations/AnnotationForObject.kt");
             }
             
+            @TestMetadata("annotationInheritance.kt")
+            public void testAnnotationInheritance() throws Exception {
+                doTest("compiler/testData/diagnostics/tests/annotations/annotationInheritance.kt");
+            }
+            
             @TestMetadata("annotationModifier.kt")
             public void testAnnotationModifier() throws Exception {
                 doTest("compiler/testData/diagnostics/tests/annotations/annotationModifier.kt");
@@ -575,6 +580,11 @@ public class JetDiagnosticsTestGenerated extends AbstractJetDiagnosticsTest {
                 doTest("compiler/testData/diagnostics/tests/annotations/BasicAnnotations.kt");
             }
             
+            @TestMetadata("ConstructorCall.kt")
+            public void testConstructorCall() throws Exception {
+                doTest("compiler/testData/diagnostics/tests/annotations/ConstructorCall.kt");
+            }
+            
             @TestMetadata("Deprecated.kt")
             public void testDeprecated() throws Exception {
                 doTest("compiler/testData/diagnostics/tests/annotations/Deprecated.kt");
@@ -605,6 +615,11 @@ public class JetDiagnosticsTestGenerated extends AbstractJetDiagnosticsTest {
                 doTest("compiler/testData/diagnostics/tests/annotations/kt1886annotationBody.kt");
             }
             
+            @TestMetadata("missingValOnParameter.kt")
+            public void testMissingValOnParameter() throws Exception {
+                doTest("compiler/testData/diagnostics/tests/annotations/missingValOnParameter.kt");
+            }
+            
             @TestMetadata("NonAnnotationClass.kt")
             public void testNonAnnotationClass() throws Exception {
                 doTest("compiler/testData/diagnostics/tests/annotations/NonAnnotationClass.kt");
@@ -613,6 +628,11 @@ public class JetDiagnosticsTestGenerated extends AbstractJetDiagnosticsTest {
             @TestMetadata("onExpression.kt")
             public void testOnExpression() throws Exception {
                 doTest("compiler/testData/diagnostics/tests/annotations/onExpression.kt");
+            }
+            
+            @TestMetadata("onInitializer.kt")
+            public void testOnInitializer() throws Exception {
+                doTest("compiler/testData/diagnostics/tests/annotations/onInitializer.kt");
             }
             
             @TestMetadata("onLoops.kt")

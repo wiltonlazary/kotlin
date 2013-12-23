@@ -283,6 +283,10 @@ public class BodyResolver {
             delegationSpecifier.accept(visitor);
         }
 
+        if (DescriptorUtils.isAnnotationClass(descriptor) && jetClass.getDelegationSpecifierList() != null) {
+            trace.report(SUPERTYPES_FOR_ANNOTATION_CLASS.on(jetClass.getDelegationSpecifierList()));
+        }
+
         Set<TypeConstructor> parentEnum =
                 jetClass instanceof JetEnumEntry
                 ? Collections.singleton(((ClassDescriptor) descriptor.getContainingDeclaration()).getTypeConstructor())
@@ -360,11 +364,13 @@ public class BodyResolver {
         if (primaryConstructor != null) {
             for (JetClassInitializer anonymousInitializer : anonymousInitializers) {
                 expressionTypingServices.getType(scopeForInitializers, anonymousInitializer.getBody(), NO_EXPECTED_TYPE, context.getOuterDataFlowInfo(), trace);
+                annotationResolver.resolveAnnotationsWithArguments(scopeForInitializers, anonymousInitializer.getModifierList(), trace);
             }
         }
         else {
             for (JetClassInitializer anonymousInitializer : anonymousInitializers) {
                 trace.report(ANONYMOUS_INITIALIZER_IN_TRAIT.on(anonymousInitializer));
+                annotationResolver.resolveAnnotationsWithArguments(scopeForInitializers, anonymousInitializer.getModifierList(), trace);
             }
         }
     }
