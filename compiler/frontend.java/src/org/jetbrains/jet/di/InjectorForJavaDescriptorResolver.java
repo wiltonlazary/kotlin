@@ -152,11 +152,9 @@ public class InjectorForJavaDescriptorResolver {
 
         deserializedDescriptorResolver.setAnnotationDeserializer(annotationDescriptorDeserializer);
         deserializedDescriptorResolver.setErrorReporter(traceBasedErrorReporter);
-        deserializedDescriptorResolver.setJavaClassResolver(javaClassResolver);
         deserializedDescriptorResolver.setJavaPackageFragmentProvider(javaPackageFragmentProvider);
 
         annotationDescriptorDeserializer.setErrorReporter(traceBasedErrorReporter);
-        annotationDescriptorDeserializer.setJavaClassResolver(javaClassResolver);
         annotationDescriptorDeserializer.setKotlinClassFinder(virtualFileKotlinClassFinder);
 
         javaFunctionResolver.setAnnotationResolver(javaAnnotationResolver);
