@@ -525,6 +525,7 @@ public class BlackBoxCodegenTestGenerated extends AbstractBlackBoxCodegenTest {
     }
     
     @TestMetadata("compiler/testData/codegen/box/callableReference")
+    @InnerTestClasses({CallableReference.Local.class})
     public static class CallableReference extends AbstractBlackBoxCodegenTest {
         @TestMetadata("abstractClassMember.kt")
         public void testAbstractClassMember() throws Exception {
@@ -665,6 +666,21 @@ public class BlackBoxCodegenTestGenerated extends AbstractBlackBoxCodegenTest {
             doTest("compiler/testData/codegen/box/callableReference/newArray.kt");
         }
         
+        @TestMetadata("objectMemberUnitNoArgs.kt")
+        public void testObjectMemberUnitNoArgs() throws Exception {
+            doTest("compiler/testData/codegen/box/callableReference/objectMemberUnitNoArgs.kt");
+        }
+        
+        @TestMetadata("objectMemberUnitOneStringArg.kt")
+        public void testObjectMemberUnitOneStringArg() throws Exception {
+            doTest("compiler/testData/codegen/box/callableReference/objectMemberUnitOneStringArg.kt");
+        }
+        
+        @TestMetadata("privateClassMember.kt")
+        public void testPrivateClassMember() throws Exception {
+            doTest("compiler/testData/codegen/box/callableReference/privateClassMember.kt");
+        }
+        
         @TestMetadata("sortListOfStrings.kt")
         public void testSortListOfStrings() throws Exception {
             doTest("compiler/testData/codegen/box/callableReference/sortListOfStrings.kt");
@@ -715,6 +731,110 @@ public class BlackBoxCodegenTestGenerated extends AbstractBlackBoxCodegenTest {
             doTest("compiler/testData/codegen/box/callableReference/traitMember.kt");
         }
         
+        @TestMetadata("compiler/testData/codegen/box/callableReference/local")
+        public static class Local extends AbstractBlackBoxCodegenTest {
+            public void testAllFilesPresentInLocal() throws Exception {
+                JetTestUtils.assertAllTestsPresentByMetadata(this.getClass(), "org.jetbrains.jet.generators.tests.TestsPackage", new File("compiler/testData/codegen/box/callableReference/local"), Pattern.compile("^(.+)\\.kt$"), true);
+            }
+            
+            @TestMetadata("captureOuter.kt")
+            public void testCaptureOuter() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/captureOuter.kt");
+            }
+            
+            @TestMetadata("classMember.kt")
+            public void testClassMember() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/classMember.kt");
+            }
+            
+            @TestMetadata("closureWithSideEffect.kt")
+            public void testClosureWithSideEffect() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/closureWithSideEffect.kt");
+            }
+            
+            @TestMetadata("constructor.kt")
+            public void testConstructor() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/constructor.kt");
+            }
+            
+            @TestMetadata("constructorWithInitializer.kt")
+            public void testConstructorWithInitializer() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/constructorWithInitializer.kt");
+            }
+            
+            @TestMetadata("enumExtendsTrait.kt")
+            public void testEnumExtendsTrait() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/enumExtendsTrait.kt");
+            }
+            
+            @TestMetadata("extension.kt")
+            public void testExtension() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/extension.kt");
+            }
+            
+            @TestMetadata("extensionToLocalClass.kt")
+            public void testExtensionToLocalClass() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/extensionToLocalClass.kt");
+            }
+            
+            @TestMetadata("extensionToPrimitive.kt")
+            public void testExtensionToPrimitive() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/extensionToPrimitive.kt");
+            }
+            
+            @TestMetadata("extensionWithClosure.kt")
+            public void testExtensionWithClosure() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/extensionWithClosure.kt");
+            }
+            
+            @TestMetadata("genericMember.kt")
+            public void testGenericMember() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/genericMember.kt");
+            }
+            
+            @TestMetadata("localClassMember.kt")
+            public void testLocalClassMember() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/localClassMember.kt");
+            }
+            
+            @TestMetadata("localLocal.kt")
+            public void testLocalLocal() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/localLocal.kt");
+            }
+            
+            @TestMetadata("recursiveClosure.kt")
+            public void testRecursiveClosure() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/recursiveClosure.kt");
+            }
+            
+            @TestMetadata("simple.kt")
+            public void testSimple() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/simple.kt");
+            }
+            
+            @TestMetadata("simpleClosure.kt")
+            public void testSimpleClosure() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/simpleClosure.kt");
+            }
+            
+            @TestMetadata("simpleWithArg.kt")
+            public void testSimpleWithArg() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/simpleWithArg.kt");
+            }
+            
+            @TestMetadata("unitWithSideEffect.kt")
+            public void testUnitWithSideEffect() throws Exception {
+                doTest("compiler/testData/codegen/box/callableReference/local/unitWithSideEffect.kt");
+            }
+            
+        }
+        
+        public static Test innerSuite() {
+            TestSuite suite = new TestSuite("CallableReference");
+            suite.addTestSuite(CallableReference.class);
+            suite.addTestSuite(Local.class);
+            return suite;
+        }
     }
     
     @TestMetadata("compiler/testData/codegen/box/casts")
@@ -5073,7 +5193,7 @@ public class BlackBoxCodegenTestGenerated extends AbstractBlackBoxCodegenTest {
         suite.addTestSuite(BinaryOp.class);
         suite.addTestSuite(Bridges.class);
         suite.addTestSuite(BuiltinStubMethods.class);
-        suite.addTestSuite(CallableReference.class);
+        suite.addTest(CallableReference.innerSuite());
         suite.addTestSuite(Casts.class);
         suite.addTestSuite(Classes.class);
         suite.addTest(Closures.innerSuite());
