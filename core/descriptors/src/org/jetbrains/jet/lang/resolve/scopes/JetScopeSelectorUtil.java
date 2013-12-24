@@ -84,6 +84,15 @@ public class JetScopeSelectorUtil {
                 }
             };
 
+    public static final ScopeByNameSelector<VariableDescriptor> VARIABLE_DESCRIPTOR_SCOPE_SELECTOR =
+            new ScopeByNameSelector<VariableDescriptor>() {
+                @Nullable
+                @Override
+                public VariableDescriptor get(@NotNull JetScope scope, @NotNull Name name) {
+                    return scope.getLocalVariable(name);
+                }
+            };
+
     public static final ScopeByNameMultiSelector<FunctionDescriptor> NAMED_FUNCTION_SCOPE_SELECTOR =
             new ScopeByNameMultiSelector<FunctionDescriptor>() {
                 @NotNull
