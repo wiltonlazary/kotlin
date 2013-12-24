@@ -20,6 +20,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.intellij.navigation.ItemPresentation;
 import com.intellij.navigation.ItemPresentationProviders;
+import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.NullableLazyValue;
@@ -29,11 +31,16 @@ import com.intellij.psi.*;
 import com.intellij.psi.impl.PsiManagerImpl;
 import com.intellij.psi.impl.compiled.ClsFileImpl;
 import com.intellij.psi.impl.java.stubs.PsiJavaFileStub;
+import com.intellij.psi.impl.light.LightClass;
+import com.intellij.psi.impl.light.LightMethod;
 import com.intellij.psi.impl.light.LightModifierList;
 import com.intellij.psi.impl.light.LightTypeParameterListBuilder;
+import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.stubs.PsiClassHolderFileStub;
 import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValuesManager;
+import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.reference.SoftReference;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NonNls;
@@ -41,12 +48,15 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.codegen.binding.PsiCodegenPredictor;
 import org.jetbrains.jet.lang.descriptors.ClassDescriptor;
+import org.jetbrains.jet.lang.descriptors.DeclarationDescriptor;
 import org.jetbrains.jet.lang.psi.*;
-import org.jetbrains.jet.lang.resolve.*;
+import org.jetbrains.jet.lang.resolve.DescriptorUtils;
+import org.jetbrains.jet.lang.resolve.ResolvePackage;
 import org.jetbrains.jet.lang.resolve.java.JvmClassName;
 import org.jetbrains.jet.lang.resolve.java.jetAsJava.JetJavaMirrorMarker;
 import org.jetbrains.jet.lang.resolve.name.FqName;
 import org.jetbrains.jet.lang.resolve.name.FqNameUnsafe;
+import org.jetbrains.jet.lang.types.JetType;
 import org.jetbrains.jet.lang.types.lang.KotlinBuiltIns;
 import org.jetbrains.jet.lexer.JetKeywordToken;
 import org.jetbrains.jet.plugin.JetLanguage;
@@ -59,7 +69,7 @@ import java.util.List;
 import static org.jetbrains.jet.lexer.JetTokens.*;
 
 public class KotlinLightClassForExplicitDeclaration extends KotlinWrappingLightClass implements KotlinLightClass, JetJavaMirrorMarker {
-    private final static Key<CachedValue<GeneratedLightClassData>> JAVA_API_STUB = Key.create("JAVA_API_STUB");
+    private final static Key<CachedValue<LightClassStubWithData>> JAVA_API_STUB = Key.create("JAVA_API_STUB");
 
     @Nullable
     public static KotlinLightClassForExplicitDeclaration create(@NotNull PsiManager manager, @NotNull JetClassOrObject classOrObject) {
@@ -72,19 +82,106 @@ public class KotlinLightClassForExplicitDeclaration extends KotlinWrappingLightC
 
         FqName fqName = JvmClassName.byInternalName(jvmInternalName).getFqNameForClassNameWithoutDollars();
 
+        if (classOrObject instanceof JetObjectDeclaration && ((JetObjectDeclaration) classOrObject).isObjectLiteral()) {
+            return new KotlinLightClassForExplicitDeclaration.Anonymous(manager, fqName, classOrObject);
+        }
         return new KotlinLightClassForExplicitDeclaration(manager, fqName, classOrObject);
     }
 
     private static String getJvmInternalName(JetClassOrObject classOrObject) {
         if (JetPsiUtil.isLocal(classOrObject)) {
-            return getGeneratedLightClassData(classOrObject).getJvmInternalName();
+            LightClassData data = getLightClassDataExactly(classOrObject);
+            return data != null ? data.getJvmInternalName() : "";
         }
         return PsiCodegenPredictor.getPredefinedJvmInternalName(classOrObject);
     }
 
     private final FqName classFqName; // FqName of (possibly inner) class
-    private final JetClassOrObject classOrObject;
+    protected final JetClassOrObject classOrObject;
     private PsiClass delegate;
+
+    private final NullableLazyValue<PsiElement> parent = new NullableLazyValue<PsiElement>() {
+        @Nullable
+        @Override
+        protected PsiElement compute() {
+            if (JetPsiUtil.isLocal(classOrObject)) {
+                //noinspection unchecked
+                PsiElement declaration = JetPsiUtil.getTopmostParentOfTypes(
+                        classOrObject,
+                        JetNamedFunction.class, JetProperty.class, JetClassInitializer.class, JetParameter.class
+                );
+
+                if (declaration instanceof JetParameter) {
+                    declaration = PsiTreeUtil.getParentOfType(declaration, JetNamedDeclaration.class);
+                }
+
+                if (declaration instanceof JetNamedFunction) {
+                    JetNamedFunction function = (JetNamedFunction) declaration;
+                    return getParentByPsiMethod(LightClassUtil.getLightClassMethod(function), function.getName(), false);
+                }
+
+                // Represent the property as a fake method with the same name
+                if (declaration instanceof JetProperty) {
+                    JetProperty property = (JetProperty) declaration;
+                    return getParentByPsiMethod(LightClassUtil.getLightClassPropertyMethods(property).getGetter(), property.getName(), true);
+                }
+
+                if (declaration instanceof JetClassInitializer) {
+                    PsiElement parent = declaration.getParent();
+                    PsiElement grandparent = parent.getParent();
+
+                    if (parent instanceof JetClassBody && grandparent instanceof JetClassOrObject) {
+                        return LightClassUtil.getPsiClass((JetClassOrObject) grandparent);
+                    }
+                }
+
+                if (declaration instanceof JetClass) {
+                    return LightClassUtil.getPsiClass((JetClass) declaration);
+                }
+            }
+
+            return classOrObject.getParent() == classOrObject.getContainingFile() ? getContainingFile() : getContainingClass();
+        }
+
+        private PsiElement getParentByPsiMethod(PsiMethod method, final String name, boolean forceMethodWrapping) {
+            if (method == null || name == null) return null;
+
+            PsiClass containingClass = method.getContainingClass();
+            if (containingClass == null) return null;
+
+            final String currentFileName = classOrObject.getContainingFile().getName();
+
+            boolean createWrapper = forceMethodWrapping;
+            // Use PsiClass wrapper instead of package light class to avoid names like "FooPackage" in Type Hierarchy and related views
+            if (containingClass instanceof KotlinLightClassForPackage) {
+                containingClass = new LightClass(containingClass, JetLanguage.INSTANCE) {
+                    @Nullable
+                    @Override
+                    public String getName() {
+                        return currentFileName;
+                    }
+                };
+                createWrapper = true;
+            }
+
+            if (createWrapper) {
+                return new LightMethod(myManager, method, containingClass, JetLanguage.INSTANCE) {
+                    @Override
+                    public PsiElement getParent() {
+                        return getContainingClass();
+                    }
+
+                    @NotNull
+                    @Override
+                    public String getName() {
+                        return name;
+                    }
+                };
+            }
+
+            return method;
+        }
+    };
 
     @Nullable
     private PsiModifierList modifierList;
@@ -156,24 +253,22 @@ public class KotlinLightClassForExplicitDeclaration extends KotlinWrappingLightC
 
     @NotNull
     private PsiJavaFileStub getJavaFileStub() {
-        return getGeneratedLightClassData().getJavaFileStub();
+        return getLightClassStubWithData().getJavaFileStub();
+    }
+
+    @Nullable
+    protected final ClassDescriptor getDescriptor() {
+        LightClassDataForKotlinClass data = getLightClassDataExactly(classOrObject);
+        return data != null ? data.getDescriptor() : null;
     }
 
     @NotNull
-    private ClassDescriptor getDescriptor() {
-        ClassDescriptor descriptor = getGeneratedLightClassData().getDescriptor();
-        assert descriptor != null;
-
-        return descriptor;
+    private LightClassStubWithData getLightClassStubWithData() {
+        return getLightClassStubWithData(classOrObject);
     }
 
     @NotNull
-    private GeneratedLightClassData getGeneratedLightClassData() {
-        return getGeneratedLightClassData(classOrObject);
-    }
-
-    @NotNull
-    private static GeneratedLightClassData getGeneratedLightClassData(JetClassOrObject classOrObject) {
+    private static LightClassStubWithData getLightClassStubWithData(JetClassOrObject classOrObject) {
         JetClassOrObject outermostClassOrObject = getOutermostClassOrObject(classOrObject);
         return CachedValuesManager.getManager(classOrObject.getProject()).getCachedValue(
                 outermostClassOrObject,
@@ -181,6 +276,13 @@ public class KotlinLightClassForExplicitDeclaration extends KotlinWrappingLightC
                 KotlinJavaFileStubProvider.createForDeclaredClass(outermostClassOrObject),
                 /*trackValue = */false
         );
+    }
+
+    @Nullable
+    private static LightClassDataForKotlinClass getLightClassDataExactly(JetClassOrObject classOrObject) {
+        OutermostKotlinClassLightClassData data =
+                (OutermostKotlinClassLightClassData) getLightClassStubWithData(classOrObject).getClassData();
+        return data.getClassOrObject().equals(classOrObject) ? data : data.getAllInnerClasses().get(classOrObject);
     }
 
     @NotNull
@@ -269,8 +371,7 @@ public class KotlinLightClassForExplicitDeclaration extends KotlinWrappingLightC
     @Nullable
     @Override
     public PsiElement getParent() {
-        if (classOrObject.getParent() == classOrObject.getContainingFile()) return getContainingFile();
-        return getContainingClass();
+        return parent.getValue();
     }
 
     @Nullable
@@ -419,13 +520,17 @@ public class KotlinLightClassForExplicitDeclaration extends KotlinWrappingLightC
     public boolean isInheritor(@NotNull PsiClass baseClass, boolean checkDeep) {
         String qualifiedName;
         if (baseClass instanceof KotlinLightClassForExplicitDeclaration) {
-            qualifiedName = DescriptorUtils.getFqName(((KotlinLightClassForExplicitDeclaration) baseClass).getDescriptor()).asString();
+            ClassDescriptor baseDescriptor = ((KotlinLightClassForExplicitDeclaration) baseClass).getDescriptor();
+            qualifiedName = baseDescriptor != null ? DescriptorUtils.getFqName(baseDescriptor).asString() : null;
         }
         else {
             qualifiedName = baseClass.getQualifiedName();
         }
 
-        return ResolvePackage.checkSuperTypeByFQName(getDescriptor(), qualifiedName, checkDeep);
+        ClassDescriptor thisDescriptor = getDescriptor();
+        return qualifiedName != null
+               && thisDescriptor != null
+               && ResolvePackage.checkSuperTypeByFQName(thisDescriptor, qualifiedName, checkDeep);
     }
 
     @Override
@@ -448,5 +553,67 @@ public class KotlinLightClassForExplicitDeclaration extends KotlinWrappingLightC
     public List<PsiClass> getOwnInnerClasses() {
         // TODO: Should return inner class wrapper
         return Arrays.asList(getDelegate().getInnerClasses());
+    }
+
+    private static class Anonymous extends KotlinLightClassForExplicitDeclaration implements PsiAnonymousClass {
+        private static final Logger LOG = Logger.getInstance(Anonymous.class);
+
+        private SoftReference<PsiClassType> cachedBaseType = null;
+
+        private Anonymous(@NotNull PsiManager manager, @NotNull FqName name, @NotNull JetClassOrObject classOrObject) {
+            super(manager, name, classOrObject);
+        }
+
+        @NotNull
+        @Override
+        public PsiJavaCodeReferenceElement getBaseClassReference() {
+            Project project = classOrObject.getProject();
+            return JavaPsiFacade.getElementFactory(project).createReferenceElementByFQClassName(
+                    getFirstSupertypeFQName(), GlobalSearchScope.allScope(project)
+            );
+        }
+
+        private String getFirstSupertypeFQName() {
+            ClassDescriptor descriptor = getDescriptor();
+            if (descriptor == null) return CommonClassNames.JAVA_LANG_OBJECT;
+
+            Collection<JetType> superTypes = descriptor.getTypeConstructor().getSupertypes();
+
+            if (superTypes.isEmpty()) return CommonClassNames.JAVA_LANG_OBJECT;
+
+            JetType superType = superTypes.iterator().next();
+            DeclarationDescriptor superClassDescriptor = superType.getConstructor().getDeclarationDescriptor();
+
+            if (superClassDescriptor == null) {
+                LOG.error("No declaration descriptor for supertype " + superType + " of " + getDescriptor());
+                // return java.lang.Object for recovery
+                return CommonClassNames.JAVA_LANG_OBJECT;
+            }
+
+            return DescriptorUtils.getFqName(superClassDescriptor).asString();
+        }
+
+        @NotNull
+        @Override
+        public synchronized PsiClassType getBaseClassType() {
+            PsiClassType type = null;
+            if (cachedBaseType != null) type = cachedBaseType.get();
+            if (type != null && type.isValid()) return type;
+
+            type = JavaPsiFacade.getInstance(classOrObject.getProject()).getElementFactory().createType(getBaseClassReference());
+            cachedBaseType = new SoftReference<PsiClassType>(type);
+            return type;
+        }
+
+        @Nullable
+        @Override
+        public PsiExpressionList getArgumentList() {
+            return null;
+        }
+
+        @Override
+        public boolean isInQualifiedNew() {
+            return false;
+        }
     }
 }

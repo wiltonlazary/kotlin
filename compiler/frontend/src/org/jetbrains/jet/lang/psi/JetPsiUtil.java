@@ -35,6 +35,7 @@ import org.jetbrains.jet.kdoc.psi.api.KDocElement;
 import org.jetbrains.jet.lang.parsing.JetExpressionParsing;
 import org.jetbrains.jet.lang.resolve.ImportPath;
 import org.jetbrains.jet.lang.resolve.name.FqName;
+import org.jetbrains.jet.lang.resolve.name.FqNameUnsafe;
 import org.jetbrains.jet.lang.resolve.name.Name;
 import org.jetbrains.jet.lang.resolve.name.SpecialNames;
 import org.jetbrains.jet.lang.types.expressions.OperatorConventions;
@@ -188,6 +189,12 @@ public class JetPsiUtil {
     public static FqName getFQName(@NotNull JetFile file) {
         JetNamespaceHeader header = file.getNamespaceHeader();
         return header != null ? header.getFqName() : FqName.ROOT;
+    }
+
+    @Nullable
+    public static FqNameUnsafe getUnsafeFQName(@NotNull JetNamedDeclaration namedDeclaration) {
+        FqName fqName = getFQName(namedDeclaration);
+        return fqName != null ? fqName.toUnsafe() : null;
     }
 
     @Nullable
@@ -998,7 +1005,7 @@ public class JetPsiUtil {
     }
 
     @Nullable
-    public static JetElement getEnclosingBlockForLocalDeclaration(@Nullable JetNamedDeclaration declaration) {
+    public static JetElement getEnclosingElementForLocalDeclaration(@Nullable JetNamedDeclaration declaration) {
         if (declaration instanceof JetTypeParameter || declaration instanceof JetParameter) {
             declaration = PsiTreeUtil.getParentOfType(declaration, JetNamedDeclaration.class);
         }
@@ -1006,7 +1013,7 @@ public class JetPsiUtil {
         //noinspection unchecked
         JetElement container = PsiTreeUtil.getParentOfType(
                 declaration,
-                JetBlockExpression.class, JetClassInitializer.class, JetProperty.class, JetFunction.class
+                JetBlockExpression.class, JetClassInitializer.class, JetProperty.class, JetFunction.class, JetParameter.class
         );
         if (container == null) return null;
 
@@ -1014,7 +1021,7 @@ public class JetPsiUtil {
     }
 
     public static boolean isLocal(@NotNull JetNamedDeclaration declaration) {
-        return getEnclosingBlockForLocalDeclaration(declaration) != null;
+        return getEnclosingElementForLocalDeclaration(declaration) != null;
     }
 
     @Nullable
