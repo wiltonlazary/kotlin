@@ -31,6 +31,7 @@ import org.jetbrains.jet.di.InjectorForLazyResolve;
 import org.jetbrains.jet.lang.descriptors.*;
 import org.jetbrains.jet.lang.psi.*;
 import org.jetbrains.jet.lang.resolve.BindingContext;
+import org.jetbrains.jet.lang.resolve.BindingContextUtils;
 import org.jetbrains.jet.lang.resolve.BindingTrace;
 import org.jetbrains.jet.lang.resolve.BindingTraceContext;
 import org.jetbrains.jet.lang.resolve.lazy.data.JetClassLikeInfo;
@@ -205,11 +206,19 @@ public class ResolveSession implements KotlinCodeAnalyzer {
         //     class A {} class A { fun foo(): A<completion here>}
         // and if we find the class by name only, we may b-not get the right one.
         // This call is only needed to make sure the classes are written to trace
-        resolutionScope.getClassifier(name);
+        ClassifierDescriptor scopeDescriptor = resolutionScope.getClassifier(name);
         DeclarationDescriptor declaration = getBindingContext().get(BindingContext.DECLARATION_TO_DESCRIPTOR, classOrObject);
 
         if (declaration == null) {
-            throw new IllegalArgumentException("Could not find a classifier for " + classOrObject + " " + classOrObject.getText());
+            PsiElement scopeDescriptorElement = scopeDescriptor != null ?
+                                                BindingContextUtils.descriptorToDeclaration(getBindingContext(), scopeDescriptor):
+                                                null;
+
+            throw new IllegalArgumentException(
+                    "Could not find a classifier for " + classOrObject +
+                    " " + classOrObject.getText() +
+                    "\nElement in context:\n" + (scopeDescriptorElement != null ? scopeDescriptorElement.getText() : "<no_element>")
+            );
         }
         return (ClassDescriptor) declaration;
     }
