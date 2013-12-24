@@ -744,26 +744,14 @@ public class JetControlFlowProcessor {
         public void visitQualifiedExpressionVoid(@NotNull JetQualifiedExpression expression, CFPContext context) {
             mark(expression);
             JetExpression selectorExpression = expression.getSelectorExpression();
-            if (selectorExpression != null) {
-                final Ref<Boolean> error = new Ref<Boolean>(false);
-                JetControlFlowBuilderAdapter adapter = new JetControlFlowBuilderAdapter() {
-                    @NotNull
-                    @Override
-                    protected JetControlFlowBuilder getDelegateBuilder() {
-                        return builder;
-                    }
+            if (selectorExpression == null) return;
 
-                    @Override
-                    public void compilationError(@NotNull JetElement element, @NotNull String message) {
-                        error.set(true);
-                        super.compilationError(element, message);
-                    }
-                };
-                new CFPVisitor(adapter).generateInstructions(selectorExpression, NOT_IN_CONDITION);
+            generateInstructions(selectorExpression, NOT_IN_CONDITION);
 
-                if (error.get()) {
-                    generateInstructions(expression.getReceiverExpression(), NOT_IN_CONDITION);
-                }
+            JetExpression calleeExpression = JetPsiUtil.getCalleeExpressionIfAny(selectorExpression);
+            if (calleeExpression == null) return;
+            if (trace.get(BindingContext.RESOLVED_CALL, calleeExpression) == null) {
+                generateInstructions(expression.getReceiverExpression(), NOT_IN_CONDITION);
             }
         }
 

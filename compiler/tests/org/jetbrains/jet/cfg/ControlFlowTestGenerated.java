@@ -91,7 +91,12 @@ public class ControlFlowTestGenerated extends AbstractControlFlowTest {
     public void testBasic() throws Exception {
         doTest("compiler/testData/cfg/Basic.kt");
     }
-    
+
+    @TestMetadata("chainedQualifiedExpression.kt")
+    public void testChainedQualifiedExpression() throws Exception {
+        doTest("compiler/testData/cfg/chainedQualifiedExpression.kt");
+    }
+
     @TestMetadata("DelegatedProperty.kt")
     public void testDelegatedProperty() throws Exception {
         doTest("compiler/testData/cfg/DelegatedProperty.kt");
