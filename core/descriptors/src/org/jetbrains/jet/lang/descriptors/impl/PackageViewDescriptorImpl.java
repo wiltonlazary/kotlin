@@ -18,13 +18,14 @@ package org.jetbrains.jet.lang.descriptors.impl;
 
 import com.google.common.collect.Lists;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ArrayUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.lang.descriptors.*;
 import org.jetbrains.jet.lang.descriptors.annotations.AnnotationDescriptor;
 import org.jetbrains.jet.lang.resolve.name.FqName;
 import org.jetbrains.jet.lang.resolve.name.Name;
-import org.jetbrains.jet.lang.resolve.scopes.ChainedScope;
+import org.jetbrains.jet.lang.resolve.scopes.DelegatingScope;
 import org.jetbrains.jet.lang.resolve.scopes.JetScope;
 import org.jetbrains.jet.lang.resolve.scopes.JetScopeImpl;
 import org.jetbrains.jet.lang.types.TypeSubstitutor;
@@ -55,8 +56,9 @@ public class PackageViewDescriptorImpl extends DeclarationDescriptorImpl impleme
         }
         scopes.add(new SubpackagesScope());
 
-        memberScope = new ChainedScope(this, "package view scope for " + fqName + " in " + module.getName(),
-                                       scopes.toArray(new JetScope[scopes.size()]));
+        memberScope = new DelegatingScope(
+                this, "package view scope for " + fqName + " in " + module.getName(),
+                ArrayUtil.toObjectArray(scopes, JetScope.class));
     }
 
     @Nullable
