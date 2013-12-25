@@ -5231,6 +5231,11 @@ public class JetDiagnosticsTestGenerated extends AbstractJetDiagnosticsTest {
                 JetTestUtils.assertAllTestsPresentByMetadata(this.getClass(), "org.jetbrains.jet.generators.tests.TestsPackage", new File("compiler/testData/diagnostics/tests/redeclarations"), Pattern.compile("^(.+)\\.kt$"), true);
             }
             
+            @TestMetadata("ClassRedeclarationInDifferentFiles.kt")
+            public void testClassRedeclarationInDifferentFiles() throws Exception {
+                doTest("compiler/testData/diagnostics/tests/redeclarations/ClassRedeclarationInDifferentFiles.kt");
+            }
+            
             @TestMetadata("ConflictingExtensionProperties.kt")
             public void testConflictingExtensionProperties() throws Exception {
                 doTest("compiler/testData/diagnostics/tests/redeclarations/ConflictingExtensionProperties.kt");
