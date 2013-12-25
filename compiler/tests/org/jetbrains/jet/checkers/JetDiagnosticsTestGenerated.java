@@ -3994,7 +3994,7 @@ public class JetDiagnosticsTestGenerated extends AbstractJetDiagnosticsTest {
         }
         
         @TestMetadata("compiler/testData/diagnostics/tests/inline")
-        @InnerTestClasses({Inline.BinaryExpressions.class, Inline.NonPublicMember.class, Inline.UnaryExpressions.class})
+        @InnerTestClasses({Inline.BinaryExpressions.class, Inline.NonPublicMember.class, Inline.Regressions.class, Inline.UnaryExpressions.class})
         public static class Inline extends AbstractJetDiagnosticsTest {
             public void testAllFilesPresentInInline() throws Exception {
                 JetTestUtils.assertAllTestsPresentByMetadata(this.getClass(), "org.jetbrains.jet.generators.tests.TestsPackage", new File("compiler/testData/diagnostics/tests/inline"), Pattern.compile("^(.+)\\.kt$"), true);
@@ -4191,6 +4191,19 @@ public class JetDiagnosticsTestGenerated extends AbstractJetDiagnosticsTest {
                 
             }
             
+            @TestMetadata("compiler/testData/diagnostics/tests/inline/regressions")
+            public static class Regressions extends AbstractJetDiagnosticsTest {
+                public void testAllFilesPresentInRegressions() throws Exception {
+                    JetTestUtils.assertAllTestsPresentByMetadata(this.getClass(), "org.jetbrains.jet.generators.tests.TestsPackage", new File("compiler/testData/diagnostics/tests/inline/regressions"), Pattern.compile("^(.+)\\.kt$"), true);
+                }
+                
+                @TestMetadata("kt4341.kt")
+                public void testKt4341() throws Exception {
+                    doTest("compiler/testData/diagnostics/tests/inline/regressions/kt4341.kt");
+                }
+                
+            }
+            
             @TestMetadata("compiler/testData/diagnostics/tests/inline/unaryExpressions")
             public static class UnaryExpressions extends AbstractJetDiagnosticsTest {
                 public void testAllFilesPresentInUnaryExpressions() throws Exception {
@@ -4214,6 +4227,7 @@ public class JetDiagnosticsTestGenerated extends AbstractJetDiagnosticsTest {
                 suite.addTestSuite(Inline.class);
                 suite.addTestSuite(BinaryExpressions.class);
                 suite.addTestSuite(NonPublicMember.class);
+                suite.addTestSuite(Regressions.class);
                 suite.addTestSuite(UnaryExpressions.class);
                 return suite;
             }
