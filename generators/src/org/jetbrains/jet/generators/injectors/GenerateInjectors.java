@@ -135,7 +135,7 @@ public class GenerateInjectors {
         generator.addField(VirtualFileKotlinClassFinder.class);
         generator.addField(MutablePackageFragmentProvider.class);
         generator.addField(NamespaceFactoryImpl.class);
-        generator.addPublicField(JavaPackageFragmentProviderImpl.class);
+        generator.addField(JavaPackageFragmentProviderImpl.class);
         generator.addField(false, VirtualFileFinder.class, "virtualFileFinder",
                            new GivenExpression(
                                    "com.intellij.openapi.components.ServiceManager.getService(project, VirtualFileFinder.class)"));
