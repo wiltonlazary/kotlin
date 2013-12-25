@@ -85,7 +85,7 @@ public final class DecompiledDataFactory {
         appendDecompiledTextAndPackageName(packageFqName);
         SerializedDataHeader.Kind kind = classFileHeader.getKind();
         if (kind == SerializedDataHeader.Kind.PACKAGE) {
-            PackageFragmentDescriptor pf = javaDescriptorResolver.getPackageFragmentProvider().getPackageFragment(packageFqName);
+            PackageFragmentDescriptor pf = javaDescriptorResolver.getPackageFragment(packageFqName);
             if (pf != null) {
                 for (DeclarationDescriptor member : sortDeclarations(pf.getMemberScope().getAllDescriptors())) {
                     if (!(member instanceof ClassDescriptor)) {
