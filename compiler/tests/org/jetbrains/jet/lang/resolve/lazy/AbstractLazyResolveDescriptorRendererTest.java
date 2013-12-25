@@ -16,11 +16,15 @@
 
 package org.jetbrains.jet.lang.resolve.lazy;
 
-import com.google.common.collect.Lists;
+import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.impl.DocumentImpl;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiFileFactory;
+import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.FilteringIterator;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.jet.ConfigurationKind;
 import org.jetbrains.jet.JetTestUtils;
@@ -32,13 +36,14 @@ import org.jetbrains.jet.lang.resolve.lazy.declarations.FileBasedDeclarationProv
 import org.jetbrains.jet.lang.resolve.lazy.storage.LockBasedLazyResolveStorageManager;
 import org.jetbrains.jet.lang.resolve.name.FqName;
 import org.jetbrains.jet.lang.types.lang.KotlinBuiltIns;
+import org.jetbrains.jet.plugin.JetFileType;
 import org.jetbrains.jet.renderer.DescriptorRenderer;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 public abstract class AbstractLazyResolveDescriptorRendererTest extends KotlinTestWithEnvironment {
 
@@ -48,20 +53,38 @@ public abstract class AbstractLazyResolveDescriptorRendererTest extends KotlinTe
     }
 
     protected void doTest(@NotNull String testFile) throws IOException {
-        JetFile psiFile = JetPsiFactory.createFile(getProject(), FileUtil.loadFile(new File(testFile), true));
-        Collection<JetFile> files = Lists.newArrayList(psiFile);
+        String text = FileUtil.loadFile(new File(testFile), true);
+
+        List<PsiFile> files = JetTestUtils.createTestFiles("file.kt", text, new JetTestUtils.TestFileFactory<PsiFile>() {
+            @Override
+            public PsiFile create(String fileName, String text, Map<String, String> directives) {
+                return PsiFileFactory.getInstance(getProject()).createFileFromText(
+                        fileName, fileName.endsWith(".kt") ? JetFileType.INSTANCE : JavaFileType.INSTANCE, text);
+            }
+        });
+
+        @SuppressWarnings("unchecked")
+        List<JetFile> jetFiles = (List<JetFile>) ContainerUtil.filter(files, new FilteringIterator.InstanceOf<JetFile>(JetFile.class));
+
+        JetFile psiFile = jetFiles.get(0);
 
         final ModuleDescriptorImpl lazyModule = AnalyzerFacadeForJVM.createJavaModule("<lazy module>");
         lazyModule.addFragmentProvider(KotlinBuiltIns.getInstance().getBuiltInsModule().getPackageFragmentProvider());
+
         LockBasedLazyResolveStorageManager storageManager = new LockBasedLazyResolveStorageManager();
-        final ResolveSession resolveSession = new ResolveSession(getProject(), storageManager, lazyModule,
-                                                                 new FileBasedDeclarationProviderFactory(storageManager, files));
+
+        final ResolveSession resolveSession = new ResolveSession(
+                getProject(), storageManager, lazyModule,
+                new FileBasedDeclarationProviderFactory(storageManager, jetFiles));
 
         final List<DeclarationDescriptor> descriptors = new ArrayList<DeclarationDescriptor>();
         psiFile.accept(new JetVisitorVoid() {
             @Override
             public void visitJetFile(@NotNull JetFile file) {
-                FqName fqName = file.getNamespaceHeader().getFqName();
+                JetNamespaceHeader header = file.getNamespaceHeader();
+                assert header != null : "Scripts are not supported";
+
+                FqName fqName = header.getFqName();
                 if (!fqName.isRoot()) {
                     PackageViewDescriptor packageDescriptor = lazyModule.getPackage(fqName);
                     descriptors.add(packageDescriptor);

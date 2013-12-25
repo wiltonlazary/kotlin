@@ -1,0 +1,26 @@
+//FILE:mainFile.kt
+//----------------------------------------------------------------------------------
+package test
+
+public class Small() {
+    fun test(hi : String) {}
+}
+
+val test: Small? = null
+
+//package test
+//public final class Small defined in test
+//public constructor Small() defined in test.Small
+//internal final fun test(hi: jet.String): jet.Unit defined in test.Small
+//value-parameter val hi: jet.String defined in test.Small.test
+//internal val test: test.Small? defined in test
+
+//FILE:Small.java
+//----------------------------------------------------------------------------------
+package test;
+
+public class Small {
+    void test(String hi) {
+
+    }
+}

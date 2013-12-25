@@ -166,6 +166,7 @@ fun main(args: Array<String>) {
 
         testClass(javaClass<AbstractLazyResolveDescriptorRendererTest>()) {
             model("renderer")
+            model("lazyResolve/multifile", extension = "resolve")
         }
 
         testClass(javaClass<AbstractLazyResolveTest>()) {
