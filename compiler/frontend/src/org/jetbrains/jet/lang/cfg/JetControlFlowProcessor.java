@@ -744,15 +744,14 @@ public class JetControlFlowProcessor {
         public void visitQualifiedExpressionVoid(@NotNull JetQualifiedExpression expression, CFPContext context) {
             mark(expression);
             JetExpression selectorExpression = expression.getSelectorExpression();
-            if (selectorExpression == null) return;
+            if (selectorExpression != null) {
+                generateInstructions(selectorExpression, NOT_IN_CONDITION);
 
-            generateInstructions(selectorExpression, NOT_IN_CONDITION);
-
-            JetExpression calleeExpression = JetPsiUtil.getCalleeExpressionIfAny(selectorExpression);
-            if (calleeExpression == null) return;
-            if (trace.get(BindingContext.RESOLVED_CALL, calleeExpression) == null) {
-                generateInstructions(expression.getReceiverExpression(), NOT_IN_CONDITION);
+                JetExpression calleeExpression = JetPsiUtil.getCalleeExpressionIfAny(selectorExpression);
+                // receiver was generated for resolvedCall
+                if (calleeExpression != null && getResolvedCall(calleeExpression) != null) return;
             }
+            generateInstructions(expression.getReceiverExpression(), NOT_IN_CONDITION);
         }
 
         @Override
