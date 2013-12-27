@@ -59,4 +59,8 @@ public class KotlinAndJavaCheckerTest extends DaemonAnalyzerTestCase {
     public void testUseKotlinSubclassesOfMappedTypes() throws Exception {
         doTest(true, true, "UseKotlinSubclassesOfMappedTypes.java", "UseKotlinSubclassesOfMappedTypes.kt");
     }
+
+    public void testUsingKotlinSubtypeTraitOfMappedTypes() throws Exception {
+        doTest(true, true, "UsingKotlinSubtypeTraitOfMappedTypes.java", "UsingKotlinSubtypeTraitOfMappedTypes.kt");
+    }
 }
