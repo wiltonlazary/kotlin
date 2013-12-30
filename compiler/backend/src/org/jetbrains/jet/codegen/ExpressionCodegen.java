@@ -1328,14 +1328,13 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
 
         ConstructorDescriptor constructorDescriptor = bindingContext.get(BindingContext.CONSTRUCTOR, expression.getObjectDeclaration());
         assert constructorDescriptor != null;
-        CallableMethod constructor = typeMapper.mapToCallableMethod(constructorDescriptor, closure);
+        CallableMethod constructor = typeMapper.mapToCallableMethod(constructorDescriptor);
 
         Type type = bindingContext.get(ASM_TYPE, constructorDescriptor.getContainingDeclaration());
         assert type != null;
 
         v.anew(type);
         v.dup();
-        Method cons = constructor.getSignature().getAsmMethod();
 
         pushClosureOnStack(closure, false);
 
@@ -1348,13 +1347,13 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
             assert superConstructor != null;
             //noinspection SuspiciousMethodCalls
             CallableMethod superCallable = typeMapper.mapToCallableMethod(superConstructor);
-            Type[] argumentTypes = superCallable.getSignature().getAsmMethod().getArgumentTypes();
+            Type[] argumentTypes = superCallable.getAsmMethod().getArgumentTypes();
             ResolvedCall resolvedCall = bindingContext.get(BindingContext.RESOLVED_CALL, superCall.getCalleeExpression());
             assert resolvedCall != null;
             pushMethodArguments(resolvedCall, Arrays.asList(argumentTypes));
         }
 
-        v.invokespecial(type.getInternalName(), "<init>", cons.getDescriptor());
+        v.invokespecial(type.getInternalName(), "<init>", constructor.getAsmMethod().getDescriptor());
         return StackValue.onStack(type);
     }
 
@@ -1774,7 +1773,6 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
         boolean isStatic = containingDeclaration instanceof PackageFragmentDescriptor;
         boolean isSuper = superExpression != null;
         boolean isInsideClass = isCallInsideSameClassAsDeclared(propertyDescriptor, context);
-        boolean isInsideModule = isCallInsideSameModuleAsDeclared(propertyDescriptor, context);
 
         JetType delegateType = getPropertyDelegateType(propertyDescriptor, state.getBindingContext());
         boolean isDelegatedProperty = delegateType != null;
@@ -1817,9 +1815,7 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
 
                 PropertyGetterDescriptor getter = propertyDescriptor.getGetter();
                 if (getter != null) {
-                    callableGetter = typeMapper.mapToCallableMethod(
-                            getter, isSuper || MethodKind.SYNTHETIC_ACCESSOR == methodKind, isInsideClass, isInsideModule,
-                            OwnerKind.IMPLEMENTATION);
+                    callableGetter = typeMapper.mapToCallableMethod(getter, isSuper || MethodKind.SYNTHETIC_ACCESSOR == methodKind, context);
                 }
             }
 
@@ -1830,9 +1826,7 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
                         callableSetter = null;
                     }
                     else {
-                        callableSetter = typeMapper.mapToCallableMethod(
-                                setter, isSuper || MethodKind.SYNTHETIC_ACCESSOR == methodKind, isInsideClass, isInsideModule,
-                                OwnerKind.IMPLEMENTATION);
+                        callableSetter = typeMapper.mapToCallableMethod(setter, isSuper || MethodKind.SYNTHETIC_ACCESSOR == methodKind, context);
                     }
                 }
             }
@@ -1844,7 +1838,7 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
         propertyDescriptor = unwrapFakeOverride(propertyDescriptor);
         if (callableMethod == null) {
             owner = typeMapper.getOwner(isBackingFieldInAnotherClass ? propertyDescriptor.getContainingDeclaration() : propertyDescriptor,
-                                        context.getContextKind(), isInsideModule);
+                                        context.getContextKind(), isCallInsideSameModuleAsDeclared(propertyDescriptor, context));
         }
         else {
             owner = callableMethod.getOwner();
@@ -2011,9 +2005,8 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
         if (callable instanceof CallableMethod) {
             CallableMethod callableMethod = (CallableMethod) callable;
             invokeMethodWithArguments(callableMethod, resolvedCall, receiver);
-            //noinspection ConstantConditions
-            Type returnType = typeMapper.mapReturnType(resolvedCall.getResultingDescriptor().getReturnType());
-            StackValue.coerce(callableMethod.getSignature().getAsmMethod().getReturnType(), returnType, v);
+            Type returnType = typeMapper.mapReturnType(resolvedCall.getResultingDescriptor());
+            StackValue.coerce(callableMethod.getReturnType(), returnType, v);
             return StackValue.onStack(returnType);
         }
         else {
@@ -2073,10 +2066,7 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
         }
         else {
             SimpleFunctionDescriptor originalOfSamAdapter = (SimpleFunctionDescriptor) SamCodegenUtil.getOriginalIfSamAdapter(fd);
-            return typeMapper.mapToCallableMethod(originalOfSamAdapter != null ? originalOfSamAdapter : fd, superCall,
-                                                  isCallInsideSameClassAsDeclared(fd, context),
-                                                  isCallInsideSameModuleAsDeclared(fd, context),
-                                                  OwnerKind.IMPLEMENTATION);
+            return typeMapper.mapToCallableMethod(originalOfSamAdapter != null ? originalOfSamAdapter : fd, superCall, context);
         }
     }
 
@@ -2411,7 +2401,7 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
 
     @NotNull
     public Type expressionType(JetExpression expr) {
-        return typeMapper.expressionType(expr);
+        return asmTypeOrVoid(bindingContext.get(EXPRESSION_TYPE, expr));
     }
 
     public int indexOfLocal(JetReferenceExpression lhs) {
@@ -3391,7 +3381,7 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> implem
             assert resolvedCall != null : "couldn't find resolved call: " + expression.getText();
 
             Callable callable = resolveToCallable(operationDescriptor, false);
-            Method asmMethod = resolveToCallableMethod(operationDescriptor, false, context).getSignature().getAsmMethod();
+            Method asmMethod = resolveToCallableMethod(operationDescriptor, false, context).getAsmMethod();
             Type[] argumentTypes = asmMethod.getArgumentTypes();
 
             if (callable instanceof CallableMethod) {
