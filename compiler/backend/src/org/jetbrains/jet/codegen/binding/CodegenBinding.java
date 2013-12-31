@@ -340,11 +340,8 @@ public class CodegenBinding {
                 JetTypeReference typeReference = specifier.getTypeReference();
 
                 JetType superType = bindingContext.get(TYPE, typeReference);
-                assert superType != null:
-                        String.format("No type in binding context for %s. Specifier: %s. Class: %s",
-                                      typeReference != null ? typeReference.getText() : null,
-                                      specifier.getText(),
-                                      classOrObject.getText());
+                assert superType != null: String.format(
+                        "No type in binding context for  \n---\n%s\n---\n", JetPsiUtil.getElementTextWithContext(specifier));
 
                 ClassDescriptor superClassDescriptor = (ClassDescriptor) superType.getConstructor().getDeclarationDescriptor();
                 assert superClassDescriptor != null;
