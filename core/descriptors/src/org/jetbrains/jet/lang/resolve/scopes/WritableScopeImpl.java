@@ -38,7 +38,118 @@ import java.util.*;
 
 public class WritableScopeImpl extends WritableScopeWithImports {
 
-    private final Collection<DeclarationDescriptor> allDescriptors = Lists.newArrayList();
+    public final class ConcurrentModificationDebugCollection<T> implements Collection<T> {
+        private final Collection<T> collection;
+        private final Set<Thread> readingThreads = Sets.newHashSet();
+
+        ConcurrentModificationDebugCollection(Collection<T> collection) {
+            this.collection = collection;
+        }
+
+        public void startRead() {
+            readingThreads.add(Thread.currentThread());
+        }
+
+        public void endRead() {
+            if (!readingThreads.remove(Thread.currentThread())) {
+                throw new IllegalStateException("Removing not added element");
+            }
+        }
+
+        public void checkWrite() {
+            if (readingThreads.contains(Thread.currentThread())) {
+                throw new IllegalStateException("Modification while reading");
+            }
+        }
+
+        @Override
+        public int size() {
+            return collection.size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return collection.isEmpty();
+        }
+
+        @Override
+        public boolean contains(Object o) {
+            return collection.contains(o);
+        }
+
+        @NotNull
+        @Override
+        public Iterator<T> iterator() {
+            return collection.iterator();
+        }
+
+        @NotNull
+        @Override
+        public Object[] toArray() {
+            return collection.toArray();
+        }
+
+        @NotNull
+        @Override
+        public <T> T[] toArray(T[] a) {
+            return collection.toArray(a);
+        }
+
+        @Override
+        public boolean add(T t) {
+            checkWrite();
+            return collection.add(t);
+        }
+
+        @Override
+        public boolean remove(Object o) {
+            checkWrite();
+            return collection.remove(o);
+        }
+
+        @Override
+        public boolean containsAll(Collection<?> c) {
+            return collection.containsAll(c);
+        }
+
+        @Override
+        public boolean addAll(Collection<? extends T> c) {
+            checkWrite();
+            return collection.addAll(c);
+        }
+
+
+        @Override
+        public boolean removeAll(Collection<?> c) {
+            checkWrite();
+            return collection.removeAll(c);
+        }
+
+        @Override
+        public boolean retainAll(Collection<?> c) {
+            checkWrite();
+            return collection.retainAll(c);
+        }
+
+        @Override
+        public void clear() {
+            checkWrite();
+            collection.clear();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return collection.equals(o);
+        }
+
+        @Override
+        public int hashCode() {
+            return collection.hashCode();
+        }
+    }
+
+
+    private final Collection<DeclarationDescriptor> allDescriptors = new ConcurrentModificationDebugCollection<DeclarationDescriptor>(Lists.<DeclarationDescriptor>newArrayList());
     private final Multimap<Name, DeclarationDescriptor> declaredDescriptorsAccessibleBySimpleName = HashMultimap.create();
     private boolean allDescriptorsDone = false;
 
@@ -137,6 +248,7 @@ public class WritableScopeImpl extends WritableScopeWithImports {
                 allDescriptors.addAll(imported.getAllDescriptors());
             }
         }
+
         return allDescriptors;
     }
 

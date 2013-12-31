@@ -54,6 +54,7 @@ import org.jetbrains.jet.lang.resolve.java.AsmTypeConstants;
 import org.jetbrains.jet.lang.resolve.java.JvmAbi;
 import org.jetbrains.jet.lang.resolve.java.JvmAnnotationNames;
 import org.jetbrains.jet.lang.resolve.name.Name;
+import org.jetbrains.jet.lang.resolve.scopes.WritableScopeImpl;
 import org.jetbrains.jet.lang.types.*;
 import org.jetbrains.jet.lang.types.checker.JetTypeChecker;
 import org.jetbrains.jet.lang.types.lang.KotlinBuiltIns;
@@ -1817,51 +1818,63 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
     private List<Pair<CallableMemberDescriptor, CallableMemberDescriptor>> getTraitImplementations(@NotNull ClassDescriptor classDescriptor) {
         List<Pair<CallableMemberDescriptor, CallableMemberDescriptor>> r = Lists.newArrayList();
 
-        for (DeclarationDescriptor decl : classDescriptor.getDefaultType().getMemberScope().getAllDescriptors()) {
-            if (!(decl instanceof CallableMemberDescriptor)) {
-                continue;
+        Collection<DeclarationDescriptor> descriptors = classDescriptor.getDefaultType().getMemberScope().getAllDescriptors();
+        try {
+            if (descriptors instanceof WritableScopeImpl.ConcurrentModificationDebugCollection) {
+                ((WritableScopeImpl.ConcurrentModificationDebugCollection) descriptors).startRead();
             }
 
-            CallableMemberDescriptor callableMemberDescriptor = (CallableMemberDescriptor) decl;
-            if (callableMemberDescriptor.getKind() != CallableMemberDescriptor.Kind.FAKE_OVERRIDE) {
-                continue;
-            }
+            for (DeclarationDescriptor decl : descriptors) {
+                if (!(decl instanceof CallableMemberDescriptor)) {
+                    continue;
+                }
 
-            Collection<CallableMemberDescriptor> overriddenDeclarations =
-                    OverridingUtil.getOverriddenDeclarations(callableMemberDescriptor);
+                CallableMemberDescriptor callableMemberDescriptor = (CallableMemberDescriptor) decl;
+                if (callableMemberDescriptor.getKind() != CallableMemberDescriptor.Kind.FAKE_OVERRIDE) {
+                    continue;
+                }
 
-            Collection<CallableMemberDescriptor> filteredOverriddenDeclarations =
-                    OverridingUtil.filterOutOverridden(Sets.newLinkedHashSet(overriddenDeclarations));
+                Collection<CallableMemberDescriptor> overriddenDeclarations =
+                        OverridingUtil.getOverriddenDeclarations(callableMemberDescriptor);
 
-            int count = 0;
-            CallableMemberDescriptor candidate = null;
+                Collection<CallableMemberDescriptor> filteredOverriddenDeclarations =
+                        OverridingUtil.filterOutOverridden(Sets.newLinkedHashSet(overriddenDeclarations));
 
-            for (CallableMemberDescriptor overriddenDeclaration : filteredOverriddenDeclarations) {
-                if (isTrait(overriddenDeclaration.getContainingDeclaration()) &&
-                    overriddenDeclaration.getModality() != Modality.ABSTRACT) {
-                    candidate = overriddenDeclaration;
-                    count++;
+                int count = 0;
+                CallableMemberDescriptor candidate = null;
+
+                for (CallableMemberDescriptor overriddenDeclaration : filteredOverriddenDeclarations) {
+                    if (isTrait(overriddenDeclaration.getContainingDeclaration()) &&
+                        overriddenDeclaration.getModality() != Modality.ABSTRACT) {
+                        candidate = overriddenDeclaration;
+                        count++;
+                    }
+                }
+                if (candidate == null) {
+                    continue;
+                }
+
+                assert count == 1 : "Ambiguous overridden declaration: " + callableMemberDescriptor.getName();
+
+
+                Collection<JetType> superTypesOfSuperClass =
+                        superClassType != null ? TypeUtils.getAllSupertypes(superClassType) : Collections.<JetType>emptySet();
+                ReceiverParameterDescriptor expectedThisObject = candidate.getExpectedThisObject();
+                assert expectedThisObject != null;
+                JetType candidateType = expectedThisObject.getType();
+                boolean implementedInSuperClass = superTypesOfSuperClass.contains(candidateType);
+
+                if (!implementedInSuperClass) {
+                    r.add(Pair.create(callableMemberDescriptor, candidate));
                 }
             }
-            if (candidate == null) {
-                continue;
-            }
-
-            assert count == 1 : "Ambiguous overridden declaration: " + callableMemberDescriptor.getName();
-
-
-            Collection<JetType> superTypesOfSuperClass =
-                    superClassType != null ? TypeUtils.getAllSupertypes(superClassType) : Collections.<JetType>emptySet();
-            ReceiverParameterDescriptor expectedThisObject = candidate.getExpectedThisObject();
-            assert expectedThisObject != null;
-            JetType candidateType = expectedThisObject.getType();
-            boolean implementedInSuperClass = superTypesOfSuperClass.contains(candidateType);
-
-            if (!implementedInSuperClass) {
-                r.add(Pair.create(callableMemberDescriptor, candidate));
+            return r;
+        }
+        finally {
+            if (descriptors instanceof WritableScopeImpl.ConcurrentModificationDebugCollection) {
+                ((WritableScopeImpl.ConcurrentModificationDebugCollection) descriptors).endRead();
             }
         }
-        return r;
     }
 
     public void addClassObjectPropertyToCopy(PropertyDescriptor descriptor, Object defaultValue) {
