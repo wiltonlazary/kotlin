@@ -1,5 +1,5 @@
 fun Int?.optint() : Unit {}
-val Int?.optval : Unit = Unit.VALUE
+val Int?.optval : Unit get() = Unit
 
 fun <T: Any, E> T.foo(<warning>x</warning> : E, y : A) : T   {
   y.plus(1)
@@ -13,7 +13,7 @@ fun <T: Any, E> T.foo(<warning>x</warning> : E, y : A) : T   {
 
 class A
 
-fun A.plus(<warning>a</warning> : Any) {
+infix operator fun A.plus(<warning>a</warning> : Any) {
 
   1.foo()
   true.<error>foo</error>(<error><error>)</error></error>
@@ -21,7 +21,7 @@ fun A.plus(<warning>a</warning> : Any) {
   <warning>1</warning>
 }
 
-fun A.plus(<warning>a</warning> : Int) {
+infix operator fun A.plus(<warning>a</warning> : Int) {
   <warning>1</warning>
 }
 
@@ -46,7 +46,7 @@ fun Int.foo() = this
           val foo : Int = 0
         }
 
-        fun Any.equals(<warning>other</warning> : Any?) : Boolean = true
+        <error>operator</error> fun Any.<warning>equals</warning>(<warning>other</warning> : Any?) : Boolean = true
         fun Any?.equals1(<warning>other</warning> : Any?) : Boolean = true
         fun Any.equals2(<warning>other</warning> : Any?) : Boolean = true
 
@@ -58,7 +58,7 @@ fun Int.foo() = this
 
             command.foo
 
-            command.equals(null)
+            command<error descr="[UNSAFE_CALL] Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type Command?">.</error>equals(null)
             command?.equals(null)
             command.equals1(null)
             command?.equals1(null)
@@ -66,5 +66,5 @@ fun Int.foo() = this
             val c = Command()
             c<warning>?.</warning>equals2(null)
 
-            if (command == null) 1
+            if (command == null) <warning>1</warning>
         }

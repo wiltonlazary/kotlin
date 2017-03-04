@@ -1,9 +1,11 @@
 JetFile: Super.kt
-  PsiComment(EOL_COMMENT)('// KT-156 Fix the this<Super> syntax')
-  PsiWhiteSpace('\n')
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   FUN
+    PsiComment(EOL_COMMENT)('// KT-156 Fix the this<Super> syntax')
+    PsiWhiteSpace('\n')
     PsiElement(fun)('fun')
     PsiWhiteSpace(' ')
     PsiElement(IDENTIFIER)('foo')
@@ -75,8 +77,9 @@ JetFile: Super.kt
                 PsiElement(IDENTIFIER)('Int')
           PsiElement(GT)('>')
           LABEL_QUALIFIER
-            LABEL_REFERENCE
-              PsiElement(LABEL_IDENTIFIER)('@label')
+            LABEL
+              PsiElement(AT)('@')
+              PsiElement(IDENTIFIER)('label')
         PsiElement(DOT)('.')
         CALL_EXPRESSION
           REFERENCE_EXPRESSION

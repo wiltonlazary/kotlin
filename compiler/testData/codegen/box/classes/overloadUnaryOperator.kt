@@ -1,5 +1,4 @@
-import java.util.*
-
+// WITH_RUNTIME
 class ArrayWrapper<T>() {
     val contents = ArrayList<T>()
 
@@ -7,14 +6,14 @@ class ArrayWrapper<T>() {
        contents.add(item)
     }
 
-    fun minus(): ArrayWrapper<T> {
+    operator fun unaryMinus(): ArrayWrapper<T> {
         val result = ArrayWrapper<T>()
         result.contents.addAll(contents)
-        Collections.reverse(result.contents)
+        result.contents.reverse()
         return result
     }
 
-    fun get(index: Int): T {
+    operator fun get(index: Int): T {
         return contents.get(index)!!
     }
 }

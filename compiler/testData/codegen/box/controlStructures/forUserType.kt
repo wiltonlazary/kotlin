@@ -1,3 +1,6 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 fun box() : String {
     var sum : Int = 0
     var i = 0
@@ -44,7 +47,7 @@ fun box() : String {
     }
     if(sum != 15) return "c4 failed"
 
-    val a : Array<Int> = Array<Int> (5, {0})
+    val a : Array<Int> = arrayOfNulls<Int>(5) as Array<Int>
     for(el in 0..4) {
        a[i] = i++
     }
@@ -92,23 +95,23 @@ class MyCollection2(): Iterable<Int> {
 }
 
 class MyCollection3() {
-    fun iterator() = MyIterator()
+    operator fun iterator() = MyIterator()
 
     class MyIterator() {
         var k : Int = 5
 
-        fun next() : Int? = k--
-        fun hasNext() : Boolean = k > 0
+        operator fun next() : Int? = k--
+        operator fun hasNext() : Boolean = k > 0
     }
 }
 
 class MyCollection4() {
-    fun iterator() = MyIterator()
+    operator fun iterator() = MyIterator()
 
     class MyIterator() {
         var k : Int = 5
 
-        fun next() : Int = k--
-        fun hasNext() = k > 0
+        operator fun next() : Int = k--
+        operator fun hasNext() = k > 0
     }
 }

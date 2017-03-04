@@ -1,5 +1,7 @@
 JetFile: functionTypes.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   CLASS
     PsiElement(class)('class')
@@ -11,27 +13,24 @@ JetFile: functionTypes.kt
       PsiWhiteSpace('\n')
       PsiElement(RBRACE)('}')
   PsiWhiteSpace('\n\n')
-  PsiErrorElement:Expecting package directive or top level declaration
+  PsiErrorElement:Expecting a top level declaration
     PsiElement(package)('package')
   PsiWhiteSpace(' ')
-  MODIFIER_LIST
-    ANNOTATION_ENTRY
-      CONSTRUCTOR_CALLEE
-        TYPE_REFERENCE
-          USER_TYPE
-            REFERENCE_EXPRESSION
-              PsiElement(IDENTIFIER)('n')
+  PsiErrorElement:Expecting a top level declaration
+    PsiElement(IDENTIFIER)('n')
   PsiWhiteSpace(' ')
-  PsiErrorElement:Expecting package directive or top level declaration
-    PsiElement(LBRACE)('{')
-  PsiWhiteSpace('\n  ')
-  CLASS
-    PsiElement(class)('class')
-    PsiWhiteSpace(' ')
-    PsiElement(IDENTIFIER)('B')
-  PsiWhiteSpace('\n')
-  PsiErrorElement:Expecting package directive or top level declaration
-    PsiElement(RBRACE)('}')
+  FUN
+    PsiErrorElement:Expecting a top level declaration
+      <empty list>
+    BLOCK
+      PsiElement(LBRACE)('{')
+      PsiWhiteSpace('\n  ')
+      CLASS
+        PsiElement(class)('class')
+        PsiWhiteSpace(' ')
+        PsiElement(IDENTIFIER)('B')
+      PsiWhiteSpace('\n')
+      PsiElement(RBRACE)('}')
   PsiWhiteSpace('\n')
   CLASS
     MODIFIER_LIST
@@ -40,9 +39,10 @@ JetFile: functionTypes.kt
     PsiElement(class)('class')
     PsiWhiteSpace(' ')
     PsiElement(IDENTIFIER)('XXX')
-    VALUE_PARAMETER_LIST
-      PsiElement(LPAR)('(')
-      PsiElement(RPAR)(')')
+    PRIMARY_CONSTRUCTOR
+      VALUE_PARAMETER_LIST
+        PsiElement(LPAR)('(')
+        PsiElement(RPAR)(')')
     PsiWhiteSpace(' ')
     CLASS_BODY
       PsiElement(LBRACE)('{')
@@ -74,9 +74,8 @@ JetFile: functionTypes.kt
         PsiWhiteSpace(' ')
         TYPE_REFERENCE
           USER_TYPE
-            USER_TYPE
-              REFERENCE_EXPRESSION
-                PsiElement(IDENTIFIER)('namespace')
+            PsiErrorElement:Expecting an element
+              PsiElement(package)('package')
             PsiElement(DOT)('.')
             REFERENCE_EXPRESSION
               PsiElement(IDENTIFIER)('Int')
@@ -500,18 +499,30 @@ JetFile: functionTypes.kt
         PsiElement(COLON)(':')
         PsiWhiteSpace(' ')
         TYPE_REFERENCE
-          USER_TYPE
-            REFERENCE_EXPRESSION
-              PsiElement(IDENTIFIER)('Int')
-        PsiErrorElement:Property getter or setter expected
-          PsiElement(SAFE_ACCESS)('?.')
-          PsiElement(LPAR)('(')
-          PsiElement(IDENTIFIER)('Int')
-          PsiElement(RPAR)(')')
-          PsiWhiteSpace(' ')
-          PsiElement(ARROW)('->')
-          PsiWhiteSpace(' ')
-          PsiElement(IDENTIFIER)('Int')
+          FUNCTION_TYPE
+            FUNCTION_TYPE_RECEIVER
+              TYPE_REFERENCE
+                NULLABLE_TYPE
+                  USER_TYPE
+                    REFERENCE_EXPRESSION
+                      PsiElement(IDENTIFIER)('Int')
+                  PsiElement(QUEST)('?')
+            PsiElement(DOT)('.')
+            VALUE_PARAMETER_LIST
+              PsiElement(LPAR)('(')
+              VALUE_PARAMETER
+                TYPE_REFERENCE
+                  USER_TYPE
+                    REFERENCE_EXPRESSION
+                      PsiElement(IDENTIFIER)('Int')
+              PsiElement(RPAR)(')')
+            PsiWhiteSpace(' ')
+            PsiElement(ARROW)('->')
+            PsiWhiteSpace(' ')
+            TYPE_REFERENCE
+              USER_TYPE
+                REFERENCE_EXPRESSION
+                  PsiElement(IDENTIFIER)('Int')
       PsiWhiteSpace('\n    ')
       PROPERTY
         MODIFIER_LIST
@@ -696,9 +707,10 @@ JetFile: functionTypes.kt
     PsiElement(class)('class')
     PsiWhiteSpace(' ')
     PsiElement(IDENTIFIER)('YYY')
-    VALUE_PARAMETER_LIST
-      PsiElement(LPAR)('(')
-      PsiElement(RPAR)(')')
+    PRIMARY_CONSTRUCTOR
+      VALUE_PARAMETER_LIST
+        PsiElement(LPAR)('(')
+        PsiElement(RPAR)(')')
     PsiWhiteSpace(' ')
     CLASS_BODY
       PsiElement(LBRACE)('{')
@@ -790,11 +802,11 @@ JetFile: functionTypes.kt
                 REFERENCE_EXPRESSION
                   PsiElement(IDENTIFIER)('B')
       PsiWhiteSpace('\n')
-      PsiComment(EOL_COMMENT)('//val a9 : (A, B)')
-      PsiWhiteSpace('\n')
-      PsiComment(EOL_COMMENT)('//val a10 : (B)? -> B')
-      PsiWhiteSpace('\n    ')
       PROPERTY
+        PsiComment(EOL_COMMENT)('//val a9 : (A, B)')
+        PsiWhiteSpace('\n')
+        PsiComment(EOL_COMMENT)('//val a10 : (B)? -> B')
+        PsiWhiteSpace('\n    ')
         PsiElement(val)('val')
         PsiWhiteSpace(' ')
         PsiElement(IDENTIFIER)('a11')
@@ -1046,22 +1058,34 @@ JetFile: functionTypes.kt
         PsiElement(COLON)(':')
         PsiWhiteSpace(' ')
         TYPE_REFERENCE
-          USER_TYPE
-            REFERENCE_EXPRESSION
-              PsiElement(IDENTIFIER)('Int')
-        PsiErrorElement:Property getter or setter expected
-          PsiElement(SAFE_ACCESS)('?.')
-          PsiElement(LPAR)('(')
-          PsiElement(IDENTIFIER)('a')
-          PsiWhiteSpace(' ')
-          PsiElement(COLON)(':')
-          PsiWhiteSpace(' ')
-          PsiElement(IDENTIFIER)('Int')
-          PsiElement(RPAR)(')')
-          PsiWhiteSpace(' ')
-          PsiElement(ARROW)('->')
-          PsiWhiteSpace(' ')
-          PsiElement(IDENTIFIER)('Int')
+          FUNCTION_TYPE
+            FUNCTION_TYPE_RECEIVER
+              TYPE_REFERENCE
+                NULLABLE_TYPE
+                  USER_TYPE
+                    REFERENCE_EXPRESSION
+                      PsiElement(IDENTIFIER)('Int')
+                  PsiElement(QUEST)('?')
+            PsiElement(DOT)('.')
+            VALUE_PARAMETER_LIST
+              PsiElement(LPAR)('(')
+              VALUE_PARAMETER
+                PsiElement(IDENTIFIER)('a')
+                PsiWhiteSpace(' ')
+                PsiElement(COLON)(':')
+                PsiWhiteSpace(' ')
+                TYPE_REFERENCE
+                  USER_TYPE
+                    REFERENCE_EXPRESSION
+                      PsiElement(IDENTIFIER)('Int')
+              PsiElement(RPAR)(')')
+            PsiWhiteSpace(' ')
+            PsiElement(ARROW)('->')
+            PsiWhiteSpace(' ')
+            TYPE_REFERENCE
+              USER_TYPE
+                REFERENCE_EXPRESSION
+                  PsiElement(IDENTIFIER)('Int')
       PsiWhiteSpace('\n    ')
       PROPERTY
         MODIFIER_LIST

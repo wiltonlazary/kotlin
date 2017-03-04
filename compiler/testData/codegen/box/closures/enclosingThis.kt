@@ -1,10 +1,10 @@
 class Point(val x:Int, val y:Int) {
     fun mul() :  (scalar:Int)->Point  {
-        return { (scalar:Int):Point -> Point(x * scalar, y * scalar) }
+        return { scalar:Int -> Point(x * scalar, y * scalar) }
     }
 }
 
-val m = Point(2, 3).mul() :  (scalar:Int)->Point
+val m = Point(2, 3).mul()
 
 fun box() : String {
     val answer = m(5)

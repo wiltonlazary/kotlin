@@ -1,6 +1,9 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 package demo_range
 
-fun Int?.rangeTo(other : Int?) : IntRange = this!!.rangeTo(other!!)
+operator fun Int?.rangeTo(other : Int?) : IntRange = this!!.rangeTo(other!!)
 
 fun box() : String {
     val x : Int? = 10

@@ -13,14 +13,14 @@ class BinaryTree<T> : IMutableSet<T> {
 
 //  override var size : Int { get; private set; }
 
-  this(compare : Comparison<T>) {
+  constructor(compare : Comparison<T>) {
     this.compare = asMatchableComparison(comparison)
   }
 
-  this() : this(naturalOrder<T>()) {
+  constructor() : this(naturalOrder<T>()) {
   }
 
-  private [operator] fun T.compareTo(other : T) : Int = compare(this, other)
+  private @[operator] fun T.compareTo(other : T) : Int = compare(this, other)
 
   override fun contains(item : T) : Boolean {
     return contains(root, item)
@@ -135,7 +135,7 @@ class BinaryTree<T> : IMutableSet<T> {
     val up = Stack<TreeNode>()
     var lastNode : TreeNode
 
-    this() {
+    init {
       if (root != null)
         down.push(root)    
     }

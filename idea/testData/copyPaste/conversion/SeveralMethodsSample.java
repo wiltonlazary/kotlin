@@ -3,7 +3,7 @@ class A {
         element = JetPsiUtil.ascendIfPropertyAccessor(element);
         if (element instanceof JetNamedFunction || element instanceof JetProperty) {
             BindingContext bindingContext =
-                    AnalyzerFacadeWithCache.analyzeFileWithCache((JetFile) element.getContainingFile()).getBindingContext();
+                    AnalyzerFacadeWithCache.analyzeFileWithCache(element.getContainingJetFile()).getBindingContext();
 
             DeclarationDescriptor declarationDescriptor = bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, element);
             if (declarationDescriptor instanceof CallableMemberDescriptor) {
@@ -12,7 +12,7 @@ class A {
                     return JetBundle.message(
                             "x.in.y",
                             DescriptorRenderer.COMPACT.render(declarationDescriptor),
-                            DescriptorRenderer.SOURCE_CODE_SHORT_NAMES_IN_TYPES.render(containingDescriptor)
+                            IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_IN_TYPES.render(containingDescriptor)
                     );
                 }
             }
@@ -25,7 +25,7 @@ class A {
 
     @Override
     protected String getDimensionServiceKey() {
-        return "#org.jetbrains.jet.plugin.refactoring.safeDelete.KotlinOverridingDialog";
+        return "#org.jetbrains.kotlin.idea.refactoring.safeDelete.KotlinOverridingDialog";
     }
 
     public ArrayList<UsageInfo> getSelected() {

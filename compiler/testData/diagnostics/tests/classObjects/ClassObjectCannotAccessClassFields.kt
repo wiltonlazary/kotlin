@@ -3,7 +3,7 @@
 class A() {
     val x = 1
 
-    class object {
-        val y = <!INACCESSIBLE_OUTER_CLASS_EXPRESSION!>x<!>
+    companion object {
+        val y = <!UNRESOLVED_REFERENCE!>x<!>
     }
 }

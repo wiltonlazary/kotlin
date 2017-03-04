@@ -1,13 +1,13 @@
-trait A {
+interface A {
     fun foo() {}
 }
-trait B : A, <error>E</error> {}
-trait C : B {}
-trait D : <error>B</error> {}
-trait E : <error>F</error> {}
-trait F : <error>D</error>, C {}
-trait G : F {}
-trait H : F {}
+interface B : A, <error>E</error> {}
+interface C : <error>B</error> {}
+interface D : <error>B</error> {}
+interface E : <error>F</error> {}
+interface F : <error>D</error>, <error>C</error> {}
+interface G : F {}
+interface H : F {}
 
 val a : A? = null
 val b : B? = null
@@ -21,10 +21,10 @@ val h : H? = null
 fun test() {
     a?.foo()
     b?.foo()
-    c?.foo()
-    d?.foo()
+    c?.<error>foo</error>()
+    d?.<error>foo</error>()
     e?.<error>foo</error>()
-    f?.foo()
-    g?.foo()
-    h?.foo()
+    f?.<error>foo</error>()
+    g?.<error>foo</error>()
+    h?.<error>foo</error>()
 }

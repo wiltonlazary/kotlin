@@ -1,14 +1,31 @@
 package test
 
 public class Pub {
-    class object {}
+    companion object {}
 }
 
 private class Pri {
-    class object {}
+    companion object {}
 }
 
 class Int {
-    class object {}
+    companion object {}
 }
 
+public class Outer {
+    public class Pub {
+        companion object {}
+    }
+
+    private class Pri {
+        companion object {}
+    }
+
+    class Int {
+        companion object {}
+    }
+
+    protected class Pro {
+        companion object {}
+    }
+}

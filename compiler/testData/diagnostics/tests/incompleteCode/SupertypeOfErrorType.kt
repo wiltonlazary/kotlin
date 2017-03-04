@@ -1,13 +1,12 @@
-// !DIAGNOSTICS: -DEBUG_INFO_AUTOCAST
+// !DIAGNOSTICS: -DEBUG_INFO_SMARTCAST
 package a
 
 import java.util.Date
 import java.util.Comparator
 
-
 fun foo() {
 
-    val <!UNUSED_VARIABLE!>c<!>: Comparator<Date?> = comparator {(date1, date2) ->
+    val <!UNUSED_VARIABLE!>c<!>: Comparator<Date?> = comparator { date1, date2 ->
         if (date1 != null && date2 != null) {
             date1.compareTo(date2) * -11
         } else {

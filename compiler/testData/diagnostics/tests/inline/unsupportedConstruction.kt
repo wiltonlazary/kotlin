@@ -8,24 +8,16 @@ inline fun unsupported() {
         }
     }<!>
 
-    <!NOT_YET_SUPPORTED_IN_INLINE!>object B{
-        object BInner {}
-    }<!>
-
-    val s = <!NOT_YET_SUPPORTED_IN_INLINE!>object {
-        fun a() {
-            val sInner = object {
-                fun aInner() {}
-            }
-        }
-    }<!>
+    <!LOCAL_OBJECT_NOT_ALLOWED!>object B<!>{
+        <!LOCAL_OBJECT_NOT_ALLOWED!>object BInner<!> {}
+    }
 
     <!NOT_YET_SUPPORTED_IN_INLINE!>fun local() {
         fun localInner() {}
     }<!>
 }
 
-inline fun unsupportedDefault(<!NOT_YET_SUPPORTED_IN_INLINE!>s : Int = 10<!>) {
+inline fun unsupportedDefault(<!NOT_YET_SUPPORTED_IN_INLINE!>s : ()->Unit = {}<!>) {
 
 }
 
@@ -34,7 +26,7 @@ open class Base {
 }
 
 class Derived: Base() {
-    inline final override fun foo(<!NOT_YET_SUPPORTED_IN_INLINE!>a: Int<!>) {
+    <!OVERRIDE_BY_INLINE!>inline final override fun foo(<!NOT_YET_SUPPORTED_IN_INLINE!>a: Int<!>)<!> {
 
     }
 }

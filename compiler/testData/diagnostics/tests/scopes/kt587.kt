@@ -1,9 +1,9 @@
 // KT-587 Unresolved reference
 
 class Main {
-    class object {
+    companion object {
         class States() {
-            class object {
+            companion object {
                 public val N: States = States() // : States unresolved
             }
         }

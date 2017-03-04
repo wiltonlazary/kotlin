@@ -1,9 +1,13 @@
-// PSI_ELEMENT: org.jetbrains.jet.lang.psi.JetClass
+// PSI_ELEMENT: org.jetbrains.kotlin.psi.KtClass
 // OPTIONS: constructorUsages
 package server
 
 open class <caret>Server {
-    class object {
+    constructor(name: String): this() {
+
+    }
+
+    companion object {
         val NAME = "Server"
     }
 

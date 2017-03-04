@@ -1,12 +1,13 @@
 package test
 
-trait A {
+interface A {
     public val c: String
         get() = "OK"
 }
 
-trait B {
-    protected val c: String
+interface B {
+    private val c: String
+        get() = "FAIL"
 }
 
 open class C {

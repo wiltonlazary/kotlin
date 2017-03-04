@@ -2,8 +2,8 @@
 package n
 
 class C {
-    fun component1() = 1
-    fun component2() = 2
+    operator fun component1() = 1
+    operator fun component2() = 2
 }
 
 fun test1(c: C) {
@@ -17,7 +17,7 @@ fun test2(c: C) {
 
 fun test3(c: C) {
     var (<!ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE!>a<!>, <!UNUSED_VARIABLE!>b<!>) = c
-    a = <!UNUSED_VALUE!>3<!>
+    <!UNUSED_VALUE!>a =<!> 3
 }
 
 fun test4(c: C) {

@@ -11,6 +11,6 @@ annotation class Ann(
         val b8: Float
 )
 
-Ann('c', 99.toChar(), 'c'.toInt(), 'c'.toLong(), 'c'.toByte(), 'c'.toShort(), 'c'.toDouble(), 'c'.toFloat()) class MyClass
+@Ann('c', 99.toChar(), 'c'.toInt(), 'c'.toLong(), 'c'.toByte(), 'c'.toShort(), 'c'.toDouble(), 'c'.toFloat()) class MyClass
 
-// EXPECTED: Ann[b1 = #99(c): jet.Char, b2 = #99(c): jet.Char, b3 = 99.toInt(): jet.Int, b4 = 99.toLong(): jet.Long, b5 = 99.toByte(): jet.Byte, b6 = 99.toShort(): jet.Short, b7 = 99.0.toDouble(): jet.Double, b8 = 99.0.toFloat(): jet.Float]
+// EXPECTED: @Ann(b1 = \u0063 ('c'), b2 = \u0063 ('c'), b3 = 99, b4 = 99.toLong(), b5 = 99.toByte(), b6 = 99.toShort(), b7 = 99.0.toDouble(), b8 = 99.0.toFloat())

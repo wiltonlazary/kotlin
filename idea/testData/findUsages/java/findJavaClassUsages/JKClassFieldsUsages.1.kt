@@ -2,7 +2,7 @@ public class X(bar: String? = A.BAR): A() {
     var next: A? = A()
     val myBar: String? = A.BAR
 
-    {
+    init {
         A.BAR = ""
         A.foos()
     }
@@ -20,7 +20,7 @@ public class X(bar: String? = A.BAR): A() {
         super<A>.foo()
     }
 
-    class object: A() {
+    companion object: A() {
 
     }
 }

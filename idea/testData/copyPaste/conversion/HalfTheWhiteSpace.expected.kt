@@ -6,6 +6,5 @@ class A {
     fun bar() {}
 
 
-
     fun f() {}
 }

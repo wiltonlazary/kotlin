@@ -14,7 +14,7 @@ class NoPC {
 class WithPC0() {
 }
 
-class WithPC1(a : Int) {
+class WithPC1(<warning>a</warning> : Int) {
 }
 
 
@@ -22,13 +22,12 @@ class Foo() : <error>WithPC0</error>(), <error>this</error>() {
 
 }
 
-class WithCPI_Dup(x : Int) {
+class WithCPI_Dup(<warning>x</warning> : Int) {
   <error>var x : Int</error>
 }
 
 class WithCPI(x : Int) {
   val a = 1
-  val b : Int = $a
   val xy : Int = x
 }
 

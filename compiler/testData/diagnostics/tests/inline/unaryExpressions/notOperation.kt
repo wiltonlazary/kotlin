@@ -1,22 +1,17 @@
 // !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_VARIABLE -NOTHING_TO_INLINE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -RECURSION_IN_INLINE
-inline fun <T, V> Function1<T, V>.not() : Boolean {
+inline operator fun <T, V> Function1<T, V>.not() : Boolean {
     return !this
 }
 
-inline fun <T, V> ExtensionFunction1<T, T, V>.not() : Boolean {
-    return !this
-}
-
-inline fun <T, V> inlineFunWithInvoke(s: (p: T) -> V, ext: T.(p: T) -> V) {
+inline fun <T, V> inlineFunWithInvoke(s: (p: T) -> V) {
     !s
-    !ext
 }
 
-fun <T, U, V> Function2<T, U, V>.not() : Boolean {
+operator fun <T, U, V> Function2<T, U, V>.not() : Boolean {
     return !this
 }
 
-fun <T, U, V, W> ExtensionFunction2<T, U, V, W>.not() : Boolean {
+operator fun <T, U, V, W> @ExtensionFunctionType Function3<T, U, V, W>.not() : Boolean {
     return !this
 }
 

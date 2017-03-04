@@ -1,32 +1,34 @@
+// !CHECK_TYPE
+
 fun whileLoop(x: Int?) {
-    @outer while (x != 0) {
+    outer@ while (x != 0) {
         while (x != 1) {
-            if (x == 2) continue @outer
+            if (x == 2) continue@outer
         }
-        <!TYPE_MISMATCH!>x<!> : Int
+        checkSubtype<Int>(<!TYPE_MISMATCH!>x<!>)
     }
-    <!DEBUG_INFO_AUTOCAST!>x<!> : Int
+    checkSubtype<Int>(<!DEBUG_INFO_SMARTCAST!>x<!>)
 }
 
 fun doWhileLoop(x: Int?) {
-    @outer while (x != 0) {
+    outer@ while (x != 0) {
         do {
-            if (x == 2) continue @outer
+            if (x == 2) continue@outer
         } while (x == null)
-        <!TYPE_MISMATCH!>x<!> : Int
+        checkSubtype<Int>(<!TYPE_MISMATCH!>x<!>)
     }
-    <!DEBUG_INFO_AUTOCAST!>x<!> : Int
+    checkSubtype<Int>(<!DEBUG_INFO_SMARTCAST!>x<!>)
 }
 
 fun whileLoopContinueInnerOuter(x: Int?) {
-    @outer while (x != 0) {
-        @inner while (x != 1) {
+    outer@ while (x != 0) {
+        inner@ while (x != 1) {
             while (x != 2) {
-                if (x == 3) continue @inner
+                if (x == 3) continue@inner
             }
-            <!TYPE_MISMATCH!>x<!> : Int
+            checkSubtype<Int>(<!TYPE_MISMATCH!>x<!>)
         }
-        <!DEBUG_INFO_AUTOCAST!>x<!> : Int
+        checkSubtype<Int>(<!DEBUG_INFO_SMARTCAST!>x<!>)
     }
-    <!DEBUG_INFO_AUTOCAST!>x<!> : Int
+    checkSubtype<Int>(<!DEBUG_INFO_SMARTCAST!>x<!>)
 }

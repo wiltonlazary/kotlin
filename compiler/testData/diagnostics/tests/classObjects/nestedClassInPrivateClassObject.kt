@@ -1,8 +1,8 @@
 class A {
-    private class object {
+    private companion object {
         class B {
             class C {
-                class object {
+                companion object {
                     fun foo() {}
                 }
             }
@@ -10,6 +10,6 @@ class A {
     }
 }
 
-fun f1() = <!INVISIBLE_MEMBER!>A<!>.B.<!INVISIBLE_MEMBER!>C<!>
+fun <!EXPOSED_FUNCTION_RETURN_TYPE!>f1<!>() = A.<!INVISIBLE_REFERENCE!>Companion<!>.<!INVISIBLE_REFERENCE!>B<!>.<!INVISIBLE_MEMBER!>C<!>
 
-fun f2() = <!INVISIBLE_MEMBER!>A<!>.B.<!INVISIBLE_MEMBER!>C<!>.<!INVISIBLE_MEMBER!>foo<!>()
+fun f2() = A.<!INVISIBLE_REFERENCE!>Companion<!>.<!INVISIBLE_REFERENCE!>B<!>.<!INVISIBLE_REFERENCE!>C<!>.<!INVISIBLE_MEMBER!>foo<!>()

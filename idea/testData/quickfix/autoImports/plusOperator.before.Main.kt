@@ -1,7 +1,9 @@
 // "Import" "true"
-// ERROR: <html>Unresolved reference. <br/> None of the following candidates is applicable because of receiver type mismatch: <ul><li><b>public</b> <b>fun</b> jet.String?.plus(other: jet.Any?): jet.String <i>defined in</i> jet</li></ul></html>
+// ERROR: Unresolved reference. None of the following candidates is applicable because of receiver type mismatch: <br>public operator fun String?.plus(other: Any?): String defined in kotlin
 
-trait H
+package h
+
+interface H
 
 fun f(h: H?) {
     h <caret>+ "other"

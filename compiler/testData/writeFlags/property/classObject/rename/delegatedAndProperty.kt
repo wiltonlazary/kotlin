@@ -1,14 +1,16 @@
-public open class TestDelegate<T: Any>(private val initializer: () -> T) {
-    private volatile var value: T? = null
+import kotlin.reflect.KProperty
 
-    public open fun get(thisRef: Any?, desc: PropertyMetadata): T {
+public open class TestDelegate<T: Any>(private val initializer: () -> T) {
+    private var value: T? = null
+
+    operator open fun getValue(thisRef: Any?, desc: KProperty<*>): T {
         if (value == null) {
             value = initializer()
         }
         return value!!
     }
 
-    public open fun set(thisRef: Any?, desc: PropertyMetadata, svalue : T) {
+    operator open fun setValue(thisRef: Any?, desc: KProperty<*>, svalue : T) {
         value = svalue
     }
 }
@@ -17,7 +19,7 @@ class Test {
 
   public var prop: String = ""
 
-  class object {
+  companion object {
     public var prop: Int by TestDelegate({10})
   }
 }

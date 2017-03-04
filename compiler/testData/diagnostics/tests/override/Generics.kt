@@ -1,6 +1,6 @@
 package override.generics
 
-trait MyTrait<T> {
+interface MyTrait<T> {
     fun foo(t: T) : T
 }
 
@@ -9,7 +9,7 @@ abstract class MyAbstractClass<T> {
     abstract val pr : T
 }
 
-trait MyProps<T> {
+interface MyProps<T> {
     val p : T
 }
 
@@ -40,21 +40,21 @@ abstract class MyAbstractClass1 : MyTrait<Int>, MyAbstractClass<String>() {
     override fun bar(t: String) = t
 }
 
-class <!ABSTRACT_MEMBER_NOT_IMPLEMENTED!>MyIllegalGenericClass1<!><T> : MyTrait<T>, MyAbstractClass<T>() {}
-class <!ABSTRACT_MEMBER_NOT_IMPLEMENTED!>MyIllegalGenericClass2<!><T, R>(r : R) : MyTrait<T>, MyAbstractClass<R>() {
+<!ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED!>class MyIllegalGenericClass1<!><T> : MyTrait<T>, MyAbstractClass<T>() {}
+<!ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED!>class MyIllegalGenericClass2<!><T, R>(r : R) : MyTrait<T>, MyAbstractClass<R>() {
     <!NOTHING_TO_OVERRIDE!>override<!> fun foo(r: R) = r
-    <!CONFLICTING_OVERLOADS!><!NOTHING_TO_OVERRIDE!>override<!> val <T> pr : R<!> = r
+    <!CONFLICTING_OVERLOADS!><!NOTHING_TO_OVERRIDE!>override<!> val <<!TYPE_PARAMETER_OF_PROPERTY_NOT_USED_IN_RECEIVER!>T<!>> pr : R<!> = r
 }
-class <!ABSTRACT_MEMBER_NOT_IMPLEMENTED!>MyIllegalClass1<!> : MyTrait<Int>, MyAbstractClass<String>() {}
+<!ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED!>class MyIllegalClass1<!> : MyTrait<Int>, MyAbstractClass<String>() {}
 abstract class MyLegalAbstractClass1 : MyTrait<Int>, MyAbstractClass<String>() {}
 
-class <!ABSTRACT_MEMBER_NOT_IMPLEMENTED!>MyIllegalClass2<!><T>(t : T) : MyTrait<Int>, MyAbstractClass<Int>() {
-    fun foo(t: T) = t
-    fun bar(t: T) = t
-    <!CONFLICTING_OVERLOADS!>val <R> pr : T<!> = t
+<!ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED!>class MyIllegalClass2<!><T>(t : T) : MyTrait<Int>, MyAbstractClass<Int>() {
+    <!ACCIDENTAL_OVERRIDE!>fun foo(t: T)<!> = t
+    <!ACCIDENTAL_OVERRIDE!>fun bar(t: T)<!> = t
+    <!CONFLICTING_OVERLOADS!>val <<!TYPE_PARAMETER_OF_PROPERTY_NOT_USED_IN_RECEIVER!>R<!>> pr : T<!> = t
 }
 abstract class MyLegalAbstractClass2<T>(t : T) : MyTrait<Int>, MyAbstractClass<Int>() {
-    fun foo(t: T) = t
-    fun bar(t: T) = t
-    <!CONFLICTING_OVERLOADS!>val <R> pr : T<!> = t
+    <!ACCIDENTAL_OVERRIDE!>fun foo(t: T)<!> = t
+    <!ACCIDENTAL_OVERRIDE!>fun bar(t: T)<!> = t
+    <!CONFLICTING_OVERLOADS!>val <<!TYPE_PARAMETER_OF_PROPERTY_NOT_USED_IN_RECEIVER!>R<!>> pr : T<!> = t
 }

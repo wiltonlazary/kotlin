@@ -1,10 +1,10 @@
 // !DIAGNOSTICS: -UNREACHABLE_CODE
-trait Tr<T> {
+interface Tr<T> {
     var v: T
 }
 
 class C {
-    fun plusAssign(<!UNUSED_PARAMETER!>c<!>: C) {}
+    operator fun plusAssign(<!UNUSED_PARAMETER!>c<!>: C) {}
 }
 
 fun test(t: Tr<out C>) {

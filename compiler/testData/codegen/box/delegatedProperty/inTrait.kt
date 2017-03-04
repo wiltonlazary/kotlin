@@ -1,8 +1,10 @@
+import kotlin.reflect.KProperty
+
 class Delegate {
-    fun get(t: Any?, p: PropertyMetadata): Int = 1
+    operator fun getValue(t: Any?, p: KProperty<*>): Int = 1
 }
 
-trait A {
+interface A {
     val prop: Int
 }
 

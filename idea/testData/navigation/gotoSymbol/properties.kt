@@ -4,20 +4,20 @@ fun some() {
   val testInFun = 12
 }
 
-trait SomeTrait {
+interface SomeTrait {
   val testInTrait
 }
 
 class Some() {
   val testInClass = 12
 
-  class object {
+  companion object {
     val testInClassObject = 12
   }
 }
 
 // SEARCH_TEXT: test
 // REF: (<root>).testGlobal
-// REF: (Some).testInClass
-// REF: (Some).testInClassObject
-// REF: (SomeTrait).testInTrait
+// REF: (in Some).testInClass
+// REF: (in Some.Companion).testInClassObject
+// REF: (in SomeTrait).testInTrait

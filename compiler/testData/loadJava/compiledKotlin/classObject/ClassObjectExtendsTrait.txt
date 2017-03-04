@@ -1,12 +1,12 @@
 package test
 
-internal trait Bbb {
+public interface Bbb {
 }
 
-internal final class ClassObjectextendsTrait {
+public final class ClassObjectextendsTrait {
     /*primary*/ public constructor ClassObjectextendsTrait()
-    
-    internal class object <class-object-for-ClassObjectextendsTrait> : test.Bbb {
-        /*primary*/ private constructor <class-object-for-ClassObjectextendsTrait>()
+
+    public companion object Companion : test.Bbb {
+        /*primary*/ private constructor Companion()
     }
 }

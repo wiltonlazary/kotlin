@@ -2,12 +2,12 @@
 
 class MyString {
     var s = ""
-    fun plus(x : String) : MyString {
+    operator fun plus(x : String) : MyString {
         s += x
         return this
     }
 
-    fun toString(): String {
+    override fun toString(): String {
         return s
     }
 }

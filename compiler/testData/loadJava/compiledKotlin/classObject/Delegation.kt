@@ -1,11 +1,11 @@
 package test
 
-trait T {
+interface T {
     fun foo(): Int
 }
 
 class A : T {
-    override fun foo() = 42
+    override fun foo(): Int = 42
 
-    class object : T by A()
+    companion object : T by A()
 }

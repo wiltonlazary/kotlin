@@ -1,6 +1,8 @@
+import kotlin.reflect.KProperty
+
 class Delegate<T>(var inner: T) {
-    fun get(t: Any?, p: PropertyMetadata): T = inner
-    fun set(t: Any?, p: PropertyMetadata, i: T) { inner = i }
+    operator fun getValue(t: Any?, p: KProperty<*>): T = inner
+    operator fun setValue(t: Any?, p: KProperty<*>, i: T) { inner = i }
 }
 
 class A {

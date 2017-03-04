@@ -1,6 +1,6 @@
 class IncDec() {
-  fun inc() : IncDec = this
-  fun dec() : IncDec = this
+  operator fun inc() : IncDec = this
+  operator fun dec() : IncDec = this
 }
 
 fun testIncDec() {
@@ -12,12 +12,12 @@ fun testIncDec() {
   x = <!UNUSED_CHANGED_VALUE!>x++<!>
   x = <!UNUSED_CHANGED_VALUE!>x--<!>
   x = ++x
-  x = <!UNUSED_VALUE!>--x<!>
+  <!UNUSED_VALUE!>x =<!> --x
 }
 
 class WrongIncDec() {
-  fun inc() : Int = 1
-  fun dec() : Int = 1
+  <!INAPPLICABLE_OPERATOR_MODIFIER!>operator<!> fun inc() : Int = 1
+  <!INAPPLICABLE_OPERATOR_MODIFIER!>operator<!> fun dec() : Int = 1
 }
 
 fun testWrongIncDec() {
@@ -29,8 +29,8 @@ fun testWrongIncDec() {
 }
 
 class UnitIncDec() {
-  fun inc() : Unit {}
-  fun dec() : Unit {}
+  <!INAPPLICABLE_OPERATOR_MODIFIER!>operator<!> fun inc() : Unit {}
+  <!INAPPLICABLE_OPERATOR_MODIFIER!>operator<!> fun dec() : Unit {}
 }
 
 fun testUnitIncDec() {
@@ -42,5 +42,5 @@ fun testUnitIncDec() {
   x = <!UNUSED_CHANGED_VALUE!>x<!INC_DEC_SHOULD_NOT_RETURN_UNIT!>++<!><!>
   x = <!UNUSED_CHANGED_VALUE!>x<!INC_DEC_SHOULD_NOT_RETURN_UNIT!>--<!><!>
   x = <!INC_DEC_SHOULD_NOT_RETURN_UNIT!>++<!>x
-  x = <!UNUSED_VALUE!><!INC_DEC_SHOULD_NOT_RETURN_UNIT!>--<!>x<!>
+  <!UNUSED_VALUE!>x =<!> <!INC_DEC_SHOULD_NOT_RETURN_UNIT!>--<!>x
 }

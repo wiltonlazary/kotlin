@@ -1,14 +1,5 @@
 open class A() {
-    {
+    init {
         do <selection>1</selection> while (true)
     }
 }
-/*
-open class A() {
-    {
-        do {
-            val i = 1
-        } while (true)
-    }
-}
-*/

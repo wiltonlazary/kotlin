@@ -2,8 +2,8 @@ class Test {
 
   public var prop: Int = 0;
 
-  class object {
-    public val prop: Int = 0;
+  companion object {
+    public const val prop: Int = 0;
   }
 }
 

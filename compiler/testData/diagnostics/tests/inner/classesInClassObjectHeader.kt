@@ -1,6 +1,6 @@
 class Test {
-    [`InnerAnnotation`InnerAnnotation]
-    class object : StaticClass(), <!INACCESSIBLE_OUTER_CLASS_EXPRESSION!><!MANY_CLASSES_IN_SUPERTYPE_LIST!>InnerClass<!>()<!> {
+    @`InnerAnnotation` <!REPEATED_ANNOTATION!>@InnerAnnotation<!>
+    companion object : StaticClass(), <!UNRESOLVED_REFERENCE, MANY_CLASSES_IN_SUPERTYPE_LIST, DEBUG_INFO_UNRESOLVED_WITH_TARGET!>InnerClass<!>() {
 
     }
 

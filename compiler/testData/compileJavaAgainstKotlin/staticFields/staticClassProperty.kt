@@ -1,9 +1,11 @@
+package test
+
 class Test {
 
-  class object {
-    public val valProp: Int = 10
+  companion object {
+    public const val valProp: Int = 10
 
-    public var varProp: Int = 10
+    @JvmField public var varProp: Int = 10
   }
 
 }

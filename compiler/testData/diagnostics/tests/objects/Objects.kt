@@ -1,6 +1,6 @@
 package toplevelObjectDeclarations
 
-  open class Foo(y : Int) {
+  open class Foo(<!UNUSED_PARAMETER!>y<!> : Int) {
     open fun foo() : Int = 1
   }
 
@@ -19,7 +19,7 @@ package toplevelObjectDeclarations
   val x = A.foo()
 
   val y = object : Foo(x) {
-    {
+    init {
       x + 12
     }
 

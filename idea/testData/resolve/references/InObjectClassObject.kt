@@ -3,7 +3,7 @@ package test
 class A
 
 object b {
-    class object {
+    companion object {
         val x = <caret>A()
     }
 }

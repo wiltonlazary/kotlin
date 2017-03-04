@@ -1,2 +1,0 @@
-fun foo(): jet.Unit in final class B : A, Z implements [Java] void foo() in interface A.
-fun foo(): jet.Unit in final class B : A, Z implements [Java] void foo() in interface Z.

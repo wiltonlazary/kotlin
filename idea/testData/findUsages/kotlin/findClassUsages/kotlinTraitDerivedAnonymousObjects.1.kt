@@ -1,4 +1,4 @@
-// PSI_ELEMENT: org.jetbrains.jet.lang.psi.JetClass
+// PSI_ELEMENT: org.jetbrains.kotlin.psi.KtClass
 // OPTIONS: derivedClasses
 
 fun foo() {
@@ -9,7 +9,7 @@ fun foo() {
     doSomething(object : A() {}, object: X {})
 
     fun bar() {
-        val x = object O2: X {
+        val x = object : X {
 
         }
     }

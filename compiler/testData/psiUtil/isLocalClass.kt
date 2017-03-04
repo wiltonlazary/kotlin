@@ -2,7 +2,7 @@ class A {
   class B
   object G
 
-  class object {
+  companion object {
     class C
     object H
 

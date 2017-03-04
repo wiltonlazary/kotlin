@@ -1,3 +1,3 @@
 fun test(a: Any) {
-    when (a)<!SYNTAX!><!>
-}<!SYNTAX!><!>
+    when (<!UNUSED_EXPRESSION!>a<!>)<!SYNTAX!><!>
+}

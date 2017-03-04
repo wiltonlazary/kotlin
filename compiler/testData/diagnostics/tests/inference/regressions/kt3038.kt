@@ -2,11 +2,11 @@
 package a
 
 enum class TestEnum {
-    FIRST
+    FIRST,
     SECOND
 }
 
-fun inferenceTest<T>(a: T) : T = a
+fun <T> inferenceTest(a: T) : T = a
 
 fun hello() {
     var enumElemFirst = <!VARIABLE_WITH_REDUNDANT_INITIALIZER!>inferenceTest(TestEnum.FIRST)<!>

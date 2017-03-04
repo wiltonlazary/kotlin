@@ -1,21 +1,22 @@
-trait PsiElement {
+interface PsiElement {
     fun getText(): String
     fun getParent(): PsiElement
 }
 
-trait JetExpression : PsiElement
+interface JetExpression : PsiElement
 
 fun foo1(e: PsiElement) {
     var current: PsiElement? = e
     var first = true
     while (current != null) {
         if (current is JetExpression && first) {
-            println(current!!.getText()) // error: smart cast not possible. But it's not needed in fact!
+            // Smartcast is possible here
+            println(<!DEBUG_INFO_SMARTCAST!>current<!>.getText())
         }
 
-        current = current?.getParent()
+        current = <!DEBUG_INFO_SMARTCAST!>current<!>.getParent()
     }
 }
 
 //from library
-fun println(any: Any?) = throw Exception("$any")
+fun println(any: Any?): Nothing = throw Exception("$any")

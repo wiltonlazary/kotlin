@@ -1,9 +1,13 @@
-trait A {
+// !DIAGNOSTICS: -UNUSED_PARAMETER
+
+import kotlin.reflect.KProperty
+
+interface A {
     val prop: Int
 }
 
 class AImpl: A  {
-    override val <!RETURN_TYPE_MISMATCH_ON_OVERRIDE!>prop<!> by Delegate()
+    override val <!PROPERTY_TYPE_MISMATCH_ON_OVERRIDE!>prop<!> by Delegate()
 }
 
 fun foo() {
@@ -11,8 +15,7 @@ fun foo() {
 }
 
 class Delegate {
-    fun get(t: Any?, p: PropertyMetadata): String {
-        t.equals(p) // to avoid UNUSED_PARAMETER warning
+    operator fun getValue(t: Any?, p: KProperty<*>): String {
         return ""
     }
 }

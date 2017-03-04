@@ -1,6 +1,9 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 fun StringBuilder.takeFirst(): Char {
-  if (this.length() == 0) return 0.toChar()
-  val c = this.charAt(0)
+  if (this.length == 0) return 0.toChar()
+  val c = this.get(0)
   this.deleteCharAt(0)
   return c
 }

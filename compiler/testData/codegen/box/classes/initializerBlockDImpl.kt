@@ -1,11 +1,9 @@
-import java.util.*
-import java.io.*
-
+// WITH_RUNTIME
 class World() {
   public val items: ArrayList<Item> = ArrayList<Item>()
 
   inner class Item() {
-    {
+    init {
       items.add(this)
     }
   }
@@ -15,6 +13,6 @@ class World() {
 
 fun box() : String {
   val w = World()
-  if (w.items.size() != 1) return "fail"
+  if (w.items.size != 1) return "fail"
   return "OK"
 }

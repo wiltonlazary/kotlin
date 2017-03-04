@@ -1,5 +1,7 @@
 JetFile: NewlinesInParentheses.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   FUN
     PsiElement(fun)('fun')
@@ -92,7 +94,7 @@ JetFile: NewlinesInParentheses.kt
         PsiWhiteSpace(' ')
         PARENTHESIZED
           PsiElement(LPAR)('(')
-          FUNCTION_LITERAL_EXPRESSION
+          LAMBDA_EXPRESSION
             FUNCTION_LITERAL
               PsiElement(LBRACE)('{')
               BLOCK
@@ -118,7 +120,7 @@ JetFile: NewlinesInParentheses.kt
         PARENTHESIZED
           PsiElement(LPAR)('(')
           BINARY_EXPRESSION
-            FUNCTION_LITERAL_EXPRESSION
+            LAMBDA_EXPRESSION
               FUNCTION_LITERAL
                 PsiElement(LBRACE)('{')
                 BLOCK
@@ -175,7 +177,7 @@ JetFile: NewlinesInParentheses.kt
             PsiElement(IDENTIFIER)('b')
           INDICES
             PsiElement(LBRACKET)('[')
-            FUNCTION_LITERAL_EXPRESSION
+            LAMBDA_EXPRESSION
               FUNCTION_LITERAL
                 PsiElement(LBRACE)('{')
                 BLOCK
@@ -204,7 +206,7 @@ JetFile: NewlinesInParentheses.kt
           INDICES
             PsiElement(LBRACKET)('[')
             BINARY_EXPRESSION
-              FUNCTION_LITERAL_EXPRESSION
+              LAMBDA_EXPRESSION
                 FUNCTION_LITERAL
                   PsiElement(LBRACE)('{')
                   BLOCK

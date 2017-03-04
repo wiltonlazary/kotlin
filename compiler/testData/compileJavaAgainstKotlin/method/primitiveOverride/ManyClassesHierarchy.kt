@@ -1,8 +1,10 @@
-trait A<T> {
+package test
+
+interface A<T> {
     fun foo(): T
 }
 
-trait B : A
+interface B : A<Int>
 
 abstract class C : B
 

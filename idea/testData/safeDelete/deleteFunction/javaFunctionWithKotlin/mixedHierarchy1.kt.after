@@ -1,5 +1,0 @@
-trait B: A {
-}
-
-class D: C() {
-}

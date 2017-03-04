@@ -1,23 +1,22 @@
 /**
-h4. Pattern matching
+#### When-expression
 
-bq. See [Pattern matching]
+See [When-expression](control-flow.html#when-expression)
 */
 
 when
-  : "when" ("(" (modifiers "val" SimpleName "=")? expression ")")? "{"
+  : "when" ("(" expression ")")? "{"
         whenEntry*
     "}"
   ;
 
-// TODO : consider empty after ->
 whenEntry
-  : whenCondition{","} "->" expression SEMI
-  : "else" "->" expression SEMI
+  : whenCondition{","} "->" controlStructureBody SEMI
+  : "else" "->" controlStructureBody SEMI
   ;
 
 whenCondition
   : expression
   : ("in" | "!in") expression
-  : ("is" | "!is") isRHS
+  : ("is" | "!is") type
   ;

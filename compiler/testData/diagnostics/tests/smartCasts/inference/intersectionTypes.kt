@@ -1,3 +1,5 @@
+// !CHECK_TYPE
+
 package a
 
 fun <T> id(t: T): T = t
@@ -6,27 +8,27 @@ fun <T> two(u: T, <!UNUSED_PARAMETER!>v<!>: T): T = u
 
 fun <T> three(<!UNUSED_PARAMETER!>a<!>: T, <!UNUSED_PARAMETER!>b<!>: T, c: T): T = c
 
-trait A
-trait B: A
-trait C: A
+interface A
+interface B: A
+interface C: A
 
 fun test(a: A, b: B, c: C) {
     if (a is B && a is C) {
-        val d: C = id(<!DEBUG_INFO_AUTOCAST!>a<!>)
+        val d: C = id(<!DEBUG_INFO_SMARTCAST!>a<!>)
         val e: Any = id(a)
         val f = id(a)
-        f: A
-        val g = two(<!DEBUG_INFO_AUTOCAST!>a<!>, b)
-        g: B
-        g: A
+        checkSubtype<A>(f)
+        val g = two(<!DEBUG_INFO_SMARTCAST!>a<!>, b)
+        checkSubtype<B>(g)
+        checkSubtype<A>(g)
 
-        // auto cast isn't needed, but is reported due to KT-4294
-        val h: Any = two(<!DEBUG_INFO_AUTOCAST!>a<!>, b)
+        // smart cast isn't needed, but is reported due to KT-4294
+        val h: Any = two(<!DEBUG_INFO_SMARTCAST!>a<!>, b)
 
         val k = three(a, b, c)
-        k: A
-        <!TYPE_MISMATCH!>k<!>: B
-        val l: Int = <!TYPE_INFERENCE_EXPECTED_TYPE_MISMATCH!>three<!>(a, b, c)
+        checkSubtype<A>(k)
+        checkSubtype<B>(<!TYPE_MISMATCH!>k<!>)
+        val l: Int = <!TYPE_INFERENCE_EXPECTED_TYPE_MISMATCH!>three(a, b, c)<!>
         
         use(d, e, f, g, h, k, l)
     }
@@ -46,13 +48,13 @@ fun testErrorMessages(a: A, ml: MutableList<String>) {
 
 fun rr(s: String?) {
     if (s != null) {
-        val l = arrayListOf("", <!DEBUG_INFO_AUTOCAST!>s<!>)
-        l: MutableList<String>
-        <!TYPE_MISMATCH!>l<!>: MutableList<String?>
+        val l = arrayListOf("", <!DEBUG_INFO_SMARTCAST!>s<!>)
+        checkSubtype<MutableList<String>>(l)
+        checkSubtype<MutableList<String?>>(<!TYPE_MISMATCH!>l<!>)
     }
 }
 
 //from library
-fun arrayListOf<T>(vararg <!UNUSED_PARAMETER!>values<!>: T): MutableList<T> = throw Exception()
+fun <T> arrayListOf(vararg <!UNUSED_PARAMETER!>values<!>: T): MutableList<T> = throw Exception()
 
 fun use(vararg a: Any) = a

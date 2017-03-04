@@ -1,7 +1,7 @@
 // KT-174 Nullability info for extension function receivers
-trait Tree {}
+interface Tree {}
 
 fun Any?.TreeValue() : Tree {
-  if (this is Tree) return <!DEBUG_INFO_AUTOCAST!>this<!>
+  if (this is Tree) return <!DEBUG_INFO_SMARTCAST!>this<!>
     throw Exception()
 }

@@ -4,7 +4,7 @@
 In a supertype list:
  Same type should not be mentioned twice
  Same type should not be indirectly mentioned with incoherent type arguments
- Every trait's required dependencies should be satisfied
+ Every interface's required dependencies should be satisfied
  No final types should appear
  Only one class is allowed
 */
@@ -17,24 +17,24 @@ open class C2 {}
 
 open class C3 {}
 
-trait T1 {}
+interface T1 {}
 
-trait T2<T> {}
+interface T2<T> {}
 
-trait Test<error>()</error> {
+interface Test<error>()</error> {
 }
 
-trait Test1 : C2<error>()</error> {}
+interface Test1 : <error>C2</error><error>()</error> {}
 
-trait Test2 : C2 {}
+interface Test2 : <error>C2</error> {}
 
-trait Test3 : C2, <error>C3</error> {}
+interface Test3 : <error>C2</error>, <error>C3</error> {}
 
-trait Test4 : T1 {}
+interface Test4 : T1 {}
 
-trait Test5 : T1, <error>T1</error> {}
+interface Test5 : T1, <error>T1</error> {}
 
-trait Test6 : <error>C1</error> {}
+interface Test6 : <error>C1</error> {}
 
 class CTest1() : OC1() {}
 

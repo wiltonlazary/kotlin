@@ -1,4 +1,4 @@
-// PSI_ELEMENT: org.jetbrains.jet.lang.psi.JetClass
+// PSI_ELEMENT: org.jetbrains.kotlin.psi.KtClass
 // OPTIONS: derivedClasses
 
 fun foo() {
@@ -11,11 +11,11 @@ fun foo() {
     }
 
     fun bar() {
-        trait Z: A {
+        interface Z: A {
 
         }
 
-        trait U: Z {
+        interface U: Z {
 
         }
     }

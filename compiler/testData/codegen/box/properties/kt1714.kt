@@ -1,4 +1,7 @@
-trait A {
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
+interface A {
     val method : (() -> Unit )?
     val test : Integer
 }

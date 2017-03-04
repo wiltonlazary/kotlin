@@ -2,12 +2,14 @@ package foo
 
 fun test() {
   A.d
-  A.<!INVISIBLE_MEMBER!>f<!>
-  <!INVISIBLE_MEMBER!>CCC<!>.<!INVISIBLE_MEMBER!>classObjectVar<!>
+  A.Companion.<!INVISIBLE_MEMBER!>f<!>
+  B.<!INVISIBLE_MEMBER!>D<!>
+  <!INVISIBLE_MEMBER!>CCC<!>
+  CCC.<!INVISIBLE_MEMBER!>classObjectVar<!>
 }
 
 class A() {
-  public class object {
+  public companion object {
     val d = 3
     private object f {
 
@@ -15,8 +17,14 @@ class A() {
   }
 }
 
+class B {
+    class D {
+        private companion object
+    }
+}
+
 class CCC() {
-  private class object {
+  private companion object {
     val classObjectVar = 3
   }
 }

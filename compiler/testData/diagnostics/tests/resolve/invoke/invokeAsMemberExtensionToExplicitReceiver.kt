@@ -1,10 +1,10 @@
-trait A
-trait Foo {
-    fun A.invoke()
+interface A
+interface Foo {
+    operator fun A.invoke()
 }
 
-fun test(a: A, foo: Foo) {
-    a.foo()
+fun test(a: A, <!UNUSED_PARAMETER!>foo<!>: Foo) {
+    a.<!UNRESOLVED_REFERENCE!>foo<!>()
 }
 
 fun test(a: Int, foo: Int.()->Unit) {

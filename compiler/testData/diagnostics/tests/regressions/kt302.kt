@@ -2,12 +2,12 @@
 
 package kt302
 
-trait A {
+interface A {
     open fun foo() {}
 }
 
-trait B {
+interface B {
     open fun foo() {}
 }
 
-class <!MANY_IMPL_MEMBER_NOT_IMPLEMENTED!>C<!> : A, B {} //should be error here
+<!MANY_INTERFACES_MEMBER_NOT_IMPLEMENTED!>class C<!> : A, B {} //should be error here

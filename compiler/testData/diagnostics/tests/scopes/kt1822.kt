@@ -5,8 +5,8 @@ open class C {
     internal open fun foo() {}
 }
 
-trait T {
-    protected fun foo() {}
+interface T {
+    <!WRONG_MODIFIER_CONTAINING_DECLARATION!>protected<!> fun foo() {}
 }
 
 class G : C(), T {
@@ -17,11 +17,11 @@ open class A {
     internal open fun foo() {}
 }
 
-trait B {
-    protected fun foo() {}
+interface B {
+    <!WRONG_MODIFIER_CONTAINING_DECLARATION!>protected<!> fun foo() {}
 }
 
-trait D {
+interface D {
     public fun foo() {}
 }
 

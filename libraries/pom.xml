@@ -7,12 +7,12 @@
 
     <groupId>org.jetbrains.kotlin</groupId>
     <artifactId>kotlin-project</artifactId>
-    <version>0.1-SNAPSHOT</version>
+    <version>1.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Kotlin</name>
-    <description>Kotlin is a statically typed programming language that compiles to JVM byte codes and JavaScrip</description>
-    <url>http://kotlin.jetbrains.org/</url>
+    <description>Kotlin is a statically typed programming language that compiles to JVM byte codes and JavaScript</description>
+    <url>http://kotlinlang.org/</url>
 
     <licenses>
         <license>
@@ -42,21 +42,20 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project-root>../../..</project-root>
 
-        <asm.version>3.3.1</asm.version>
-        <dart.name>dart-r3300</dart.name>
-        <guava.version>11.0.2</guava.version>
-        <junit-version>4.10</junit-version>
-        <kotlin-maven-plugin.version>0.2.3.8</kotlin-maven-plugin.version>
+        <junit-version>4.11</junit-version>
+        <pegdown.version>1.1.0</pegdown.version>
+        <surefire-version>2.16</surefire-version>
+        <exec-maven-plugin.version>1.2.1</exec-maven-plugin.version>
+        <selenium.version>2.52.0</selenium.version>
+
         <kotlin-dist>${project-root}/dist</kotlin-dist>
-        <kotlin-js-lib-srcdir>${project-root}/js/js.libraries/src</kotlin-js-lib-srcdir>
         <kotlin-sdk>${kotlin-dist}/kotlinc</kotlin-sdk>
+        <kotlin.compiler.jdkHome>${env.JDK_16}</kotlin.compiler.jdkHome>
+
+        <kotlin.language.version>1.1</kotlin.language.version>
+
         <maven.compiler.source>1.6</maven.compiler.source>
         <maven.compiler.target>1.6</maven.compiler.target>
-        <maven-jar-plugin.version>2.4</maven-jar-plugin.version>
-        <pegdown.version>1.1.0</pegdown.version>
-        <surefire-version>2.5</surefire-version>
-        <exec-maven-plugin.version>1.2.1</exec-maven-plugin.version>
-        <selenium.version>2.25.0</selenium.version>
     </properties>
 
     <prerequisites>
@@ -65,8 +64,8 @@
 
     <distributionManagement>
         <repository>
-            <id>sonatype-nexus-snapshots</id>
-            <url>http://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+            <id>${deploy-repo}</id>
+            <url>${deploy-url}</url>
         </repository>
         <snapshotRepository>
             <id>sonatype-nexus-staging</id>
@@ -76,29 +75,58 @@
 
     <modules>
         <module>tools/kotlin-compiler</module>
-        <module>tools/kotlin-jdk-annotations</module>
-        <module>tools/kotlin-android-sdk-annotations</module>
-        <module>tools/runtime</module>
-        <module>tools/kotlin-gradle-plugin</module>
-        <module>tools/kotlin-gradle-plugin-core</module>
+        <module>tools/kotlin-compiler-embeddable</module>
+        <module>tools/native-platform</module>
+        <module>tools/kotlin-compiler-runner</module>
+        <module>tools/kotlin-daemon-client</module>
+        <module>tools/kotlin-build-common-test</module>
         <module>tools/kotlin-maven-plugin</module>
+
+        <module>tools/runtime</module>
+        <module>tools/script-runtime</module>
+        <module>kotlin.test</module>
+        <module>stdlib/common</module>
+        <module>stdlib</module>
+        <module>stdlib/jre7</module>
+        <module>stdlib/jre8</module>
+        <module>stdlib/samples</module>
+        <module>tools/kotlin-reflect</module>
+        <module>tools/kotlin-osgi-bundle</module>
+
+        <module>tools/maven-archetypes</module>
+
+        <module>tools/binary-compatibility-validator</module>
+
+        <!--NB! kotlin-js-library should be built before kotlin-gradle-plugin-integration-tests-->
+        <!--because it is used in tests but cannot be added as test-dependency-->
+        <!--(kotlin-gradle-plugin module will be recognized as kotlin-js module)-->
+        <module>tools/idl2k</module>
         <module>tools/kotlin-js-library</module>
         <module>tools/kotlin-js-tests</module>
         <module>tools/kotlin-js-tests-junit</module>
-        <module>tools/kdoc</module>
-        <module>tools/kdoc-maven-plugin</module>
+        <module>tools/kotlin-annotation-processing</module>
+        <module>tools/kotlin-allopen</module>
+        <module>tools/kotlin-maven-allopen</module>
+        <module>tools/kotlin-noarg</module>
+        <module>tools/kotlin-maven-noarg</module>
 
-        <module>stdlib</module>
-        <module>kunit</module>
-        <module>kotlin-jdbc</module>
-        <module>kotlin-swing</module>
+        <module>tools/kotlin-script-util</module>
+        <module>tools/kotlin-gradle-plugin</module>
+        <module>tools/kotlin-gradle-plugin-api</module>
+        <module>tools/kotlin-android-extensions</module>
+        <module>tools/kotlin-maven-plugin-test</module>
 
-        <module>docs/apidoc</module>
-        <module>docs/website</module>
-
+        <module>examples/annotation-processor-example</module>
         <module>examples/kotlin-java-example</module>
         <module>examples/js-example</module>
+        <module>examples/kotlin-js-library-example</module>
+        <module>examples/kotlin-gradle-subplugin-example</module>
         <module>examples/browser-example</module>
+        <module>examples/browser-example-with-library</module>
+        <module>examples/kotlin-jsr223-local-example</module>
+        <module>examples/kotlin-jsr223-daemon-local-eval-example</module>
+
+        <module>tools/kotlin-gradle-plugin-integration-tests</module>
     </modules>
 
     <dependencies>
@@ -142,6 +170,11 @@
                     <artifactId>build-helper-maven-plugin</artifactId>
                     <version>1.7</version>
                 </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>2.6</version>
+                </plugin>
             </plugins>
         </pluginManagement>
 
@@ -151,6 +184,7 @@
                 <version>${surefire-version}</version>
                 <configuration>
                     <forkMode>once</forkMode>
+                    <jvm>${env.JDK_16}/bin/java</jvm>
                     <useSystemClassLoader>false</useSystemClassLoader>
                     <useManifestOnlyJar>false</useManifestOnlyJar>
                     <failIfNoTests>false</failIfNoTests>
@@ -222,6 +256,16 @@
                 </executions>
             </plugin>
 
+            <plugin>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 

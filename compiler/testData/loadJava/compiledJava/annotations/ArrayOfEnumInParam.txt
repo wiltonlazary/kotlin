@@ -1,9 +1,9 @@
 package test
 
-public trait ArrayOfEnumInParam : java.lang.Object {
-    
-    java.lang.annotation.Target(value = [ElementType.FIELD, ElementType.CONSTRUCTOR]: jet.Array<java.lang.annotation.ElementType>?) public final annotation class targetAnnotation : jet.Annotation {
-        public constructor targetAnnotation(/*0*/ value: jet.String?)
-        public abstract fun value(): jet.String?
+public interface ArrayOfEnumInParam {
+
+    @kotlin.annotation.Target(allowedTargets = {AnnotationTarget.FIELD, AnnotationTarget.CONSTRUCTOR}) public final annotation class targetAnnotation : kotlin.Annotation {
+        public constructor targetAnnotation(/*0*/ value: kotlin.String)
+        public final val value: kotlin.String
     }
 }

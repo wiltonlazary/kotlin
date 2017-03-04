@@ -2,7 +2,7 @@
 package outer
 
 fun Int?.optint() : Unit {}
-val Int?.optval : Unit = Unit.VALUE
+val Int?.optval : Unit get() = Unit
 
 fun <T: Any, E> T.foo(<!UNUSED_PARAMETER!>x<!> : E, y : A) : T   {
   y.plus(1)
@@ -16,7 +16,7 @@ fun <T: Any, E> T.foo(<!UNUSED_PARAMETER!>x<!> : E, y : A) : T   {
 
 class A
 
-fun A.plus(<!UNUSED_PARAMETER!>a<!> : Any) {
+infix operator fun A.plus(<!UNUSED_PARAMETER!>a<!> : Any) {
 
   1.foo()
   true.<!TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>foo<!>(<!NO_VALUE_FOR_PARAMETER, NO_VALUE_FOR_PARAMETER!>)<!>
@@ -24,11 +24,11 @@ fun A.plus(<!UNUSED_PARAMETER!>a<!> : Any) {
   <!UNUSED_EXPRESSION!>1<!>
 }
 
-fun A.plus(<!UNUSED_PARAMETER!>a<!> : Int) {
+operator fun A.plus(<!UNUSED_PARAMETER!>a<!> : Int) {
   <!UNUSED_EXPRESSION!>1<!>
 }
 
-fun <T> T.minus(<!UNUSED_PARAMETER!>t<!> : T) : Int = 1
+operator fun <T> T.minus(<!UNUSED_PARAMETER!>t<!> : T) : Int = 1
 
 fun test() {
   val <!UNUSED_VARIABLE!>y<!> = 1.abs
@@ -51,7 +51,7 @@ import outer.*
           val foo : Int = 0
         }
 
-        fun Any.equals(<!UNUSED_PARAMETER!>other<!> : Any?) : Boolean = true
+        fun Any.<!EXTENSION_SHADOWED_BY_MEMBER!>equals<!>(<!UNUSED_PARAMETER!>other<!> : Any?) : Boolean = true
         fun Any?.equals1(<!UNUSED_PARAMETER!>other<!> : Any?) : Boolean = true
         fun Any.equals2(<!UNUSED_PARAMETER!>other<!> : Any?) : Boolean = true
 
@@ -63,7 +63,7 @@ import outer.*
 
             command.foo
 
-            command.equals(null)
+            command<!UNSAFE_CALL!>.<!>equals(null)
             command?.equals(null)
             command.equals1(null)
             command?.equals1(null)
@@ -71,5 +71,5 @@ import outer.*
             val c = Command()
             c<!UNNECESSARY_SAFE_CALL!>?.<!>equals2(null)
 
-            if (command == null) 1
+            if (command == null) <!UNUSED_EXPRESSION!>1<!>
         }

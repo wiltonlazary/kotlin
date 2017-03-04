@@ -1,10 +1,11 @@
+// !DIAGNOSTICS: -UNUSED_PARAMETER
+
+import kotlin.reflect.KProperty
+
 class B {
     val c by Delegate(<!UNRESOLVED_REFERENCE!>ag<!>)
 }
 
 class Delegate<T: Any>(val init: T) {
-  fun get(t: Any?, p: PropertyMetadata): Int {
-    t.equals(p) // to avoid UNUSED_PARAMETER warning
-    throw Exception()
-  }
+    operator fun getValue(t: Any?, p: KProperty<*>): Int = null!!
 }

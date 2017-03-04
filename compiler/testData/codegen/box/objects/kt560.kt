@@ -1,10 +1,13 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 package while_bug_1
 
 import java.io.*
 
 open class AllEvenNum() {
 
-    class object {
+    companion object {
         open public fun main(args : Array<String?>?) : Unit {
             var i : Int = 1
             while ((i <= 100)) {
@@ -15,7 +18,7 @@ open class AllEvenNum() {
                         }
 
                     }
-                (i = i + 1)
+                i = i + 1
             }
         }
 

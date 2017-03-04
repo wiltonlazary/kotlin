@@ -1,3 +1,7 @@
+// !DIAGNOSTICS: -UNUSED_PARAMETER
+
+import kotlin.reflect.KProperty
+
 class A {
   var a: Int by Delegate()
 }
@@ -5,12 +9,8 @@ class A {
 var aTopLevel: Int by Delegate()
 
 class Delegate {
-  fun get(t: Any?, p: PropertyMetadata): Int {
-    t.equals(p) // to avoid UNUSED_PARAMETER warning
+  operator fun getValue(t: Any?, p: KProperty<*>): Int {
     return 1
   }
-  fun set(t: Any?, p: PropertyMetadata, a: Int) {
-    t.equals(p) // to avoid UNUSED_PARAMETER warning
-    a.equals(null)
-  }
+  operator fun setValue(t: Any?, p: KProperty<*>, a: Int) {}
 }

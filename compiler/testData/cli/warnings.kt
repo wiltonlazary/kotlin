@@ -1,10 +1,9 @@
-import jet.Any
-import jet.Any
+import kotlin.Any
 
 fun foo(p: Int??) {
 
 }
 
-trait T {
+interface T {
     abstract fun foo()
 }

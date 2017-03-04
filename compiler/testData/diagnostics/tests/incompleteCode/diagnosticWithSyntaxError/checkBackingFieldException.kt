@@ -3,7 +3,7 @@ package h
 class Square() {
   var size : Double =
   <!UNRESOLVED_REFERENCE!>set<!>(<!UNRESOLVED_REFERENCE!>value<!>) {
-    $area = size * size
+    <!SYNTAX!>$area<!> <!SYNTAX!>= size * size<!>
   }
 
   <!MUST_BE_INITIALIZED_OR_BE_ABSTRACT!>var area : Double<!>

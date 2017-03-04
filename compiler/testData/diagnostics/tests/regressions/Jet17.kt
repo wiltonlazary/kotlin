@@ -2,5 +2,5 @@
 
 class WithC() {
   val a = 1
-  val b = $a // error here, but must not be
+  val b = a
 }

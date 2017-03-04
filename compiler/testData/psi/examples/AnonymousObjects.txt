@@ -1,5 +1,7 @@
 JetFile: AnonymousObjects.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   FUN
     PsiElement(fun)('fun')
@@ -24,8 +26,8 @@ JetFile: AnonymousObjects.kt
                 PsiWhiteSpace(' ')
                 PsiElement(COLON)(':')
                 PsiWhiteSpace(' ')
-                DELEGATION_SPECIFIER_LIST
-                  DELEGATOR_SUPER_CALL
+                SUPER_TYPE_LIST
+                  SUPER_TYPE_CALL_ENTRY
                     CONSTRUCTOR_CALLEE
                       TYPE_REFERENCE
                         USER_TYPE
@@ -135,12 +137,11 @@ JetFile: AnonymousObjects.kt
           PsiElement(LBRACE)('{')
           PsiWhiteSpace('\n  ')
           ENUM_ENTRY
-            OBJECT_DECLARATION_NAME
-              PsiElement(IDENTIFIER)('TOO_MANY_CLICKS')
+            PsiElement(IDENTIFIER)('TOO_MANY_CLICKS')
+            PsiElement(COMMA)(',')
           PsiWhiteSpace('\n  ')
           ENUM_ENTRY
-            OBJECT_DECLARATION_NAME
-              PsiElement(IDENTIFIER)('ONE_MORE_MESSAGE')
+            PsiElement(IDENTIFIER)('ONE_MORE_MESSAGE')
           PsiWhiteSpace('\n')
           PsiElement(RBRACE)('}')
       PsiWhiteSpace('\n\n')

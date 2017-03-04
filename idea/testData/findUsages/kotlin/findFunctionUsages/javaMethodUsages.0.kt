@@ -1,6 +1,6 @@
-// PSI_ELEMENT: org.jetbrains.jet.lang.psi.JetNamedFunction
+// PSI_ELEMENT: org.jetbrains.kotlin.psi.KtNamedFunction
 // OPTIONS: usages
-package testing;
+package testing
 
 public open class Server() {
     public open fun <caret>processRequest() = "foo"

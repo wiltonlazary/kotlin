@@ -1,11 +1,13 @@
+import kotlin.reflect.KProperty
+
 class TestDelegate() {
-    fun get(thisRef: Any?, desc: PropertyMetadata): Int {
+    operator fun getValue(thisRef: Any?, desc: KProperty<*>): Int {
         return 10
     }
 }
 
 class Test {
-  class object {
+  companion object {
     public val prop: Int by TestDelegate()
   }
 }
@@ -15,11 +17,11 @@ class Test {
 // ABSENT: TRUE
 
 // TESTED_OBJECT_KIND: property
-// TESTED_OBJECTS: Test$object, prop
+// TESTED_OBJECTS: Test$Companion, prop
 // ABSENT: TRUE
 
 // TESTED_OBJECT_KIND: property
-// TESTED_OBJECTS: Test$object, prop$delegate
+// TESTED_OBJECTS: Test$Companion, prop$delegate
 // ABSENT: TRUE
 
 // TESTED_OBJECT_KIND: property

@@ -1,17 +1,19 @@
+package test;
+
 class ClassObject {
     void accessToClassObject() {
-        WithClassObject.object$.foo();
-        WithClassObject.object$.getValue();
-        WithClassObject.object$.getValueWithGetter();
-        WithClassObject.object$.getVariable();
-        WithClassObject.object$.setVariable(0);
-        WithClassObject.object$.getVariableWithAccessors();
-        WithClassObject.object$.setVariableWithAccessors(0);
+        WithClassObject.Companion.foo();
+        WithClassObject.Companion.getValue();
+        WithClassObject.Companion.getValueWithGetter();
+        WithClassObject.Companion.getVariable();
+        WithClassObject.Companion.setVariable(0);
+        WithClassObject.Companion.getVariableWithAccessors();
+        WithClassObject.Companion.setVariableWithAccessors(0);
     }
 
     void accessToPackageObject() {
-        PackageInner.instance$.foo();
-        PackageInner.instance$.getValue();
+        PackageInner.INSTANCE.foo();
+        PackageInner.INSTANCE.getValue();
     }
 
     void accessToInnerClass() {

@@ -1,17 +1,19 @@
+fun <T> doSomething(a: T) {}
+
 fun test(n: Int): String {
     if (n == 1) {
         <caret>if (3 > 2) {
-            println("***")
+            doSomething("***")
             return "one"
         } else {
-            println("***")
+            doSomething("***")
             return "???"
         }
     } else if (n == 2) {
-        println("***")
+        doSomething("***")
         return "two"
     } else {
-        println("***")
+        doSomething("***")
         return "too many"
     }
 }

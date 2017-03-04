@@ -1,3 +1,6 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 package kt606
 
 //KT-606 wrong resolved call
@@ -10,16 +13,18 @@ class StandardPipelineFactory(val config : ChannelPipeline.() -> Unit) : Channel
     }
 }
 
-trait ChannelPipeline  {
+interface ChannelPipeline  {
   fun print(any: Any)
 }
 
 class DefaultChannelPipeline : ChannelPipeline {
-  override fun print(any: Any) = System.out?.println(any)
+  override fun print(any: Any) {
+      System.out?.println(any)
+  }
 
 }
 
-trait ChannelPipelineFactory {
+interface ChannelPipelineFactory {
     fun getPipeline() : ChannelPipeline
 }
 

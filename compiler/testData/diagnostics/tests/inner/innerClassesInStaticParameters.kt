@@ -1,5 +1,5 @@
 class Test {
-    class object {
+    companion object {
         fun test(<!UNUSED_PARAMETER!>t<!>: TestInner) = 42
     }
 

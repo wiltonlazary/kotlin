@@ -1,8 +1,8 @@
 var x : Int = 1 + <!UNINITIALIZED_VARIABLE!>x<!>
    get() : Int = 1
    set(value : <!WRONG_SETTER_PARAMETER_TYPE!>Long<!>) {
-      $x = value.toInt()
-      $x = <!TYPE_MISMATCH!>1.toLong()<!>
+      field = value.toInt()
+      field = <!TYPE_MISMATCH!>1.toLong()<!>
     }
 
  val xx : Int = <!PROPERTY_INITIALIZER_NO_BACKING_FIELD!>1 + x<!>
@@ -14,17 +14,9 @@ var x : Int = 1 + <!UNINITIALIZED_VARIABLE!>x<!>
 
 class Test() {
     var a : Int = 111
-    var b : Int get() = $a; set(x) {a = x; $a = x}
+    var b : Int = 222
+        get() = field
+        set(x) {a = x; field = x}
 
-   {
-    <!NO_BACKING_FIELD_CUSTOM_ACCESSORS!>$b<!> = $a
-    $a = <!NO_BACKING_FIELD_CUSTOM_ACCESSORS!>$b<!>
-    a = <!NO_BACKING_FIELD_CUSTOM_ACCESSORS!>$b<!>
-   }
-
-   fun f() {
-    <!NO_BACKING_FIELD_CUSTOM_ACCESSORS!>$b<!> = $a
-    a = <!NO_BACKING_FIELD_CUSTOM_ACCESSORS!>$b<!>
-   }
-   <!PUBLIC_MEMBER_SHOULD_SPECIFY_TYPE!>public val i<!> = 1
+   public val i = 1
 }

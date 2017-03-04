@@ -1,16 +1,18 @@
-trait A
+// !CHECK_TYPE
 
-trait B : A
-fun B.plus(b: B) = if (this == b) b else this
+interface A
+
+interface B : A
+operator fun B.plus(b: B) = if (this == b) b else this
 
 fun foo(a: A): B {
-    val result = (a as B) + <!DEBUG_INFO_AUTOCAST!>a<!>
-    <!DEBUG_INFO_AUTOCAST!>a<!> : B
+    val result = (a as B) + <!DEBUG_INFO_SMARTCAST!>a<!>
+    checkSubtype<B>(<!DEBUG_INFO_SMARTCAST!>a<!>)
     return result
 }
 
 fun bar(a: A, b: B): B {
     val result = b + (a as B)
-    <!DEBUG_INFO_AUTOCAST!>a<!> : B
+    checkSubtype<B>(<!DEBUG_INFO_SMARTCAST!>a<!>)
     return result
 }

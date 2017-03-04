@@ -1,20 +1,20 @@
 var x : Int <caret>by Baz()
 
-trait Foo {
-  fun get(p1: Any?, p2: Any?): Int = 1
+interface Foo {
+  fun getValue(p1: Any?, p2: Any?): Int = 1
 }
 
-trait Bar {
-  fun get(p1: Any?, p2: Any?): Int
+interface Bar {
+  fun getValue(p1: Any?, p2: Any?): Int
 }
 
-trait Zoo {
-  fun set(p1: Any?, p2: Any?, p3: Any?)
+interface Zoo {
+  fun setValue(p1: Any?, p2: Any?, p3: Any?)
 }
 
 class Baz: Foo, Bar, Zoo
 
 // MULTIRESOLVE
-// REF: (in Bar).get(Any?,Any?)
-// REF: (in Foo).get(Any?,Any?)
-// REF: (in Zoo).set(Any?,Any?,Any?)
+// REF: (in Bar).getValue(Any?, Any?)
+// REF: (in Foo).getValue(Any?, Any?)
+// REF: (in Zoo).setValue(Any?, Any?, Any?)

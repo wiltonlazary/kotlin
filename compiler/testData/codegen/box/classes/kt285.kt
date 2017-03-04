@@ -1,12 +1,15 @@
-trait Trait {
+interface Trait {
     fun foo() = "O"
-    fun toString() = "K"
+    fun bar(): String
 }
 
-class SimpleClass : Trait
+class SimpleClass : Trait {
+    override fun bar() = "K"
+}
 
+// Delegating 'toString' doesn't work, see KT-9519
 class ComplexClass : Trait by SimpleClass() {
-    override fun toString() = foo() + super.toString()
+    fun qux() = foo() + bar()
 }
 
-fun box() = ComplexClass().toString()
+fun box() = ComplexClass().qux()

@@ -1,6 +1,6 @@
 class C {
-    suppress("warnings")
-    class object {
+    @Suppress("warnings")
+    companion object {
         val foo: String?? = null as Nothing?
     }
 }

@@ -1,12 +1,12 @@
-// PSI_ELEMENT: org.jetbrains.jet.lang.psi.JetClass
+// PSI_ELEMENT: org.jetbrains.kotlin.psi.KtClass
 // OPTIONS: derivedInterfaces
 fun foo() {
     open class <caret>A
 
-    trait T: A
+    interface T: A
 
     fun bar() {
-        trait U: T
+        interface U: T
     }
 }
 

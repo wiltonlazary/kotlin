@@ -4,12 +4,12 @@
 package demo
 
 class Foo {
-    class object {
+    companion object {
         class Bar() { }
     }
 }
 class User {
     fun main() : Unit {
-        var <!UNUSED_VARIABLE!>boo<!> : Foo.Bar? /* <-- this reference is red */ = Foo.Bar()
+        var <!UNUSED_VARIABLE!>boo<!> : Foo.Companion.Bar? /* <-- this reference is red */ = Foo.Companion.Bar()
     }
 }

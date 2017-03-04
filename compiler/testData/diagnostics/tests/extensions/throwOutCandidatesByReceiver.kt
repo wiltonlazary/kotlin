@@ -23,7 +23,7 @@ fun test3(s: String?) {
     s.<!UNRESOLVED_REFERENCE_WRONG_RECEIVER!>foo<!>("a")
 }
 
-trait A
+interface A
 fun <T: A> T.c() {}
 
 fun test4() {
@@ -34,13 +34,13 @@ fun test4() {
 // should be an error on receiver, shouldn't be thrown away
 
 fun test5() {
-    <!TYPE_MISMATCH!>1<!>.{ String.(): String -> this}()
+    <!TYPE_MISMATCH!>1<!>.(fun String.()=1)()
 }
 
 fun <R: Any> R?.sure() : R = this!!
 
 fun <T> test6(l: List<T>?) {
-    <!TYPE_MISMATCH!>l<!>.sure<T>()
+    <!TYPE_MISMATCH!>l<!>.sure<<!UPPER_BOUND_VIOLATED!>T<!>>()
 }
 
 

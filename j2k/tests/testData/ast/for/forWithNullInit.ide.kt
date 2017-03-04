@@ -1,9 +1,0 @@
-{
-while (condition())
-{
-body()
-{
-update()
-}
-}
-}

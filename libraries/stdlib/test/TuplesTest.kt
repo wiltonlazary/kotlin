@@ -1,91 +1,104 @@
 package test.tuples
 
+import org.junit.Test
 import kotlin.test.assertTrue
-import org.junit.Test as test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 
 class PairTest {
     val p = Pair(1, "a")
 
-    test fun pairFirstAndSecond() {
+    @Test fun pairFirstAndSecond() {
         assertEquals(1, p.first)
         assertEquals("a", p.second)
     }
 
-    test fun pairMultiAssignment() {
+    @Test fun pairMultiAssignment() {
         val (a, b) = p
         assertEquals(1, a)
         assertEquals("a", b)
     }
 
-    test fun pairToString() {
+    @Test fun pairToString() {
         assertEquals("(1, a)", p.toString())
     }
 
-    test fun pairEquals() {
-        assertTrue(p == Pair(1, "a"))
-        assertTrue(p != Pair(2, "a"))
-        assertTrue(p != Pair(1, "b"))
-        assertTrue(!(p : Object).equals(null))
-        assertTrue((p : Any) != "")
+    @Test fun pairEquals() {
+        assertEquals(Pair(1, "a"), p)
+        assertNotEquals(Pair(2, "a"), p)
+        assertNotEquals(Pair(1, "b"), p)
+        assertTrue(!p.equals(null))
+        assertNotEquals("", (p as Any))
     }
 
-    test fun pairHashCode() {
-        assertTrue(p.hashCode() == Pair(1, "a").hashCode())
-        assertTrue(p.hashCode() != Pair(2, "a").hashCode())
-        assertTrue(Pair(null, "b").hashCode() != 0)
-        assertTrue(Pair("b", null).hashCode() != 0)
-        assertTrue(Pair(null, null).hashCode() == 0)
+    @Test fun pairHashCode() {
+        assertEquals(Pair(1, "a").hashCode(), p.hashCode())
+        assertNotEquals(Pair(2, "a").hashCode(), p.hashCode())
+        assertNotEquals(0, Pair(null, "b").hashCode())
+        assertNotEquals(0, Pair("b", null).hashCode())
+        assertEquals(0, Pair(null, null).hashCode())
     }
 
-    test fun pairHashSet() {
-        val s = hashSet(Pair(1, "a"), Pair(1, "b"), Pair(1, "a"))
-        assertTrue(s.size == 2)
+    @Test fun pairHashSet() {
+        val s = hashSetOf(Pair(1, "a"), Pair(1, "b"), Pair(1, "a"))
+        assertEquals(2, s.size)
         assertTrue(s.contains(p))
+    }
+
+    @Test fun pairToList() {
+        assertEquals(listOf(1, 2), (1 to 2).toList())
+        assertEquals(listOf(1, null), (1 to null).toList())
+        assertEquals(listOf(1, "2"), (1 to "2").toList())
     }
 }
 
 class TripleTest {
-    val t = Triple(1, "a", 0.0)
+    val t = Triple(1, "a", 0.07)
 
-    test fun tripleFirstAndSecond() {
-        assertTrue(t.first == 1)
-        assertTrue(t.second == "a")
-        assertTrue(t.third == 0.0)
+    @Test fun tripleFirstAndSecond() {
+        assertEquals(1, t.first)
+        assertEquals("a", t.second)
+        assertEquals(0.07, t.third)
     }
 
-    test fun tripleMultiAssignment() {
+    @Test fun tripleMultiAssignment() {
         val (a, b, c) = t
-        assertTrue(a == 1)
-        assertTrue(b == "a")
-        assertTrue(c == 0.0)
+        assertEquals(1, a)
+        assertEquals("a", b)
+        assertEquals(0.07, c)
     }
 
-    test fun tripleToString() {
-        assertEquals("(1, a, 0.0)", t.toString())
+    @Test fun tripleToString() {
+        assertEquals("(1, a, 0.07)", t.toString())
     }
 
-    test fun tripleEquals() {
-        assertTrue(t == Triple(1, "a", 0.0))
-        assertTrue(t != Triple(2, "a", 0.0))
-        assertTrue(t != Triple(1, "b", 0.0))
-        assertTrue(t != Triple(1, "a", 0.1))
-        assertTrue(!(t : Object).equals(null))
-        assertTrue((t : Any) != "")
+    @Test fun tripleEquals() {
+        assertEquals(Triple(1, "a", 0.07), t)
+        assertNotEquals(Triple(2, "a", 0.07), t)
+        assertNotEquals(Triple(1, "b", 0.07), t)
+        assertNotEquals(Triple(1, "a", 0.1), t)
+        assertTrue(!t.equals(null))
+        assertNotEquals("", (t as Any))
     }
 
-    test fun tripleHashCode() {
-        assertTrue(t.hashCode() == Triple(1, "a", 0.0).hashCode())
-        assertTrue(t.hashCode() != Triple(2, "a", 0.0).hashCode())
-        assertTrue(Triple(null, "b", 0.0).hashCode() != 0)
-        assertTrue(Triple("b", null, 0.0).hashCode() != 0)
-        assertTrue(Triple("b", 1, null).hashCode() != 0)
-        assertTrue(Triple(null, null, null).hashCode() == 0)
+    @Test fun tripleHashCode() {
+        assertEquals(Triple(1, "a", 0.07).hashCode(), t.hashCode())
+        assertNotEquals(Triple(2, "a", 0.07).hashCode(), t.hashCode())
+        assertNotEquals(0, Triple(null, "b", 0.07).hashCode())
+        assertNotEquals(0, Triple("b", null, 0.07).hashCode())
+        assertNotEquals(0, Triple("b", 1, null).hashCode())
+        assertEquals(0, Triple(null, null, null).hashCode())
     }
 
-    test fun tripleHashSet() {
-        val s = hashSet(Triple(1, "a", 0.0), Triple(1, "b", 0.0), Triple(1, "a", 0.0))
-        assertTrue(s.size == 2)
+    @Test fun tripleHashSet() {
+        val s = hashSetOf(Triple(1, "a", 0.07), Triple(1, "b", 0.07), Triple(1, "a", 0.07))
+        assertEquals(2, s.size)
         assertTrue(s.contains(t))
+    }
+
+    @Test fun tripleToList() {
+        assertEquals(listOf(1, 2, 3), (Triple(1, 2, 3)).toList())
+        assertEquals(listOf(1, null, 3), (Triple(1, null, 3)).toList())
+        assertEquals(listOf(1, 2, "3"), (Triple(1, 2, "3")).toList())
     }
 }

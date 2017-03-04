@@ -1,5 +1,7 @@
 JetFile: AnonymousInitializer.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   CLASS
     PsiElement(class)('class')
@@ -9,7 +11,9 @@ JetFile: AnonymousInitializer.kt
     CLASS_BODY
       PsiElement(LBRACE)('{')
       PsiWhiteSpace('\n\n  ')
-      ANONYMOUS_INITIALIZER
+      CLASS_INITIALIZER
+        PsiElement(init)('init')
+        PsiWhiteSpace(' ')
         BLOCK
           PsiElement(LBRACE)('{')
           PsiWhiteSpace('\n    ')

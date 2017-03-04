@@ -1,3 +1,6 @@
+// Enable for JS when it supports Java class library.
+// IGNORE_BACKEND: JS
+
 class TestJava(r : Runnable) : Runnable by r {}
 class TestRunnable() : Runnable {
   public override fun run() = System.out.println("foobar")

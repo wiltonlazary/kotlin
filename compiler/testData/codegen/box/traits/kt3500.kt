@@ -1,8 +1,11 @@
-trait BK {
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
+interface BK {
     fun foo(): String = 10.toString()
 }
 
-trait KTrait: BK {
+interface KTrait: BK {
     override fun foo() = 30.toString()
 }
 

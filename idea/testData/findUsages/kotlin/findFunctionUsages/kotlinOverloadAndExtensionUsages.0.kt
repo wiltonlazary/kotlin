@@ -1,6 +1,6 @@
-// PSI_ELEMENT: org.jetbrains.jet.lang.psi.JetNamedFunction
+// PSI_ELEMENT: org.jetbrains.kotlin.psi.KtNamedFunction
 // OPTIONS: overloadUsages
-trait X<T> {
+interface X<T> {
 }
 
 fun <T> X<T>.foo(a: Number, b: Number) {

@@ -4,28 +4,32 @@ open class A() {
   fun foo() : Int = 1
 }
 
-trait B {
+interface B {
   fun bar() : Double = 1.0;
+}
+
+interface G<X> {
+    val <<!TYPE_PARAMETER_OF_PROPERTY_NOT_USED_IN_RECEIVER!>X<!>> boo: Double  where X : A, X : B
+    val <<!TYPE_PARAMETER_OF_PROPERTY_NOT_USED_IN_RECEIVER!>A<!>> bal: Double  where A : B
+    val <<!TYPE_PARAMETER_OF_PROPERTY_NOT_USED_IN_RECEIVER!>Y<!>> bas: Double where Y : B, <!NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER!>X<!> : B
 }
 
 class C() : A(), B
 
 class D() {
-  class object : A(), B {}
+  companion object : A(), B {}
 }
 
-class Test1<T : A>()
+class Test1<T>()
   where
+    T : A,
     T : B,
-    <!NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER!>B<!> : T, // error
-    <!UNSUPPORTED!>class object T : A<!>,
-    <!UNSUPPORTED!>class object T : B<!>,
-    <!UNSUPPORTED!>class object <!NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER!>B<!> : T<!>
+    <!NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER!>B<!> : T // error
   {
 
   fun test(t : T) {
-    T.foo()
-    T.bar()
+    <!TYPE_PARAMETER_ON_LHS_OF_DOT!>T<!>.<!UNRESOLVED_REFERENCE!>foo<!>()
+    <!TYPE_PARAMETER_ON_LHS_OF_DOT!>T<!>.<!UNRESOLVED_REFERENCE!>bar<!>()
     t.foo()
     t.bar()
   }
@@ -44,18 +48,16 @@ class Bar<T : <!FINAL_UPPER_BOUND!>Foo<!>>
 class Buzz<T> where T : <!FINAL_UPPER_BOUND!>Bar<<!UPPER_BOUND_VIOLATED!>Int<!>><!>, T : <!UNRESOLVED_REFERENCE!>nioho<!>
 
 class X<T : <!FINAL_UPPER_BOUND!>Foo<!>>
-class Y<<!CONFLICTING_UPPER_BOUNDS!>T<!> : <!FINAL_UPPER_BOUND!>Foo<!>> where T : <!FINAL_UPPER_BOUND!>Bar<Foo><!>
+class Y<<!CONFLICTING_UPPER_BOUNDS!>T<!>> where T : <!FINAL_UPPER_BOUND!>Foo<!>, T : <!ONLY_ONE_CLASS_BOUND_ALLOWED, FINAL_UPPER_BOUND!>Bar<Foo><!>
 
-fun <T : A> test2(t : T)
+fun <T> test2(t : T)
   where
+    T : A,
     T : B,
-    <!NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER!>B<!> : T,
-    <!UNSUPPORTED!>class object <!NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER!>B<!> : T<!>,
-    <!UNSUPPORTED!>class object T : B<!>,
-    <!UNSUPPORTED!>class object T : A<!>
+    <!NAME_IN_CONSTRAINT_IS_NOT_A_TYPE_PARAMETER!>B<!> : T
 {
-  T.foo()
-  T.bar()
+  <!TYPE_PARAMETER_ON_LHS_OF_DOT!>T<!>.<!UNRESOLVED_REFERENCE!>foo<!>()
+  <!TYPE_PARAMETER_ON_LHS_OF_DOT!>T<!>.<!UNRESOLVED_REFERENCE!>bar<!>()
   t.foo()
   t.bar()
 }
@@ -64,9 +66,4 @@ val t1 = test2<<!UPPER_BOUND_VIOLATED!>A<!>>(A())
 val t2 = test2<<!UPPER_BOUND_VIOLATED!>B<!>>(C())
 val t3 = test2<C>(C())
 
-class Test<<!CONFLICTING_CLASS_OBJECT_UPPER_BOUNDS!>T<!>>
-  where
-    <!UNSUPPORTED!>class object T : <!FINAL_CLASS_OBJECT_UPPER_BOUND!>Foo<!><!>,
-    <!UNSUPPORTED!>class object T : A<!> {}
-
-val <T, B : T> x : Int = 0
+val <<!TYPE_PARAMETER_OF_PROPERTY_NOT_USED_IN_RECEIVER!>T<!>, <!TYPE_PARAMETER_OF_PROPERTY_NOT_USED_IN_RECEIVER!>B : T<!>> x : Int = 0

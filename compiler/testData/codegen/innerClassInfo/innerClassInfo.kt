@@ -3,5 +3,5 @@ class A {
         inner class C
     }
     
-    class object
+    companion object
 }

@@ -1,13 +1,15 @@
+// !DIAGNOSTICS: -UNUSED_PARAMETER
+
+import kotlin.reflect.KProperty
+
 class B {
     val a: Int by Delegate()
 
-    fun foo() = <!NO_BACKING_FIELD_CUSTOM_ACCESSORS!>$a<!>
+    fun foo() =<!SYNTAX!><!> <!SYNTAX!>$a<!>
 }
 
 class Delegate {
-  fun get(t: Any?, p: PropertyMetadata): Int {
-    t.equals(p) // to avoid UNUSED_PARAMETER warning
+  operator fun getValue(t: Any?, p: KProperty<*>): Int {
     return 1
   }
 }
-

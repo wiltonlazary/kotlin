@@ -1,6 +1,8 @@
+// !CHECK_TYPE
+
 import java.util.Enumeration
 
-fun <T> java.util.Enumeration<T>.iterator() = object : Iterator<T> {
+operator fun <T> java.util.Enumeration<T>.iterator() = object : Iterator<T> {
   public override fun hasNext(): Boolean = hasMoreElements()
 
   public override fun next() = nextElement()
@@ -8,6 +10,6 @@ fun <T> java.util.Enumeration<T>.iterator() = object : Iterator<T> {
 
 fun a(e : java.util.Enumeration<Int>) {
     for (i in e) {
-        i : Int
+        checkSubtype<Int>(i)
     }
 }

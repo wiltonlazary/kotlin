@@ -7,6 +7,6 @@ annotation class Ann(
         val b4: Byte
 )
 
-Ann(1, 1.toByte(), 128.toByte(), 128) class MyClass
+@Ann(1, 1.toByte(), 128.toByte(), 128) class MyClass
 
-// EXPECTED: Ann[b1 = IntegerValueType(1): IntegerValueType(1), b2 = 1.toByte(): jet.Byte, b3 = -128.toByte(): jet.Byte, b4 = IntegerValueType(128): IntegerValueType(128)]
+// EXPECTED: @Ann(b1 = 1.toByte(), b2 = 1.toByte(), b3 = -128.toByte(), b4 = 128)

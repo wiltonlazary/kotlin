@@ -1,11 +1,13 @@
+import kotlin.reflect.KProperty
+
 class TestDelegate() {
-    fun get(thisRef: Any?, desc: PropertyMetadata): Int {
+    operator fun getValue(thisRef: Any?, desc: KProperty<*>): Int {
         return 10
     }
 }
 
-trait Test {
-  class object {
+interface Test {
+  companion object {
     public val prop: Int by TestDelegate()
   }
 }
@@ -15,12 +17,12 @@ trait Test {
 // ABSENT: TRUE
 
 // TESTED_OBJECT_KIND: property
-// TESTED_OBJECTS: Test$object, prop
+// TESTED_OBJECTS: Test$Companion, prop
 // ABSENT: TRUE
 
 // TESTED_OBJECT_KIND: property
-// TESTED_OBJECTS: Test$object, prop$delegate
-// FLAGS: ACC_FINAL, ACC_PRIVATE
+// TESTED_OBJECTS: Test$Companion, prop$delegate
+// FLAGS: ACC_FINAL, ACC_PRIVATE, ACC_STATIC
 
 // TESTED_OBJECT_KIND: property
 // TESTED_OBJECTS: Test, prop$delegate

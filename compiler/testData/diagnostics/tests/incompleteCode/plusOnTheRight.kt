@@ -2,9 +2,9 @@
 package a
 
 class MyClass1 {
-    public fun plus() {}
+    public operator fun unaryPlus() {}
 }
 
 fun main(arg: MyClass1) {
-    arg<!TOO_MANY_ARGUMENTS!>+<!><!SYNTAX!><!>
+    arg<!UNRESOLVED_REFERENCE_WRONG_RECEIVER!>+<!><!SYNTAX!><!>
 }

@@ -2,18 +2,20 @@
 package bar
 
 open class A {
-    public fun invoke(<!UNUSED_PARAMETER!>f<!>: A.() -> Unit) {}
+    public operator fun invoke(<!UNUSED_PARAMETER!>f<!>: A.() -> Unit) {}
 }
 
 class B {
-    public fun invoke(<!UNUSED_PARAMETER!>f<!>: B.() -> Unit) {}
+    public operator fun invoke(<!UNUSED_PARAMETER!>f<!>: B.() -> Unit) {}
 }
 
 open class C
-val C.attr = A()
+val C.attr: A
+    get() = A()
 
 open class D: C()
-val D.attr = B()
+val D.attr: B
+    get() = B()
 
 
 fun main(args: Array<String>) {

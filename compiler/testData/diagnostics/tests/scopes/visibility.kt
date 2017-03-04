@@ -1,11 +1,13 @@
+// !DIAGNOSTICS: -UNUSED_PARAMETER
+
 //FILE:a.kt
 package test_visibility
 
-<!PACKAGE_MEMBER_CANNOT_BE_PROTECTED!>protected<!> class ProtectedClass
-<!PACKAGE_MEMBER_CANNOT_BE_PROTECTED!>protected<!> trait ProtectedTrait
+<!WRONG_MODIFIER_CONTAINING_DECLARATION!>protected<!> class ProtectedClass
+<!WRONG_MODIFIER_CONTAINING_DECLARATION!>protected<!> interface ProtectedTrait
 
-<!PACKAGE_MEMBER_CANNOT_BE_PROTECTED!>protected<!> val protected_val : Int = 4
-<!PACKAGE_MEMBER_CANNOT_BE_PROTECTED!>protected<!> fun protected_fun() {}
+<!WRONG_MODIFIER_TARGET!>protected<!> val protected_val : Int = 4
+<!WRONG_MODIFIER_TARGET!>protected<!> fun protected_fun() {}
 
 private val private_val : Int = 4
 private fun private_fun() {}
@@ -26,7 +28,7 @@ class Y {
 class A {
     private val i = 23
     private val v: B = B()
-    private fun f(<!UNUSED_PARAMETER!>i<!>: Int): B = B()
+    private fun f(i: Int): B = B()
 
     fun test() {
         doSmth(i)
@@ -38,11 +40,11 @@ class B {
 }
 
 fun test3(a: A) {
-    a.<!INVISIBLE_MEMBER!>v<!> //todo .bMethod()
-    a.<!INVISIBLE_MEMBER!>f<!>(0, 1) //todo .bMethod()
+    a.<!INVISIBLE_MEMBER(v; private; 'A')!>v<!> //todo .bMethod()
+    a.<!INVISIBLE_MEMBER(f; private; 'A')!>f<!>(0, <!TOO_MANY_ARGUMENTS!>1<!>) //todo .bMethod()
 }
 
-trait T
+interface T
 
 open class C : T {
     protected var i : Int = 34
@@ -52,7 +54,7 @@ open class C : T {
 }
 
 fun test4(c: C) {
-    c.<!INVISIBLE_MEMBER!>i<!>++
+    c.<!INVISIBLE_MEMBER(i; protected; 'C')!>i<!>++
 }
 
 class D : C() {
@@ -70,13 +72,13 @@ class E : C() {
 
 class F : C() {
     fun test8(c: C) {
-        doSmth(c.i)
+        doSmth(c.<!INVISIBLE_MEMBER!>i<!>)
     }
 }
 
 class G : T {
     fun test8(c: C) {
-        doSmth(c.<!INVISIBLE_MEMBER!>i<!>)
+        doSmth(c.<!INVISIBLE_MEMBER(i; protected; 'C')!>i<!>)
     }
 }
 
@@ -89,5 +91,5 @@ import test_visibility.*
 
 fun test() {
     internal_fun()
-    <!INVISIBLE_MEMBER!>private_fun<!>()
+    <!INVISIBLE_MEMBER(private_fun; private; file)!>private_fun<!>()
 }

@@ -1,10 +1,13 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
 
-trait MyIterator<T> {
-    fun hasNext() : Boolean
-    fun next() : T
+
+interface MyIterator<T> {
+    operator fun hasNext() : Boolean
+    operator fun next() : T
 }
 
-fun <T : Any> T?.iterator() = object : MyIterator<T> {
+operator fun <T : Any> T?.iterator() = object : MyIterator<T> {
     var hasNext = this@iterator != null
       private set
     override fun hasNext() = hasNext

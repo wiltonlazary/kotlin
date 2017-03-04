@@ -1,5 +1,7 @@
 JetFile: ForRecovery.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   FUN
     PsiElement(fun)('fun')
@@ -16,7 +18,7 @@ JetFile: ForRecovery.kt
         PsiElement(for)('for')
         PsiWhiteSpace(' ')
         PsiElement(LPAR)('(')
-        LOOP_PARAMETER
+        VALUE_PARAMETER
           PsiElement(IDENTIFIER)('v')
           PsiElement(COLON)(':')
           PsiWhiteSpace(' ')

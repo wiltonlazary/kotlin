@@ -1,6 +1,7 @@
 >>> fun foo() = 765
-null
 >>> foo(1)
-ERROR: /line2.ktscript: (1, 5) Too many arguments for internal final fun foo(): jet.Int defined in <script>
+error: too many arguments for public final fun foo(): Int defined in Line1
+foo(1)
+    ^
 >>> foo()
 765

@@ -1,15 +1,16 @@
 val Int.getter: Int
     get() {
-        val extFun = { Int.() ->
+        val extFun: Int.() -> Int = {
             this@getter
         }
         return this@getter.extFun()
     }
 
 
-var Int.setter: Int = 1
+var Int.setter: Int
+    get() = 1
     set(i: Int) {
-        val extFun = { Int.() ->
+        val extFun: Int.() -> Int = {
             this@setter
         }
         this@setter.extFun()

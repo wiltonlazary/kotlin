@@ -1,5 +1,7 @@
 JetFile: PropertyWithoutTypeRef.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   PROPERTY
     PsiElement(val)('val')

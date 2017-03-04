@@ -2,7 +2,7 @@ package  As
 
 val staticProperty : String = "1"
 
-val String.staticExt  = "1"
+val String.staticExt: String get() = "1"
 
 open class A(val init: String) {
 
@@ -10,7 +10,7 @@ open class A(val init: String) {
 
     private val privateProperty : String = init
 
-    val String.ext  = "1"
+    val String.ext: String get() = "1"
 
     val Int.myInc : Int
         get() = this + 1
@@ -24,8 +24,8 @@ open class A(val init: String) {
     }
 
     public var backingField : Int = 0
-        get() = $backingField.myInc
-        set(s) { $backingField = s }
+        get() = field.myInc
+        set(s) { field = s }
 
 }
 
@@ -38,7 +38,7 @@ open class B(init: String) : A("1") {
     }
 
     fun getWithBackingFieldProperty(): String {
-        return $property
+        return property
     }
 }
 

@@ -1,10 +1,10 @@
-trait Runnable {
+interface Runnable {
     fun run()
 }
 
 class C {
     fun f() {
-        class <!ABSTRACT_MEMBER_NOT_IMPLEMENTED!>MyRunnable<!>(): Runnable {
+        <!ABSTRACT_MEMBER_NOT_IMPLEMENTED!>class MyRunnable<!>(): Runnable {
         }
     }
 }

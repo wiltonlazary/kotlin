@@ -1,5 +1,5 @@
-trait A {
-    fun foo(value : String) : Unit = 0
+interface A {
+    fun foo(value : String) : Unit {}
 }
 
 class C : A {

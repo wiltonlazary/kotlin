@@ -2,11 +2,11 @@ class CallbackBlock {}
 
 public class Foo
 {
-    class object {
+    companion object {
         private var bar = 0
     }
 
-    {
+    init {
         ++bar
     }
 

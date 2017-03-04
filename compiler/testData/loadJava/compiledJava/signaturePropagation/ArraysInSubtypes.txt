@@ -1,16 +1,16 @@
 package test
 
-public trait ArraysInSubtypes : java.lang.Object {
-    
-    public trait Sub</*0*/ T> : test.ArraysInSubtypes.Super {
-        public abstract override /*1*/ fun array(): jet.Array<jet.String>?
-        public abstract override /*1*/ fun listOfArray(): jet.MutableList<out jet.Array<jet.String>?>?
-        public abstract override /*1*/ fun objArray(): jet.Array<T>?
+public interface ArraysInSubtypes {
+
+    public interface Sub</*0*/ T : kotlin.Any!> : test.ArraysInSubtypes.Super {
+        public abstract override /*1*/ fun array(): kotlin.Array<(out) kotlin.String!>!
+        public abstract override /*1*/ fun listOfArray(): (kotlin.collections.MutableList<out kotlin.Array<(out) kotlin.String!>!>..kotlin.collections.List<kotlin.Array<(out) kotlin.String!>!>?)
+        public abstract override /*1*/ fun objArray(): kotlin.Array<(out) T!>!
     }
-    
-    public trait Super : java.lang.Object {
-        public abstract fun array(): jet.Array<jet.CharSequence>?
-        public abstract fun listOfArray(): jet.MutableList<out jet.Array<jet.CharSequence>?>?
-        public abstract fun objArray(): jet.Array<jet.Any>?
+
+    public interface Super {
+        public abstract fun array(): kotlin.Array<(out) kotlin.CharSequence!>!
+        public abstract fun listOfArray(): (kotlin.collections.MutableList<out kotlin.Array<(out) kotlin.CharSequence!>!>..kotlin.collections.List<kotlin.Array<(out) kotlin.CharSequence!>!>?)
+        public abstract fun objArray(): kotlin.Array<(out) kotlin.Any!>!
     }
 }

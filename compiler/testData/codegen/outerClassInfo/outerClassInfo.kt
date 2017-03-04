@@ -1,8 +1,8 @@
-package foo;
+package foo
 
 class Foo {
 
-  class object {
+  companion object {
       fun objectFoo() { }
   }
 
@@ -18,6 +18,14 @@ class Foo {
   val objectLiteral = object  {
       fun objectLiteralFoo() { }
   }
+
+    //anonymous lambda in constructor
+  val s = { 11 }()
+
+  fun foo() {
+        //anonymous lambda
+        { }()
+    }
 }
 
 object PackageInnerObject {

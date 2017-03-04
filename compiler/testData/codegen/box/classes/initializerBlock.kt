@@ -1,8 +1,8 @@
 class C() {
   public var f: Int
 
-  {
-    $f = 610
+  init {
+    f = 610
   }
 }
 

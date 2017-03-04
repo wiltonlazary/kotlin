@@ -1,8 +1,7 @@
 fun f() {
-    foo {(): Int ->
+    foo {
         bar {
-            (): Int ->
-            <!RETURN_NOT_ALLOWED!>return@foo 1<!>
+            <!RETURN_NOT_ALLOWED!>return@foo<!> 1
         }
         return@foo 1
     }

@@ -1,4 +1,5 @@
-// "Import" "false"
+// "class org.jetbrains.kotlin.idea.quickfix.ImportFix" "false"
+// ACTION: Rename reference
 // ERROR: Unresolved reference: externalFun
 
 package testing

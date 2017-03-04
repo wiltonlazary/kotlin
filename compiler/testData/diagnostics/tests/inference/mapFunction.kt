@@ -1,3 +1,5 @@
+// !CHECK_TYPE
+
 package a
 
 //+JDK
@@ -8,25 +10,26 @@ fun foo() {
 
     val u = v map { it * 2 }
 
-    u : List<Int>
+    checkSubtype<List<Int>>(u)
 
     val a = 1..5
 
     val b = a.map { it * 2 }
 
-    b : List<Int>
+    checkSubtype<List<Int>>(b)
 
     //check for non-error types
-    <!TYPE_MISMATCH!>u<!> : String
-    <!TYPE_MISMATCH!>b<!> : String
+    checkSubtype<String>(<!TYPE_MISMATCH!>u<!>)
+    checkSubtype<String>(<!TYPE_MISMATCH!>b<!>)
 }
 
 
 // ---------------------
-// copy from kotlin util
+// copy from kotlin util (but with `infix` modifier on `map`)
 
-fun <T> array(vararg t : T) : Array<T> = t
+@Suppress("UNCHECKED_CAST")
+fun <T> array(vararg t : T) : Array<T> = t as Array<T>
 
-fun <T, R> Array<T>.map(<!UNUSED_PARAMETER!>transform<!> : (T) -> R) : List<R> {<!NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY!>}<!>
+infix fun <T, R> Array<T>.map(<!UNUSED_PARAMETER!>transform<!> : (T) -> R) : List<R> {<!NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY!>}<!>
 
-fun <T, R> Iterable<T>.map(<!UNUSED_PARAMETER!>transform<!> : (T) -> R) : List<R> {<!NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY!>}<!>
+infix fun <T, R> Iterable<T>.map(<!UNUSED_PARAMETER!>transform<!> : (T) -> R) : List<R> {<!NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY!>}<!>

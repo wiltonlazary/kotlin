@@ -2,4 +2,4 @@ fun test() {
     listOf(1, 2, 4).<caret>filter { it > 0 }
 }
 
-// INFO: jet.inline <b>public</b> <b>fun</b> &lt;T> jet.Iterable&lt;T&gt;.filter(predicate: (T) &rarr; jet.Boolean): jet.List&lt;T&gt; <i>defined in</i> kotlin<br/><p>Returns a list containing all elements which match the given *predicate*<br/></p>
+//INFO: <pre><b>public</b> inline <b>fun</b> &lt;T&gt; <a href="psi_element://kotlin.collections.Iterable">Iterable</a>&lt;<a href="psi_element://kotlin.collections.filter.T">T</a>&gt;.filter(predicate: (<a href="psi_element://kotlin.collections.filter.T">T</a>) &rarr; Boolean): <a href="psi_element://kotlin.collections.List">List</a>&lt;<a href="psi_element://kotlin.collections.filter.T">T</a>&gt; <i>defined in</i> kotlin.collections</pre><p>Returns a list containing only elements matching the given <a href="psi_element://predicate">predicate</a>.</p>

@@ -1,8 +1,8 @@
 class A {
-    class object {
+    companion object {
         class Foo(val a: Int = 1) {}
     }
 }
 
-// CLASS: A$object$Foo
+// CLASS: A$Companion$Foo
 // HAS_DEFAULT_CONSTRUCTOR: true

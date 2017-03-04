@@ -1,1 +1,1 @@
-class <!ABSTRACT_MEMBER_NOT_IMPLEMENTED!>A<!> : (categoryName: <!SYNTAX!><!>) <!SYNTAX!>{<!SYNTAX!><!><!>
+class A : (<!UNSUPPORTED!>categoryName<!>: <!SYNTAX!><!>)<!SYNTAX!><!> <!SYNTAX!><!>{<!SYNTAX!><!>

@@ -1,11 +1,15 @@
+// !CHECK_TYPE
+
+import kotlin.reflect.KProperty
+
 class A {
     val a by MyProperty()
 
     fun test() {
-        a: Int
+        checkSubtype<Int>(a)
     }
 }
 
 class MyProperty<R> {
-    public fun get(thisRef: R, desc: PropertyMetadata): Int = throw Exception("$thisRef $desc")
+    operator fun getValue(thisRef: R, desc: KProperty<*>): Int = throw Exception("$thisRef $desc")
 }

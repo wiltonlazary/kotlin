@@ -1,7 +1,7 @@
 fun ~test~test() = 1
 
 class Test {
-    class object {
+    companion object {
         fun call() = `test`test()
     }
 

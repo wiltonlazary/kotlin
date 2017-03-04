@@ -3,11 +3,11 @@ fun foo() {
     fun foo()
     class foo
 
-    type x = t
+    typealias x = t
     var r
 
-    [a] var foo = 4
+    @a var foo = 4
 
     1
-    [a] val f
+    @a val f
 }

@@ -1,12 +1,12 @@
+// !CHECK_TYPE
+
 fun test() {
-    val x = run @f{
+    val x = run f@{
       fun local(a: Int): String {
         if (a > 0) return "2"
         return@local "3"
       }
-      <!RETURN_NOT_ALLOWED_EXPLICIT_RETURN_TYPE_REQUIRED!>return@f 1<!>
+      return@f 1
     }
-    x: Int
+    checkSubtype<Int>(x)
 }
-
-fun run<T>(f: () -> T): T { return f() }

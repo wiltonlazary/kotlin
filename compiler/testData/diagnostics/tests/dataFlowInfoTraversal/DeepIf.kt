@@ -1,4 +1,4 @@
-// !DIAGNOSTICS: -DEBUG_INFO_AUTOCAST
+// !DIAGNOSTICS: -DEBUG_INFO_SMARTCAST
 fun bar(x: Int) = x + 1
 
 fun foo() {
@@ -16,15 +16,15 @@ fun foo() {
         }
         if (<!SENSELESS_COMPARISON!>x == null<!>) bar(x) else bar(x)
         bar(bar(x))
-    } else if (<!SENSELESS_COMPARISON!>x == null<!>) {
-        bar(<!TYPE_MISMATCH!>x<!>)
-        if (<!SENSELESS_COMPARISON!>x != null<!>) {
+    } else if (<!SENSELESS_COMPARISON!><!DEBUG_INFO_CONSTANT!>x<!> == null<!>) {
+        bar(<!TYPE_MISMATCH, DEBUG_INFO_CONSTANT!>x<!>)
+        if (<!SENSELESS_COMPARISON!><!DEBUG_INFO_CONSTANT!>x<!> != null<!>) {
             bar(x)
             if (<!SENSELESS_COMPARISON!>x == null<!>) bar(x)
             if (<!SENSELESS_COMPARISON!>x == null<!>) bar(x) else bar(x)
             bar(bar(x) + bar(x))
-        } else if (<!SENSELESS_COMPARISON!>x == null<!>) {
-            bar(<!TYPE_MISMATCH!>x<!>)
+        } else if (<!SENSELESS_COMPARISON!><!DEBUG_INFO_CONSTANT!>x<!> == null<!>) {
+            bar(<!TYPE_MISMATCH, DEBUG_INFO_CONSTANT!>x<!>)
         }
     }
 

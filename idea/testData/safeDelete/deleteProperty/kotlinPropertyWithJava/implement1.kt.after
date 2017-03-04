@@ -1,6 +1,0 @@
-trait A {
-}
-
-trait Z {
-    val foo: String
-}

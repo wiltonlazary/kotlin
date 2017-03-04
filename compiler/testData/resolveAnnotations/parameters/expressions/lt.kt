@@ -12,6 +12,6 @@ annotation class Ann(
 val a = 1
 val b = 2
 
-Ann(1 < 2, 1.0 < 2.0, 2 < a, b < a, 'b' < 'a', "a" < "b") class MyClass
+@Ann(1 < 2, 1.0 < 2.0, 2 < a, b < a, 'b' < 'a', "a" < "b") class MyClass
 
-// EXPECTED: Ann[b1 = true: jet.Boolean, b2 = true: jet.Boolean, b3 = false: jet.Boolean, b4 = false: jet.Boolean, b5 = false: jet.Boolean, b6 = true: jet.Boolean]
+// EXPECTED: @Ann(b1 = true, b2 = true, b3 = false, b4 = false, b5 = false, b6 = true)

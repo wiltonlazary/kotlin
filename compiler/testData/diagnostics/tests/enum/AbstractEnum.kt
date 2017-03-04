@@ -1,3 +1,3 @@
 package abstract
 
-abstract enum class MyAbstractEnum() {}
+<!WRONG_MODIFIER_TARGET!>abstract<!> enum class MyAbstractEnum() {}

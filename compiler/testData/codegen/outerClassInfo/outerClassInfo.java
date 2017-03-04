@@ -4,7 +4,7 @@ import java.lang.Object;
 
 class Foo {
 
-    class object { }
+    class Companion { }
 
     class InnerClass { }
 
@@ -20,6 +20,16 @@ class Foo {
         void objectLiteralFoo() { }
     };
 
+    //anonymous lambda
+    Foo() {
+        class LambdaInConstructor{}
+    }
+
+
+    void foo() {
+        //lambda
+        class Lambda {}
+    }
 }
 
 class PackageInnerObject { }

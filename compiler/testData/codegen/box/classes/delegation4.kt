@@ -1,8 +1,8 @@
-open trait First {
+interface First {
   public open fun foo() : Int
 }
 
-open trait Second : First {
+interface Second : First {
   public open fun bar() : Int
 }
 

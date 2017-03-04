@@ -1,38 +1,41 @@
-<!ILLEGAL_MODIFIER!>inner<!> fun foo() {}
-<!ILLEGAL_MODIFIER!>inner<!> val prop = 42
+<!WRONG_MODIFIER_TARGET!>inner<!> fun foo() {}
+<!WRONG_MODIFIER_TARGET!>inner<!> val prop = 42
 
-<!ILLEGAL_MODIFIER!>inner<!> class A
-<!ILLEGAL_MODIFIER!>inner<!> trait B
-<!ILLEGAL_MODIFIER!>inner<!> object C
+<!WRONG_MODIFIER_CONTAINING_DECLARATION!>inner<!> class A
+<!WRONG_MODIFIER_TARGET!>inner<!> interface B
+<!WRONG_MODIFIER_TARGET!>inner<!> object C
 
 class D {
     inner class E
-    <!ILLEGAL_MODIFIER!>inner<!> trait F
-    <!ILLEGAL_MODIFIER!>inner<!> object G
-    <!ILLEGAL_MODIFIER!>inner<!> enum class R
-    <!ILLEGAL_MODIFIER!>inner<!> annotation class S
-    <!ILLEGAL_MODIFIER!>inner<!> class object
+    <!WRONG_MODIFIER_TARGET!>inner<!> interface F
+    <!WRONG_MODIFIER_TARGET!>inner<!> object G
+    <!WRONG_MODIFIER_TARGET!>inner<!> enum class R
+    <!WRONG_MODIFIER_TARGET!>inner<!> annotation class S
+    <!WRONG_MODIFIER_TARGET!>inner<!> companion object
 }
 
 enum class H {
-    <!ILLEGAL_MODIFIER!>inner<!> I {
-        inner class II
-    }
+    I0 {
+        <!WRONG_MODIFIER_CONTAINING_DECLARATION!>inner<!> class II0
+    },
+    <!WRONG_MODIFIER_TARGET!>inner<!> I {
+        <!WRONG_MODIFIER_CONTAINING_DECLARATION!>inner<!> class II
+    };
     
     inner class J
 }
 
-trait K {
-    <!ILLEGAL_MODIFIER!>inner<!> class L
+interface K {
+    <!WRONG_MODIFIER_CONTAINING_DECLARATION!>inner<!> class L
 }
 
 object N {
-    inner class O
+    <!WRONG_MODIFIER_CONTAINING_DECLARATION!>inner<!> class O
 }
 
 class P {
-    class object {
-        inner class Q
+    companion object {
+        <!WRONG_MODIFIER_CONTAINING_DECLARATION!>inner<!> class Q
     }
 }
 

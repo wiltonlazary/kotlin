@@ -2,39 +2,36 @@ class MyClass {
     val i = 0
 }
 
-deprecated("Use A instead") fun MyClass.minus(i: MyClass) { i.i }
-deprecated("Use A instead") fun MyClass.div(i: MyClass) { i.i }
-deprecated("Use A instead") fun MyClass.times(i: MyClass) { i.i }
+@Deprecated("Use A instead") operator fun MyClass.minus(i: MyClass) { i.i }
+@Deprecated("Use A instead") operator fun MyClass.div(i: MyClass) { i.i }
+@Deprecated("Use A instead") operator fun MyClass.times(i: MyClass) { i.i }
 
-deprecated("Use A instead") fun MyClass.not() { }
-deprecated("Use A instead") fun MyClass.plus() { }
+@Deprecated("Use A instead") operator fun MyClass.not() { }
+@Deprecated("Use A instead") operator fun MyClass.unaryPlus() { }
 
-deprecated("Use A instead") fun MyClass.contains(i: MyClass): Boolean { i.i; return false }
+@Deprecated("Use A instead") operator fun MyClass.contains(i: MyClass): Boolean { i.i; return false }
 
-deprecated("Use A instead") fun MyClass.plusAssign(i: MyClass) { i.i }
+@Deprecated("Use A instead") operator fun MyClass.plusAssign(i: MyClass) { i.i }
 
-deprecated("Use A instead") fun MyClass.equals(i: Any?): Boolean { i == null; return false }
-deprecated("Use A instead") fun MyClass.compareTo(i: MyClass): Int { return i.i }
+@Deprecated("Use A instead") operator fun MyClass.rangeTo(i: MyClass): IntRange { return IntRange(i.i, i.i) }
 
 fun test() {
     val x1 = MyClass()
     val x2 = MyClass()
 
-    x1 <warning descr="'fun minus(i: MyClass)' is deprecated. Use A instead">-</warning> x2
-    x1 <warning descr="'fun div(i: MyClass)' is deprecated. Use A instead">/</warning> x2
-    x1 <warning descr="'fun times(i: MyClass)' is deprecated. Use A instead">*</warning> x2
+    x1 <warning descr="[DEPRECATION] 'minus(MyClass): Unit' is deprecated. Use A instead">-</warning> x2
+    x1 <warning descr="[DEPRECATION] 'div(MyClass): Unit' is deprecated. Use A instead">/</warning> x2
+    x1 <warning descr="[DEPRECATION] 'times(MyClass): Unit' is deprecated. Use A instead">*</warning> x2
 
-    <warning descr="'fun not()' is deprecated. Use A instead">!</warning>x1
-    <warning descr="'fun plus()' is deprecated. Use A instead">+</warning>x1
+    <warning descr="[DEPRECATION] 'not(): Unit' is deprecated. Use A instead">!</warning>x1
+    <warning descr="[DEPRECATION] 'unaryPlus(): Unit' is deprecated. Use A instead">+</warning>x1
 
-    x1 <warning descr="'fun contains(i: MyClass)' is deprecated. Use A instead">in</warning> x2
-    x1 <warning descr="'fun contains(i: MyClass)' is deprecated. Use A instead">!in</warning> x2
+    x1 <warning descr="[DEPRECATION] 'contains(MyClass): Boolean' is deprecated. Use A instead">in</warning> x2
+    x1 <warning descr="[DEPRECATION] 'contains(MyClass): Boolean' is deprecated. Use A instead">!in</warning> x2
 
-    x1 <warning descr="'fun plusAssign(i: MyClass)' is deprecated. Use A instead">+=</warning> x2
+    x1 <warning descr="[DEPRECATION] 'plusAssign(MyClass): Unit' is deprecated. Use A instead">+=</warning> x2
 
-    x1 <warning descr="'fun equals(i: jet.Any?)' is deprecated. Use A instead">==</warning> x2
-    x1 <warning descr="'fun equals(i: jet.Any?)' is deprecated. Use A instead">!=</warning> x2
-    x1 <warning descr="'fun compareTo(i: MyClass)' is deprecated. Use A instead">></warning> x2
+    x1<warning descr="[DEPRECATION] 'rangeTo(MyClass): IntRange' is deprecated. Use A instead">..</warning>x2
 }
 
 // NO_CHECK_INFOS

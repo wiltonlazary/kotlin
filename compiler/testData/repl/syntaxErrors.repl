@@ -1,7 +1,10 @@
 >>> )(
-ERROR: /line1.ktscript: (1, 1) Expecting an element
-ERROR: /line1.ktscript: (1, 3) Expecting an expression
+error: expecting an element
+)(
+^
+error: expecting an expression
+)(
+  ^
 >>> fun foo() = 98
-null
 >>> foo()
 98

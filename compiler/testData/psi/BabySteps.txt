@@ -1,9 +1,11 @@
 JetFile: BabySteps.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
     PsiElement(package)('package')
     PsiWhiteSpace(' ')
     REFERENCE_EXPRESSION
       PsiElement(IDENTIFIER)('foo')
+  IMPORT_LIST
+    <empty list>
   PsiWhiteSpace('\n\n')
   CLASS
     PsiElement(class)('class')
@@ -17,28 +19,29 @@ JetFile: BabySteps.kt
       TYPE_PARAMETER
         PsiElement(IDENTIFIER)('a')
       PsiElement(GT)('>')
-    VALUE_PARAMETER_LIST
-      PsiElement(LPAR)('(')
-      VALUE_PARAMETER
-        PsiElement(IDENTIFIER)('a')
-        PsiWhiteSpace(' ')
-        PsiElement(COLON)(':')
-        PsiWhiteSpace(' ')
-        TYPE_REFERENCE
-          USER_TYPE
-            REFERENCE_EXPRESSION
-              PsiElement(IDENTIFIER)('doo')
-        PsiWhiteSpace(' ')
-        PsiElement(EQ)('=')
-        PsiWhiteSpace(' ')
-        INTEGER_CONSTANT
-          PsiElement(INTEGER_LITERAL)('0')
-      PsiElement(RPAR)(')')
+    PRIMARY_CONSTRUCTOR
+      VALUE_PARAMETER_LIST
+        PsiElement(LPAR)('(')
+        VALUE_PARAMETER
+          PsiElement(IDENTIFIER)('a')
+          PsiWhiteSpace(' ')
+          PsiElement(COLON)(':')
+          PsiWhiteSpace(' ')
+          TYPE_REFERENCE
+            USER_TYPE
+              REFERENCE_EXPRESSION
+                PsiElement(IDENTIFIER)('doo')
+          PsiWhiteSpace(' ')
+          PsiElement(EQ)('=')
+          PsiWhiteSpace(' ')
+          INTEGER_CONSTANT
+            PsiElement(INTEGER_LITERAL)('0')
+        PsiElement(RPAR)(')')
     PsiWhiteSpace(' ')
     PsiElement(COLON)(':')
     PsiWhiteSpace(' ')
-    DELEGATION_SPECIFIER_LIST
-      DELEGATOR_SUPER_CALL
+    SUPER_TYPE_LIST
+      SUPER_TYPE_CALL_ENTRY
         CONSTRUCTOR_CALLEE
           TYPE_REFERENCE
             USER_TYPE
@@ -56,7 +59,7 @@ JetFile: BabySteps.kt
           PsiElement(RPAR)(')')
       PsiElement(COMMA)(',')
       PsiWhiteSpace(' ')
-      DELEGATOR_BY
+      DELEGATED_SUPER_TYPE_ENTRY
         TYPE_REFERENCE
           USER_TYPE
             REFERENCE_EXPRESSION
@@ -68,7 +71,7 @@ JetFile: BabySteps.kt
           PsiElement(IDENTIFIER)('x')
       PsiElement(COMMA)(',')
       PsiWhiteSpace(' ')
-      DELEGATOR_SUPER_CLASS
+      SUPER_TYPE_ENTRY
         TYPE_REFERENCE
           USER_TYPE
             REFERENCE_EXPRESSION

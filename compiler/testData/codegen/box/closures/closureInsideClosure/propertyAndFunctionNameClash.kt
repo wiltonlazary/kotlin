@@ -1,7 +1,5 @@
 package d
 
-import java.util.ArrayList
-
 fun box(): String {
     ListTag().test(listOf("a", "b"))
     return "OK"
@@ -24,8 +22,8 @@ class LI : ListTag() {}
 public fun ListTag.item(body: LI.() -> Unit): Unit {}
 fun HtmlTag.a(contents: A.() -> Unit) {}
 
-trait A : HtmlTag {
-    public var text: String
+abstract class A : HtmlTag() {
+    public abstract var text: String
 }
 
 fun listOf(vararg strings: String): List<String> {

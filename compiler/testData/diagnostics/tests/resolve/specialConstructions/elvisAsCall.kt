@@ -1,6 +1,6 @@
 package a
 
-trait A
+interface A
 fun doList(l: List<Int>) = l
 fun doInt(i: Int) = i
 fun getList(): List<Int>? = null
@@ -11,7 +11,7 @@ fun <T: A> emptyListOfA(): List<T> = throw Exception()
 
 fun testElvis(a: Int?, b: Int?) {
     if (a != null) {
-        doInt(b ?: <!DEBUG_INFO_AUTOCAST!>a<!>)
+        doInt(b ?: <!DEBUG_INFO_SMARTCAST!>a<!>)
     }
     doList(getList() ?: <!TYPE_INFERENCE_UPPER_BOUND_VIOLATED!>emptyListOfA<!>()) //should be an error
     doList(getList() ?: strangeList { doInt(it) }) //lambda was not analyzed
@@ -21,12 +21,14 @@ fun testElvis(a: Int?, b: Int?) {
 fun testDataFlowInfo1(a: Int?, b: Int?) {
     val c: Int = a ?: b!!
     doInt(c)
-    <!DEBUG_INFO_AUTOCAST!>b<!> + 1
+    // b is nullable if a != null
+    b <!UNSAFE_INFIX_CALL!>+<!> 1
 }
 
 fun testDataFlowInfo2(a: Int?, b: Int?) {
     doInt(a ?: b!!)
-    <!DEBUG_INFO_AUTOCAST!>b<!> + 1
+    // b is nullable if a != null
+    b <!UNSAFE_INFIX_CALL!>+<!> 1
 }
 
 fun testTypeMismatch(a: String?, b: Any) {

@@ -1,2 +1,4 @@
-val empty = IntRange.<ref>EMPTY
-//jet/Ranges.kt:EMPTY
+val empty = IntRange.<caret>EMPTY
+// BINARY: ranges/IntRange.class
+// SRC: kotlin/Ranges.kt
+// TARGET: (in kotlin.ranges.IntRange.Companion).EMPTY

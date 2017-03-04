@@ -1,23 +1,25 @@
 JetFile: SimpleModifiers.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
     PsiElement(package)('package')
     PsiWhiteSpace(' ')
-    REFERENCE_EXPRESSION
-      PsiElement(IDENTIFIER)('foo')
-    PsiElement(DOT)('.')
-    REFERENCE_EXPRESSION
-      PsiElement(IDENTIFIER)('bar')
-    PsiElement(DOT)('.')
-    REFERENCE_EXPRESSION
-      PsiElement(IDENTIFIER)('goo')
+    DOT_QUALIFIED_EXPRESSION
+      DOT_QUALIFIED_EXPRESSION
+        REFERENCE_EXPRESSION
+          PsiElement(IDENTIFIER)('foo')
+        PsiElement(DOT)('.')
+        REFERENCE_EXPRESSION
+          PsiElement(IDENTIFIER)('bar')
+      PsiElement(DOT)('.')
+      REFERENCE_EXPRESSION
+        PsiElement(IDENTIFIER)('goo')
+  IMPORT_LIST
+    <empty list>
   PsiWhiteSpace('\n\n')
   CLASS
     MODIFIER_LIST
       PsiElement(abstract)('abstract')
       PsiWhiteSpace('\n')
       PsiElement(open)('open')
-      PsiWhiteSpace('\n')
-      PsiElement(enum)('enum')
       PsiWhiteSpace('\n')
       PsiElement(open)('open')
       PsiWhiteSpace('\n')
@@ -40,13 +42,6 @@ JetFile: SimpleModifiers.kt
       PsiElement(in)('in')
       PsiWhiteSpace('\n')
       PsiElement(out)('out')
-      PsiWhiteSpace('\n')
-      ANNOTATION_ENTRY
-        CONSTRUCTOR_CALLEE
-          TYPE_REFERENCE
-            USER_TYPE
-              REFERENCE_EXPRESSION
-                PsiElement(IDENTIFIER)('ref')
     PsiWhiteSpace('\n ')
     PsiElement(class)('class')
     PsiWhiteSpace(' ')
@@ -82,14 +77,7 @@ JetFile: SimpleModifiers.kt
           PsiElement(in)('in')
           PsiWhiteSpace('\n        ')
           PsiElement(out)('out')
-          PsiWhiteSpace('\n        ')
-          ANNOTATION_ENTRY
-            CONSTRUCTOR_CALLEE
-              TYPE_REFERENCE
-                USER_TYPE
-                  REFERENCE_EXPRESSION
-                    PsiElement(IDENTIFIER)('ref')
-        PsiWhiteSpace(' ')
+        PsiWhiteSpace('\n        ')
         PsiElement(IDENTIFIER)('T')
       PsiElement(GT)('>')
     PsiWhiteSpace(' ')

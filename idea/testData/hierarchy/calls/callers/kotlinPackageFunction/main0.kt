@@ -3,11 +3,11 @@ fun <caret>packageFun(s: String): String = s
 val packageVal = packageFun("")
 
 class KClient {
-    {
+    init {
         packageFun("")
     }
 
-    class object {
+    companion object {
         val a = packageFun("")
     }
 

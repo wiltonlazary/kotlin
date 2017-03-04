@@ -1,7 +1,7 @@
 class Test {
-    [ClassObjectAnnotation]
-    [NestedAnnotation]
-    class object {
+    @<!UNRESOLVED_REFERENCE!>ClassObjectAnnotation<!>
+    @NestedAnnotation
+    companion object {
         annotation class ClassObjectAnnotation
     }
 

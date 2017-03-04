@@ -1,8 +1,8 @@
-trait Test {
-  class object {
+interface Test {
+  companion object {
     public val prop: Int = 0
       get() {
-        return $prop
+        return field
       }
   }
 }
@@ -12,5 +12,5 @@ trait Test {
 // ABSENT: TRUE
 
 // TESTED_OBJECT_KIND: property
-// TESTED_OBJECTS: Test$object, prop
-// FLAGS: ACC_PRIVATE, ACC_FINAL
+// TESTED_OBJECTS: Test$Companion, prop
+// FLAGS: ACC_PRIVATE, ACC_FINAL, ACC_STATIC

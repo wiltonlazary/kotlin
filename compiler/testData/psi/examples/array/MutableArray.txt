@@ -1,14 +1,17 @@
 JetFile: MutableArray.kt
-  KDoc
-    PsiElement(KDOC_START)('/**')
-    PsiWhiteSpace('\n  ')
-    PsiElement(KDOC_TEXT)('These declarations are "shallow" in the sense that they are not really compiled, only the type-checker uses them')
-    PsiWhiteSpace('\n')
-    PsiElement(KDOC_END)('*/')
-  PsiWhiteSpace('\n\n')
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   CLASS
+    KDoc
+      PsiElement(KDOC_START)('/**')
+      PsiWhiteSpace('\n  ')
+      KDOC_SECTION
+        PsiElement(KDOC_TEXT)('These declarations are "shallow" in the sense that they are not really compiled, only the type-checker uses them')
+      PsiWhiteSpace('\n')
+      PsiElement(KDOC_END)('*/')
+    PsiWhiteSpace('\n\n')
     MODIFIER_LIST
       PsiElement(open)('open')
     PsiWhiteSpace(' ')
@@ -26,8 +29,8 @@ JetFile: MutableArray.kt
     PsiWhiteSpace(' ')
     PsiElement(COLON)(':')
     PsiWhiteSpace(' ')
-    DELEGATION_SPECIFIER_LIST
-      DELEGATOR_SUPER_CLASS
+    SUPER_TYPE_LIST
+      SUPER_TYPE_ENTRY
         TYPE_REFERENCE
           USER_TYPE
             REFERENCE_EXPRESSION
@@ -39,6 +42,7 @@ JetFile: MutableArray.kt
       FUN
         MODIFIER_LIST
           ANNOTATION
+            PsiElement(AT)('@')
             PsiElement(LBRACKET)('[')
             ANNOTATION_ENTRY
               CONSTRUCTOR_CALLEE
@@ -91,8 +95,8 @@ JetFile: MutableArray.kt
     PsiWhiteSpace(' ')
     PsiElement(COLON)(':')
     PsiWhiteSpace(' ')
-    DELEGATION_SPECIFIER_LIST
-      DELEGATOR_SUPER_CLASS
+    SUPER_TYPE_LIST
+      SUPER_TYPE_ENTRY
         TYPE_REFERENCE
           USER_TYPE
             REFERENCE_EXPRESSION
@@ -106,6 +110,7 @@ JetFile: MutableArray.kt
       FUN
         MODIFIER_LIST
           ANNOTATION
+            PsiElement(AT)('@')
             PsiElement(LBRACKET)('[')
             ANNOTATION_ENTRY
               CONSTRUCTOR_CALLEE
@@ -156,8 +161,8 @@ JetFile: MutableArray.kt
     PsiWhiteSpace(' ')
     PsiElement(COLON)(':')
     PsiWhiteSpace(' ')
-    DELEGATION_SPECIFIER_LIST
-      DELEGATOR_SUPER_CLASS
+    SUPER_TYPE_LIST
+      SUPER_TYPE_ENTRY
         TYPE_REFERENCE
           USER_TYPE
             REFERENCE_EXPRESSION
@@ -172,7 +177,7 @@ JetFile: MutableArray.kt
               PsiElement(GT)('>')
       PsiElement(COMMA)(',')
       PsiWhiteSpace(' ')
-      DELEGATOR_SUPER_CLASS
+      SUPER_TYPE_ENTRY
         TYPE_REFERENCE
           USER_TYPE
             REFERENCE_EXPRESSION

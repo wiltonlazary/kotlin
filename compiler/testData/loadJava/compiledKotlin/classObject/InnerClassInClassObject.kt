@@ -1,7 +1,8 @@
+//ALLOW_AST_ACCESS
 package test
 
 class TestFirst {
-  class object {
+  companion object {
     fun testing(a: InnerClass) = 45
     fun testing(a: NotInnerClass) = 45
   }

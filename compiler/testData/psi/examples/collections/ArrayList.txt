@@ -1,5 +1,7 @@
 JetFile: ArrayList.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   CLASS
     PsiElement(class)('class')
@@ -13,8 +15,8 @@ JetFile: ArrayList.kt
     PsiWhiteSpace(' ')
     PsiElement(COLON)(':')
     PsiWhiteSpace(' ')
-    DELEGATION_SPECIFIER_LIST
-      DELEGATOR_SUPER_CLASS
+    SUPER_TYPE_LIST
+      SUPER_TYPE_ENTRY
         TYPE_REFERENCE
           USER_TYPE
             REFERENCE_EXPRESSION
@@ -146,8 +148,8 @@ JetFile: ArrayList.kt
             PsiWhiteSpace(' ')
             PsiElement(COLON)(':')
             PsiWhiteSpace(' ')
-            DELEGATION_SPECIFIER_LIST
-              DELEGATOR_SUPER_CALL
+            SUPER_TYPE_LIST
+              SUPER_TYPE_CALL_ENTRY
                 CONSTRUCTOR_CALLEE
                   TYPE_REFERENCE
                     USER_TYPE
@@ -724,7 +726,7 @@ JetFile: ArrayList.kt
                       PsiElement(for)('for')
                       PsiWhiteSpace(' ')
                       PsiElement(LPAR)('(')
-                      LOOP_PARAMETER
+                      VALUE_PARAMETER
                         PsiElement(IDENTIFIER)('i')
                       PsiWhiteSpace(' ')
                       PsiElement(in)('in')
@@ -845,7 +847,7 @@ JetFile: ArrayList.kt
             PsiElement(for)('for')
             PsiWhiteSpace(' ')
             PsiElement(LPAR)('(')
-            LOOP_PARAMETER
+            VALUE_PARAMETER
               PsiElement(IDENTIFIER)('i')
             PsiWhiteSpace(' ')
             PsiElement(in)('in')

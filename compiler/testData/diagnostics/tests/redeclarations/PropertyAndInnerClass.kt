@@ -5,7 +5,7 @@ public class A() {
 }
 
 public class B() {
-   class object {
+   companion object {
       public val <!REDECLARATION!>FOO<!>: String = "test"
       
       public class <!REDECLARATION!>FOO<!>() { }

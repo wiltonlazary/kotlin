@@ -1,12 +1,12 @@
 package test
 
-internal final class ClassObjectDeclaresProperty {
+public final class ClassObjectDeclaresProperty {
     /*primary*/ public constructor ClassObjectDeclaresProperty()
-    
-    internal class object <class-object-for-ClassObjectDeclaresProperty> {
-        /*primary*/ private constructor <class-object-for-ClassObjectDeclaresProperty>()
-        internal final var s: jet.String
-            internal final fun <get-s>(): jet.String
-            internal final fun <set-s>(/*0*/ <set-?>: jet.String): jet.Unit
+
+    public companion object Companion {
+        /*primary*/ private constructor Companion()
+        public final var s: kotlin.String
+            public final fun <get-s>(): kotlin.String
+            public final fun <set-s>(/*0*/ <set-?>: kotlin.String): kotlin.Unit
     }
 }

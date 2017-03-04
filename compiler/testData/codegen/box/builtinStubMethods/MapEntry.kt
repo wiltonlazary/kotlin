@@ -1,13 +1,16 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 class MyMapEntry<K, V>: Map.Entry<K, V> {
     override fun hashCode(): Int = 0
     override fun equals(other: Any?): Boolean = false
-    override fun getKey(): K = throw UnsupportedOperationException()
-    override fun getValue(): V = throw UnsupportedOperationException()
+    override val key: K get() = throw UnsupportedOperationException()
+    override val value: V get() = throw UnsupportedOperationException()
 }
 
 fun box(): String {
     try {
-        (MyMapEntry<String, Int>() as MutableMap.MutableEntry<String, Int>).setValue(1)
+        (MyMapEntry<String, Int>() as java.util.Map.Entry<String, Int>).setValue(1)
         throw AssertionError()
     } catch (e: UnsupportedOperationException) {
         return "OK"

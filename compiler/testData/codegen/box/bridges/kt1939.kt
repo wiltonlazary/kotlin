@@ -2,8 +2,8 @@ abstract class Foo<T> {
     fun hello(id: T) = "Hi $id"
 }
 
-trait Tr {
-    fun hello(s : String)
+interface Tr {
+    fun hello(s : String): String
 }
 
 class Bar: Foo<String>(), Tr {

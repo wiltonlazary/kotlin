@@ -1,4 +1,4 @@
-import java.util.ArrayList
+// TARGET_BACKEND: JVM
 
 public object SomeObject {
     private val workerThread = object : Thread() {
@@ -7,7 +7,7 @@ public object SomeObject {
         }
     }
 
-    {
+    init {
         workerThread.start()
     }
 
@@ -35,16 +35,16 @@ public class SomeClass() {
         }
     }
 
-    {
+    init {
         workerThread.start()
         workerThread.join()
     }
 }
 
-public fun box():String {
+public fun box(): String {
     var obj = SomeClass()
-    return if(obj.status == null) "OK" else {
-        obj.status?.printStackTrace()
+    return if (obj.status == null) "OK" else {
+        (obj.status as java.lang.Throwable).printStackTrace()
         "failed"
     }
 }

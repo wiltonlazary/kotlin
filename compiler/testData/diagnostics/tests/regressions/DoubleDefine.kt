@@ -1,10 +1,9 @@
-
 import java.util.*
 
 import java.io.*
 
 fun takeFirst(expr: StringBuilder): Char {
-  val c = expr.charAt(0)
+  val c = expr.get(0)
   expr.deleteCharAt(0)
   return c
 }
@@ -23,7 +22,7 @@ fun evaluateArg(expr: CharSequence, numbers: ArrayList<Int>): Int {
 
 fun evaluateAdd(expr: StringBuilder, numbers: ArrayList<Int>): Int {
   val lhs = evaluateArg(expr, numbers)
-  if (expr.length() > 0) {
+  if (expr.length > 0) {
 
   }
   return lhs
@@ -31,8 +30,8 @@ fun evaluateAdd(expr: StringBuilder, numbers: ArrayList<Int>): Int {
 
 fun evaluate(expr: StringBuilder, numbers: ArrayList<Int>): Int {
   val lhs = evaluateAdd(expr, numbers)
-  if (expr.length() > 0) {
-    val <!UNUSED_VARIABLE!>c<!> = expr.charAt(0)
+  if (expr.length > 0) {
+    val <!UNUSED_VARIABLE!>c<!> = expr.get(0)
     expr.deleteCharAt(0)
   }
   return lhs
@@ -61,6 +60,6 @@ fun main(args: Array<String>) {
       System.out.println("You won!");
   }
   catch(e: Throwable) {
-    System.out.println(e.getMessage())
+    System.out.println(e.message)
   }
 }

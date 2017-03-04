@@ -13,9 +13,9 @@ fun foo() {
 }
 
 class A() {
-    class object {
+    companion object {
         class B() {
-            class object {
+            companion object {
                 fun foo() {}
             }
         }
@@ -35,9 +35,9 @@ object N {
 //FILE:b.kt
 package b
 
-import b.<!CANNOT_IMPORT_FROM_ELEMENT!>N<!>.<!DEBUG_INFO_MISSING_UNRESOLVED!>M<!>
-import b.A.P
-import b.A.B
+import b.N.M
+import b.A.Companion.P
+import b.A.Companion.B
 
 fun foo() {
     val <!UNUSED_VARIABLE!>b<!> : B = B()
@@ -45,13 +45,13 @@ fun foo() {
 
     P.foo()
 
-    <!UNRESOLVED_REFERENCE!>M<!>.<!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>bar<!>()
+    M.bar()
 }
 
 class A() {
-    class object {
+    companion object {
         class B() {
-            class object {
+            companion object {
                 fun foo() {}
             }
         }

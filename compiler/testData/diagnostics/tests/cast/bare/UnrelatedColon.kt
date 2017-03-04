@@ -1,4 +1,6 @@
-trait Tr
-trait G<T>
+// !CHECK_TYPE
 
-fun test(tr: Tr) = tr: <!WRONG_NUMBER_OF_TYPE_ARGUMENTS!>G<!>
+interface Tr
+interface G<T>
+
+fun test(tr: Tr) = checkSubtype<<!WRONG_NUMBER_OF_TYPE_ARGUMENTS!>G<!>>(tr)

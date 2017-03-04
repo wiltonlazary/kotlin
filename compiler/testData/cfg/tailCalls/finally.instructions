@@ -1,5 +1,5 @@
 == test ==
-tailRecursive fun test() : Int {
+tailrec fun test() : Int {
     try {
         // do nothing
     } finally {
@@ -8,28 +8,31 @@ tailRecursive fun test() : Int {
 }
 ---------------------
 L0:
-    <START>
-    mark({ try { // do nothing } finally { test() } })
+  1 <START>
+  2 mark({ try { // do nothing } finally { test() } })
     mark(try { // do nothing } finally { test() })
-    jmp?(L2 [onExceptionToFinallyBlock])                  NEXT:[mark({ test() }), mark({ // do nothing })]
-    mark({ // do nothing })
+    jmp?(L2)                                                         NEXT:[mark({ test() }), mark({ // do nothing })]
+  3 mark({ // do nothing })
     read (Unit)
-    jmp(L3 [skipFinallyToErrorBlock])                     NEXT:[mark({ test() })]
+  2 jmp?(L2)                                                         NEXT:[mark({ test() }), jmp(L3)]
+    jmp(L3)                                                          NEXT:[mark({ test() })]
 L2 [onExceptionToFinallyBlock]:
 L4 [start finally]:
-    mark({ test() })                                      PREV:[jmp?(L2 [onExceptionToFinallyBlock])]
+  3 mark({ test() })                                                 PREV:[jmp?(L2), jmp?(L2)]
     mark(test())
-    call(test, test)
+    call(test(), test) -> <v0>
 L5 [finish finally]:
-    jmp(error)                                            NEXT:[<ERROR>]
+  2 jmp(error)                                                       NEXT:[<ERROR>]
 L3 [skipFinallyToErrorBlock]:
-    mark({ test() })                                      PREV:[jmp(L3 [skipFinallyToErrorBlock])]
+L6 [copy of L2, onExceptionToFinallyBlock]:
+  3 mark({ test() })                                                 PREV:[jmp(L3)]
     mark(test())
-    call(test, test)
+    call(test(), test) -> <v0>
+  2 merge(try { // do nothing } finally { test() }|!<v1>) -> <v2>
 L1:
-    <END>                                                 NEXT:[<SINK>]
+  1 <END>                                                            NEXT:[<SINK>]
 error:
-    <ERROR>                                               PREV:[jmp(error)]
+    <ERROR>                                                          PREV:[jmp(error)]
 sink:
-    <SINK>                                                PREV:[<ERROR>, <END>]
+    <SINK>                                                           PREV:[<ERROR>, <END>]
 =====================

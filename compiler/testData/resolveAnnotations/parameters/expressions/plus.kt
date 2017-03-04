@@ -7,6 +7,6 @@ annotation class Ann(
         val l: Long
 )
 
-Ann(1 + 1, 1 + 1, 1 + 1, 1 + 1) class MyClass
+@Ann(1 + 1, 1 + 1, 1 + 1, 1 + 1) class MyClass
 
-// EXPECTED: Ann[b = IntegerValueType(2): IntegerValueType(2), i = IntegerValueType(2): IntegerValueType(2), l = IntegerValueType(2): IntegerValueType(2), s = IntegerValueType(2): IntegerValueType(2)]
+// EXPECTED: @Ann(b = 2.toByte(), i = 2, l = 2.toLong(), s = 2.toShort())

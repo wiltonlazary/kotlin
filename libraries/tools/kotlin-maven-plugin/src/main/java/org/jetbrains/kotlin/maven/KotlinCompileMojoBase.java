@@ -16,200 +16,214 @@
 
 package org.jetbrains.kotlin.maven;
 
-import com.intellij.openapi.util.text.StringUtil;
+import com.google.common.base.Joiner;
+import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.util.ArrayUtil;
+import com.intellij.util.Processor;
 import org.apache.maven.artifact.Artifact;
-import org.apache.maven.plugin.AbstractMojo;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.artifact.resolver.ArtifactResolutionRequest;
+import org.apache.maven.artifact.resolver.ArtifactResolutionResult;
+import org.apache.maven.model.Dependency;
+import org.apache.maven.model.Plugin;
+import org.apache.maven.model.PluginExecution;
+import org.apache.maven.plugin.*;
+import org.apache.maven.plugins.annotations.Component;
+import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
+import org.apache.maven.repository.RepositorySystem;
+import org.codehaus.plexus.PlexusContainer;
+import org.codehaus.plexus.component.repository.exception.ComponentLookupException;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.jet.cli.common.CLICompiler;
-import org.jetbrains.jet.cli.common.ExitCode;
-import org.jetbrains.jet.cli.common.KotlinVersion;
-import org.jetbrains.jet.cli.common.arguments.CommonCompilerArguments;
-import org.jetbrains.jet.cli.common.arguments.K2JVMCompilerArguments;
-import org.jetbrains.jet.cli.common.messages.CompilerMessageLocation;
-import org.jetbrains.jet.cli.common.messages.CompilerMessageSeverity;
-import org.jetbrains.jet.cli.common.messages.MessageCollector;
-import org.jetbrains.jet.cli.jvm.K2JVMCompiler;
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.cli.common.CLICompiler;
+import org.jetbrains.kotlin.cli.common.ExitCode;
+import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments;
+import org.jetbrains.kotlin.config.KotlinCompilerVersion;
+import org.jetbrains.kotlin.config.Services;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.reflect.Field;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.Set;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import static com.intellij.openapi.util.text.StringUtil.join;
+public abstract class KotlinCompileMojoBase<A extends CommonCompilerArguments> extends AbstractMojo {
+    @Component
+    protected PlexusContainer container;
 
-public abstract class KotlinCompileMojoBase extends AbstractMojo {
+    @Component
+    protected MojoExecution mojoExecution;
 
-
-    // TODO it would be nice to avoid using 2 injected fields for sources
-    // but I've not figured out how to have a defaulted parameter value
-    // which is also customisable inside an <execution> in a maven pom.xml
-    // so for now lets just use 2 fields
-
-    /**
-     * The default source directories containing the sources to be compiled.
-     *
-     * @parameter default-value="${project.compileSourceRoots}"
-     * @required
-     */
-    private List<String> defaultSourceDirs;
+    @Component
+    protected RepositorySystem system;
 
     /**
      * The source directories containing the sources to be compiled.
-     *
-     * @parameter
      */
+    @Parameter
     private List<String> sourceDirs;
 
-    public List<String> getSources() {
+    /**
+     * A list of kotlin compiler plugins to be applied.
+     */
+    @Parameter
+    private List<String> compilerPlugins;
+
+    /**
+     * A list of plugin options in format (pluginId):(parameter)=(value)
+     */
+    @Parameter
+    private List<String> pluginOptions;
+
+    @Parameter
+    private boolean multiPlatform = false;
+
+    private List<String> getAppliedCompilerPlugins() {
+        return (compilerPlugins == null) ? Collections.<String>emptyList() : compilerPlugins;
+    }
+
+    protected List<String> getSourceFilePaths() {
         if (sourceDirs != null && !sourceDirs.isEmpty()) return sourceDirs;
-        return defaultSourceDirs;
+        return project.getCompileSourceRoots();
+    }
+
+    private List<File> getSourceDirs() {
+        List<String> sources = getSourceFilePaths();
+        List<File> result = new ArrayList<File>(sources.size());
+
+        for (String source : sources) {
+            addSourceRoots(result, source);
+        }
+
+        Map<String, MavenProject> projectReferences = project.getProjectReferences();
+        if (projectReferences != null) {
+            iterateDependencies:
+            for (Dependency dependency : project.getDependencies()) {
+                MavenProject sibling = projectReferences.get(dependency.getGroupId() + ":" + dependency.getArtifactId() + ":" + dependency.getVersion());
+                if (sibling != null) {
+                    Plugin plugin = sibling.getPlugin("org.jetbrains.kotlin:kotlin-maven-plugin");
+                    if (plugin != null) {
+                        for (PluginExecution pluginExecution : plugin.getExecutions()) {
+                            if (pluginExecution.getGoals() != null && pluginExecution.getGoals().contains("metadata")) {
+                                for (String sourceRoot : orEmpty(getRelatedSourceRoots(sibling))) {
+                                    addSourceRoots(result, sourceRoot);
+                                    continue iterateDependencies;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    protected abstract List<String> getRelatedSourceRoots(MavenProject project);
+
+    private void addSourceRoots(List<File> result, String source) {
+        File f = new File(source);
+        if (f.isAbsolute()) {
+            result.add(f);
+        } else {
+            result.add(new File(project.getBasedir(), source));
+        }
     }
 
     /**
-     * The directories used to scan for annotation.xml files for Kotlin annotations
-     *
-     * @parameter
+     * Suppress all warnings.
      */
-    public List<String> annotationPaths;
+    @Parameter(defaultValue = "false")
+    public boolean nowarn;
 
-    // TODO not sure why this doesn't work :(
-    // * @parameter default-value="$(project.basedir}/src/main/resources"
-
-    /**
-     * @parameter default-value="${project}"
-     * @required
-     * @readonly
-     */
+    @Parameter(defaultValue = "${project}", required = true, readonly = true)
     public MavenProject project;
 
     /**
-     * @parameter default-value="true"
-     */
-    public boolean scanForAnnotations;
-
-    /**
-     * Project classpath.
-     *
-     * @parameter default-value="${project.compileClasspathElements}"
-     * @required
-     * @readonly
-     */
-    public List<String> classpath;
-
-    /**
-     * Project test classpath.
-     *
-     * @parameter default-value="${project.testClasspathElements}"
-     * @required
-     * @readonly
-     */
-    protected List<String> testClasspath;
-
-    /**
      * The directory for compiled classes.
-     *
-     * @parameter default-value="${project.build.outputDirectory}"
-     * @required
-     * @readonly
      */
+    @Parameter(defaultValue = "${project.build.outputDirectory}", required = true, readonly = true)
     public String output;
 
     /**
      * The directory for compiled tests classes.
-     *
-     * @parameter default-value="${project.build.testOutputDirectory}"
-     * @required
-     * @readonly
      */
+    @Parameter(defaultValue = "${project.build.testOutputDirectory}", required = true, readonly = true)
     public String testOutput;
 
     /**
      * Kotlin compilation module, as alternative to source files or folders.
-     *
-     * @parameter
      */
+    @Parameter
     public String module;
 
     /**
      * Kotlin compilation module, as alternative to source files or folders (for tests).
-     *
-     * @parameter
      */
+    @Parameter
     public String testModule;
+
+
+    @Parameter(property = "kotlin.compiler.languageVersion", required = false, readonly = false)
+    protected String languageVersion;
+
+
+    @Parameter(property = "kotlin.compiler.apiVersion", required = false, readonly = false)
+    protected String apiVersion;
+
+    /**
+     * Additional command line arguments for Kotlin compiler.
+     */
+    @Parameter
+    public List<String> args;
+
+    private final static Pattern OPTION_PATTERN = Pattern.compile("([^:]+):([^=]+)=(.*)");
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-        getLog().info("Kotlin Compiler version " + KotlinVersion.VERSION);
 
-        // Check sources
-        List<String> sources = getSources();
-        if (sources != null && sources.size() > 0) {
-            boolean sourcesExists = false;
+        getLog().info("Kotlin Compiler version " + KotlinCompilerVersion.VERSION);
 
-            for (String source : sources) {
-                if (new File(source).exists()) {
-                    sourcesExists = true;
-                    break;
-                }
-            }
-
-            if (!sourcesExists) {
-                getLog().warn( "No sources found skipping Kotlin compile" );
-                return;
-            }
+        if (!hasKotlinFilesInSources()) {
+            getLog().warn("No sources found skipping Kotlin compile");
+            return;
         }
 
-        final CommonCompilerArguments arguments = createCompilerArguments();
-        configureCompilerArguments(arguments);
+        A arguments = createCompilerArguments();
+        CLICompiler<A> compiler = createCompiler();
 
-        final CLICompiler compiler = createCompiler();
+        configureCompilerArguments(arguments, compiler);
         printCompilerArgumentsIfDebugEnabled(arguments, compiler);
 
-        final Log log = getLog();
-        MessageCollector messageCollector = new MessageCollector() {
-            @Override
-            public void report(@NotNull CompilerMessageSeverity severity, @NotNull String message, @NotNull CompilerMessageLocation location) {
-                String path = location.getPath();
-                String position = path == null ? "" : path + ": (" + (location.getLine() + ", " + location.getColumn()) + ") ";
+        MavenPluginLogMessageCollector messageCollector = new MavenPluginLogMessageCollector(getLog());
 
-                String text = position + message;
+        ExitCode exitCode = compiler.exec(messageCollector, Services.EMPTY, arguments);
 
-                if (CompilerMessageSeverity.VERBOSE.contains(severity)) {
-                    log.debug(text);
-                } else if (CompilerMessageSeverity.ERRORS.contains(severity)) {
-                    log.error(text);
-                } else if (severity == CompilerMessageSeverity.INFO) {
-                    log.info(text);
-                } else {
-                    log.warn(text);
-                }
-            }
-        };
-
-        final ExitCode exitCode = compiler.exec(messageCollector, arguments);
-
-        switch (exitCode) {
-            case COMPILATION_ERROR:
-                throw new MojoExecutionException("Compilation error. See log for more details");
-
-            case INTERNAL_ERROR:
-                throw new MojoExecutionException("Internal compiler error. See log for more details");
+        if (exitCode != ExitCode.OK) {
+            messageCollector.throwKotlinCompilerException();
         }
     }
 
-    private void printCompilerArgumentsIfDebugEnabled(CommonCompilerArguments arguments, CLICompiler compiler) {
+    private boolean hasKotlinFilesInSources() throws MojoExecutionException {
+        List<File> sources = getSourceDirs();
+        if (sources == null || sources.isEmpty()) return false;
+
+        for (File root : sources) {
+            if (root.exists()) {
+                boolean sourcesExists = !FileUtil.processFilesRecursively(root, new Processor<File>() {
+                    @Override
+                    public boolean process(File file) {
+                        return !file.getName().endsWith(".kt");
+                    }
+                });
+                if (sourcesExists) return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void printCompilerArgumentsIfDebugEnabled(@NotNull A arguments, @NotNull CLICompiler<A> compiler) {
         if (getLog().isDebugEnabled()) {
             getLog().debug("Invoking compiler " + compiler + " with arguments:");
             try {
@@ -238,162 +252,243 @@ public abstract class KotlinCompileMojoBase extends AbstractMojo {
         }
     }
 
-    protected CLICompiler createCompiler() {
-        return new K2JVMCompiler();
-    }
+    @NotNull
+    protected abstract CLICompiler<A> createCompiler();
 
-    /**
-     * Derived classes can create custom compiler argument implementations
-     * such as for KDoc
-     */
-    protected CommonCompilerArguments createCompilerArguments() {
-        return new K2JVMCompilerArguments();
-    }
+    @NotNull
+    protected abstract A createCompilerArguments();
 
-    /**
-     * Derived classes can register custom plugins or configurations
-     */
-    protected abstract void configureCompilerArguments(CommonCompilerArguments arguments) throws MojoExecutionException;
+    protected abstract void configureSpecificCompilerArguments(@NotNull A arguments) throws MojoExecutionException;
 
-    protected void configureBaseCompilerArguments(Log log, K2JVMCompilerArguments arguments, String module,
-                                                  List<String> sources, List<String> classpath, String output) throws MojoExecutionException {
-        // don't include runtime, it should be in maven dependencies
-        arguments.noStdlib = true;
+    private List<String> getCompilerPluginClassPaths() {
+        ArrayList<String> result = new ArrayList<String>();
 
-        final ArrayList<String> classpathList = new ArrayList<String>();
+        List<File> files = new ArrayList<File>();
 
-        if (module != null) {
-            log.info("Compiling Kotlin module " + module);
-            arguments.module = module;
-        }
-        else {
-            if (sources.size() <= 0)
-                throw new MojoExecutionException("No source roots to compile");
+        for (Dependency dependency : mojoExecution.getPlugin().getDependencies()) {
+            Artifact artifact = system.createDependencyArtifact(dependency);
+            ArtifactResolutionResult resolved = system.resolve(new ArtifactResolutionRequest().setArtifact(artifact));
 
-            arguments.src = join(sources, File.pathSeparator);
-            log.info("Compiling Kotlin sources from " + arguments.src);
+            for (Artifact resolvedArtifact : resolved.getArtifacts()) {
+                File file = resolvedArtifact.getFile();
 
-            // TODO: Move it compiler
-            classpathList.addAll(sources);
-        }
-
-        classpathList.addAll(classpath);
-
-        if (classpathList.remove(output)) {
-            log.debug("Removed target directory from compiler classpath (" + output + ")");
-        }
-
-        if (classpathList.size() > 0) {
-            String classPathString = join(classpathList, File.pathSeparator);
-            log.info("Classpath: " + classPathString);
-            arguments.classpath = classPathString;
-        }
-
-        log.info("Classes directory is " + output);
-        arguments.outputDir = output;
-
-        arguments.noJdkAnnotations = true;
-        arguments.annotations = getFullAnnotationsPath(log, annotationPaths);
-        log.info("Using kotlin annotations from " + arguments.annotations);
-    }
-
-    protected String getFullAnnotationsPath(Log log, List<String> annotations) {
-        String jdkAnnotation = getJdkAnnotations().getPath();
-
-        List<String> list = new ArrayList<String>();
-        list.add(jdkAnnotation);
-
-        if (annotations != null) {
-            for (String annotationPath : annotations) {
-                if (new File(annotationPath).exists()) {
-                    list.add(annotationPath);
-                } else {
-                    log.info("annotation path " + annotationPath + " does not exist");
+                if (file != null && file.exists()) {
+                    files.add(file);
                 }
             }
         }
 
-        if (scanForAnnotations) {
-            for (String path : scanAnnotations(log)) {
-                if (!list.contains(path)) {
-                    list.add(path);
+        for (File file : files) {
+            result.add(file.getAbsolutePath());
+        }
+
+        return result;
+    }
+
+    @NotNull
+    private Map<String, KotlinMavenPluginExtension> loadCompilerPlugins() throws PluginNotFoundException {
+        Map<String, KotlinMavenPluginExtension> loadedPlugins = new HashMap<String, KotlinMavenPluginExtension>();
+        for (String pluginName : getAppliedCompilerPlugins()) {
+            getLog().debug("Looking for plugin " + pluginName);
+            try {
+                KotlinMavenPluginExtension extension = container.lookup(KotlinMavenPluginExtension.class, pluginName);
+                loadedPlugins.put(pluginName, extension);
+                getLog().debug("Got plugin instance" + pluginName + " of type " + extension.getClass().getName());
+
+            } catch (ComponentLookupException e) {
+                getLog().debug("Unable to get plugin instance" + pluginName);
+                throw new PluginNotFoundException(pluginName, e);
+            }
+        }
+        return loadedPlugins;
+    }
+
+    @NotNull
+    private List<String> renderCompilerPluginOptions(@NotNull List<PluginOption> options) {
+        List<String> renderedOptions = new ArrayList<String>(options.size());
+        for (PluginOption option : options) {
+            renderedOptions.add(option.toString());
+        }
+        return renderedOptions;
+    }
+
+    @NotNull
+    private List<PluginOption> getCompilerPluginOptions() throws PluginNotFoundException, PluginOptionIllegalFormatException {
+        if (mojoExecution == null) {
+            throw new IllegalStateException("No mojoExecution injected");
+        }
+
+        List<PluginOption> pluginOptions = new ArrayList<PluginOption>();
+
+        Map<String, KotlinMavenPluginExtension> plugins = loadCompilerPlugins();
+
+        // Get options for extension-provided compiler plugins
+
+        for (Map.Entry<String, KotlinMavenPluginExtension> pluginEntry : plugins.entrySet()) {
+            String pluginName = pluginEntry.getKey();
+            KotlinMavenPluginExtension plugin = pluginEntry.getValue();
+
+            // applied plugin (...) to info()
+            if (plugin.isApplicable(project, mojoExecution)) {
+                getLog().info("Applied plugin: '" + pluginName + "'");
+                List<PluginOption> optionsForPlugin = plugin.getPluginOptions(project, mojoExecution);
+                if (!optionsForPlugin.isEmpty()) {
+                    pluginOptions.addAll(optionsForPlugin);
                 }
             }
         }
 
-        return join(list, File.pathSeparator);
-    }
-
-    protected File getJdkAnnotations() {
-        final ClassLoader classLoader = getClass().getClassLoader();
-        if (!(classLoader instanceof URLClassLoader)) {
-            throw new RuntimeException("Kotlin plugin`s classloader is not URLClassLoader");
+        if (this.pluginOptions != null) {
+            pluginOptions.addAll(parseUserProvidedPluginOptions(this.pluginOptions, plugins));
         }
 
-        final URLClassLoader urlClassLoader = (URLClassLoader) classLoader;
-        for (URL url : urlClassLoader.getURLs()) {
-            final String path = url.getPath();
-            if (StringUtil.isEmpty(path)) {
-                continue;
+        Map<String, List<PluginOption>> optionsByPluginName = new LinkedHashMap<String, List<PluginOption>>();
+        for (PluginOption option : pluginOptions) {
+            List<PluginOption> optionsForPlugin = optionsByPluginName.get(option.pluginName);
+            if (optionsForPlugin == null) {
+                optionsForPlugin = new ArrayList<PluginOption>();
+                optionsByPluginName.put(option.pluginName, optionsForPlugin);
             }
 
-            final File file = new File(path);
-            if (file.getName().startsWith("kotlin-jdk-annotations")) {
-                return file;
-            }
+            optionsForPlugin.add(option);
         }
 
-        throw new RuntimeException("Could not get jdk annotations from Kotlin plugin`s classpath");
-    }
+        for (Map.Entry<String, List<PluginOption>> entry : optionsByPluginName.entrySet()) {
+            assert !entry.getValue().isEmpty();
 
-    protected List<String> scanAnnotations(Log log) {
-        final List<String> annotations = new ArrayList<String>();
+            String pluginName = entry.getValue().get(0).pluginName;
 
-        final Set<Artifact> artifacts = project.getArtifacts();
-        for (Artifact artifact : artifacts) {
-            final File file = artifact.getFile();
-            if (containsAnnotations(file, log)) {
-                log.info("Discovered kotlin annotations in: " + file);
-                try {
-                    annotations.add(file.getCanonicalPath());
+            StringBuilder renderedOptions = new StringBuilder("[");
+            for (PluginOption option : entry.getValue()) {
+                if (renderedOptions.length() > 1) {
+                    renderedOptions.append(", ");
                 }
-                catch (IOException e) {
-                    log.warn("Error extracting canonical path from: " + file, e);
-                }
+                renderedOptions.append(option.key).append(": ").append(option.value);
+            }
+            renderedOptions.append("]");
+
+            getLog().debug("Options for plugin " + pluginName + ": " + renderedOptions);
+        }
+
+        return pluginOptions;
+    }
+
+    @NotNull
+    private static List<PluginOption> parseUserProvidedPluginOptions(
+            @NotNull List<String> rawOptions,
+            @NotNull Map<String, KotlinMavenPluginExtension> plugins
+    ) throws PluginOptionIllegalFormatException, PluginNotFoundException {
+        List<PluginOption> pluginOptions = new ArrayList<PluginOption>(rawOptions.size());
+
+        for (String rawOption : rawOptions) {
+            Matcher matcher = OPTION_PATTERN.matcher(rawOption);
+            if (!matcher.matches()) {
+                throw new PluginOptionIllegalFormatException(rawOption);
+            }
+
+            String pluginName = matcher.group(1);
+            String key = matcher.group(2);
+            String value = matcher.group(3);
+            KotlinMavenPluginExtension plugin = plugins.get(pluginName);
+            if (plugin == null) {
+                throw new PluginNotFoundException(pluginName);
+            }
+
+            pluginOptions.add(new PluginOption(pluginName, plugin.getCompilerPluginId(), key, value));
+        }
+
+        return pluginOptions;
+    }
+
+    private void configureCompilerArguments(@NotNull A arguments, @NotNull CLICompiler<A> compiler) throws MojoExecutionException {
+        if (getLog().isDebugEnabled()) {
+            arguments.verbose = true;
+        }
+
+        List<String> sources = new ArrayList<String>();
+        for (File source : getSourceDirs()) {
+            if (source.exists()) {
+                sources.add(source.getPath());
+            }
+            else {
+                getLog().warn("Source root doesn't exist: " + source);
             }
         }
 
-        return annotations;
-    }
+        if (sources.isEmpty()) {
+            throw new MojoExecutionException("No source roots to compile");
+        }
 
-    protected boolean containsAnnotations(File file, Log log) {
-        log.debug("Scanning for kotlin annotations in " + file);
+        arguments.suppressWarnings = nowarn;
+        arguments.languageVersion = languageVersion;
+        arguments.apiVersion = apiVersion;
+        arguments.multiPlatform = multiPlatform;
 
-        ZipFile zipFile = null;
+        getLog().info("Compiling Kotlin sources from " + sources);
+
+        configureSpecificCompilerArguments(arguments);
+
         try {
-            zipFile = new ZipFile(file);
+            compiler.parseArguments(ArrayUtil.toStringArray(args), arguments);
+        }
+        catch (IllegalArgumentException e) {
+            throw new MojoExecutionException(e.getMessage());
+        }
 
-            final Enumeration<? extends ZipEntry> entries = zipFile.entries();
-            while (entries.hasMoreElements()) {
-                String name = entries.nextElement().getName();
-                if (name.endsWith("/annotations.xml")) {
-                    return true;
-                }
+        arguments.freeArgs.addAll(sources);
+
+        if (arguments.noInline) {
+            getLog().info("Method inlining is turned off");
+        }
+
+        List<String> pluginClassPaths = getCompilerPluginClassPaths();
+        if (pluginClassPaths != null && !pluginClassPaths.isEmpty()) {
+            if (getLog().isDebugEnabled()) {
+                getLog().debug("Plugin classpaths are: " + Joiner.on(", ").join(pluginClassPaths));
             }
+            arguments.pluginClasspaths = pluginClassPaths.toArray(new String[pluginClassPaths.size()]);
         }
-        catch (IOException e) {
-            log.warn("Error reading contents of jar: " + file, e);
+
+        List<String> pluginArguments;
+        try {
+            pluginArguments = renderCompilerPluginOptions(getCompilerPluginOptions());
+        } catch (PluginNotFoundException e) {
+            throw new MojoExecutionException(e.getMessage(), e);
+        } catch (PluginOptionIllegalFormatException e) {
+            throw new MojoExecutionException(e.getMessage(), e);
         }
-        finally {
-            if (zipFile != null) {
-                try {
-                    zipFile.close();
-                }
-                catch (IOException e) {
-                    log.warn("Error closing: " + zipFile, e);
-                }
+
+        if (!pluginArguments.isEmpty()) {
+            if (getLog().isDebugEnabled()) {
+                getLog().debug("Plugin options are: " + Joiner.on(", ").join(pluginArguments));
             }
+
+            arguments.pluginOptions = pluginArguments.toArray(new String[pluginArguments.size()]);
         }
-        return false;
+    }
+
+    public static class PluginNotFoundException extends Exception {
+        PluginNotFoundException(String pluginId, Throwable cause) {
+            super("Plugin not found: " + pluginId, cause);
+        }
+
+        PluginNotFoundException(String pluginId) {
+            super("Plugin not found: " + pluginId);
+        }
+    }
+
+    public static class PluginOptionIllegalFormatException extends Exception {
+        PluginOptionIllegalFormatException(String option) {
+            super("Plugin option has an illegal format: " + option);
+        }
+    }
+
+    @NotNull
+    private static <T> List<T> orEmpty(@Nullable List<T> in) {
+        if (in == null) {
+            return Collections.emptyList();
+        }
+
+        return in;
     }
 }

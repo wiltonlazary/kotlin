@@ -1,7 +1,10 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 abstract class ClassValAbstract {
     abstract var a: Int
 
-    class object {
+    companion object {
         val methods = (this as java.lang.Object).getClass()?.getClassLoader()?.loadClass("ClassValAbstract")?.getMethods()!!
     }
 }

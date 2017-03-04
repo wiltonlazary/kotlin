@@ -1,6 +1,5 @@
--sourceFiles
 $TESTDATA_DIR$/../warnings.kt
--suppress
-WaRnInGs
+-no-stdlib
+-nowarn
 -output
 $TEMP_DIR$/out.js

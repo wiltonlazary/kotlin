@@ -1,5 +1,7 @@
 JetFile: LocalDeclarations.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   FUN
     PsiElement(fun)('fun')
@@ -20,15 +22,13 @@ JetFile: LocalDeclarations.kt
       PsiWhiteSpace('\n    ')
       CLASS
         MODIFIER_LIST
-          ANNOTATION
-            PsiElement(LBRACKET)('[')
-            ANNOTATION_ENTRY
-              CONSTRUCTOR_CALLEE
-                TYPE_REFERENCE
-                  USER_TYPE
-                    REFERENCE_EXPRESSION
-                      PsiElement(IDENTIFIER)('a')
-            PsiElement(RBRACKET)(']')
+          ANNOTATION_ENTRY
+            PsiElement(AT)('@')
+            CONSTRUCTOR_CALLEE
+              TYPE_REFERENCE
+                USER_TYPE
+                  REFERENCE_EXPRESSION
+                    PsiElement(IDENTIFIER)('a')
           PsiWhiteSpace(' ')
           PsiElement(abstract)('abstract')
         PsiWhiteSpace(' ')
@@ -44,15 +44,13 @@ JetFile: LocalDeclarations.kt
         MODIFIER_LIST
           PsiElement(abstract)('abstract')
           PsiWhiteSpace(' ')
-          ANNOTATION
-            PsiElement(LBRACKET)('[')
-            ANNOTATION_ENTRY
-              CONSTRUCTOR_CALLEE
-                TYPE_REFERENCE
-                  USER_TYPE
-                    REFERENCE_EXPRESSION
-                      PsiElement(IDENTIFIER)('a')
-            PsiElement(RBRACKET)(']')
+          ANNOTATION_ENTRY
+            PsiElement(AT)('@')
+            CONSTRUCTOR_CALLEE
+              TYPE_REFERENCE
+                USER_TYPE
+                  REFERENCE_EXPRESSION
+                    PsiElement(IDENTIFIER)('a')
         PsiWhiteSpace(' ')
         PsiElement(class)('class')
         PsiWhiteSpace(' ')
@@ -77,15 +75,13 @@ JetFile: LocalDeclarations.kt
       PsiWhiteSpace('\n    ')
       PROPERTY
         MODIFIER_LIST
-          ANNOTATION
-            PsiElement(LBRACKET)('[')
-            ANNOTATION_ENTRY
-              CONSTRUCTOR_CALLEE
-                TYPE_REFERENCE
-                  USER_TYPE
-                    REFERENCE_EXPRESSION
-                      PsiElement(IDENTIFIER)('a')
-            PsiElement(RBRACKET)(']')
+          ANNOTATION_ENTRY
+            PsiElement(AT)('@')
+            CONSTRUCTOR_CALLEE
+              TYPE_REFERENCE
+                USER_TYPE
+                  REFERENCE_EXPRESSION
+                    PsiElement(IDENTIFIER)('a')
         PsiWhiteSpace(' ')
         PsiElement(var)('var')
         PsiWhiteSpace(' ')
@@ -96,8 +92,8 @@ JetFile: LocalDeclarations.kt
         INTEGER_CONSTANT
           PsiElement(INTEGER_LITERAL)('4')
       PsiWhiteSpace('\n    ')
-      TYPEDEF
-        PsiElement(type)('type')
+      TYPEALIAS
+        PsiElement(typealias)('typealias')
         PsiWhiteSpace(' ')
         PsiElement(IDENTIFIER)('f')
         PsiWhiteSpace(' ')
@@ -121,5 +117,5 @@ JetFile: LocalDeclarations.kt
               USER_TYPE
                 REFERENCE_EXPRESSION
                   PsiElement(IDENTIFIER)('Unit')
-      PsiWhiteSpace('\n\n')
+      PsiWhiteSpace('\n')
       PsiElement(RBRACE)('}')

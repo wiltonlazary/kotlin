@@ -2,14 +2,14 @@
 package a
 //+JDK
 
-fun getJavaClass<T>() : java.lang.Class<T> { <!NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY!>}<!>
+fun <T> getJavaClass() : java.lang.Class<T> { <!NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY!>}<!>
 
 public class Throwables() {
-    class object {
-        public fun propagateIfInstanceOf<X : Throwable?>(throwable : Throwable?, declaredType : Class<X<!BASE_WITH_NULLABLE_UPPER_BOUND!>?<!>>?) : Unit {
+    companion object {
+        public fun <X : Throwable?> propagateIfInstanceOf(throwable : Throwable?, declaredType : Class<X?>?) : Unit {
             if (((throwable != null) && declaredType?.isInstance(throwable)!!))
             {
-                throw declaredType?.cast(throwable)!!
+                throw declaredType<!UNNECESSARY_SAFE_CALL!>?.<!>cast(throwable)!!
             }
         }
         public fun propagateIfPossible(throwable : Throwable?) : Unit {
@@ -18,4 +18,3 @@ public class Throwables() {
         }
     }
 }
-

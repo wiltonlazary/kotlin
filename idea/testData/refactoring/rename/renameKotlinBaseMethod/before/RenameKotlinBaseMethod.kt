@@ -1,13 +1,11 @@
 package testing.rename
 
-trait A {
+interface A {
     fun first() : Int
 }
 
 public open class B: A {
     override fun first() = 1
-
-    fun first(a: Int) = 12
 }
 
 class C: B() {

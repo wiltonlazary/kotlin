@@ -2,26 +2,26 @@ package f
 
 object A {
     class LoginFormPage() : Request({
-        val failed = session.get("LOGIN_FAILED")
+        val <!UNUSED_VARIABLE!>failed<!> = session.get("LOGIN_FAILED")
     })
 }
 
 class B {
-    class object {
+    companion object {
         class LoginFormPage() : Request({
-            val failed = session.get("LOGIN_FAILED")
+            val <!UNUSED_VARIABLE!>failed<!> = session.get("LOGIN_FAILED")
         })
     }
 
     class C {
         class LoginFormPage() : Request({
-            val failed = session.get("LOGIN_FAILED")
+            val <!UNUSED_VARIABLE!>failed<!> = session.get("LOGIN_FAILED")
         })
     }
 }
 
 open class Request(private val handler: ActionContext.() -> Unit) {}
 
-trait ActionContext {
+interface ActionContext {
     val session : Map<String, String>
 }

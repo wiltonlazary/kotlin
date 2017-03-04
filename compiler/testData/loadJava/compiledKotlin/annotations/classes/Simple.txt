@@ -1,9 +1,9 @@
 package test
 
-internal final annotation class Anno : jet.Annotation {
+public final annotation class Anno : kotlin.Annotation {
     /*primary*/ public constructor Anno()
 }
 
-test.Anno() internal final class X {
+@test.Anno public final class X {
     /*primary*/ public constructor X()
 }

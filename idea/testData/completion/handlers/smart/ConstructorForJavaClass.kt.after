@@ -1,3 +1,0 @@
-import java.util.Date
-
-var a : Date = Date(<caret>)

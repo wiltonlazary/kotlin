@@ -1,6 +1,6 @@
-trait Test {
-  class object {
-    var prop: Int = 0;
+interface Test {
+  companion object {
+    internal var prop: Int = 0;
   }
 }
 
@@ -9,5 +9,5 @@ trait Test {
 // ABSENT: TRUE
 
 // TESTED_OBJECT_KIND: property
-// TESTED_OBJECTS: Test$object, prop
-// FLAGS: ACC_PRIVATE
+// TESTED_OBJECTS: Test$Companion, prop
+// FLAGS: ACC_PRIVATE, ACC_STATIC

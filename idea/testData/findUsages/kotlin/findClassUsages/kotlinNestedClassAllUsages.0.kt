@@ -1,4 +1,4 @@
-// PSI_ELEMENT: org.jetbrains.jet.lang.psi.JetClass
+// PSI_ELEMENT: org.jetbrains.kotlin.psi.KtClass
 // OPTIONS: usages, constructorUsages
 package a
 
@@ -10,7 +10,7 @@ public open class Outer {
 
         }
 
-        class object {
+        companion object {
             public var bar: String = "bar";
 
             public open fun foo() {

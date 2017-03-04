@@ -3,11 +3,11 @@ var <caret>packageVal = ""
 fun packageFun(s: String): String = packageVal + s
 
 class KClient {
-    {
+    init {
         packageVal = ""
     }
 
-    class object {
+    companion object {
         val a = packageVal
     }
 
@@ -24,7 +24,7 @@ class KClient {
 
 object KClientObj {
     val a = packageVal
-    {
+    init {
         packageVal = ""
     }
 }

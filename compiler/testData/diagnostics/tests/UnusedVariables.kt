@@ -2,19 +2,19 @@ package unused_variables
 
 fun testSimpleCases() {
     var i = <!VARIABLE_WITH_REDUNDANT_INITIALIZER!>2<!>
-    i = <!UNUSED_VALUE!>34<!>
+    <!UNUSED_VALUE!>i =<!> 34
     i = 34
     doSmth(i)
-    i = <!UNUSED_VALUE!>5<!>
+    <!UNUSED_VALUE!>i =<!> 5
 
     var j = 2
     j = <!UNUSED_CHANGED_VALUE!>j++<!>
-    j = <!UNUSED_VALUE, UNUSED_CHANGED_VALUE!>j--<!>
+    <!UNUSED_VALUE!>j =<!> <!UNUSED_CHANGED_VALUE!>j--<!>
 }
 
 class IncDec() {
-  fun inc() : IncDec = this
-  fun dec() : IncDec = this
+  operator fun inc() : IncDec = this
+  operator fun dec() : IncDec = this
 }
 
 class MyTest() {
@@ -27,18 +27,18 @@ class MyTest() {
       x = <!UNUSED_CHANGED_VALUE!>x++<!>
       x = <!UNUSED_CHANGED_VALUE!>x--<!>
       x = ++x
-      x = <!UNUSED_VALUE!>--x<!>
+      <!UNUSED_VALUE!>x =<!> --x
     }
 
     var a: String = "s"
         set(v: String) {
             var i: Int = 23
             doSmth(i)
-            i = <!UNUSED_VALUE!>34<!>
-            $a = v
+            <!UNUSED_VALUE!>i =<!> 34
+            field = v
         }
 
-    {
+    init {
         a = "rr"
     }
 
@@ -46,8 +46,8 @@ class MyTest() {
         a = "rro"
 
         var <!ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE!>i<!> = 1;
-        i = <!UNUSED_VALUE!>34<!>;
-        i = <!UNUSED_VALUE!>456<!>;
+        <!UNUSED_VALUE!>i =<!> 34;
+        <!UNUSED_VALUE!>i =<!> 456;
     }
 
     fun testWhile() {
@@ -57,7 +57,7 @@ class MyTest() {
             a = null
         }
         while (b != null) {
-            a = <!UNUSED_VALUE!>null<!>
+            <!UNUSED_VALUE!>a =<!> null
         }
     }
 
@@ -68,15 +68,15 @@ class MyTest() {
         }
         else {
             a = "ss"
-            doSmth(a as String)
+            doSmth(<!DEBUG_INFO_SMARTCAST!>a<!>)
         }
         doSmth(a)
 
         if (1 < 2) {
-            a = <!UNUSED_VALUE!>23<!>
+            <!UNUSED_VALUE!>a =<!> 23
         }
         else {
-            a = <!UNUSED_VALUE!>"ss"<!>
+            <!UNUSED_VALUE!>a =<!> "ss"
         }
     }
 
@@ -103,16 +103,16 @@ fun testInnerFunctions() {
 
 fun testFunctionLiterals() {
     var x = 1
-    var <!UNUSED_VARIABLE!>fl<!> = { (): Int ->
+    var <!UNUSED_VARIABLE!>fl<!> = {
         x
     }
     var y = 2
-    var <!UNUSED_VARIABLE!>fl1<!> = { (): Unit ->
+    var <!UNUSED_VARIABLE!>fl1<!> = {
         doSmth(y)
     }
 }
 
-trait Trait {
+interface Trait {
     fun foo()
 }
 
@@ -128,15 +128,6 @@ fun testObject() : Trait {
     }
 
     return o
-}
-
-fun testBackingFieldsNotMarked() {
-    val <!UNUSED_VARIABLE!>a<!> = object {
-        val x : Int
-        {
-            $x = 1
-        }
-    }
 }
 
 fun doSmth(<!UNUSED_PARAMETER!>i<!> : Int) {}

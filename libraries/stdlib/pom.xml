@@ -8,7 +8,7 @@
     <parent>
         <groupId>org.jetbrains.kotlin</groupId>
         <artifactId>kotlin-project</artifactId>
-        <version>0.1-SNAPSHOT</version>
+        <version>1.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>kotlin-stdlib</artifactId>
@@ -19,6 +19,12 @@
             <artifactId>kotlin-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -26,18 +32,31 @@
         <testSourceDirectory>test</testSourceDirectory>
 
         <plugins>
-             <plugin>
+            <plugin>
                 <groupId>org.jetbrains.kotlin</groupId>
                 <artifactId>kotlin-maven-plugin</artifactId>
                 <version>${project.version}</version>
 
+                 <configuration>
+                     <args>
+                         <arg>-Xallow-kotlin-package</arg>
+                     </args>
+                 </configuration>
+
                 <executions>
                     <execution>
                         <id>compile</id>
-                        <phase>compile</phase>
+                        <phase>process-sources</phase>
                         <goals>
                             <goal>compile</goal>
                         </goals>
+                        <configuration>
+                            <args combine.children="append">
+                                <arg>-Xmultifile-parts-inherit</arg>
+                                <arg>-Xdump-declarations-to</arg>
+                                <arg>${basedir}/target/stdlib-declarations.json</arg>
+                            </args>
+                        </configuration>
                     </execution>
 
                     <execution>
@@ -46,8 +65,72 @@
                         <goals>
                             <goal>test-compile</goal>
                         </goals>
+                        <configuration>
+                            <args combine.children="append">
+                                <arg>-Xmulti-platform</arg>
+                            </args>
+                            <sourceDirs>
+                                <dir>${project.basedir}/test</dir>
+                                <dir>${project.basedir}/../kotlin.test/common/src/main/kotlin</dir>
+                                <dir>${project.basedir}/../kotlin.test/jvm/src/main/kotlin</dir>
+                                <dir>${project.basedir}/../kotlin.test/junit/src/main/kotlin</dir>
+                            </sourceDirs>
+                        </configuration>
                     </execution>
                 </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>2.4.3</version>
+                <configuration>
+                    <artifactSet>
+                        <includes>
+                            <include>org.jetbrains.kotlin:kotlin-runtime</include>
+                        </includes>
+                    </artifactSet>
+                    <filters>
+                        <filter>
+                            <artifact>org.jetbrains.kotlin:kotlin-runtime</artifact>
+                            <excludes>
+                                <exclude>META-INF/maven/**</exclude>
+                            </excludes>
+                        </filter>
+                    </filters>
+                    <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+                    <dependencyReducedPomLocation>${basedir}/target/dependency-reduced-pom.xml</dependencyReducedPomLocation>
+                    <createSourcesJar>true</createSourcesJar>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Kotlin-Version>${kotlin.language.version}</Kotlin-Version>
+                            <Kotlin-Runtime-Component>Main</Kotlin-Runtime-Component>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <forkMode>once</forkMode>
+                    <jvm>${env.JDK_16}/bin/java</jvm>
+                </configuration>
             </plugin>
         </plugins>
     </build>

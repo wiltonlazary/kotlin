@@ -1,9 +1,9 @@
-// !DIAGNOSTICS: -DEBUG_INFO_AUTOCAST
-trait Either<out A, out B>
-trait Left<out A>: Either<A, Nothing> {
+// !DIAGNOSTICS: -DEBUG_INFO_SMARTCAST
+interface Either<out A, out B>
+interface Left<out A>: Either<A, Nothing> {
     val value: A
 }
-trait Right<out B>: Either<Nothing, B> {
+interface Right<out B>: Either<Nothing, B> {
     val value: B
 }
 

@@ -1,7 +1,7 @@
 class Test(val prop: String) {
 
-  class object {
-    public val prop : String = "CO";
+  companion object {
+    public const val prop : String = "CO";
   }
 
 }

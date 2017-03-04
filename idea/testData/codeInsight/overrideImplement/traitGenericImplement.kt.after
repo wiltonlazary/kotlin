@@ -1,10 +1,9 @@
-trait G<T> {
+interface G<T> {
     fun foo(t : T) : T
 }
 
 class GC<T>() : G<T> {
-
     override fun foo(t: T): T {
-        throw UnsupportedOperationException()
+        <selection><caret>TODO("not implemented") //To change body of created functions use File | Settings | File Templates.</selection>
     }
 }

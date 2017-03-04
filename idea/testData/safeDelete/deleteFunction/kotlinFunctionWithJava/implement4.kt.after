@@ -1,6 +1,0 @@
-trait A {
-}
-
-trait Z {
-    fun foo()
-}

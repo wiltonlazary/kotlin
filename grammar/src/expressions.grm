@@ -1,27 +1,28 @@
 /**
-h2. Expressions
+## Expressions
 
-bq. See [Expressions]
+<!--See [Expressions](expressions.html)-->
 
-h3. Precedence
+### Precedence
 
-||*Precedence*||Title||Symbols||
-|Highest|Postfix|{{\+\+}}, {{\-\-}}, {{.}}, {{?.}}, {{?}}|
-| |Prefix|{{-}}, {{\+}}, {{\+\+}}, {{\-\-}}, {{!}}, [{{@label}}|#LabelName], {{@}}, {{@@}} |
-| |Type RHS|{{:}}, {{as}}, {{as?}} |
-| |Multiplicative|{{*}}, {{/}}, {{%}} |
-| |Additive|{{\+}}, {{-}} |
-| |Range|{{..}} |
-| |Infix function|[{{SimpleName}}|#SimpleName] |
-| |Elvis|{{?:}} |
-| |Named checks|{{in}}, {{\!in}}, {{is}}, {{\!is}} |
-| |Comparison|{{<}}, {{>}}, {{<=}}, {{>=}} |
-| |Equality|{{==}}, {{\!==}}|
-| |Conjunction|{{&&}}|
-| |Disjunction|{{\|\|}}|
-|Lowest|Assignment|{{=}}, {{+=}}, {{-=}}, {{*=}}, {{/=}}, {{%=}}|
+| Precedence | Title | Symbols |
+|------------|-------|---------|
+| Highest    | Postfix | `++`, `--`, `.`, `?.`, `?` |
+| | Prefix | `-`, `+`, `++`, `--`, `!`, [`labelDefinition`](#IDENTIFIER)`@` |
+| | Type RHS | `:`, `as`, `as?` |
+| | Multiplicative | `*`, `/`, `%` |
+| | Additive | `+`, `-` |
+| | Range | `..` |
+| | Infix function | [`SimpleName`](#SimpleName) |
+| | Elvis | `?:` |
+| | Named checks | `in`, `!in`, `is`, `!is` |
+| | Comparison | `<`, `>`, `<=`, `>=` |
+| | Equality | `==`, `\!==` |
+| | Conjunction | `&&` |
+| | Disjunction | `||` |
+| Lowest | Assignment | `=`, `+=`, `-=`, `*=`, `/=`, `%=` |
 
-h3. Rules
+### Rules
 
 */
 
@@ -42,7 +43,6 @@ Decreasing precedence:
   "||"
   assignmentOperator
 */
-
 
 expression
   : disjunction (assignmentOperator disjunction)*
@@ -66,7 +66,7 @@ comparison
 
 namedInfix
   : elvisExpression (inOperation elvisExpression)*
-  : elvisExpression (isOperation isRHS)?
+  : elvisExpression (isOperation type)?
   ;
 
 elvisExpression
@@ -102,9 +102,9 @@ postfixUnaryExpression
   : callableReference postfixUnaryOperation*
   ;
 
-// TODO: callSuffix is forbidden after callableReference, since parentheses will be used to provide parameter types
+// TODO: update this rule to include class literals and bound callable references
 callableReference
-  : userType? "::" SimpleName
+  : (userType "?"*)? "::" SimpleName typeArguments?
   ;
 
 // !!! When you add here, remember to update the FIRST set in the parser
@@ -112,8 +112,8 @@ atomicExpression
   : "(" expression ")"
   : literalConstant
   : functionLiteral
-  : "this" label?
-  : "super" ("<" type ">")? label?
+  : "this" labelReference?
+  : "super" ("<" type ">")? labelReference?
   : if
   : when
   : try
@@ -121,14 +121,14 @@ atomicExpression
   : jump
   : loop
   : SimpleName
-  : FieldName
-  : "namespace" // for the root namespace
   ;
 
-label
-  : "@"
-  : "@@"
-  : LabelName
+labelReference
+  : "@" ++ LabelName
+  ;
+
+labelDefinition
+  : LabelName ++ "@"
   ;
 
 literalConstant
@@ -148,7 +148,7 @@ stringTemplate
 
 stringTemplateElement
   : RegularStringPart
-  : ShortTemplateEntrySTART (SimpleName | "this")
+  : ShortTemplateEntryStart (SimpleName | "this")
   : EscapeSequence
   : longTemplate
   ;
@@ -157,21 +157,21 @@ longTemplate
   : "${" expression "}"
   ;
 
-isRHS
-  : type
-  ;
-
 declaration
   : function
   : property
   : class
-  : typedef
+  : typeAlias
   : object
   ;
 
 statement
   : declaration
-  : expression
+  : blockLevelExpression
+  ;
+
+blockLevelExpression
+  : annotations ("\n")+ expression
   ;
 
 multiplicativeOperation
@@ -210,9 +210,9 @@ assignmentOperator
 prefixUnaryOperation
   : "-" : "+"
   : "++" : "--"
-  : "!"  // No ~
-  : annotations // mandatory
-  : label
+  : "!"
+  : annotations
+  : labelDefinition
   ;
 
 postfixUnaryOperation
@@ -223,9 +223,12 @@ postfixUnaryOperation
   ;
 
 callSuffix
-  : typeArguments? valueArguments (label? functionLiteral)
-  : typeArguments (label? functionLiteral)
+  : typeArguments? valueArguments annotatedLambda
+  : typeArguments annotatedLambda
   ;
+
+annotatedLambda
+  : ("@" unescapedAnnotation)* labelDefinition? functionLiteral
 
 memberAccessOperation
   : "." : "?." : "?"
@@ -241,17 +244,20 @@ valueArguments
 
 jump
   : "throw" expression
-  : "return" label? expression?
-  : "continue" label?
-  : "break" label?
+  : "return" ++ labelReference? expression?
+  : "continue" ++ labelReference?
+  : "break" ++ labelReference?
 // yield ?
   ;
 
-// one can use "it" as a parameter name
 functionLiteral
   : "{" statements "}"
-  : "{" (modifiers SimpleName){","} "->" statements "}"
-  : "{" (type ".")? "(" (modifiers SimpleName (":" type)?){","} ")" (":" type)? "->" statements "}"
+  : "{" lambdaParameter{","} "->" statements "}"
+  ;
+
+lambdaParameter
+  : variableDeclarationEntry
+  : multipleVariableDeclarations (":" type)?
   ;
 
 statements
@@ -267,22 +273,5 @@ arrayAccess
   ;
 
 objectLiteral
-  : "object" (":" delegationSpecifier{","})? classBody // Cannot make class body optional: foo(object : F, A)
+  : "object" (":" delegationSpecifier{","})? classBody
   ;
-
-/* Factory methods:
-
-objectLiteral
-  : "object" delegationSpecifier{","} ("{" objectLiteralMember{","} "}")?
-  ;
-
-objectLiteralMember
-  : memberDeclaration
-  : factoryMethod
-  ;
-
-factoryMethod
-  : accessModifier? SimpleName typeParameters? functionParameters functionBody
-  ;
-
-*/

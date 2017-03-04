@@ -2,4 +2,4 @@ enum class E {
     ENTRY
 }
 
-class A : <!SINGLETON_IN_SUPERTYPE!>E.ENTRY<!>
+class A : E.<!ENUM_ENTRY_AS_TYPE!>ENTRY<!>

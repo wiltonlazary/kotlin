@@ -1,3 +1,4 @@
+// !DIAGNOSTICS: -UNREACHABLE_CODE
 package kt770_351_735
 
 
@@ -17,7 +18,7 @@ val w = <!EXPRESSION_EXPECTED!>while (true) {}<!>
 
 fun foo() {
     var <!ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE!>z<!> = 2
-    val r = {  // type fun(): Int is inferred
+    val r = {  // type fun(): Any is inferred
         if (true) {
             2
         }
@@ -33,7 +34,7 @@ fun foo() {
 fun box() : Int {
     val d = 2
     var z = 0
-        when(d) {
+    when(d) {
         5, 3 -> z++
         else -> z = -1000
     }
@@ -47,13 +48,13 @@ fun test2(): Unit { while(true) {} }
 
 fun testCoercionToUnit() {
     val <!UNUSED_VARIABLE!>simple<!>: ()-> Unit = {
-        41
+        <!UNUSED_EXPRESSION!>41<!>
     }
     val <!UNUSED_VARIABLE!>withIf<!>: ()-> Unit = {
         if (true) {
-            3
+            <!UNUSED_EXPRESSION!>3<!>
         } else {
-            45
+            <!UNUSED_EXPRESSION!>45<!>
         }
     }
     val i = 34
@@ -65,8 +66,8 @@ fun testCoercionToUnit() {
                 doSmth(d)
 
             }
-            2 -> '4'
-            else -> true
+            2 -> <!UNUSED_EXPRESSION!>'4'<!>
+            else -> <!UNUSED_EXPRESSION!>true<!>
         }
     }
 
@@ -92,37 +93,70 @@ fun testImplicitCoercion() {
         else -> z = 20
     }
 
-    var <!UNUSED_VARIABLE!>u<!> = <!IMPLICIT_CAST_TO_UNIT_OR_ANY!>when(d) {
+    var <!UNUSED_VARIABLE!>u<!> = when(d) {
         3 -> {
-            z = <!UNUSED_VALUE!>34<!>
+            <!IMPLICIT_CAST_TO_ANY!><!UNUSED_VALUE!>z =<!> 34<!>
         }
-        else -> <!UNUSED_CHANGED_VALUE!>z--<!>
-    }<!>
+        else -> <!UNUSED_CHANGED_VALUE, IMPLICIT_CAST_TO_ANY!>z--<!>
+    }
 
-    var <!UNUSED_VARIABLE!>iff<!> = <!IMPLICIT_CAST_TO_UNIT_OR_ANY!>if (true) {
-        z = <!UNUSED_VALUE!>34<!>
+    var <!UNUSED_VARIABLE!>iff<!> = <!INVALID_IF_AS_EXPRESSION!>if (true) {
+        <!UNUSED_VALUE!>z =<!> 34
     }<!>
-    val <!UNUSED_VARIABLE!>g<!> = <!IMPLICIT_CAST_TO_UNIT_OR_ANY!>if (true) 4<!>
-    val <!UNUSED_VARIABLE!>h<!> = <!IMPLICIT_CAST_TO_UNIT_OR_ANY!>if (false) 4 else {}<!>
+    val <!UNUSED_VARIABLE!>g<!> = <!INVALID_IF_AS_EXPRESSION!>if (true) 4<!>
+    val <!UNUSED_VARIABLE!>h<!> = if (false) <!IMPLICIT_CAST_TO_ANY!>4<!> else <!IMPLICIT_CAST_TO_ANY!>{}<!>
 
     bar(if (true) {
         <!CONSTANT_EXPECTED_TYPE_MISMATCH!>4<!>
     }
     else {
-        z = <!UNUSED_VALUE!>342<!>
+        <!UNUSED_VALUE!>z =<!> 342
     })
+}
+
+fun fooWithAnyArg(<!UNUSED_PARAMETER!>arg<!>: Any) {}
+fun fooWithAnyNullableArg(<!UNUSED_PARAMETER!>arg<!>: Any?) {}
+
+fun testCoercionToAny() {
+    val d = 21
+    val <!UNUSED_VARIABLE!>x1<!>: Any = if (1>2) 1 else 2.0
+    val <!UNUSED_VARIABLE!>x2<!>: Any? = if (1>2) 1 else 2.0
+    val <!UNUSED_VARIABLE!>x3<!>: Any? = if (1>2) 1 else (if (1>2) null else 2.0)
+
+    fooWithAnyArg(if (1>2) 1 else 2.0)
+    fooWithAnyNullableArg(if (1>2) 1 else 2.0)
+    fooWithAnyNullableArg(if (1>2) 1 else (if (1>2) null else 2.0))
+
+    val <!UNUSED_VARIABLE!>y1<!>: Any = when(d) { 1 -> 1.0 else -> 2.0 }
+    val <!UNUSED_VARIABLE!>y2<!>: Any? = when(d) { 1 -> 1.0 else -> 2.0 }
+    val <!UNUSED_VARIABLE!>y3<!>: Any? = when(d) { 1 -> 1.0; 2 -> null; else -> 2.0 }
+
+    fooWithAnyArg(when(d) { 1 -> 1.0 else -> 2.0 })
+    fooWithAnyNullableArg(when(d) { 1 -> 1.0 else -> 2.0 })
+    fooWithAnyNullableArg(when(d) { 1 -> 1.0; 2 -> null; else -> 2.0 })
+}
+
+fun fooWithAnuNullableResult(s: String?, name: String, optional: Boolean): Any? {
+    return if (s == null) {
+        if (!optional) {
+            throw java.lang.IllegalArgumentException("Parameter '$name' was not found in the request")
+        }
+        null
+    } else {
+        name
+    }
 }
 
 fun bar(<!UNUSED_PARAMETER!>a<!>: Unit) {}
 
 fun testStatementInExpressionContext() {
     var <!ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE!>z<!> = 34
-    val <!UNUSED_VARIABLE!>a1<!>: Unit = <!ASSIGNMENT_IN_EXPRESSION_CONTEXT!>z = <!UNUSED_VALUE!>334<!><!>
+    val <!UNUSED_VARIABLE!>a1<!>: Unit = <!ASSIGNMENT_IN_EXPRESSION_CONTEXT!><!UNUSED_VALUE!>z =<!> 334<!>
     val <!UNUSED_VARIABLE!>f<!> = <!EXPRESSION_EXPECTED!>for (i in 1..10) {}<!>
-    if (true) return <!ASSIGNMENT_IN_EXPRESSION_CONTEXT!>z = <!UNUSED_VALUE!>34<!><!>
-    <!UNREACHABLE_CODE!>return <!EXPRESSION_EXPECTED!>while (true) {}<!><!>
+    if (true) return <!ASSIGNMENT_IN_EXPRESSION_CONTEXT!><!UNUSED_VALUE!>z =<!> 34<!>
+    return <!EXPRESSION_EXPECTED!>while (true) {}<!>
 }
 
 fun testStatementInExpressionContext2() {
-    <!UNREACHABLE_CODE!>val <!UNUSED_VARIABLE!>a2<!>: Unit = <!EXPRESSION_EXPECTED!>while(true) {}<!><!>
+    val <!UNUSED_VARIABLE!>a2<!>: Unit = <!EXPRESSION_EXPECTED!>while(true) {}<!>
 }

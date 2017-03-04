@@ -1,6 +1,0 @@
-// "Suppress 'UNNECESSARY_NOT_NULL_ASSERTION' for statement " "true"
-
-fun foo() {
-    [suppress("UNNECESSARY_NOT_NULL_ASSERTION")]
-    (1<caret>!! plus 2)
-}

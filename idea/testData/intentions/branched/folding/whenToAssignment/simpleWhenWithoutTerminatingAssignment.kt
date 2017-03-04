@@ -1,15 +1,17 @@
 // IS_APPLICABLE: false
+fun <T> doSomething(a: T) {}
+
 fun test(n: Int): String {
     var res: String
 
     <caret>when (n) {
             1 -> {
-                println("***")
+                doSomething("***")
                 res = "one"
             }
             else -> {
                 res = "two"
-                println("***")
+                doSomething("***")
             }
     }
 

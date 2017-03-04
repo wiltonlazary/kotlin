@@ -1,5 +1,5 @@
 class Test {
-  class object {
+  companion object {
     private val prop = 0;
   }
 }
@@ -9,5 +9,5 @@ class Test {
 // FLAGS: ACC_STATIC, ACC_PRIVATE, ACC_FINAL
 
 // TESTED_OBJECT_KIND: property
-// TESTED_OBJECTS: Test$object, prop
+// TESTED_OBJECTS: Test$Companion, prop
 // ABSENT: TRUE

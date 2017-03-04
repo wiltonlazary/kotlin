@@ -1,5 +1,7 @@
+package test;
+
 class Void {
     {
-        _DefaultPackage.f();
+        VoidKt.f();
     }
 }

@@ -1,5 +1,7 @@
 JetFile: SimpleClassMembers.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   CLASS
     PsiElement(class)('class')
@@ -20,8 +22,7 @@ JetFile: SimpleClassMembers.kt
           OBJECT_DECLARATION
             PsiElement(object)('object')
             PsiWhiteSpace(' ')
-            OBJECT_DECLARATION_NAME
-              PsiElement(IDENTIFIER)('foo')
+            PsiElement(IDENTIFIER)('foo')
             PsiWhiteSpace(' ')
             CLASS_BODY
               PsiElement(LBRACE)('{')
@@ -55,8 +56,8 @@ JetFile: SimpleClassMembers.kt
             PsiWhiteSpace(' ')
             PsiElement(IDENTIFIER)('f')
           PsiWhiteSpace('\n\n        ')
-          TYPEDEF
-            PsiElement(type)('type')
+          TYPEALIAS
+            PsiElement(typealias)('typealias')
             PsiWhiteSpace(' ')
             PsiElement(IDENTIFIER)('foo')
             PsiWhiteSpace(' ')
@@ -66,7 +67,7 @@ JetFile: SimpleClassMembers.kt
               USER_TYPE
                 REFERENCE_EXPRESSION
                   PsiElement(IDENTIFIER)('bar')
-          PsiWhiteSpace('\n\n    ')
+          PsiWhiteSpace('\n    ')
           PsiElement(RBRACE)('}')
       PsiWhiteSpace('\n\n    ')
       CLASS
@@ -80,135 +81,130 @@ JetFile: SimpleClassMembers.kt
           OBJECT_DECLARATION
             PsiElement(object)('object')
             PsiWhiteSpace(' ')
-            OBJECT_DECLARATION_NAME
-              PsiElement(IDENTIFIER)('foo')
+            PsiElement(IDENTIFIER)('foo')
             PsiWhiteSpace(' ')
             CLASS_BODY
               PsiElement(LBRACE)('{')
               PsiWhiteSpace('\n            ')
-              CLASS_OBJECT
-                PsiElement(class)('class')
+              OBJECT_DECLARATION
+                MODIFIER_LIST
+                  PsiElement(companion)('companion')
                 PsiWhiteSpace(' ')
-                OBJECT_DECLARATION
-                  PsiElement(object)('object')
-                  PsiWhiteSpace(' ')
-                  CLASS_BODY
-                    PsiElement(LBRACE)('{')
-                    PsiWhiteSpace('\n\n            ')
-                    PsiElement(RBRACE)('}')
+                PsiElement(object)('object')
+                PsiWhiteSpace(' ')
+                CLASS_BODY
+                  PsiElement(LBRACE)('{')
+                  PsiWhiteSpace('\n\n            ')
+                  PsiElement(RBRACE)('}')
               PsiWhiteSpace('\n\n            ')
-              CLASS_OBJECT
+              OBJECT_DECLARATION
                 MODIFIER_LIST
                   PsiElement(private)('private')
-                PsiWhiteSpace(' ')
-                PsiElement(class)('class')
-                PsiWhiteSpace(' ')
-                OBJECT_DECLARATION
-                  PsiElement(object)('object')
                   PsiWhiteSpace(' ')
-                  CLASS_BODY
-                    PsiElement(LBRACE)('{')
-                    PsiWhiteSpace('\n\n            ')
-                    PsiElement(RBRACE)('}')
+                  PsiElement(companion)('companion')
+                PsiWhiteSpace(' ')
+                PsiElement(object)('object')
+                PsiWhiteSpace(' ')
+                CLASS_BODY
+                  PsiElement(LBRACE)('{')
+                  PsiWhiteSpace('\n\n            ')
+                  PsiElement(RBRACE)('}')
               PsiWhiteSpace('\n\n            ')
-              CLASS_OBJECT
+              OBJECT_DECLARATION
                 MODIFIER_LIST
                   PsiElement(private)('private')
+                  PsiWhiteSpace(' ')
+                  PsiElement(companion)('companion')
                 PsiWhiteSpace(' ')
-                PsiElement(class)('class')
+                PsiElement(object)('object')
                 PsiWhiteSpace(' ')
-                OBJECT_DECLARATION
-                  PsiElement(object)('object')
-                  PsiWhiteSpace(' ')
-                  PsiElement(COLON)(':')
-                  PsiWhiteSpace(' ')
-                  DELEGATION_SPECIFIER_LIST
-                    DELEGATOR_SUPER_CLASS
-                      TYPE_REFERENCE
-                        USER_TYPE
-                          REFERENCE_EXPRESSION
-                            PsiElement(IDENTIFIER)('Fooo')
-                  PsiWhiteSpace(' ')
-                  CLASS_BODY
-                    PsiElement(LBRACE)('{')
-                    PsiWhiteSpace('\n\n            ')
-                    PsiElement(RBRACE)('}')
+                PsiElement(COLON)(':')
+                PsiWhiteSpace(' ')
+                SUPER_TYPE_LIST
+                  SUPER_TYPE_ENTRY
+                    TYPE_REFERENCE
+                      USER_TYPE
+                        REFERENCE_EXPRESSION
+                          PsiElement(IDENTIFIER)('Fooo')
+                PsiWhiteSpace(' ')
+                CLASS_BODY
+                  PsiElement(LBRACE)('{')
+                  PsiWhiteSpace('\n\n            ')
+                  PsiElement(RBRACE)('}')
               PsiWhiteSpace('\n\n            ')
-              CLASS_OBJECT
+              OBJECT_DECLARATION
                 MODIFIER_LIST
                   PsiElement(private)('private')
-                PsiWhiteSpace(' ')
-                PsiElement(class)('class')
-                PsiWhiteSpace(' ')
-                OBJECT_DECLARATION
-                  PsiElement(object)('object')
                   PsiWhiteSpace(' ')
-                  PsiElement(COLON)(':')
+                  PsiElement(companion)('companion')
+                PsiWhiteSpace(' ')
+                PsiElement(object)('object')
+                PsiWhiteSpace(' ')
+                PsiElement(COLON)(':')
+                PsiWhiteSpace(' ')
+                SUPER_TYPE_LIST
+                  SUPER_TYPE_ENTRY
+                    TYPE_REFERENCE
+                      USER_TYPE
+                        REFERENCE_EXPRESSION
+                          PsiElement(IDENTIFIER)('Fooo')
+                  PsiElement(COMMA)(',')
                   PsiWhiteSpace(' ')
-                  DELEGATION_SPECIFIER_LIST
-                    DELEGATOR_SUPER_CLASS
-                      TYPE_REFERENCE
-                        USER_TYPE
-                          REFERENCE_EXPRESSION
-                            PsiElement(IDENTIFIER)('Fooo')
-                    PsiElement(COMMA)(',')
+                  DELEGATED_SUPER_TYPE_ENTRY
+                    TYPE_REFERENCE
+                      USER_TYPE
+                        REFERENCE_EXPRESSION
+                          PsiElement(IDENTIFIER)('Bar')
                     PsiWhiteSpace(' ')
-                    DELEGATOR_BY
-                      TYPE_REFERENCE
-                        USER_TYPE
-                          REFERENCE_EXPRESSION
-                            PsiElement(IDENTIFIER)('Bar')
-                      PsiWhiteSpace(' ')
-                      PsiElement(by)('by')
-                      PsiWhiteSpace(' ')
-                      REFERENCE_EXPRESSION
-                        PsiElement(IDENTIFIER)('foo')
-                  PsiWhiteSpace(' ')
-                  CLASS_BODY
-                    PsiElement(LBRACE)('{')
-                    PsiWhiteSpace('\n\n            ')
-                    PsiElement(RBRACE)('}')
+                    PsiElement(by)('by')
+                    PsiWhiteSpace(' ')
+                    REFERENCE_EXPRESSION
+                      PsiElement(IDENTIFIER)('foo')
+                PsiWhiteSpace(' ')
+                CLASS_BODY
+                  PsiElement(LBRACE)('{')
+                  PsiWhiteSpace('\n\n            ')
+                  PsiElement(RBRACE)('}')
               PsiWhiteSpace('\n\n            ')
-              CLASS_OBJECT
+              OBJECT_DECLARATION
                 MODIFIER_LIST
                   PsiElement(private)('private')
-                PsiWhiteSpace(' ')
-                PsiElement(class)('class')
-                PsiWhiteSpace(' ')
-                OBJECT_DECLARATION
-                  PsiElement(object)('object')
                   PsiWhiteSpace(' ')
-                  PsiElement(COLON)(':')
+                  PsiElement(companion)('companion')
+                PsiWhiteSpace(' ')
+                PsiElement(object)('object')
+                PsiWhiteSpace(' ')
+                PsiElement(COLON)(':')
+                PsiWhiteSpace(' ')
+                SUPER_TYPE_LIST
+                  SUPER_TYPE_ENTRY
+                    TYPE_REFERENCE
+                      USER_TYPE
+                        REFERENCE_EXPRESSION
+                          PsiElement(IDENTIFIER)('Fooo')
+                  PsiElement(COMMA)(',')
                   PsiWhiteSpace(' ')
-                  DELEGATION_SPECIFIER_LIST
-                    DELEGATOR_SUPER_CLASS
+                  DELEGATED_SUPER_TYPE_ENTRY
+                    TYPE_REFERENCE
+                      USER_TYPE
+                        REFERENCE_EXPRESSION
+                          PsiElement(IDENTIFIER)('Bar')
+                    PsiWhiteSpace(' ')
+                    PsiElement(by)('by')
+                    PsiWhiteSpace(' ')
+                    REFERENCE_EXPRESSION
+                      PsiElement(IDENTIFIER)('foo')
+                  PsiElement(COMMA)(',')
+                  PsiWhiteSpace(' ')
+                  SUPER_TYPE_CALL_ENTRY
+                    CONSTRUCTOR_CALLEE
                       TYPE_REFERENCE
                         USER_TYPE
                           REFERENCE_EXPRESSION
-                            PsiElement(IDENTIFIER)('Fooo')
-                    PsiElement(COMMA)(',')
-                    PsiWhiteSpace(' ')
-                    DELEGATOR_BY
-                      TYPE_REFERENCE
-                        USER_TYPE
-                          REFERENCE_EXPRESSION
-                            PsiElement(IDENTIFIER)('Bar')
-                      PsiWhiteSpace(' ')
-                      PsiElement(by)('by')
-                      PsiWhiteSpace(' ')
-                      REFERENCE_EXPRESSION
-                        PsiElement(IDENTIFIER)('foo')
-                    PsiElement(COMMA)(',')
-                    PsiWhiteSpace(' ')
-                    DELEGATOR_SUPER_CALL
-                      CONSTRUCTOR_CALLEE
-                        TYPE_REFERENCE
-                          USER_TYPE
-                            REFERENCE_EXPRESSION
-                              PsiElement(IDENTIFIER)('Goo')
-                      VALUE_ARGUMENT_LIST
-                        PsiElement(LPAR)('(')
-                        PsiElement(RPAR)(')')
+                            PsiElement(IDENTIFIER)('Goo')
+                    VALUE_ARGUMENT_LIST
+                      PsiElement(LPAR)('(')
+                      PsiElement(RPAR)(')')
               PsiWhiteSpace('\n        ')
               PsiElement(RBRACE)('}')
           PsiWhiteSpace('\n\n        ')
@@ -239,8 +235,8 @@ JetFile: SimpleClassMembers.kt
             PsiWhiteSpace(' ')
             PsiElement(IDENTIFIER)('f')
           PsiWhiteSpace('\n\n        ')
-          TYPEDEF
-            PsiElement(type)('type')
+          TYPEALIAS
+            PsiElement(typealias)('typealias')
             PsiWhiteSpace(' ')
             PsiElement(IDENTIFIER)('foo')
             PsiWhiteSpace(' ')
@@ -250,7 +246,7 @@ JetFile: SimpleClassMembers.kt
               USER_TYPE
                 REFERENCE_EXPRESSION
                   PsiElement(IDENTIFIER)('bar')
-          PsiWhiteSpace('\n\n    ')
+          PsiWhiteSpace('\n    ')
           PsiElement(RBRACE)('}')
       PsiWhiteSpace('\n\n    ')
       FUN
@@ -271,8 +267,8 @@ JetFile: SimpleClassMembers.kt
         PsiWhiteSpace(' ')
         PsiElement(IDENTIFIER)('f')
       PsiWhiteSpace('\n\n    ')
-      TYPEDEF
-        PsiElement(type)('type')
+      TYPEALIAS
+        PsiElement(typealias)('typealias')
         PsiWhiteSpace(' ')
         PsiElement(IDENTIFIER)('foo')
         PsiWhiteSpace(' ')
@@ -283,128 +279,124 @@ JetFile: SimpleClassMembers.kt
             REFERENCE_EXPRESSION
               PsiElement(IDENTIFIER)('bar')
       PsiWhiteSpace('\n\n    ')
-      CLASS_OBJECT
-        PsiElement(class)('class')
+      OBJECT_DECLARATION
+        MODIFIER_LIST
+          PsiElement(companion)('companion')
         PsiWhiteSpace(' ')
-        OBJECT_DECLARATION
-          PsiElement(object)('object')
-          PsiWhiteSpace(' ')
-          CLASS_BODY
-            PsiElement(LBRACE)('{')
-            PsiWhiteSpace('\n\n    ')
-            PsiElement(RBRACE)('}')
+        PsiElement(object)('object')
+        PsiWhiteSpace(' ')
+        CLASS_BODY
+          PsiElement(LBRACE)('{')
+          PsiWhiteSpace('\n\n    ')
+          PsiElement(RBRACE)('}')
       PsiWhiteSpace('\n\n    ')
-      CLASS_OBJECT
+      OBJECT_DECLARATION
         MODIFIER_LIST
           PsiElement(private)('private')
-        PsiWhiteSpace(' ')
-        PsiElement(class)('class')
-        PsiWhiteSpace(' ')
-        OBJECT_DECLARATION
-          PsiElement(object)('object')
           PsiWhiteSpace(' ')
-          CLASS_BODY
-            PsiElement(LBRACE)('{')
-            PsiWhiteSpace('\n\n    ')
-            PsiElement(RBRACE)('}')
+          PsiElement(companion)('companion')
+        PsiWhiteSpace(' ')
+        PsiElement(object)('object')
+        PsiWhiteSpace(' ')
+        CLASS_BODY
+          PsiElement(LBRACE)('{')
+          PsiWhiteSpace('\n\n    ')
+          PsiElement(RBRACE)('}')
       PsiWhiteSpace('\n\n    ')
-      CLASS_OBJECT
+      OBJECT_DECLARATION
         MODIFIER_LIST
           PsiElement(private)('private')
+          PsiWhiteSpace(' ')
+          PsiElement(companion)('companion')
         PsiWhiteSpace(' ')
-        PsiElement(class)('class')
+        PsiElement(object)('object')
         PsiWhiteSpace(' ')
-        OBJECT_DECLARATION
-          PsiElement(object)('object')
-          PsiWhiteSpace(' ')
-          PsiElement(COLON)(':')
-          PsiWhiteSpace(' ')
-          DELEGATION_SPECIFIER_LIST
-            DELEGATOR_SUPER_CLASS
-              TYPE_REFERENCE
-                USER_TYPE
-                  REFERENCE_EXPRESSION
-                    PsiElement(IDENTIFIER)('Fooo')
-          PsiWhiteSpace(' ')
-          CLASS_BODY
-            PsiElement(LBRACE)('{')
-            PsiWhiteSpace('\n\n    ')
-            PsiElement(RBRACE)('}')
+        PsiElement(COLON)(':')
+        PsiWhiteSpace(' ')
+        SUPER_TYPE_LIST
+          SUPER_TYPE_ENTRY
+            TYPE_REFERENCE
+              USER_TYPE
+                REFERENCE_EXPRESSION
+                  PsiElement(IDENTIFIER)('Fooo')
+        PsiWhiteSpace(' ')
+        CLASS_BODY
+          PsiElement(LBRACE)('{')
+          PsiWhiteSpace('\n\n    ')
+          PsiElement(RBRACE)('}')
       PsiWhiteSpace('\n\n    ')
-      CLASS_OBJECT
+      OBJECT_DECLARATION
         MODIFIER_LIST
           PsiElement(private)('private')
-        PsiWhiteSpace(' ')
-        PsiElement(class)('class')
-        PsiWhiteSpace(' ')
-        OBJECT_DECLARATION
-          PsiElement(object)('object')
           PsiWhiteSpace(' ')
-          PsiElement(COLON)(':')
+          PsiElement(companion)('companion')
+        PsiWhiteSpace(' ')
+        PsiElement(object)('object')
+        PsiWhiteSpace(' ')
+        PsiElement(COLON)(':')
+        PsiWhiteSpace(' ')
+        SUPER_TYPE_LIST
+          SUPER_TYPE_ENTRY
+            TYPE_REFERENCE
+              USER_TYPE
+                REFERENCE_EXPRESSION
+                  PsiElement(IDENTIFIER)('Fooo')
+          PsiElement(COMMA)(',')
           PsiWhiteSpace(' ')
-          DELEGATION_SPECIFIER_LIST
-            DELEGATOR_SUPER_CLASS
-              TYPE_REFERENCE
-                USER_TYPE
-                  REFERENCE_EXPRESSION
-                    PsiElement(IDENTIFIER)('Fooo')
-            PsiElement(COMMA)(',')
+          DELEGATED_SUPER_TYPE_ENTRY
+            TYPE_REFERENCE
+              USER_TYPE
+                REFERENCE_EXPRESSION
+                  PsiElement(IDENTIFIER)('Bar')
             PsiWhiteSpace(' ')
-            DELEGATOR_BY
-              TYPE_REFERENCE
-                USER_TYPE
-                  REFERENCE_EXPRESSION
-                    PsiElement(IDENTIFIER)('Bar')
-              PsiWhiteSpace(' ')
-              PsiElement(by)('by')
-              PsiWhiteSpace(' ')
-              REFERENCE_EXPRESSION
-                PsiElement(IDENTIFIER)('foo')
-          PsiWhiteSpace(' ')
-          CLASS_BODY
-            PsiElement(LBRACE)('{')
-            PsiWhiteSpace('\n\n    ')
-            PsiElement(RBRACE)('}')
+            PsiElement(by)('by')
+            PsiWhiteSpace(' ')
+            REFERENCE_EXPRESSION
+              PsiElement(IDENTIFIER)('foo')
+        PsiWhiteSpace(' ')
+        CLASS_BODY
+          PsiElement(LBRACE)('{')
+          PsiWhiteSpace('\n\n    ')
+          PsiElement(RBRACE)('}')
       PsiWhiteSpace('\n\n    ')
-      CLASS_OBJECT
+      OBJECT_DECLARATION
         MODIFIER_LIST
           PsiElement(private)('private')
-        PsiWhiteSpace(' ')
-        PsiElement(class)('class')
-        PsiWhiteSpace(' ')
-        OBJECT_DECLARATION
-          PsiElement(object)('object')
           PsiWhiteSpace(' ')
-          PsiElement(COLON)(':')
+          PsiElement(companion)('companion')
+        PsiWhiteSpace(' ')
+        PsiElement(object)('object')
+        PsiWhiteSpace(' ')
+        PsiElement(COLON)(':')
+        PsiWhiteSpace(' ')
+        SUPER_TYPE_LIST
+          SUPER_TYPE_ENTRY
+            TYPE_REFERENCE
+              USER_TYPE
+                REFERENCE_EXPRESSION
+                  PsiElement(IDENTIFIER)('Fooo')
+          PsiElement(COMMA)(',')
           PsiWhiteSpace(' ')
-          DELEGATION_SPECIFIER_LIST
-            DELEGATOR_SUPER_CLASS
+          DELEGATED_SUPER_TYPE_ENTRY
+            TYPE_REFERENCE
+              USER_TYPE
+                REFERENCE_EXPRESSION
+                  PsiElement(IDENTIFIER)('Bar')
+            PsiWhiteSpace(' ')
+            PsiElement(by)('by')
+            PsiWhiteSpace(' ')
+            REFERENCE_EXPRESSION
+              PsiElement(IDENTIFIER)('foo')
+          PsiElement(COMMA)(',')
+          PsiWhiteSpace(' ')
+          SUPER_TYPE_CALL_ENTRY
+            CONSTRUCTOR_CALLEE
               TYPE_REFERENCE
                 USER_TYPE
                   REFERENCE_EXPRESSION
-                    PsiElement(IDENTIFIER)('Fooo')
-            PsiElement(COMMA)(',')
-            PsiWhiteSpace(' ')
-            DELEGATOR_BY
-              TYPE_REFERENCE
-                USER_TYPE
-                  REFERENCE_EXPRESSION
-                    PsiElement(IDENTIFIER)('Bar')
-              PsiWhiteSpace(' ')
-              PsiElement(by)('by')
-              PsiWhiteSpace(' ')
-              REFERENCE_EXPRESSION
-                PsiElement(IDENTIFIER)('foo')
-            PsiElement(COMMA)(',')
-            PsiWhiteSpace(' ')
-            DELEGATOR_SUPER_CALL
-              CONSTRUCTOR_CALLEE
-                TYPE_REFERENCE
-                  USER_TYPE
-                    REFERENCE_EXPRESSION
-                      PsiElement(IDENTIFIER)('Goo')
-              VALUE_ARGUMENT_LIST
-                PsiElement(LPAR)('(')
-                PsiElement(RPAR)(')')
+                    PsiElement(IDENTIFIER)('Goo')
+            VALUE_ARGUMENT_LIST
+              PsiElement(LPAR)('(')
+              PsiElement(RPAR)(')')
       PsiWhiteSpace('\n\n\n')
       PsiElement(RBRACE)('}')

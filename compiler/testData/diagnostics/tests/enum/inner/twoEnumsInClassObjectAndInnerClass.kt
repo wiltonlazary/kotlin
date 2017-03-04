@@ -1,9 +1,9 @@
 class A {
-    class object {
+    companion object {
         enum class E { ENTRY }  // OK
     }
     
     inner class B {
-        enum class <!NESTED_CLASS_NOT_ALLOWED!>E<!> { ENTRY }
+        <!NESTED_CLASS_NOT_ALLOWED!>enum class E<!> { ENTRY }
     }
 }

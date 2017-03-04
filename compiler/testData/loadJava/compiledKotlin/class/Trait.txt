@@ -1,4 +1,4 @@
 package test
 
-internal trait Trtrtr {
+public interface Trtrtr {
 }

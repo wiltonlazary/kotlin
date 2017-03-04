@@ -7,10 +7,10 @@ var c2 = 0
 
 class A() {
     var p = 0
-    fun divAssign(<!UNUSED_PARAMETER!>a<!> : Int) {
+    operator fun divAssign(<!UNUSED_PARAMETER!>a<!> : Int) {
         c1++;
     }
-    fun times(<!UNUSED_PARAMETER!>a<!> : Int) : A {
+    operator fun times(<!UNUSED_PARAMETER!>a<!> : Int) : A {
         c2++;
         return this;
     }
@@ -19,7 +19,7 @@ class A() {
 val a : A = A()
 get() {
     c0++
-    return $a
+    return field
 }
 
 fun box() : String {

@@ -10,7 +10,7 @@ class WithC2() : <!SUPERTYPE_NOT_INITIALIZED!>WithC1<!>
 class WithPC0() {
 }
 
-class WithPC1(a : Int) {
+class WithPC1(<!UNUSED_PARAMETER!>a<!> : Int) {
 }
 
 
@@ -18,13 +18,12 @@ class Foo() : <!SUPERTYPE_NOT_INITIALIZED, FINAL_SUPERTYPE!>WithPC0<!>, <!SYNTAX
 
 }
 
-class WithCPI_Dup(x : Int) {
+class WithCPI_Dup(<!UNUSED_PARAMETER!>x<!> : Int) {
   <!MUST_BE_INITIALIZED_OR_BE_ABSTRACT!>var x : Int<!>
 }
 
 class WithCPI(x : Int) {
   val a = 1
-  val b : Int = $a
   val xy : Int = x
 }
 

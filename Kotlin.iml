@@ -8,7 +8,9 @@
       <excludeFolder url="file://$MODULE_DIR$/android.tests.dependencies" />
       <excludeFolder url="file://$MODULE_DIR$/dependencies" />
       <excludeFolder url="file://$MODULE_DIR$/dist" />
+      <excludeFolder url="file://$MODULE_DIR$/ideaSDK/androidSDK" />
       <excludeFolder url="file://$MODULE_DIR$/ideaSDK/config" />
+      <excludeFolder url="file://$MODULE_DIR$/ideaSDK/config-idea" />
       <excludeFolder url="file://$MODULE_DIR$/ideaSDK/system" />
       <excludeFolder url="file://$MODULE_DIR$/ideaSDK/system-idea" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/.idea" />
@@ -20,14 +22,25 @@
       <excludeFolder url="file://$MODULE_DIR$/libraries/kotlin-jdbc/target" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/kotlin-swing/target" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/kunit/target" />
+      <excludeFolder url="file://$MODULE_DIR$/libraries/stdlib/target" />
+      <excludeFolder url="file://$MODULE_DIR$/libraries/stdlib/validator/target" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/tools/.idea" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kdoc-maven-plugin/target" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kdoc/target" />
+      <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-compiler/target" />
+      <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-gradle-plugin-core/local-repo" />
+      <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-gradle-plugin-core/target" />
+      <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-gradle-plugin-test/target" />
+      <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-gradle-plugin/local-repo" />
+      <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-gradle-plugin/target" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-js-library/target" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-js-tests-junit/target" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-js-tests/target" />
+      <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-maven-plugin-test/local-repo" />
+      <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-maven-plugin-test/target" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-maven-plugin/local-repo" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-maven-plugin/target" />
+      <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-reflect/target" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/tools/kotlin-stdlib-gen/target" />
       <excludeFolder url="file://$MODULE_DIR$/libraries/tools/runtime/target" />
     </content>
@@ -35,4 +48,3 @@
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>
-

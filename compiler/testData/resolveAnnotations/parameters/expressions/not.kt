@@ -6,6 +6,6 @@ annotation class Ann(
         val b3: Boolean
 )
 
-Ann(!true, !false) class MyClass
+@Ann(!true, !false) class MyClass
 
-// EXPECTED: Ann[b1 = false: jet.Boolean, b2 = true: jet.Boolean]
+// EXPECTED: @Ann(b1 = false, b2 = true)

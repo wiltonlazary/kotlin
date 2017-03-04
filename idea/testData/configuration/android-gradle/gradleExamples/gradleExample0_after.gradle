@@ -10,9 +10,6 @@ android {
 
     deviceProvider project.ext.fakeProvider
     testServer project.ext.fakeServer
-    sourceSets {
-        main.java.srcDirs += 'src/main/kotlin'
-    }
 }
 
 project.afterEvaluate {
@@ -37,7 +34,7 @@ project.afterEvaluate {
 
 dependencies {
     compile project(':lib')
-    compile "org.jetbrains.kotlin:kotlin-stdlib:$ext.kotlin_version"
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jre7:$kotlin_version"
 }
 
 buildscript {
@@ -47,7 +44,7 @@ buildscript {
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:0.5.+'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$ext.kotlin_version"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
 repositories {

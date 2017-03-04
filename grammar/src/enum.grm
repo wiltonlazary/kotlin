@@ -1,13 +1,17 @@
 /**
-h3. Enum classes
+### Enum classes
 
-bq. See [Enum classes]
+See [Enum classes](enum-classes.html)
 */
 
 enumClassBody
-  : "{" enumEntry* "}"
+  : "{" enumEntries (";" members)? "}"
+  ;
+
+enumEntries
+  : (enumEntry{","} ","? ";"?)?
   ;
 
 enumEntry
-  : modifiers SimpleName (":" initializer{","})? classBody?
+  : modifiers SimpleName ("(" arguments ")")? classBody?
   ;

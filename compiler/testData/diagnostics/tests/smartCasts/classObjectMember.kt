@@ -3,18 +3,18 @@ open class T {
 }
 
 class A {
-    class object: T() {
+    companion object: T() {
     }
 }
 
 class B {
-    class object: T() {
+    companion object: T() {
     }
 }
 
 fun test() {
     if (A.x != null) {
-        useInt(<!DEBUG_INFO_AUTOCAST!>A.x<!>)
+        useInt(<!DEBUG_INFO_SMARTCAST!>A.x<!>)
         useInt(<!TYPE_MISMATCH!>B.x<!>)
     }
 }

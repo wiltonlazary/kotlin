@@ -1,9 +1,9 @@
-fun test(a: Int) {
-    val x = run @f{
-      if (a > 0) <!RETURN_NOT_ALLOWED_EXPLICIT_RETURN_TYPE_REQUIRED!>return@f<!>
-      else <!RETURN_NOT_ALLOWED_EXPLICIT_RETURN_TYPE_REQUIRED!>return@f Unit.VALUE<!>
-    }
-    x: Unit
-}
+// !CHECK_TYPE
 
-fun run<T>(f: () -> T): T { return f() }
+fun test(a: Int) {
+    val x = run f@{
+      if (a > 0) return@f
+      else return@f Unit
+    }
+    checkSubtype<Unit>(x)
+}

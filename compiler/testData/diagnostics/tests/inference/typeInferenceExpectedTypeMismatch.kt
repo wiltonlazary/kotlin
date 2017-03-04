@@ -3,29 +3,29 @@ package typeInferenceExpectedTypeMismatch
 import java.util.*
 
 fun test() {
-    val s : Set<Int> = <!TYPE_INFERENCE_EXPECTED_TYPE_MISMATCH!>newList<!>()
+    val s : Set<Int> = <!TYPE_INFERENCE_EXPECTED_TYPE_MISMATCH!>newList()<!>
     use(s)
 }
 
-fun newList<S>() : ArrayList<S> {
+fun <S> newList() : ArrayList<S> {
     return ArrayList<S>()
 }
 
-trait Out<out T>
-trait In<in T>
+interface Out<out T>
+interface In<in T>
 
-trait Two<T, R>
+interface Two<T, R>
 
-trait A
-trait B: A
-trait C: A
+interface A
+interface B: A
+interface C: A
 
 fun <T, R> foo(o: Out<T>, i: In<R>): Two<T, R> = throw Exception("$o $i")
 
 fun test1(outA: Out<A>, inB: In<B>) {
     foo(outA, inB)
 
-    val b: Two<A, C> = <!TYPE_INFERENCE_EXPECTED_TYPE_MISMATCH!>foo<!>(outA, inB)
+    val b: Two<A, C> = <!TYPE_INFERENCE_EXPECTED_TYPE_MISMATCH!>foo(outA, inB)<!>
     use(b)
 }
 

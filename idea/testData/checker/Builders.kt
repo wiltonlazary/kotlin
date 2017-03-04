@@ -2,11 +2,11 @@ package html
 
 import java.util.*
 
-  trait Factory<T> {
+  interface Factory<T> {
     fun create() : T
   }
 
-  trait Element
+  interface Element
 
   class TextElement(val text : String) : Element
 
@@ -14,23 +14,23 @@ import java.util.*
     val children = ArrayList<Element>()
     val attributes = HashMap<String, String>()
 
-    protected fun initTag<T : Element>(init :  T.() -> Unit) : T
-      where <error>class object T : Factory<T></error>{
-      val tag = T.create()
-      tag.init()
-      children.add(tag)
-      return tag
+    protected fun <T : Element> initTag(<warning>init</warning> :  T.() -> Unit) : T
+      {
+      val tag = <error>T</error>.<error>create</error>()
+      <error>tag</error>.<error>init</error>()
+      children.add(<error>tag</error>)
+      return <error>tag</error>
     }
   }
 
   abstract class TagWithText(name : String) : Tag(name) {
-    fun String.plus() {
+    operator fun String.unaryPlus() {
       children.add(TextElement(this))
     }
   }
 
   class HTML() : TagWithText("html") {
-    class object : Factory<HTML> {
+    companion object : Factory<HTML> {
       override fun create() = HTML()
     }
 
@@ -40,7 +40,7 @@ import java.util.*
   }
 
   class Head() : TagWithText("head") {
-    class object : Factory<Head> {
+    companion object : Factory<Head> {
       override fun create() = Head()
     }
 
@@ -53,7 +53,7 @@ import java.util.*
   }
 
   class Body() : BodyTag("body") {
-    class object : Factory<Body> {
+    companion object : Factory<Body> {
       override fun create() = Body()
     }
 
@@ -78,7 +78,7 @@ import java.util.*
       }
   }
 
-  fun MutableMap<String, String>.set(key : String, value : String) = this.put(key, value)
+  operator fun MutableMap<String, String>.set(key : String, value : String) = this.put(key, value)
 
   fun html(init :  HTML.() -> Unit) : HTML {
     val html = HTML()

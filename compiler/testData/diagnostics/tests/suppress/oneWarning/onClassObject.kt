@@ -1,6 +1,6 @@
 class C {
-    suppress("REDUNDANT_NULLABLE")
-    class object {
-        val foo: String?? = null <!USELESS_CAST!>as<!> Nothing??
+    @Suppress("REDUNDANT_NULLABLE")
+    companion object {
+        val foo: String?? = null <!USELESS_CAST!>as Nothing??<!>
     }
 }

@@ -12,6 +12,5 @@ class foo {
 
     var f
 
-    type foo = ;
-
+    typealias foo = ;
 }

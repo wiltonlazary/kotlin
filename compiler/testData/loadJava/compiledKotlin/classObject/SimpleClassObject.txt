@@ -1,9 +1,9 @@
 package test
 
-internal final class SimpleClassObject {
+public final class SimpleClassObject {
     /*primary*/ public constructor SimpleClassObject()
-    
-    internal class object <class-object-for-SimpleClassObject> {
-        /*primary*/ private constructor <class-object-for-SimpleClassObject>()
+
+    public companion object Companion {
+        /*primary*/ private constructor Companion()
     }
 }

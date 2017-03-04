@@ -1,12 +1,12 @@
 package Jet86
 
 class A {
-  class object {
+  companion object {
     val x = 1
   }
-  <error>class object { // error
+  <error descr="[MANY_COMPANION_OBJECTS] Only one companion object is allowed per class">companion</error> object Another { // error
     val x = 1
-  }</error>
+  }
 }
 
 class B() {
@@ -14,9 +14,10 @@ class B() {
 }
 
 object b {
-  <error>class object {
+  <error descr="[WRONG_MODIFIER_CONTAINING_DECLARATION] Modifier 'companion' is not applicable inside 'object'">companion</error> object {
     val x = 1
-  }</error> // error
+  }
+  // error
 }
 
 val a = A.x

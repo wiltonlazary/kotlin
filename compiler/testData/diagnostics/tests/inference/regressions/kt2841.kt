@@ -1,6 +1,6 @@
 package a
 
-trait Closeable {}
+interface Closeable {}
 class C : Closeable {}
 
 public inline fun <T: Closeable, R> T.use1(block: (T)-> R) : R {
@@ -9,7 +9,7 @@ public inline fun <T: Closeable, R> T.use1(block: (T)-> R) : R {
 
 fun main(args: Array<String>) {
     C().use1 {
-        w ->  // ERROR here
+        <!UNUSED_PARAMETER!>w<!> ->  // ERROR here
         <!UNRESOLVED_REFERENCE!>x<!>
     }
 }

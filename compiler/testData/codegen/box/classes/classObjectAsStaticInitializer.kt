@@ -1,8 +1,8 @@
 var global = 0;
 
 class C {
-  class object {
-      {
+  companion object {
+      init {
         global = 1;
       }
   }

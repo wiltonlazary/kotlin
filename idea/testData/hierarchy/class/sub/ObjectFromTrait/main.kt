@@ -1,9 +1,9 @@
-trait <caret>A
+interface <caret>A
 
 object B: A
 
 class MyClass(a: A = run { object: A {} }) {
-    {
+    init {
         object C: A
     }
 

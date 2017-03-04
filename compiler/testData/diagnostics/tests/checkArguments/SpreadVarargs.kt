@@ -1,3 +1,5 @@
+// !CHECK_TYPE
+
 fun <T> array1(vararg a : T) = a
 
 fun main(args : Array<String>) {
@@ -40,10 +42,10 @@ fun main(args : Array<String>) {
 
     joinG(1, "2")
     joinG(<!NON_VARARG_SPREAD!>*<!>1, "2")
-    <!TYPE_INFERENCE_TYPE_CONSTRUCTOR_MISMATCH!>joinG<!>(1, *<!TYPE_MISMATCH!>"2"<!>)
+    <!TYPE_INFERENCE_PARAMETER_CONSTRAINT_ERROR!>joinG<!>(1, *<!TYPE_MISMATCH!>"2"<!>)
     joinG(x = 1, a = *a)
     joinG(x = 1, a = "2")
-    <!TYPE_INFERENCE_TYPE_CONSTRUCTOR_MISMATCH!>joinG<!>(x = <!NON_VARARG_SPREAD!>*<!>1, a = *<!TYPE_MISMATCH!>"2"<!>)
+    <!TYPE_INFERENCE_PARAMETER_CONSTRAINT_ERROR!>joinG<!>(x = <!NON_VARARG_SPREAD!>*<!>1, a = *<!TYPE_MISMATCH!>"2"<!>)
     joinG(1, *a)
     joinG(1, *a, "3")
     joinG(1, "4", *a, "3")
@@ -52,23 +54,23 @@ fun main(args : Array<String>) {
     joinG(a = *a, x = 1)
 
     val x1 = joinT(1, "2")
-    x1 : String?
+    checkSubtype<String?>(x1)
     val x2 = joinT(<!NON_VARARG_SPREAD!>*<!>1, "2")
-    x2 : String?
+    checkSubtype<String?>(x2)
     val x6 = joinT(1, *a)
-    x6 : String?
+    checkSubtype<String?>(x6)
     val x7 = joinT(1, *a, "3")
-    x7 : String?
+    checkSubtype<String?>(x7)
     val x8 = joinT(1, "4", *a, "3")
-    x8 : String?
+    checkSubtype<String?>(x8)
     val x9 = joinT(1, "4", *a)
-    x9 : String?
+    checkSubtype<String?>(x9)
     val x10 = joinT(1, "4", *a, *a, "3")
-    x10 : String?
+    checkSubtype<String?>(x10)
     val x11 = joinT(a = *a, x = 1)
-    x11 : String?
+    checkSubtype<String?>(x11)
     val x12 = joinT(x = 1, a = *a)
-    x12 : String?
+    checkSubtype<String?>(x12)
 }
 
 fun join(x : Int, vararg a : String) : String {

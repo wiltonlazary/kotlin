@@ -1,12 +1,12 @@
 // !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_VARIABLE -NOTHING_TO_INLINE
 
-fun Function1<Int, Unit>.noInlineExt(p: Int) {}
+infix fun Function1<Int, Unit>.noInlineExt(p: Int) {}
 
-inline fun Function1<Int, Unit>.inlineExt2(p: Int) {
-    <!USAGE_IS_NOT_INLINABLE!>noInlineExt<!>(11)
-    <!USAGE_IS_NOT_INLINABLE!>this<!>.noInlineExt(11)
-    <!USAGE_IS_NOT_INLINABLE!>this<!> noInlineExt 11
-    <!USAGE_IS_NOT_INLINABLE!>this<!>
+inline infix fun Function1<Int, Unit>.inlineExt2(p: Int) {
+    noInlineExt(11)
+    this.noInlineExt(11)
+    this noInlineExt 11
+    this
 }
 
 inline fun Function1<Int, Unit>.inlineExt() {

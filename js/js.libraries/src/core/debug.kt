@@ -1,15 +1,17 @@
-package js.debug
+package kotlin.js
 
-import js.noImpl
-
-// https://developer.mozilla.org/en/DOM/console
-native trait Console {
-    native fun dir(o: Any): Unit = noImpl
-    native fun error(vararg o: Any?): Unit = noImpl
-    native fun info(vararg o: Any?): Unit = noImpl
-    native fun log(vararg o: Any?): Unit = noImpl
-    native fun warn(vararg o: Any?): Unit = noImpl
+/**
+ * Exposes the [console API](https://developer.mozilla.org/en/DOM/console) to Kotlin.
+ */
+external public interface Console {
+    public fun dir(o: Any): Unit
+    public fun error(vararg o: Any?): Unit
+    public fun info(vararg o: Any?): Unit
+    public fun log(vararg o: Any?): Unit
+    public fun warn(vararg o: Any?): Unit
 }
 
-native
-val console:Console = noImpl
+/**
+ * Exposes the [console API](https://developer.mozilla.org/en/DOM/console) to Kotlin.
+ */
+public external val console: Console

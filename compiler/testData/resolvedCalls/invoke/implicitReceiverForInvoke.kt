@@ -1,16 +1,5 @@
-// !CALL: invoke
-// !EXPLICIT_RECEIVER_KIND: THIS_OBJECT
-// !THIS_OBJECT: f
-// !RECEIVER_ARGUMENT: Int
-
-class Foo() {
-    fun Int.invoke() {}
-}
-
-fun bar(f: Foo, i: Int) {
+fun bar(f: Int.() -> Unit, i: Int) {
     with (i) {
-        f()
+        f<caret>()
     }
 }
-
-fun <T, R> with(receiver: T, f: T.() -> R) : R = throw Exception()

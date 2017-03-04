@@ -1,8 +1,8 @@
 package test
 
-trait Foo
-trait Bar
+interface Foo
+interface Bar
 
-fun <T> foo()
+fun <T> foo(): Unit
         where T : Foo, T : Bar
-    = Unit.VALUE
+    = Unit

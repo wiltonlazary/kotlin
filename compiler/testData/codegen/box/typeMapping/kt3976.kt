@@ -1,12 +1,14 @@
-// java.lang.ClassNotFoundException: jet.Nothing
+import kotlin.reflect.KProperty
+
+// java.lang.ClassNotFoundException: kotlin.Nothing
 
 var currentAccountId: Int? by SessionAccessor()
 class SessionAccessor<T> {
-    fun get(o : Nothing?, desc: jet.PropertyMetadata): T {
+    operator fun getValue(o : Nothing?, desc: KProperty<*>): T {
         return null as T
     }
 
-    fun set(o : Nothing?, desc: jet.PropertyMetadata, value: T) {
+    operator fun setValue(o : Nothing?, desc: KProperty<*>, value: T) {
 
     }
 }

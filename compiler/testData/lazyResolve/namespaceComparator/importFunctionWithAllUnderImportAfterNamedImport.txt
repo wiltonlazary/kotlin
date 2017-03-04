@@ -1,3 +1,0 @@
-package test
-
-internal val a: [ERROR : Type for TestFun()]

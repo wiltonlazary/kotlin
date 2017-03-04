@@ -4,7 +4,7 @@ package kt58
 
 import java.util.concurrent.locks.Lock
 
-fun lock<T>(lock : Lock, body :  () -> T) : T {
+fun <T> lock(lock : Lock, body :  () -> T) : T {
     lock.lock()
     try {
         return body()
@@ -17,7 +17,7 @@ fun lock<T>(lock : Lock, body :  () -> T) : T {
 //more tests
 fun t1() : Int {
     try {
-        <!UNREACHABLE_CODE!>return 1<!>
+        <!UNREACHABLE_CODE!>return<!> 1
     }
     finally {
         return 2

@@ -1,7 +1,6 @@
-fun x(): Int = println(<selection>1</selection>)
-/*
-fun x(): Int {
-    val i = 1
-    println(i)
-}
-*/
+fun foo(a: Int) =
+        if (a > 1) {
+            (<selection>a + 1</selection>) * (a - 1)
+        } else {
+            a * (a + 1)
+        }

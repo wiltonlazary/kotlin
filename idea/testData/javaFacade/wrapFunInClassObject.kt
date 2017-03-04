@@ -1,5 +1,5 @@
 class Test {
-  class object {
+  companion object {
     fun <caret>testing() {
     }
   }

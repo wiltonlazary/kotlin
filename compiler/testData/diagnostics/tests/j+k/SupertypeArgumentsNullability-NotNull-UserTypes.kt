@@ -1,3 +1,4 @@
+// !CHECK_TYPE
 // FILE: A.java
 public class A {}
 
@@ -17,7 +18,6 @@ public class Y extends X<A> {
 // FILE: test.kt
 
 fun main() {
-    Y().fooN() : Any
+    checkSubtype<Any>(Y().fooN())
     Y().barN(<!NULL_FOR_NONNULL_TYPE!>null<!>);
 }
-

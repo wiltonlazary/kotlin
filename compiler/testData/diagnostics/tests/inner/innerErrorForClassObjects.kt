@@ -1,21 +1,21 @@
 open class SomeClass<T>
 class TestSome<P> {
-    class object : SomeClass<<!INACCESSIBLE_OUTER_CLASS_EXPRESSION!>P<!>>() {
+    companion object : SomeClass<<!UNRESOLVED_REFERENCE!>P<!>>() {
     }
 }
 
 class Test {
-    class object : <!INACCESSIBLE_OUTER_CLASS_EXPRESSION!>InnerClass()<!> {
-        val a = object: <!INACCESSIBLE_OUTER_CLASS_EXPRESSION!>InnerClass()<!> {
+    companion object : <!UNRESOLVED_REFERENCE, DEBUG_INFO_UNRESOLVED_WITH_TARGET!>InnerClass<!>() {
+        val a = object: <!UNRESOLVED_REFERENCE, DEBUG_INFO_UNRESOLVED_WITH_TARGET!>InnerClass<!>() {
         }
 
         fun more(): InnerClass {
-            val b = <!INACCESSIBLE_OUTER_CLASS_EXPRESSION!>InnerClass()<!>
+            val b = <!RESOLUTION_TO_CLASSIFIER!>InnerClass<!>()
 
-            val <!UNUSED_VARIABLE!>testVal<!> = <!INACCESSIBLE_OUTER_CLASS_EXPRESSION!>inClass<!>
-            <!INACCESSIBLE_OUTER_CLASS_EXPRESSION!>foo()<!>
+            val <!UNUSED_VARIABLE!>testVal<!> = <!UNRESOLVED_REFERENCE!>inClass<!>
+            <!UNRESOLVED_REFERENCE!>foo<!>()
 
-            return b
+            return <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>b<!>
         }
     }
 

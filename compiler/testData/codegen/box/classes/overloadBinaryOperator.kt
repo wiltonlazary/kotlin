@@ -1,5 +1,3 @@
-import java.util.*
-
 class ArrayWrapper<T>() {
     val contents = ArrayList<T>()
 
@@ -7,7 +5,7 @@ class ArrayWrapper<T>() {
        contents.add(item)
     }
 
-    fun plus(b: ArrayWrapper<T>): ArrayWrapper<T> {
+    operator fun plus(b: ArrayWrapper<T>): ArrayWrapper<T> {
         val result = ArrayWrapper<T>()
         result.contents.addAll(contents)
         result.contents.addAll(b.contents)
@@ -21,5 +19,5 @@ fun box(): String {
     v1.add("foo")
     v2.add("bar")
     val v3 = v1 + v2
-    return if (v3.contents.size() == 2) "OK" else "fail"
+    return if (v3.contents.size == 2) "OK" else "fail"
 }

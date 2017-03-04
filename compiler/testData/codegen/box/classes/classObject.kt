@@ -1,5 +1,5 @@
 class C() {
-  class object {
+  companion object {
     fun create() = C()
   }
 }

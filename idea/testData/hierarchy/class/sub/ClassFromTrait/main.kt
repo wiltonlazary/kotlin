@@ -1,11 +1,11 @@
-trait <caret>A
+interface <caret>A
 
 class B: A
 
 class MyClass(a: A = run { class X: A; object: A {} }) {
     inner class G: A {}
 
-    {
+    init {
         class C: A
     }
 

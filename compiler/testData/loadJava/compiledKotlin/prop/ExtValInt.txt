@@ -1,4 +1,4 @@
 package test
 
-internal val jet.Int.itIs: jet.Int
-    internal fun jet.Int.<get-itIs>(): jet.Int
+public val kotlin.Int.itIs: kotlin.Int
+    public fun kotlin.Int.<get-itIs>(): kotlin.Int

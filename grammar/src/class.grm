@@ -1,11 +1,10 @@
 /**
-h2. Classes
+## Classes
 
-bq. See [Classes and Inheritance]
+See [Classes and Inheritance](classes.html)
 */
 
 /*
-
 internal class Example<X, T : Comparable<X>>(protected val x : Foo<X, T>, y : Some)
     : Bar(x), Foo<X, T> by x, IAbstractSome by y.asAbstract()
     where
@@ -13,21 +12,27 @@ internal class Example<X, T : Comparable<X>>(protected val x : Foo<X, T>, y : So
 {
   // members
 }
-
 */
 
 class
-  : modifiers ("class" | "trait") SimpleName
+  : modifiers ("class" | "interface") SimpleName
       typeParameters?
-      modifiers ("(" functionParameter{","} ")")?
+      primaryConstructor?
       (":" annotations delegationSpecifier{","})?
       typeConstraints
       (classBody? | enumClassBody)
   ;
 
+primaryConstructor
+  : (modifiers "constructor")? ("(" functionParameter{","} ")")
+  ;
 
 classBody
-  : ("{" memberDeclaration "}")?
+  : ("{" members "}")?
+  ;
+
+members
+  : memberDeclaration*
   ;
 
 delegationSpecifier
@@ -49,7 +54,7 @@ typeParameter
   ;
 
 /**
-bq. See [Generic classes|Generics#Generic classes]
+See [Generic classes](generics.html)
 */
 
 typeConstraints
@@ -58,8 +63,7 @@ typeConstraints
 
 typeConstraint
   : annotations SimpleName ":" type
-  : annotations "class" "object" SimpleName ":" type
   ;
 /**
-bq. See [Generic constraints|Generics#Generic constraints]
+See [Generic constraints](generics.html#generic-constraints)
 */

@@ -1,12 +1,12 @@
 // KT-702 Type inference failed
-fun getJavaClass<T>() : java.lang.Class<T> { return "" <!CAST_NEVER_SUCCEEDS!>as<!> Class<T> }
+fun <T> getJavaClass() : java.lang.Class<T> { return "" <!CAST_NEVER_SUCCEEDS!>as<!> Class<T> }
 
 public class Throwables() {
-    class object {
-        public fun propagateIfInstanceOf<X : Throwable?>(throwable : Throwable?, declaredType : Class<X<!BASE_WITH_NULLABLE_UPPER_BOUND!>?<!>>?) {
+    companion object {
+        public fun <X : Throwable?> propagateIfInstanceOf(throwable : Throwable?, declaredType : Class<X?>?) {
             if (((throwable != null) && declaredType?.isInstance(throwable)!!))
             {
-                throw declaredType?.cast(throwable)!!
+                throw declaredType<!UNNECESSARY_SAFE_CALL!>?.<!>cast(throwable)!!
             }
         }
         public fun propagateIfPossible(throwable : Throwable?) {

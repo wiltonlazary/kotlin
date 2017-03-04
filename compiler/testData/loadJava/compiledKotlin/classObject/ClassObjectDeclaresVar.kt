@@ -1,7 +1,8 @@
+//ALLOW_AST_ACCESS
 package test
 
 class ClassObjectDeclaresProperty {
-    class object {
+    companion object {
         var s = ""
     }
 }

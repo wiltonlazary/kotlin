@@ -13,29 +13,28 @@ class foo {
 
         var f
 
-        type foo = bar
-
+        typealias foo = bar
     }
 
     class Bar {
         object foo {
-            class object {
+            companion object {
 
             }
 
-            private class object {
+            private companion object {
 
             }
 
-            private class object : Fooo {
+            private companion object : Fooo {
 
             }
 
-            private class object : Fooo, Bar by foo {
+            private companion object : Fooo, Bar by foo {
 
             }
 
-            private class object : Fooo, Bar by foo, Goo()
+            private companion object : Fooo, Bar by foo, Goo()
         }
 
         class Bar {}
@@ -46,8 +45,7 @@ class foo {
 
         var f
 
-        type foo = bar
-
+        typealias foo = bar
     }
 
     fun foo()
@@ -56,25 +54,25 @@ class foo {
 
     var f
 
-    type foo = bar
+    typealias foo = bar
 
-    class object {
-
-    }
-
-    private class object {
+    companion object {
 
     }
 
-    private class object : Fooo {
+    private companion object {
 
     }
 
-    private class object : Fooo, Bar by foo {
+    private companion object : Fooo {
 
     }
 
-    private class object : Fooo, Bar by foo, Goo()
+    private companion object : Fooo, Bar by foo {
+
+    }
+
+    private companion object : Fooo, Bar by foo, Goo()
 
 
 }

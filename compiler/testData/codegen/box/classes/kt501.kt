@@ -1,10 +1,8 @@
 class Reluctant() {
-     {
+     init {
         throw Exception("I'm not coming out")
      }
 }
-
-fun p(o : Any?) = System.out?.println(o)
 
 fun test1() : String {
   try {

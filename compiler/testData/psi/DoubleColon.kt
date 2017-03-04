@@ -1,4 +1,4 @@
-fun ok() {
+fun simple() {
     A::a
     A::a + 1
     Map<String, Int>::size
@@ -9,6 +9,11 @@ fun ok() {
     a::b.c
     a.b::c.d
 
+    (a::b)()
+    a.(b::c)()
+}
+
+fun genericType() {
     a<b>::c
     a<b>::c.d
     a.b<c>::d
@@ -18,25 +23,43 @@ fun ok() {
     a.b<c.d<e.f>>::g.h
 
     a.b.c<d>.e<f>.g::h
-
-    a::b()
-    (a::b)()
-    a.(b::c)()
-    a.b::c()
 }
 
-fun err0() {
+fun nullableType() {
+    a?::b
+    a??::b
+    a<b>?::c
+    a<b?,c?>?::d
+}
+
+fun classLiteral() {
+    A::class
+    a<b,c>::class
+    ::class
+    a b ::class
+
+    this::class
+    super::class
+    X()::class
+    object {}::class
+}
+
+fun expressions() {
+    this@x::foo
+    super<a>@b::foo
+
+    -a::b
+    ++a::b
+    a+b::c
+    (a+b)::c
+    x()::e
+    x().y().z()::e
+
     a::b.c::d
-}
-
-fun err1() {
-    A::
-}
-
-fun err2() {
     A::a::b
 }
 
-fun err3() {
-    ::
+fun emptyLHS() {
+    ::x.name
+    foo(::x.name)
 }

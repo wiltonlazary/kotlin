@@ -1,9 +1,4 @@
-// !CALL: +
-// !EXPLICIT_RECEIVER_KIND: RECEIVER_ARGUMENT
-// !THIS_OBJECT: Title
-// !RECEIVER_ARGUMENT: "Foo"
-
-trait Element {
+interface Element {
     fun render(builder: StringBuilder, indent: String)
 }
 
@@ -18,7 +13,7 @@ abstract class Tag(val name: String): Element {
 }
 
 abstract class TagWithText(name: String): Tag(name) {
-    fun String.plus() {}
+    operator fun String.unaryPlus() {}
 }
 
 class HTML(): TagWithText("html") {
@@ -37,7 +32,7 @@ fun html(init: HTML.() -> Unit): HTML = fail
 fun result() =
         html {
             head {
-                title {+"Foo"}
+                title { <caret>+"Foo" }
             }
         }
 

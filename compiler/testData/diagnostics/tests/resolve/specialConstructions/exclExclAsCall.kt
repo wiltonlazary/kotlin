@@ -1,6 +1,6 @@
 package a
 
-trait A
+interface A
 
 fun <T>id(t: T): T = t
 fun doList(l: List<Int>) = l
@@ -20,7 +20,7 @@ fun testExclExcl() {
 
 fun testDataFlowInfoAfterExclExcl(a: Int?) {
     doInt(a!!)
-    <!DEBUG_INFO_AUTOCAST!>a<!> + 1
+    <!DEBUG_INFO_SMARTCAST!>a<!> + 1
 }
 
 fun testUnnecessaryExclExcl(a: Int) {

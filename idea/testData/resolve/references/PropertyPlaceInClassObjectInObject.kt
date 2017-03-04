@@ -1,8 +1,8 @@
 package testing
 
 object Testing {
-    class object {
-        <caret>va
+    companion object {
+        @<caret>va
     }
 }
 

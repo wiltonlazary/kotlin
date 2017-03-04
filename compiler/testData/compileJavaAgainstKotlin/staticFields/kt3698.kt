@@ -1,5 +1,7 @@
+package test
+
 class KotlinClass {
-    class object {
-        val FOO: Int = 10
+    companion object {
+        const val FOO: Int = 10
     }
 }

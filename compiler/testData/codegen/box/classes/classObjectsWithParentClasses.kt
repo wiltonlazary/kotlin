@@ -1,5 +1,5 @@
 open class Test {
-    class object {
+    companion object {
         fun testStatic(ic: InnerClass): NotInnerClass = NotInnerClass(ic.value)
     }
 

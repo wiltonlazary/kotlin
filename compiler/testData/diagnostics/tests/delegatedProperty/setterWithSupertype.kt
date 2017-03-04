@@ -1,17 +1,16 @@
+// !DIAGNOSTICS: -UNUSED_PARAMETER
+
+import kotlin.reflect.KProperty
+
 open class Base
 class Derived: Base()
 
 var a: Derived by A()
 
 class A {
-  fun get(t: Any?, p: PropertyMetadata): Derived {
-    t.equals(p) // to avoid UNUSED_PARAMETER warning
+  operator fun getValue(t: Any?, p: KProperty<*>): Derived {
     return Derived()
   }
 
-  fun set(t: Any?, p: PropertyMetadata, i: Base) {
-    t.equals(p) // to avoid UNUSED_PARAMETER warning
-    i.equals(null) // to avoid UNUSED_PARAMETER warning
-  }
+  operator fun setValue(t: Any?, p: KProperty<*>, i: Base) {}
 }
-

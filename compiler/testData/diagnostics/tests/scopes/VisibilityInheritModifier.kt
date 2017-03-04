@@ -14,7 +14,7 @@ class C : A() {
 
 //------------
 open class D {
-    private open fun self() : D = this
+    <!INCOMPATIBLE_MODIFIERS!>private<!> <!INCOMPATIBLE_MODIFIERS!>open<!> fun self() : D = this
 }
 
 class E : D() {
@@ -56,7 +56,7 @@ class K : H() {
 }
 
 //-------------
-trait T {
+interface T {
     public fun foo() {}
 }
 
@@ -68,18 +68,18 @@ class M : L() {
     <!CANNOT_WEAKEN_ACCESS_PRIVILEGE!>internal<!> override fun foo() {}
 }
 //---------------
-trait R {
-    <!INCOMPATIBLE_MODIFIERS!>internal<!> <!INCOMPATIBLE_MODIFIERS!>protected<!> fun foo() {}
+interface R {
+    fun foo() {}
 }
 
-trait P : R {
-    <!CANNOT_CHANGE_ACCESS_PRIVILEGE!>internal<!> override fun foo() {}
+interface P : R {
+    override fun foo() {}
 }
 
-trait Q : R {
-    protected override fun foo() {}
+interface Q : R {
+    override fun foo() {}
 }
 
 class S : P, Q {
-    <!CANNOT_CHANGE_ACCESS_PRIVILEGE!>internal<!> override fun foo() {}
+    <!CANNOT_WEAKEN_ACCESS_PRIVILEGE!>internal<!> override fun foo() {}
 }

@@ -1,5 +1,5 @@
 class A {
-    class object {}
+    companion object {}
     enum class E {
         OK
     }

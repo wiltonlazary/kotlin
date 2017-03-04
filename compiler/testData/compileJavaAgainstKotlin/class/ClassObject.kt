@@ -1,5 +1,7 @@
+package test
+
 class WithClassObject {
-  class object {
+  companion object {
     fun foo() {}
 
     val value: Int = 0

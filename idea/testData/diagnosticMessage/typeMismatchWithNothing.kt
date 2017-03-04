@@ -3,9 +3,9 @@
 
 package b
 
-trait A<T>
+interface A<T>
 
-fun infer<T>(a: A<T>) : T {}
+fun <T> infer(a: A<T>) : T {}
 
 fun foo(nothing: Nothing?) {
     val i = infer(nothing)

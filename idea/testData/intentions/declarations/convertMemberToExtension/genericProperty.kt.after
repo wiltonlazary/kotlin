@@ -1,5 +1,0 @@
-class Owner<T> {
-}
-
-val <T, R> Owner<T>.p: R
-    get() = <caret><selection>throw UnsupportedOperationException()</selection>

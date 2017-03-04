@@ -1,8 +1,8 @@
 class TestObject()
 {
-    class object {
+    companion object {
         var prop: Int = 1
-            get() = $prop++
+            get() = field++
     }
 }
 

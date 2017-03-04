@@ -2,8 +2,9 @@
 import lib.ArrayFactory
 
 public class Impl : ArrayFactory {
-
     override fun create(): lib.Array {
-        throw UnsupportedOperationException()
+        <selection><caret>TODO("not implemented") //To change body of created functions use File | Settings | File Templates.</selection>
     }
 }
+
+val array: Array<String> = emptyArray()

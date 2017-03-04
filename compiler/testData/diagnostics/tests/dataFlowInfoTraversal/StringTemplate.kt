@@ -1,6 +1,8 @@
+// !CHECK_TYPE
+
 fun foo(x: Number, y: String?): String {
     val result = "abcde $x ${x as Int} ${y!!} $x $y"
-    <!DEBUG_INFO_AUTOCAST!>x<!> : Int
-    <!DEBUG_INFO_AUTOCAST!>y<!> : String
+    checkSubtype<Int>(<!DEBUG_INFO_SMARTCAST!>x<!>)
+    checkSubtype<String>(<!DEBUG_INFO_SMARTCAST!>y<!>)
     return result
 }

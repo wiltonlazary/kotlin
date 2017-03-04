@@ -1,9 +1,9 @@
-// KT-575 Cannot ++ a class object member
+// KT-575 Cannot ++ a companion object member
 
 package kt575
 
 class Creature() {
-    class object {
+    companion object {
         var numCreated : Int = 0
           private set
     }
@@ -11,20 +11,20 @@ class Creature() {
     object A {
         var bbb : Int
 
-        {
-            $bbb = 1
+        init {
+            bbb = 1
         }
     }
 
     class C() {
         var ccc : Int
 
-        {
-            $ccc = 2
+        init {
+            ccc = 2
         }
     }
 
-    {
+    init {
         Creature.numCreated++ // Error
         A.bbb++
         C().ccc++

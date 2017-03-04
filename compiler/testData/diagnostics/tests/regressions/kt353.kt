@@ -1,6 +1,6 @@
 // KT-353 Generic type argument inference sometimes doesn't work
 
-trait A {
+interface A {
     fun <T> gen() : T
 }
 
@@ -20,11 +20,11 @@ fun foo(a: A) {
             a.gen()  // unit can be inferred
         }
         else {
-            Unit.VALUE
+            Unit
         }
     }
 
-    val <!UNUSED_VARIABLE!>f<!> : () -> Int = { () : Int ->
+    val <!UNUSED_VARIABLE!>f<!> : () -> Int = {
         a.gen()  //type mismatch, but Int can be derived
     }
 

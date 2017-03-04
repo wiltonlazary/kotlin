@@ -1,12 +1,12 @@
 // FILE: f.kt
 class A() {
   fun foo() : Unit {
-    this@A
+    <!UNUSED_EXPRESSION!>this@A<!>
     this<!UNRESOLVED_REFERENCE!>@a<!>
-    this
+    <!UNUSED_EXPRESSION!>this<!>
   }
 
-  val x = this@A.foo()
-  val y = this.foo()
-  val z = foo()
+  val x = this@A.<!DEBUG_INFO_LEAKING_THIS!>foo<!>()
+  val y = this.<!DEBUG_INFO_LEAKING_THIS!>foo<!>()
+  val z = <!DEBUG_INFO_LEAKING_THIS!>foo<!>()
 }

@@ -1,4 +1,4 @@
-data class A()
+data class A<!DATA_CLASS_WITHOUT_PARAMETERS!>()<!>
 
 fun foo(a: A) {
     a.<!UNRESOLVED_REFERENCE!>component1<!>()

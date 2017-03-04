@@ -1,3 +1,6 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 fun box(): String {
     if (check(1, { it as Int }) == "OK") return "fail 1"
     if (check(1, { it as Byte }) != "OK") return "fail 2"
@@ -26,7 +29,7 @@ fun box(): String {
     return "OK"
 }
 
-fun check<T>(param: T, f: (T) -> Unit): String {
+fun <T> check(param: T, f: (T) -> Unit): String {
     try {
         f(param)
     }

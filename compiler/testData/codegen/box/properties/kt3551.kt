@@ -8,7 +8,7 @@ class Identifier() {
         return myNullable
     }
 
-    class object {
+    companion object {
         fun init(isNullable : Boolean) : Identifier {
             val id = Identifier()
             id.myNullable = isNullable

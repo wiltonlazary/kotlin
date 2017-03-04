@@ -1,4 +1,4 @@
-//KT-3833 Invoke method not working inside class object?
+//KT-3833 Invoke method not working inside companion object?
 package m
 
 class Either1 {
@@ -17,7 +17,7 @@ class Either1 {
 
 
 class X {
-    fun invoke() {
+    operator fun invoke() {
     }
 }
 
@@ -26,7 +26,7 @@ object Foo{
 }
 
 class C{
-    class object {
+    companion object {
         fun f(){
             Foo.v()
         }

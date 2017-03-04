@@ -1,17 +1,16 @@
 package test
 
-public trait StringConstantInParam : java.lang.Object {
-    
-    public final annotation class Anno : jet.Annotation {
-        public constructor Anno(/*0*/ value: jet.String?)
-        public abstract fun value(): jet.String?
+public interface StringConstantInParam {
+
+    public final annotation class Anno : kotlin.Annotation {
+        public constructor Anno(/*0*/ value: kotlin.String)
+        public final val value: kotlin.String
     }
-    
-    test.StringConstantInParam.Anno(value = "hello": jet.String) public open class Class : java.lang.Object {
+
+    @test.StringConstantInParam.Anno(value = "hello") public open class Class {
         public constructor Class()
     }
-}
 
-package test.StringConstantInParam {
-    public val HEL: jet.String
+    // Static members
+    public const final val HEL: kotlin.String = "hel"
 }

@@ -1,5 +1,5 @@
 /**
-h3. Class members
+### Class members
 */
 
 /*
@@ -26,40 +26,31 @@ class Example(a : Foo, i : Int) : Bar(i), Some {
 }
 */
 
-// h5. Grammar
-
 memberDeclaration
-  : classObject
+  : companionObject
   : object
   : function
   : property
   : class
-  : typedef
+  : typeAlias
   : anonymousInitializer
+  : secondaryConstructor
   ;
 
 anonymousInitializer
-  : block
+  : "init" block
   ;
 
-classObject
-  : modifiers "class" object
+companionObject
+  : modifiers "companion" "object" SimpleName? (":" delegationSpecifier{","})? classBody?
   ;
-/**
-bq. See [Class objects|Classes and Inheritance#Class objects]
-*/
 
 valueParameters
-  : "(" functionParameter{","}? ")" // default values
+  : "(" functionParameter{","}? ")"
   ;
 
 functionParameter
   : modifiers ("val" | "var")? parameter ("=" expression)?
-  ;
-
-initializer
-  : annotations "this" valueArguments
-  : annotations constructorInvocation // type parameters may (must?) be omitted
   ;
 
 block
@@ -67,8 +58,9 @@ block
   ;
 
 function
-  : modifiers "fun" typeParameters?
-      (type "." | annotations/*for receiver type*/)?
+  : modifiers "fun"
+      typeParameters?
+      (type ".")?
       SimpleName
       typeParameters? valueParameters (":" type)?
       typeConstraints
@@ -90,15 +82,15 @@ multipleVariableDeclarations
 
 property
   : modifiers ("val" | "var")
-      typeParameters? (type "." | annotations)?
+      typeParameters?
+      (type ".")?
       (multipleVariableDeclarations | variableDeclarationEntry)
       typeConstraints
       ("by" | "=" expression SEMI?)?
       (getter? setter? | setter? getter?) SEMI?
   ;
-
 /**
-bq. See [Properties and Fields]
+See [Properties and Fields](properties.html)
 */
 
 getter
@@ -116,7 +108,16 @@ parameter
   ;
 
 object
-  : "object" SimpleName (":" delegationSpecifier{","})? classBody? // Class body can be optional: this is a declaration
+  : "object" SimpleName primaryConstructor? (":" delegationSpecifier{","})? classBody?
+
+secondaryConstructor
+  : modifiers "constructor" valueParameters (":" constructorDelegationCall)? block
+  ;
+
+constructorDelegationCall
+  : "this" valueArguments
+  : "super" valueArguments
+  ;
 /**
-bq. See [Object expressions and Declarations]
+See [Object expressions and Declarations](object-declarations.html)
 */

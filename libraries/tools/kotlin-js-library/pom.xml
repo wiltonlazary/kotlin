@@ -8,11 +8,11 @@
     <parent>
         <groupId>org.jetbrains.kotlin</groupId>
         <artifactId>kotlin-project</artifactId>
-        <version>0.1-SNAPSHOT</version>
+        <version>1.1-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>kotlin-js-library</artifactId>
+    <artifactId>kotlin-stdlib-js</artifactId>
     <packaging>jar</packaging>
 
     <build>
@@ -20,76 +20,19 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
-                <version>1.7</version>
                 <executions>
                     <execution>
-                        <id>copy-sources</id>
-                        <phase>process-sources</phase>
+                        <id>copy-jar</id>
+                        <phase>package</phase>
                         <configuration>
-                            <target>
-                                <delete dir="${project.build.directory}/classes" failonerror="false" />
-                                <delete dir="${project.build.directory}/generated-js-library" failonerror="false" />
-                                <delete dir="${project.build.directory}/generated-js-definitions" failonerror="false" />
-
-                                <mkdir dir="${basedir}/target/generated-js-library"/>
-                                <mkdir dir="${basedir}/target/generated-js-definitions"/>
-                                <copy todir="${basedir}/target/generated-js-definitions">
-                                    <fileset dir="${kotlin-js-lib-srcdir}">
-                                        <exclude name="**/*Code.kt"/>
-                                        <exclude name="core/dom/core.kt"/>
-                                    </fileset>
-                                </copy>
-                                <copy todir="${basedir}/target/generated-js-library">
-                                    <fileset dir="${kotlin-js-lib-srcdir}">
-                                        <include name="**/*Code.kt"/>
-                                    </fileset>
-                                </copy>
-                                <copy todir="${basedir}/target/generated-js-library/kotlin">
-                                    <fileset dir="${basedir}/../../stdlib/src/kotlin/dom">
-                                        <include name="**/*.kt"/>
-                                        <exclude name="**/*JVM.kt"/>
-                                    </fileset>
-                                    <fileset dir="${basedir}/../../stdlib/src/kotlin/support">
-                                        <include name="**/*.kt"/>
-                                        <exclude name="**/*JVM.kt"/>
-                                    </fileset>
-                                    <fileset dir="${basedir}/../../stdlib/src/kotlin/test">
-                                        <include name="**/*.kt"/>
-                                        <exclude name="**/*JVM.kt"/>
-                                    </fileset>
-                                    <fileset dir="${basedir}/../../stdlib/src/kotlin">
-                                        <include name="Arrays.kt"/>
-                                        <include name="Preconditions.kt"/>
-                                        <include name="Iterators.kt"/>
-                                        <include name="JUtil.kt"/>
-                                        <include name="Collections.kt"/>
-                                        <include name="Maps.kt"/>
-                                        <include name="Iterables.kt"/>
-                                        <include name="IterablesLazy.kt"/>
-                                        <include name="IterablesSpecial.kt"/>
-<!--
-                                        <include name="Ordering.kt"/>
--->
-                                        <include name="Standard.kt"/>
-                                        <include name="Strings.kt"/>
-                                    </fileset>
-                                    <fileset dir="${basedir}/../../stdlib/src/generated">
-                                        <include name="*.kt"/>
-                                        <exclude name="**/*JVM.kt"/>
-                                        <exclude name="DownTo.kt"/>
-<!--
-                                        <include name="IteratorsFromJLangIterables.kt"/>
-                                        <include name="IterablesFromCollections.kt"/>
--->
-                                    </fileset>
-                                </copy>
-                                <copy tofile="${basedir}/target/generated-js-library/kotlin-maps.js"
-                                      file="${kotlin-js-lib-srcdir}/../../js.translator/testFiles/maps.js"/>
-                                <copy tofile="${basedir}/target/generated-js-library/kotlin-lib.js"
-                                      file="${kotlin-js-lib-srcdir}/../../js.translator/testFiles/kotlin_lib.js"/>
-                               <copy tofile="${basedir}/target/generated-js-library/kotlin-lib-ecma5.js"
-                                      file="${kotlin-js-lib-srcdir}/../../js.translator/testFiles/kotlin_lib_ecma5.js"/>
-                            </target>
+                            <tasks>
+                                <copy file="${kotlin-dist}/kotlinc/lib/kotlin-stdlib-js.jar"
+                                      tofile="${basedir}/target/${project.artifactId}-${project.version}.jar"
+                                      overwrite="true" verbose="true"/>
+                                <copy file="${kotlin-dist}/kotlinc/lib/kotlin-stdlib-js-sources.jar"
+                                      tofile="${basedir}/target/${project.artifactId}-${project.version}-sources.jar"
+                                      overwrite="true" verbose="true"/>
+                            </tasks>
                         </configuration>
                         <goals>
                             <goal>run</goal>
@@ -97,25 +40,6 @@
                     </execution>
                 </executions>
             </plugin>
-
-            <plugin>
-                <groupId>org.jetbrains.kotlin</groupId>
-                <artifactId>kotlin-maven-plugin</artifactId>
-                <version>${project.version}</version>
-                <configuration>
-                    <librarySourceDir>${basedir}/target/generated-js-library</librarySourceDir>
-                    <definitionSourceDir>${basedir}/target/generated-js-definitions</definitionSourceDir>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>jslib</id>
-                        <goals>
-                            <goal>jslib</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
         </plugins>
     </build>
 </project>

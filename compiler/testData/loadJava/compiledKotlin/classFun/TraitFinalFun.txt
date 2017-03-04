@@ -1,5 +1,5 @@
 package test
 
-internal trait A {
-    internal final fun f(): jet.String
+public interface A {
+    public final fun f(): kotlin.String
 }

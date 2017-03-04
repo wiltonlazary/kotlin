@@ -6,6 +6,6 @@ annotation class Ann(
         val l3: Long
 )
 
-Ann(1 + 1, java.lang.Long.MAX_VALUE + 1 - 1, java.lang.Long.MAX_VALUE - 1) class MyClass
+@Ann(1 + 1, java.lang.Long.MAX_VALUE + 1 - 1, java.lang.Long.MAX_VALUE - 1) class MyClass
 
-// EXPECTED: Ann[l1 = IntegerValueType(2): IntegerValueType(2), l2 = 9223372036854775807.toLong(): jet.Long, l3 = 9223372036854775806.toLong(): jet.Long]
+// EXPECTED: @Ann(l1 = 2.toLong(), l2 = 9223372036854775807.toLong(), l3 = 9223372036854775806.toLong())

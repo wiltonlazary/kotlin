@@ -1,5 +1,7 @@
 JetFile: CallsInWhen.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   FUN
     PsiElement(fun)('fun')
@@ -146,7 +148,7 @@ JetFile: CallsInWhen.kt
               REFERENCE_EXPRESSION
                 PsiElement(IDENTIFIER)('a')
               PsiElement(DOT)('.')
-              FUNCTION_LITERAL_EXPRESSION
+              LAMBDA_EXPRESSION
                 FUNCTION_LITERAL
                   PsiElement(LBRACE)('{')
                   BLOCK
@@ -165,7 +167,7 @@ JetFile: CallsInWhen.kt
               REFERENCE_EXPRESSION
                 PsiElement(IDENTIFIER)('a')
               PsiElement(DOT)('.')
-              FUNCTION_LITERAL_EXPRESSION
+              LAMBDA_EXPRESSION
                 FUNCTION_LITERAL
                   PsiElement(LBRACE)('{')
                   BLOCK
@@ -187,13 +189,12 @@ JetFile: CallsInWhen.kt
               REFERENCE_EXPRESSION
                 PsiElement(IDENTIFIER)('a')
               PsiElement(DOT)('.')
-              FUNCTION_LITERAL_EXPRESSION
+              LAMBDA_EXPRESSION
                 FUNCTION_LITERAL
                   PsiElement(LBRACE)('{')
-                  VALUE_PARAMETER_LIST
-                    PsiElement(LPAR)('(')
-                    PsiElement(RPAR)(')')
                   PsiWhiteSpace(' ')
+                  VALUE_PARAMETER_LIST
+                    <empty list>
                   PsiElement(ARROW)('->')
                   PsiWhiteSpace(' ')
                   BLOCK

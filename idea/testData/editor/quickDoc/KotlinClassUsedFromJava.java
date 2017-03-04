@@ -1,9 +1,9 @@
-import testing.Test
+import testing.Test;
 
 class KotlinClassUsedFromJava {
     void test() {
-        <caret>Test()
+        <caret>Test();
     }
 }
 
-//INFO: [light_idea_test_case] testing...
+//INFO: <pre><b>public</b> <b>final</b> <b>class</b> Test <i>defined in</i> testing</pre><p>Some comment</p>

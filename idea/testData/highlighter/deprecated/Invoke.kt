@@ -1,11 +1,11 @@
 class MyRunnable() {}
 
-deprecated("Use A instead") fun MyRunnable.invoke() {
+@Deprecated("Use A instead") operator fun MyRunnable.invoke() {
 }
 
 fun test() {
   val m = MyRunnable()
-  <warning descr="'fun invoke()' is deprecated. Use A instead">m()</warning>
+  <warning descr="[DEPRECATION] 'invoke(): Unit' is deprecated. Use A instead">m</warning>()
 }
 
 // NO_CHECK_INFOS

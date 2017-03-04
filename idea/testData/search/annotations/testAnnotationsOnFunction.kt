@@ -1,30 +1,34 @@
-Deprecated fun test1() {}
+@java.lang.Deprecated fun test1() {}
 
-java.lang.Deprecated fun test2() {}
+@java.lang.Deprecated fun test2() {}
 
 fun test3() {
-  Deprecated fun test3inner() {}
+  @java.lang.Deprecated fun test3inner() {}
 }
 
 class Test4() {
-    Deprecated fun test4() {}
+    @java.lang.Deprecated fun test4() {}
 }
 
 class Test5() {
     fun test5() {
-        Deprecated fun test5inner() {}
+        @java.lang.Deprecated fun test5inner() {}
     }
 }
 
 class Test6() {
-    class object {
-        Deprecated fun test6() {}
+    companion object {
+        @java.lang.Deprecated fun test6() {}
     }
 }
 
 object Test7 {
-    Deprecated fun test7() {}
+    @java.lang.Deprecated fun test7() {}
 }
 
 // ANNOTATION: java.lang.Deprecated
-// SEARCH: PsiMethod:test1, PsiMethod:test2, PsiMethod:test4, PsiMethod:test6, PsiMethod:test7
+// SEARCH: method:test1
+// SEARCH: method:test2
+// SEARCH: method:test4
+// SEARCH: method:test6
+// SEARCH: method:test7

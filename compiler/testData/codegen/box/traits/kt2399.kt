@@ -1,4 +1,6 @@
-import java.util.ArrayList
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+// on JS Parser.parse and MultiParser.parse clash in ProjectInfoJsonParser
 
 class JsonObject {
 }
@@ -7,18 +9,18 @@ class JsonArray {
 }
 
 class ProjectInfo {
-    public fun toString(): String = "OK"
+    override fun toString(): String = "OK"
 }
 
-public trait Parser<in IN: Any, out OUT: Any> {
+public interface Parser<in IN: Any, out OUT: Any> {
     public fun parse(source: IN): OUT
 }
 
-public trait MultiParser<in IN: Any, out OUT: Any> {
+public interface MultiParser<in IN: Any, out OUT: Any> {
     public fun parse(source: IN): Collection<OUT>
 }
 
-public trait JsonParser<T: Any>: Parser<JsonObject, T>, MultiParser<JsonArray, T> {
+public interface JsonParser<T: Any>: Parser<JsonObject, T>, MultiParser<JsonArray, T> {
     public override fun parse(source: JsonArray): Collection<T> {
         return ArrayList<T>()
     }

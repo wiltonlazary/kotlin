@@ -5,7 +5,6 @@ import foo
 public protected private internal
 abstract
 open
-enum
 open
 annotation
 override
@@ -17,7 +16,7 @@ public
 internal
 in
 out
-ref
+suspend
  class Bar<abstract, abstract enum : T, out open,
     public protected private internal abstract
     open
@@ -55,6 +54,15 @@ ref
     val private
     val protected
     val internal
+    val field
+    val property
+    val receiver
+    val param
+    val setparam
+    val lateinit
+    val const
+    val suspend
+    val coroutine
       get() = a
       set(S : s) {}
 
@@ -83,6 +91,13 @@ ref
     fun private   () : private
     fun protected () : protected
     fun internal  () : internal
+    fun field  () : field
+    fun property  () : property
+    fun receiver  () : receiver
+    fun param  () : param
+    fun setparam  () : setparam
+    fun lateinit  () : lateinit
+    fun const  () : const
 
     fun test(
         abstract  : t,
@@ -108,6 +123,13 @@ ref
         private   : t,
         protected : t,
         internal  : t,
+        field     : t,
+        property  : t,
+        receiver  : t,
+        param     : t,
+        setparam    : t,
+        lateinit  : t,
+        const     : t,
     public protected private internal abstract
     open
     enum
@@ -150,6 +172,13 @@ class F(val foo : bar,
         private   : t,
         protected : t,
         internal  : t,
+        field     : t,
+        property  : t,
+        receiver  : t,
+        param     : t,
+        setparam    : t,
+        lateinit  : t,
+        const     : t,
     public protected private internal abstract
     open
     enum

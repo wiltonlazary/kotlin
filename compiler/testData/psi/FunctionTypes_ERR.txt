@@ -1,8 +1,10 @@
 JetFile: FunctionTypes_ERR.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
     <empty list>
-  TYPEDEF
-    PsiElement(type)('type')
+  IMPORT_LIST
+    <empty list>
+  TYPEALIAS
+    PsiElement(typealias)('typealias')
     PsiWhiteSpace(' ')
     PsiElement(IDENTIFIER)('f')
     PsiWhiteSpace(' ')

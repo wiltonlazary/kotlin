@@ -1,19 +1,21 @@
 package foo
 
+import kotlin.reflect.KProperty
+
 class A {
     var a5: String by <!TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>MyProperty1<!>()
     var b5: String by <!TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>getMyProperty1<!>()
 }
 
-fun getMyProperty1<A, B>() = MyProperty1<A, B>()
+fun <A, B> getMyProperty1() = MyProperty1<A, B>()
 
 class MyProperty1<T, R> {
 
-    public fun get(<!UNUSED_PARAMETER!>thisRef<!>: R, <!UNUSED_PARAMETER!>desc<!>: PropertyMetadata): T {
+    operator fun getValue(thisRef: R, desc: KProperty<*>): T {
         throw Exception()
     }
 
-    public fun set(<!UNUSED_PARAMETER!>i<!>: Int, <!UNUSED_PARAMETER!>j<!>: Int, <!UNUSED_PARAMETER!>k<!>: Int) {
+    operator fun setValue(i: Int, j: Any, k: Int) {
         println("set")
     }
 }
@@ -25,15 +27,15 @@ class B {
     var b5: String by <!DELEGATE_SPECIAL_FUNCTION_NONE_APPLICABLE!>getMyProperty2()<!>
 }
 
-fun getMyProperty2<A, B>() = MyProperty2<A, B>()
+fun <A, B> getMyProperty2() = MyProperty2<A, B>()
 
 class MyProperty2<T, R> {
 
-    public fun get(<!UNUSED_PARAMETER!>thisRef<!>: R, <!UNUSED_PARAMETER!>desc<!>: PropertyMetadata): T {
+    operator fun getValue(thisRef: R, desc: KProperty<*>): T {
         throw Exception()
     }
 
-    public fun set(<!UNUSED_PARAMETER!>i<!>: Int) {
+    <!INAPPLICABLE_OPERATOR_MODIFIER!>operator<!> fun setValue(i: Int) {
         println("set")
     }
 }

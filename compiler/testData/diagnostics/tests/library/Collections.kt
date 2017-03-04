@@ -1,9 +1,9 @@
 package collections
 
 fun <T> testCollection(c: Collection<T>, t: T) {
-    c.size()
+    c.size
     c.isEmpty()
-    c.contains(1)
+    c.contains(<!CONSTANT_EXPECTED_TYPE_MISMATCH!>1<!>)
     val <!UNUSED_VARIABLE!>iterator<!>: Iterator<T> = c.iterator()
     c.containsAll(c)
 
@@ -17,16 +17,16 @@ fun <T> testCollection(c: Collection<T>, t: T) {
 
 }
 fun <T> testMutableCollection(c: MutableCollection<T>, t: T) {
-    c.size()
+    c.size
     c.isEmpty()
-    c.contains(1)
+    c.contains(<!CONSTANT_EXPECTED_TYPE_MISMATCH!>1<!>)
     val <!UNUSED_VARIABLE!>iterator<!>: Iterator<T> = c.iterator()
     c.containsAll(c)
 
 
     val <!UNUSED_VARIABLE!>mutableIterator<!>: MutableIterator<T> = c.iterator()
     c.add(t)
-    c.remove(1)
+    c.remove(<!UNCHECKED_CAST!>1 as T<!>)
     c.addAll(c)
     c.removeAll(c)
     c.retainAll(c)
@@ -35,8 +35,8 @@ fun <T> testMutableCollection(c: MutableCollection<T>, t: T) {
 
 fun <T> testList(l: List<T>, <!UNUSED_PARAMETER!>t<!>: T) {
     val <!NAME_SHADOWING!>t<!>: T = l.get(1)
-    val <!UNUSED_VARIABLE!>i<!>: Int = l.indexOf(1)
-    val <!UNUSED_VARIABLE!>i1<!>: Int = l.lastIndexOf(1)
+    val <!UNUSED_VARIABLE!>i<!>: Int = l.indexOf(t)
+    val <!UNUSED_VARIABLE!>i1<!>: Int = l.lastIndexOf(t)
     val <!UNUSED_VARIABLE!>listIterator<!>: ListIterator<T> = l.listIterator()
     val <!UNUSED_VARIABLE!>listIterator1<!>: ListIterator<T> = l.listIterator(1)
     val <!UNUSED_VARIABLE!>list<!>: List<T> = l.subList(1, 2)
@@ -52,16 +52,16 @@ fun <T> testList(l: List<T>, <!UNUSED_PARAMETER!>t<!>: T) {
 fun <T> testMutableList(l: MutableList<T>, t: T) {
     val <!UNUSED_VARIABLE!>value<!>: T = l.set(1, t)
     l.add(1, t)
-    l.remove(1)
+    l.removeAt(1)
     val <!UNUSED_VARIABLE!>mutableListIterator<!>: MutableListIterator<T> = l.listIterator()
     val <!UNUSED_VARIABLE!>mutableListIterator1<!>: MutableListIterator<T> = l.listIterator(1)
     val <!UNUSED_VARIABLE!>mutableList<!>: MutableList<T> = l.subList(1, 2)
 }
 
 fun <T> testSet(s: Set<T>, t: T) {
-    s.size()
+    s.size
     s.isEmpty()
-    s.contains(1)
+    s.contains(<!CONSTANT_EXPECTED_TYPE_MISMATCH!>1<!>)
     val <!UNUSED_VARIABLE!>iterator<!>: Iterator<T> = s.iterator()
     s.containsAll(s)
 
@@ -75,16 +75,16 @@ fun <T> testSet(s: Set<T>, t: T) {
 
 }
 fun <T> testMutableSet(s: MutableSet<T>, t: T) {
-    s.size()
+    s.size
     s.isEmpty()
-    s.contains(1)
+    s.contains(<!CONSTANT_EXPECTED_TYPE_MISMATCH!>1<!>)
     val <!UNUSED_VARIABLE!>iterator<!>: Iterator<T> = s.iterator()
     s.containsAll(s)
 
 
     val <!UNUSED_VARIABLE!>mutableIterator<!>: MutableIterator<T> = s.iterator()
     s.add(t)
-    s.remove(1)
+    s.remove(<!UNCHECKED_CAST!>1 as T<!>)
     s.addAll(s)
     s.removeAll(s)
     s.retainAll(s)
@@ -92,19 +92,19 @@ fun <T> testMutableSet(s: MutableSet<T>, t: T) {
 }
 
 fun <K, V> testMap(m: Map<K, V>) {
-    val <!UNUSED_VARIABLE!>set<!>: Set<K> = m.keySet()
-    val <!UNUSED_VARIABLE!>collection<!>: Collection<V> = m.values()
-    val <!UNUSED_VARIABLE!>set1<!>: Set<Map.Entry<K, V>> = m.entrySet()
+    val <!UNUSED_VARIABLE!>set<!>: Set<K> = m.keys
+    val <!UNUSED_VARIABLE!>collection<!>: Collection<V> = m.values
+    val <!UNUSED_VARIABLE!>set1<!>: Set<Map.Entry<K, V>> = m.entries
 
-    val <!UNUSED_VARIABLE!>mutableSet<!>: MutableSet<K> = <!TYPE_MISMATCH!>m.keySet()<!>
-    val <!UNUSED_VARIABLE!>mutableCollection<!>: MutableCollection<V> = <!TYPE_MISMATCH!>m.values()<!>
-    val <!UNUSED_VARIABLE!>mutableSet1<!>: MutableSet<MutableMap.MutableEntry<K, V>> = <!TYPE_MISMATCH!>m.entrySet()<!>
+    val <!UNUSED_VARIABLE!>mutableSet<!>: MutableSet<K> = <!TYPE_MISMATCH!>m.keys<!>
+    val <!UNUSED_VARIABLE!>mutableCollection<!>: MutableCollection<V> = <!TYPE_MISMATCH!>m.values<!>
+    val <!UNUSED_VARIABLE!>mutableSet1<!>: MutableSet<MutableMap.MutableEntry<K, V>> = <!TYPE_MISMATCH!>m.entries<!>
 }
 
 fun <K, V> testMutableMap(m: MutableMap<K, V>) {
-    val <!UNUSED_VARIABLE!>mutableSet<!>: MutableSet<K> = m.keySet()
-    val <!UNUSED_VARIABLE!>mutableCollection<!>: MutableCollection<V> = m.values()
-    val <!UNUSED_VARIABLE!>mutableSet1<!>: MutableSet<MutableMap.MutableEntry<K, V>> = m.entrySet()
+    val <!UNUSED_VARIABLE!>mutableSet<!>: MutableSet<K> = m.keys
+    val <!UNUSED_VARIABLE!>mutableCollection<!>: MutableCollection<V> = m.values
+    val <!UNUSED_VARIABLE!>mutableSet1<!>: MutableSet<MutableMap.MutableEntry<K, V>> = m.entries
 }
 
 fun <T> array(vararg <!UNUSED_PARAMETER!>t<!>: T): Array<T> {<!NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY!>}<!>

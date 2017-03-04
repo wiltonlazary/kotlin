@@ -1,8 +1,9 @@
+//ALLOW_AST_ACCESS
 package test
 
-trait Test {
+interface Test {
 
-    class object {
+    companion object {
 
         public val prop1 : Int = 10
 
@@ -11,20 +12,20 @@ trait Test {
 
         public val prop3: Int = 12
             get() {
-                return  $prop3
+                return field
             }
 
         var prop4 : Int = 13
 
         fun incProp4() {
-            $prop4++
+            prop4++
         }
 
         public var prop5 : Int = 14
 
         public var prop7 : Int = 20
             set(i: Int) {
-                $prop7++
+                field++
             }
     }
 }

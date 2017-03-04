@@ -1,79 +1,84 @@
+/*
+ * Copyright 2010-2016 JetBrains s.r.o.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.jetbrains.kotlin.gradle.plugin
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.api.artifacts.dsl.DependencyHandler
-import org.gradle.api.artifacts.ConfigurationContainer
-import org.gradle.api.artifacts.Dependency
-import org.gradle.api.specs.Spec
-import java.io.File
-import java.net.URL
+import org.gradle.api.internal.file.FileResolver
+import org.gradle.api.internal.plugins.DslObject
+import org.gradle.api.logging.Logger
 import org.gradle.api.logging.Logging
-import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.ExperimentalExtension
+import org.jetbrains.kotlin.gradle.dsl.KotlinProjectExtension
+import org.jetbrains.kotlin.gradle.dsl.createKotlinExtension
+import org.jetbrains.kotlin.gradle.internal.KotlinSourceSetProviderImpl
+import org.jetbrains.kotlin.gradle.tasks.*
 import java.io.FileNotFoundException
+import java.util.*
+import javax.inject.Inject
 
-abstract class KotlinBasePluginWrapper: Plugin<Project> {
+abstract class KotlinBasePluginWrapper(protected val fileResolver: FileResolver): Plugin<Project> {
+    private val log = Logging.getLogger(this.javaClass)
+    protected val kotlinPluginVersion = loadKotlinVersionFromResource(log)
 
-    val log = Logging.getLogger(getClass())!!
+    override fun apply(project: Project) {
+        // TODO: consider only set if if daemon or parallel compilation are enabled, though this way it should be safe too
+        System.setProperty(org.jetbrains.kotlin.cli.common.KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY, "true")
+        val kotlinGradleBuildServices = KotlinGradleBuildServices.getInstance(project.gradle)
 
-    public override fun apply(project: Project) {
-        val dependencyHandler : DependencyHandler = project.getBuildscript().getDependencies()
-        val configurationsContainer : ConfigurationContainer = project.getBuildscript().getConfigurations()
+        project.createKotlinExtension()
 
-        log.debug("Loading version information")
-        val props = Properties()
-        val propFileName = "project.properties"
-        val inputStream = getClass().getClassLoader()!!.getResourceAsStream(propFileName)
-
-        if (inputStream == null) {
-            throw FileNotFoundException("property file '" + propFileName + "' not found in the classpath")
-        }
-
-        props.load(inputStream);
-
-        val projectVersion = props.get("project.version") as String
-        log.debug("Found project version [$projectVersion]")
-        project.getExtensions().getExtraProperties()?.set("kotlin.gradle.plugin.version", projectVersion)
-
-        log.debug("Creating configuration and dependency")
-        val kotlinPluginCoreCoordinates = "org.jetbrains.kotlin:kotlin-gradle-plugin-core:" + projectVersion
-        val dependency = dependencyHandler.create(kotlinPluginCoreCoordinates)
-        val configuration = configurationsContainer.detachedConfiguration(dependency)!!
-
-        log.debug("Resolving [" + kotlinPluginCoreCoordinates + "]")
-        val kotlinPluginDependencies : List<URL> = configuration.getResolvedConfiguration().getFiles(KSpec({ dep -> true }))!!.map({(f: File):URL -> f.toURI().toURL() })
-        log.debug("Resolved files: [" + kotlinPluginDependencies.toString() + "]")
-        log.debug("Load plugin in parent-last URL classloader")
-        val kotlinPluginClassloader = ParentLastURLClassLoader(kotlinPluginDependencies, getClass().getClassLoader())
-        log.debug("Class loader created")
-        val cls = Class.forName(getPluginClassName(), true, kotlinPluginClassloader)
-        log.debug("Plugin class loaded")
-        val pluginInstance = cls.newInstance()
-        log.debug("Plugin class instantiated")
-
-        val applyMethod = cls.getMethod("apply", javaClass<Project>())
-        log.debug("'apply' method found, invoking...")
-        applyMethod.invoke(pluginInstance, project);
-        log.debug("'apply' method invoked successfully")
+        val plugin = getPlugin(kotlinGradleBuildServices)
+        plugin.apply(project)
     }
 
-    public abstract fun getPluginClassName():String
+    internal abstract fun getPlugin(kotlinGradleBuildServices: KotlinGradleBuildServices): Plugin<Project>
 }
 
-open class KotlinPluginWrapper: KotlinBasePluginWrapper() {
-    public override fun getPluginClassName():String {
-        return "org.jetbrains.kotlin.gradle.plugin.KotlinPlugin"
-    }
+open class KotlinPluginWrapper @Inject constructor(fileResolver: FileResolver): KotlinBasePluginWrapper(fileResolver) {
+    override fun getPlugin(kotlinGradleBuildServices: KotlinGradleBuildServices) =
+            KotlinPlugin(KotlinTasksProvider(), KotlinSourceSetProviderImpl(fileResolver), kotlinPluginVersion, kotlinGradleBuildServices)
 }
 
-open class KotlinAndriodPluginWrapper: KotlinBasePluginWrapper() {
-    public override fun getPluginClassName():String {
-        return "org.jetbrains.kotlin.gradle.plugin.KotlinAndroidPlugin"
-    }
+open class KotlinCommonPluginWrapper @Inject constructor(fileResolver: FileResolver): KotlinBasePluginWrapper(fileResolver) {
+    override fun getPlugin(kotlinGradleBuildServices: KotlinGradleBuildServices) =
+            KotlinCommonPlugin(KotlinCommonTasksProvider(), KotlinSourceSetProviderImpl(fileResolver), kotlinPluginVersion)
 }
 
-open class KSpec<T: Any?>(val predicate: (T) -> Boolean): Spec<T> {
-    public override fun isSatisfiedBy(p0: T?): Boolean {
-        return p0 != null && predicate(p0)
-    }
+open class KotlinAndroidPluginWrapper @Inject constructor(fileResolver: FileResolver): KotlinBasePluginWrapper(fileResolver) {
+    override fun getPlugin(kotlinGradleBuildServices: KotlinGradleBuildServices) =
+            KotlinAndroidPlugin(AndroidTasksProvider(), KotlinSourceSetProviderImpl(fileResolver), kotlinPluginVersion, kotlinGradleBuildServices)
+}
+
+open class Kotlin2JsPluginWrapper @Inject constructor(fileResolver: FileResolver): KotlinBasePluginWrapper(fileResolver) {
+    override fun getPlugin(kotlinGradleBuildServices: KotlinGradleBuildServices) =
+            Kotlin2JsPlugin(Kotlin2JsTasksProvider(), KotlinSourceSetProviderImpl(fileResolver), kotlinPluginVersion)
+}
+
+private fun Any.loadKotlinVersionFromResource(log: Logger): String {
+    log.kotlinDebug("Loading version information")
+    val props = Properties()
+    val propFileName = "project.properties"
+    val inputStream = javaClass.classLoader!!.getResourceAsStream(propFileName) ?:
+            throw FileNotFoundException("property file '$propFileName' not found in the classpath")
+
+    props.load(inputStream)
+
+    val projectVersion = props["project.version"] as String
+    log.kotlinDebug("Found project version [$projectVersion]")
+    return projectVersion
 }

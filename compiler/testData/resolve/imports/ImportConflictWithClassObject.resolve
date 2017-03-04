@@ -5,12 +5,11 @@ package test
 import testing.TestClass
 
 class WithClassObject {
-  class object {
+  companion object {
     class ~class-object~TestClass
   }
 
-  // TODO: Isn't it a bug?
-  val a2: `testing`TestClass? = null
+  val a2: `class-object`TestClass? = null
 }
 
 

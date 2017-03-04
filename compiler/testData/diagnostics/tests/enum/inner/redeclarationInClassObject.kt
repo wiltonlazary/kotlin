@@ -1,10 +1,10 @@
 class A {
-    enum class <!REDECLARATION!>E<!> {
+    enum class E {
         ENTRY
     }
     
-    class object {
-        enum class <!REDECLARATION!>E<!> {
+    companion object {
+        enum class E {
             ENTRY2
         }
     }

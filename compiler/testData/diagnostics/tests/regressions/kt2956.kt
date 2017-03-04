@@ -1,1 +1,1 @@
-val a: String = <!NO_CLASS_OBJECT!>Nothing<!>
+val a: String = <!NO_COMPANION_OBJECT!>Nothing<!>

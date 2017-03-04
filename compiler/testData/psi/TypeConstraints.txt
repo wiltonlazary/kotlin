@@ -1,5 +1,7 @@
 JetFile: TypeConstraints.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   CLASS
     PsiElement(class)('class')
@@ -15,22 +17,6 @@ JetFile: TypeConstraints.kt
     PsiWhiteSpace(' ')
     TYPE_CONSTRAINT_LIST
       TYPE_CONSTRAINT
-        REFERENCE_EXPRESSION
-          PsiElement(IDENTIFIER)('T')
-        PsiWhiteSpace(' ')
-        PsiElement(COLON)(':')
-        PsiWhiteSpace(' ')
-        TYPE_REFERENCE
-          USER_TYPE
-            REFERENCE_EXPRESSION
-              PsiElement(IDENTIFIER)('T')
-      PsiElement(COMMA)(',')
-      PsiWhiteSpace(' ')
-      TYPE_CONSTRAINT
-        PsiElement(class)('class')
-        PsiWhiteSpace(' ')
-        PsiElement(object)('object')
-        PsiWhiteSpace(' ')
         REFERENCE_EXPRESSION
           PsiElement(IDENTIFIER)('T')
         PsiWhiteSpace(' ')

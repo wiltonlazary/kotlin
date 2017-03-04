@@ -2,11 +2,11 @@
 package foo
 
 enum class E {
-    ENTRY
-    ANOTHER
+    ENTRY,
+    ANOTHER;
 
     class Nested {
-        class object {
+        companion object {
             fun foo() = 42
         }
     }
@@ -21,4 +21,4 @@ fun f1() = ENTRY
 fun f2() = ANOTHER
 fun f3() = Nested()
 fun f4() = Nested.foo()
-fun f5() = <!UNRESOLVED_REFERENCE!>values<!>()
+fun f5() = values()

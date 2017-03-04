@@ -1,10 +1,9 @@
 package test
 
-public open class Simple : java.lang.Object {
+public open class Simple {
     public constructor Simple()
-    public open fun foo(): jet.Unit
-}
+    public open fun foo(): kotlin.Unit
 
-package test.Simple {
-    public open fun bar(): jet.Unit
+    // Static members
+    public open fun bar(): kotlin.Unit
 }

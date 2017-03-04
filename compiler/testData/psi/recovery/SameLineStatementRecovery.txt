@@ -1,5 +1,7 @@
 JetFile: SameLineStatementRecovery.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   FUN
     PsiElement(fun)('fun')
@@ -75,7 +77,7 @@ JetFile: SameLineStatementRecovery.kt
         PsiElement(for)('for')
         PsiWhiteSpace(' ')
         PsiElement(LPAR)('(')
-        LOOP_PARAMETER
+        VALUE_PARAMETER
           PsiElement(IDENTIFIER)('a')
         PsiWhiteSpace(' ')
         PsiElement(in)('in')
@@ -217,35 +219,6 @@ JetFile: SameLineStatementRecovery.kt
         PsiWhiteSpace(' ')
         INTEGER_CONSTANT
           PsiElement(INTEGER_LITERAL)('12')
-      PsiWhiteSpace('\n')
-      PsiElement(RBRACE)('}')
-  PsiWhiteSpace('\n\n')
-  FUN
-    PsiElement(fun)('fun')
-    PsiWhiteSpace(' ')
-    PsiElement(IDENTIFIER)('f5')
-    VALUE_PARAMETER_LIST
-      PsiElement(LPAR)('(')
-      PsiElement(RPAR)(')')
-    PsiWhiteSpace(' ')
-    BLOCK
-      PsiElement(LBRACE)('{')
-      PsiWhiteSpace('\n    ')
-      DOT_QUALIFIED_EXPRESSION
-        CALLABLE_REFERENCE_EXPRESSION
-          TYPE_REFERENCE
-            USER_TYPE
-              REFERENCE_EXPRESSION
-                PsiElement(IDENTIFIER)('a')
-          PsiElement(COLONCOLON)('::')
-          REFERENCE_EXPRESSION
-            PsiElement(IDENTIFIER)('b')
-        PsiElement(DOT)('.')
-        REFERENCE_EXPRESSION
-          PsiElement(IDENTIFIER)('c')
-      PsiErrorElement:Unexpected tokens (use ';' to separate expressions on the same line)
-        PsiElement(COLONCOLON)('::')
-        PsiElement(IDENTIFIER)('d')
       PsiWhiteSpace('\n')
       PsiElement(RBRACE)('}')
   PsiWhiteSpace('\n\n')
@@ -625,14 +598,19 @@ JetFile: SameLineStatementRecovery.kt
         PsiElement(IDENTIFIER)('get')
         PsiElement(LPAR)('(')
         PsiElement(RPAR)(')')
-        PsiWhiteSpace(' ')
-        PsiElement(LBRACE)('{')
-        PsiWhiteSpace(' ')
-        PsiElement(return)('return')
-        PsiWhiteSpace(' ')
-        PsiElement(INTEGER_LITERAL)('12')
-        PsiWhiteSpace(' ')
-        PsiElement(RBRACE)('}')
+      PsiWhiteSpace(' ')
+      LAMBDA_EXPRESSION
+        FUNCTION_LITERAL
+          PsiElement(LBRACE)('{')
+          PsiWhiteSpace(' ')
+          BLOCK
+            RETURN
+              PsiElement(return)('return')
+              PsiWhiteSpace(' ')
+              INTEGER_CONSTANT
+                PsiElement(INTEGER_LITERAL)('12')
+          PsiWhiteSpace(' ')
+          PsiElement(RBRACE)('}')
       PsiWhiteSpace('\n')
       PsiElement(RBRACE)('}')
   PsiWhiteSpace('\n\n')

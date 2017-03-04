@@ -1,4 +1,6 @@
-trait A<T> {
+package test
+
+interface A<T> {
     fun foo(): T
 }
 

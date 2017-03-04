@@ -1,18 +1,20 @@
+import kotlin.reflect.KProperty
+
 class Delegate<T>(var inner: T) {
-    fun get(t: Any?, p: PropertyMetadata): T = inner
-    fun set(t: Any?, p: PropertyMetadata, i: T) { inner = i }
+    operator fun getValue(t: Any?, p: KProperty<*>): T = inner
+    operator fun setValue(t: Any?, p: KProperty<*>, i: T) { inner = i }
 }
 
 
 class Foo (val f: Int) {
-    class object {
+    companion object {
         val A: Foo by Delegate(Foo(11))
         var B: Foo by Delegate(Foo(11))
     }
 }
 
-trait FooTrait {
-    class object {
+interface FooTrait {
+    companion object {
         val A: Foo by Delegate(Foo(11))
         var B: Foo by Delegate(Foo(11))
     }

@@ -1,5 +1,5 @@
-trait Test {
-  class object {
+interface Test {
+  companion object {
     public var prop: Int = 0
       protected set
   }
@@ -10,5 +10,5 @@ trait Test {
 // ABSENT: TRUE
 
 // TESTED_OBJECT_KIND: property
-// TESTED_OBJECTS: Test$object, prop
-// FLAGS: ACC_PRIVATE
+// TESTED_OBJECTS: Test$Companion, prop
+// FLAGS: ACC_PRIVATE, ACC_STATIC

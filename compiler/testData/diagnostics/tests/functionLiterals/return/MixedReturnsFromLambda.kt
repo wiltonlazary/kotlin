@@ -1,14 +1,14 @@
-trait A
-trait B: A
-trait C: A
+// !CHECK_TYPE
+
+interface A
+interface B: A
+interface C: A
 
 
 fun test(a: C, b: B) {
-    val x = run @f{
-      if (a != b) <!RETURN_NOT_ALLOWED_EXPLICIT_RETURN_TYPE_REQUIRED!>return@f a<!>
+    val x = run f@{
+      if (a != b) return@f a
       b
     }
-    x: A
+    checkSubtype<A>(x)
 }
-
-fun run<T>(f: () -> T): T { return f() }

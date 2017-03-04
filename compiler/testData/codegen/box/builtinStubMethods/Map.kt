@@ -1,12 +1,15 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 class MyMap<K, V>: Map<K, V> {
-    override fun size(): Int = 0
+    override val size: Int get() = 0
     override fun isEmpty(): Boolean = true
-    override fun containsKey(key: Any?): Boolean = false
-    override fun containsValue(value: Any?): Boolean = false
-    override fun get(key: Any?): V? = null
-    override fun keySet(): Set<K> = throw UnsupportedOperationException()
-    override fun values(): Collection<V> = throw UnsupportedOperationException()
-    override fun entrySet(): Set<Map.Entry<K, V>> = throw UnsupportedOperationException()
+    override fun containsKey(key: K): Boolean = false
+    override fun containsValue(value: V): Boolean = false
+    override fun get(key: K): V? = null
+    override val keys: Set<K> get() = throw UnsupportedOperationException()
+    override val values: Collection<V> get() = throw UnsupportedOperationException()
+    override val entries: Set<Map.Entry<K, V>> get() = throw UnsupportedOperationException()
 }
 
 fun expectUoe(block: () -> Unit) {
@@ -18,11 +21,12 @@ fun expectUoe(block: () -> Unit) {
 }
 
 fun box(): String {
-    val map = MyMap<String, Int>() as MutableMap<String, Int>
+    val myMap = MyMap<String, Int>()
+    val map = myMap as java.util.Map<String, Int>
 
     expectUoe { map.put("", 1) }
     expectUoe { map.remove("") }
-    expectUoe { map.putAll(map) }
+    expectUoe { map.putAll(myMap) }
     expectUoe { map.clear() }
 
     return "OK"

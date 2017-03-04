@@ -1,3 +1,6 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 class MyIterator<T>(val v: T): Iterator<T> {
     override fun next(): T = v
     override fun hasNext(): Boolean = true
@@ -6,6 +9,6 @@ class MyIterator<T>(val v: T): Iterator<T> {
 }
 
 fun box(): String {
-    (MyIterator<String>("") as MutableIterator<String>).remove()
+    (MyIterator<String>("") as java.util.Iterator<String>).remove()
     return "OK"
 }

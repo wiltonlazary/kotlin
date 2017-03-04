@@ -1,5 +1,7 @@
 JetFile: LINQ.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   FUN
     PsiElement(fun)('fun')
@@ -21,7 +23,7 @@ JetFile: LINQ.kt
             OPERATION_REFERENCE
               PsiElement(IDENTIFIER)('filter')
             PsiWhiteSpace(' ')
-            FUNCTION_LITERAL_EXPRESSION
+            LAMBDA_EXPRESSION
               FUNCTION_LITERAL
                 PsiElement(LBRACE)('{')
                 BLOCK
@@ -36,7 +38,7 @@ JetFile: LINQ.kt
           OPERATION_REFERENCE
             PsiElement(IDENTIFIER)('map')
           PsiWhiteSpace(' ')
-          FUNCTION_LITERAL_EXPRESSION
+          LAMBDA_EXPRESSION
             FUNCTION_LITERAL
               PsiElement(LBRACE)('{')
               BLOCK
@@ -51,18 +53,16 @@ JetFile: LINQ.kt
         OPERATION_REFERENCE
           PsiElement(IDENTIFIER)('aggregate')
         PsiWhiteSpace(' ')
-        FUNCTION_LITERAL_EXPRESSION
+        LAMBDA_EXPRESSION
           FUNCTION_LITERAL
             PsiElement(LBRACE)('{')
             VALUE_PARAMETER_LIST
-              PsiElement(LPAR)('(')
               VALUE_PARAMETER
                 PsiElement(IDENTIFIER)('a')
               PsiElement(COMMA)(',')
               PsiWhiteSpace(' ')
               VALUE_PARAMETER
                 PsiElement(IDENTIFIER)('b')
-              PsiElement(RPAR)(')')
             PsiWhiteSpace(' ')
             PsiElement(ARROW)('->')
             PsiWhiteSpace(' ')

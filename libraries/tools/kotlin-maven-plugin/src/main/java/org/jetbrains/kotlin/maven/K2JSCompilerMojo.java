@@ -16,164 +16,172 @@
 
 package org.jetbrains.kotlin.maven;
 
-import com.google.common.io.Files;
-import com.google.common.io.InputSupplier;
+import com.intellij.openapi.util.text.StringUtil;
+import kotlin.text.StringsKt;
+import org.apache.maven.artifact.DependencyResolutionRequiredException;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.MojoFailureException;
-import org.jetbrains.jet.cli.common.CLICompiler;
-import org.jetbrains.jet.cli.common.arguments.CommonCompilerArguments;
-import org.jetbrains.jet.cli.common.arguments.K2JSCompilerArguments;
-import org.jetbrains.jet.cli.js.K2JSCompiler;
-import com.intellij.openapi.util.io.FileUtil;
-import org.jetbrains.k2js.config.MetaInfServices;
+import org.apache.maven.plugins.annotations.LifecyclePhase;
+import org.apache.maven.plugins.annotations.Mojo;
+import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.plugins.annotations.ResolutionScope;
+import org.apache.maven.project.MavenProject;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments;
+import org.jetbrains.kotlin.cli.js.K2JSCompiler;
+import org.jetbrains.kotlin.utils.LibraryUtils;
+import org.jetbrains.kotlin.utils.KotlinJavascriptMetadataUtils;
+import org.jetbrains.kotlin.js.JavaScript;
 
-import java.io.*;
-import java.nio.charset.Charset;
-import java.util.Arrays;
+import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Converts Kotlin to JavaScript code
  *
- * @goal js
- * @phase compile
  * @noinspection UnusedDeclaration
  */
-public class K2JSCompilerMojo extends KotlinCompileMojo {
-    public static final String KOTLIN_JS_MAPS = "kotlin-maps.js";
-    public static final String KOTLIN_JS_LIB = "kotlin-lib.js";
-    public static final String KOTLIN_JS_LIB_ECMA3 = "kotlin-lib-ecma3.js";
-    public static final String KOTLIN_JS_LIB_ECMA5 = "kotlin-lib-ecma5.js";
+@Mojo(name = "js", defaultPhase = LifecyclePhase.COMPILE, requiresDependencyResolution = ResolutionScope.COMPILE, threadSafe = true)
+public class K2JSCompilerMojo extends KotlinCompileMojoBase<K2JSCompilerArguments> {
+
+    private static final String OUTPUT_DIRECTORIES_COLLECTOR_PROPERTY_NAME = "outputDirectoriesCollector";
+    private static final Lock lock = new ReentrantLock();
 
     /**
      * The output JS file name
-     *
-     * @required
-     * @parameter default-value="${project.build.directory}/js/${project.artifactId}.js"
      */
+    @Parameter(defaultValue = "${project.build.directory}/js/${project.artifactId}.js", required = true)
     private String outputFile;
 
     /**
-     * The output Kotlin JS file
-     *
-     * @required
-     * @parameter default-value="${project.build.directory}/js"
-     * @parameter expression="${outputKotlinJSFile}"
+     * Flag enables or disables .meta.js and .kjsm files generation, used to create libraries
      */
-    private File outputKotlinJSDir;
+    @Parameter(defaultValue = "true")
+    private boolean metaInfo;
 
     /**
-     * Whether to copy the kotlin-lib.js file to the output directory
-     *
-     * @parameter default-value="true"
-     * @parameter expression="${copyLibraryJS}"
+     * Flags enables or disable source map generation
      */
-    private Boolean copyLibraryJS;
+    @Parameter(defaultValue = "false")
+    private boolean sourceMap;
 
     /**
-     * Whether to copy the kotlin-lib.js file to the output directory
-     *
-     * @parameter default-value="false"
-     * @parameter expression="${appendLibraryJS}"
+     * <p>Specifies which JS module system to generate compatible sources for. Options are:</p>
+     * <ul>
+     *     <li><b>amd</b> &mdash;
+     *       <a href="https://github.com/amdjs/amdjs-api/wiki/AMD"></a>Asynchronous Module System</a>;</li>
+     *     <li><b>commonjs</b> &mdash; npm/CommonJS conventions based on synchronous <code>require</code>
+     *       function;</li>
+     *     <li><b>plain</b> (default) &mdash; no module system, keep all modules in global scope;</li>
+     *     <li><b>umd</b> &mdash; Universal Module Definition, stub wrapper that detects current
+     *       module system in runtime and behaves as <code>plain</code> if none detected.</li>
+     * </ul>
      */
-    private Boolean appendLibraryJS;
+    @Parameter(defaultValue = "plain")
+    private String moduleKind;
 
     @Override
-    public void execute() throws MojoExecutionException, MojoFailureException {
-        super.execute();
-        if (appendLibraryJS != null && appendLibraryJS.booleanValue()) {
-            try {
-                Charset charset = Charset.defaultCharset();
-                File file = new File(outputFile);
-                String text = Files.toString(file, charset);
-                StringBuilder builder = new StringBuilder();
-                appendFile(KOTLIN_JS_LIB_ECMA3, builder);
-                appendFile(KOTLIN_JS_LIB, builder);
-                appendFile(KOTLIN_JS_MAPS, builder);
-                builder.append("\n");
-                builder.append(text);
-                Files.write(builder.toString(), file, charset);
-            } catch (IOException e) {
-                throw new MojoExecutionException(e.getMessage(), e);
-            }
-        }
-        if (copyLibraryJS != null && copyLibraryJS.booleanValue()) {
-            getLog().info("Copying kotlin JS library to " + outputKotlinJSDir);
+    protected void configureSpecificCompilerArguments(@NotNull K2JSCompilerArguments arguments) throws MojoExecutionException {
+        arguments.outputFile = outputFile;
+        arguments.noStdlib = true;
+        arguments.metaInfo = metaInfo;
+        arguments.moduleKind = moduleKind;
 
-            copyJsLibraryFile(KOTLIN_JS_MAPS);
-            copyJsLibraryFile(KOTLIN_JS_LIB);
-            copyJsLibraryFile(KOTLIN_JS_LIB_ECMA3);
-            copyJsLibraryFile(KOTLIN_JS_LIB_ECMA5);
-        }
-    }
-
-    protected void appendFile(String jsLib, StringBuilder builder) throws MojoExecutionException {
-        // lets copy the kotlin library into the output directory
+        List<String> libraries = null;
         try {
-            final InputStream inputStream = MetaInfServices.loadClasspathResource(jsLib);
-            if (inputStream == null) {
-                System.out.println("WARNING: Could not find " + jsLib + " on the classpath!");
-            } else {
-                InputSupplier<InputStream> inputSupplier = new InputSupplier<InputStream>() {
-                    @Override
-                    public InputStream getInput() throws IOException {
-                        return inputStream;
-                    }
-                };
-                String text = "\n" + FileUtil.loadTextAndClose(inputStream);
-                builder.append(text);
-            }
-        } catch (IOException e) {
-            throw new MojoExecutionException(e.getMessage(), e);
+            libraries = getKotlinJavascriptLibraryFiles();
+        } catch (DependencyResolutionRequiredException e) {
+            throw new MojoExecutionException("Unresolved dependencies", e);
+        }
+        getLog().debug("libraries: " + libraries);
+        arguments.libraries = StringUtil.join(libraries, File.pathSeparator);
+
+        arguments.sourceMap = sourceMap;
+
+        Set<String> collector = getOutputDirectoriesCollector();
+
+        if (outputFile != null) {
+            collector.add(new File(outputFile).getParent());
+        }
+        if (metaInfo) {
+            String output = com.google.common.base.Objects.firstNonNull(outputFile, ""); // fqname here because of J8 compatibility issues
+            String metaFile = StringsKt.substringBeforeLast(output, JavaScript.DOT_EXTENSION, output) + KotlinJavascriptMetadataUtils.META_JS_SUFFIX;
+            collector.add(new File(metaFile).getParent());
         }
     }
 
-    protected void copyJsLibraryFile(String jsLib) throws MojoExecutionException {
-        // lets copy the kotlin library into the output directory
-        try {
-            outputKotlinJSDir.mkdirs();
-            final InputStream inputStream = MetaInfServices.loadClasspathResource(jsLib);
-            if (inputStream == null) {
-                System.out.println("WARNING: Could not find " + jsLib + " on the classpath!");
-            } else {
-                InputSupplier<InputStream> inputSupplier = new InputSupplier<InputStream>() {
-                    @Override
-                    public InputStream getInput() throws IOException {
-                        return inputStream;
-                    }
-                };
-                Files.copy(inputSupplier, new File(outputKotlinJSDir, jsLib));
-            }
-        } catch (IOException e) {
-            throw new MojoExecutionException(e.getMessage(), e);
-        }
+    protected List<String> getClassPathElements() throws DependencyResolutionRequiredException {
+        return project.getCompileClasspathElements();
     }
 
+    /**
+     * Returns all Kotlin Javascript dependencies that this project has, including transitive ones.
+     *
+     * @return array of paths to kotlin javascript libraries
+     */
+    @NotNull
+    private List<String> getKotlinJavascriptLibraryFiles() throws DependencyResolutionRequiredException {
+        List<String> libraries = new ArrayList<String>();
+
+        for (String path : getClassPathElements()) {
+            File file = new File(path);
+
+            if (file.exists() && LibraryUtils.isKotlinJavascriptLibrary(file)) {
+                libraries.add(file.getAbsolutePath());
+            }
+            else {
+                getLog().debug("artifact " + file.getAbsolutePath() + " is not a Kotlin Javascript Library");
+            }
+        }
+
+        for (String path : getOutputDirectoriesCollector()) {
+            File file = new File(path);
+
+            if (file.exists() && LibraryUtils.isKotlinJavascriptLibrary(file)) {
+                libraries.add(file.getAbsolutePath());
+            }
+            else {
+                getLog().debug("JS output directory missing: " + file);
+            }
+        }
+
+        return libraries;
+    }
+
+    @NotNull
     @Override
-    protected void configureCompilerArguments(CommonCompilerArguments arguments) throws MojoExecutionException {
-        super.configureCompilerArguments(arguments);
-
-        if (arguments instanceof K2JSCompilerArguments) {
-            K2JSCompilerArguments k2jsArgs = (K2JSCompilerArguments)arguments;
-            k2jsArgs.outputFile = outputFile;
-            if (getLog().isDebugEnabled()) {
-                k2jsArgs.verbose = true;
-            }
-            List<String> sources = getSources();
-            if (sources.size() > 0) {
-                k2jsArgs.sourceFiles = sources.toArray(new String[sources.size()]);
-            }
-            getLog().info("Compiling Kotlin src from " + Arrays.asList(k2jsArgs.sourceFiles) + " to JavaScript at: " + outputFile);
-        }
-    }
-
-    @Override
-    protected CommonCompilerArguments createCompilerArguments() {
+    protected K2JSCompilerArguments createCompilerArguments() {
         return new K2JSCompilerArguments();
     }
 
     @Override
-    protected CLICompiler createCompiler() {
+    protected List<String> getRelatedSourceRoots(MavenProject project) {
+        return project.getCompileSourceRoots();
+    }
+
+    @NotNull
+    @Override
+    protected K2JSCompiler createCompiler() {
         return new K2JSCompiler();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Set<String> getOutputDirectoriesCollector() {
+        lock.lock();
+        try {
+            Set<String> collector = (Set<String>) getPluginContext().get(OUTPUT_DIRECTORIES_COLLECTOR_PROPERTY_NAME);
+            if (collector == null) {
+                collector = new ConcurrentSkipListSet<String>();
+                getPluginContext().put(OUTPUT_DIRECTORIES_COLLECTOR_PROPERTY_NAME, collector);
+            }
+
+            return collector;
+        } finally {
+            lock.unlock();
+        }
     }
 }

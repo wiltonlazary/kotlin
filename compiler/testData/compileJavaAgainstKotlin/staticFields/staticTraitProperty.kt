@@ -1,7 +1,9 @@
-trait Test {
+package test
 
-  class object {
-    public val valProp: Int = 10
+interface Test {
+
+  companion object {
+    public const val valProp: Int = 10
   }
 
 }

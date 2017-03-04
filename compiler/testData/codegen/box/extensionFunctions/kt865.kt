@@ -1,10 +1,8 @@
-import java.util.*
-
 class Template() {
     val collected = ArrayList<String>()
 
-    fun String.plus() {
-       collected.add(this@plus)
+    operator fun String.unaryPlus() {
+       collected.add(this@unaryPlus)
     }
 
     fun test() {
@@ -15,5 +13,5 @@ class Template() {
 fun box() : String {
     val u = Template()
     u.test()
-    return if(u.collected.size() == 1 && u.collected.get(0) == "239") "OK" else "fail"
+    return if(u.collected.size == 1 && u.collected.get(0) == "239") "OK" else "fail"
 }

@@ -3,7 +3,7 @@
 package enum
 
 enum class HappyEnum {
-    CASE1
+    CASE1,
     CASE2
 }
 
@@ -13,8 +13,8 @@ import enum.HappyEnum
 import enum.HappyEnum.*
 
 fun f(e: HappyEnum) {
-    when (e) {
+    <!DEBUG_INFO_IMPLICIT_EXHAUSTIVE!>when (e) {
         CASE1 -> throw UnsupportedOperationException() // unresolved reference
         CASE2 -> throw UnsupportedOperationException() // unresolved references
-    }
+    }<!>
 }

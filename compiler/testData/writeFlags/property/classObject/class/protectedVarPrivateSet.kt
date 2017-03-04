@@ -1,5 +1,5 @@
 class Test {
-  class object {
+  companion object {
     protected var prop: Int = 0
       private set
   }
@@ -10,5 +10,5 @@ class Test {
 // FLAGS: ACC_STATIC, ACC_PRIVATE
 
 // TESTED_OBJECT_KIND: property
-// TESTED_OBJECTS: Test$object, prop
+// TESTED_OBJECTS: Test$Companion, prop
 // ABSENT: TRUE

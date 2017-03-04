@@ -1,11 +1,11 @@
 val foo = bar.foo.bar
 
 val foo
-val [a] foo
+val @[a] foo
 val foo.bar
 
 val foo : T
-val [a] foo = bar
+val @[a] foo = bar
 val foo.bar
    get() {}
    set(sad) = foo
@@ -44,7 +44,6 @@ val foo.bar = 5
 fun foo() {
   val foo = 5
   get() = 5
-  set(int : x) = 5
 }
 
 val IList<T>.lastIndex : Int

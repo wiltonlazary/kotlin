@@ -1,6 +1,6 @@
 private enum class MethodKind {
-    INSTANCE
+    INSTANCE,
     STATIC
 }
 
-fun MethodKind.hasThis() = this == MethodKind.INSTANCE
+private fun MethodKind.hasThis() = this == MethodKind.INSTANCE

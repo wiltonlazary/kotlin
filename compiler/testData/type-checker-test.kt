@@ -21,7 +21,7 @@ class Functions<T>() {
   fun f(a : Int) : Int {}
   fun f(a : T) : Any {}
   fun f(a : Pair<Int, Int>) : T {}
-  fun f<E>(a : E) : T {}
+  fun <E> f(a : E) : T {}
 }
 class WithPredicate() {
   fun isValid() : Boolean
@@ -29,11 +29,28 @@ class WithPredicate() {
   val p : Boolean
 }
 
-open class List<E>()
-open class AbstractList<E> : List<E?>
-open class ArrayList<E>() : Any, AbstractList<E?>, List<E?>
+open class InvList<E>()
+open class AbstractList<E> : InvList<E?>
+open class ArrayList<E>() : Any, AbstractList<E?>, InvList<E?>
 
 fun f() : Unit {}
 fun f(a : Int) : Int {a}
 fun f(a : Float, b : Int) : Float {a}
-fun f<T>(a : Float) : T {a}
+fun <T> f(a : Float) : T {a}
+
+interface Parent
+interface A: Parent
+interface B: Parent
+
+interface Rec<T>
+class ARec : Rec<ARec>
+class BRec : Rec<BRec>
+interface SubRec<T>: Rec<T>
+
+interface Star<T : Star<T>>
+interface SubStar<T : SubStar<T>> : Star<T>
+
+interface I
+class AI : I
+class BI : I
+class CI : I

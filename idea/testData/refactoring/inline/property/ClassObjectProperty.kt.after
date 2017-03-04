@@ -1,8 +1,0 @@
-class Class {
-    class object {
-    }
-}
-
-fun f() {
-    println(239)
-}

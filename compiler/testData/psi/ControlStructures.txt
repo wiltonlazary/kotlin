@@ -1,5 +1,7 @@
 JetFile: ControlStructures.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   FUN
     PsiElement(fun)('fun')
@@ -80,10 +82,10 @@ JetFile: ControlStructures.kt
         PsiWhiteSpace(' ')
         BREAK
           PsiElement(break)('break')
-          PsiWhiteSpace(' ')
           LABEL_QUALIFIER
-            LABEL_REFERENCE
-              PsiElement(LABEL_IDENTIFIER)('@la')
+            LABEL
+              PsiElement(AT)('@')
+              PsiElement(IDENTIFIER)('la')
       PsiElement(COMMA)(',')
       PsiWhiteSpace('\n    ')
       VALUE_PARAMETER
@@ -116,10 +118,10 @@ JetFile: ControlStructures.kt
         PsiWhiteSpace(' ')
         CONTINUE
           PsiElement(continue)('continue')
-          PsiWhiteSpace(' ')
           LABEL_QUALIFIER
-            LABEL_REFERENCE
-              PsiElement(LABEL_IDENTIFIER)('@la')
+            LABEL
+              PsiElement(AT)('@')
+              PsiElement(IDENTIFIER)('la')
       PsiElement(COMMA)(',')
       PsiWhiteSpace('\n    ')
       VALUE_PARAMETER
@@ -199,30 +201,34 @@ JetFile: ControlStructures.kt
       BREAK
         PsiElement(break)('break')
       PsiWhiteSpace('\n  ')
-      PREFIX_EXPRESSION
-        OPERATION_REFERENCE
-          PsiElement(LABEL_IDENTIFIER)('@la')
+      LABELED_EXPRESSION
+        LABEL_QUALIFIER
+          LABEL
+            PsiElement(IDENTIFIER)('la')
+            PsiElement(AT)('@')
         PsiWhiteSpace('\n  ')
         BREAK
           PsiElement(break)('break')
-          PsiWhiteSpace(' ')
           LABEL_QUALIFIER
-            LABEL_REFERENCE
-              PsiElement(LABEL_IDENTIFIER)('@la')
+            LABEL
+              PsiElement(AT)('@')
+              PsiElement(IDENTIFIER)('la')
       PsiWhiteSpace('\n  ')
       CONTINUE
         PsiElement(continue)('continue')
       PsiWhiteSpace('\n  ')
-      PREFIX_EXPRESSION
-        OPERATION_REFERENCE
-          PsiElement(LABEL_IDENTIFIER)('@la')
+      LABELED_EXPRESSION
+        LABEL_QUALIFIER
+          LABEL
+            PsiElement(IDENTIFIER)('la')
+            PsiElement(AT)('@')
         PsiWhiteSpace('\n  ')
         CONTINUE
           PsiElement(continue)('continue')
-          PsiWhiteSpace(' ')
           LABEL_QUALIFIER
-            LABEL_REFERENCE
-              PsiElement(LABEL_IDENTIFIER)('@la')
+            LABEL
+              PsiElement(AT)('@')
+              PsiElement(IDENTIFIER)('la')
       PsiWhiteSpace('\n  ')
       IF
         PsiElement(if)('if')
@@ -453,7 +459,7 @@ JetFile: ControlStructures.kt
         PsiElement(for)('for')
         PsiWhiteSpace(' ')
         PsiElement(LPAR)('(')
-        LOOP_PARAMETER
+        VALUE_PARAMETER
           PsiElement(val)('val')
           PsiWhiteSpace(' ')
           PsiElement(IDENTIFIER)('x')
@@ -473,7 +479,7 @@ JetFile: ControlStructures.kt
         PsiElement(for)('for')
         PsiWhiteSpace(' ')
         PsiElement(LPAR)('(')
-        LOOP_PARAMETER
+        VALUE_PARAMETER
           PsiElement(IDENTIFIER)('x')
         PsiWhiteSpace(' ')
         PsiElement(in)('in')
@@ -491,7 +497,7 @@ JetFile: ControlStructures.kt
         PsiElement(for)('for')
         PsiWhiteSpace(' ')
         PsiElement(LPAR)('(')
-        LOOP_PARAMETER
+        VALUE_PARAMETER
           PsiElement(val)('val')
           PsiWhiteSpace(' ')
           PsiElement(IDENTIFIER)('x')
@@ -518,7 +524,7 @@ JetFile: ControlStructures.kt
         PsiElement(for)('for')
         PsiWhiteSpace(' ')
         PsiElement(LPAR)('(')
-        LOOP_PARAMETER
+        VALUE_PARAMETER
           PsiElement(IDENTIFIER)('x')
           PsiWhiteSpace(' ')
           PsiElement(COLON)(':')
@@ -588,7 +594,7 @@ JetFile: ControlStructures.kt
         PsiElement(for)('for')
         PsiWhiteSpace(' ')
         PsiElement(LPAR)('(')
-        LOOP_PARAMETER
+        VALUE_PARAMETER
           PsiElement(IDENTIFIER)('a')
         PsiWhiteSpace(' ')
         PsiElement(in)('in')
@@ -606,7 +612,7 @@ JetFile: ControlStructures.kt
         PsiElement(for)('for')
         PsiWhiteSpace(' ')
         PsiElement(LPAR)('(')
-        LOOP_PARAMETER
+        VALUE_PARAMETER
           PsiElement(IDENTIFIER)('a')
         PsiWhiteSpace(' ')
         PsiElement(in)('in')
@@ -625,7 +631,7 @@ JetFile: ControlStructures.kt
         PsiElement(for)('for')
         PsiWhiteSpace(' ')
         PsiElement(LPAR)('(')
-        LOOP_PARAMETER
+        VALUE_PARAMETER
           PsiElement(IDENTIFIER)('a')
         PsiWhiteSpace(' ')
         PsiElement(in)('in')
@@ -648,7 +654,7 @@ JetFile: ControlStructures.kt
         PsiElement(for)('for')
         PsiWhiteSpace(' ')
         PsiElement(LPAR)('(')
-        LOOP_PARAMETER
+        VALUE_PARAMETER
           PsiElement(IDENTIFIER)('a')
         PsiWhiteSpace(' ')
         PsiElement(in)('in')
@@ -964,18 +970,17 @@ JetFile: ControlStructures.kt
         BODY
           BLOCK
             PsiElement(LBRACE)('{')
-            PsiElement(SEMICOLON)(';')
-            PsiElement(SEMICOLON)(';')
+            PsiErrorElement:Expecting an element
+              PsiElement(DOUBLE_SEMICOLON)(';;')
             PsiElement(SEMICOLON)(';')
             REFERENCE_EXPRESSION
               PsiElement(IDENTIFIER)('foo')
             PsiElement(SEMICOLON)(';')
             REFERENCE_EXPRESSION
               PsiElement(IDENTIFIER)('bar')
-            PsiElement(SEMICOLON)(';')
-            PsiElement(SEMICOLON)(';')
-            PsiElement(SEMICOLON)(';')
-            PsiElement(SEMICOLON)(';')
+            PsiErrorElement:Unexpected tokens (use ';' to separate expressions on the same line)
+              PsiElement(DOUBLE_SEMICOLON)(';;')
+              PsiElement(DOUBLE_SEMICOLON)(';;')
             PsiWhiteSpace(' ')
             PsiElement(RBRACE)('}')
         PsiWhiteSpace(' ')

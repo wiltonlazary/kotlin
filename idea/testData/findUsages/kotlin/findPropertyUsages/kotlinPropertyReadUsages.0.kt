@@ -1,6 +1,6 @@
-// PSI_ELEMENT: org.jetbrains.jet.lang.psi.JetProperty
+// PSI_ELEMENT: org.jetbrains.kotlin.psi.KtProperty
 // OPTIONS: usages, skipWrite
-package server;
+package server
 
 open class A<T> {
     open var <caret>foo: T

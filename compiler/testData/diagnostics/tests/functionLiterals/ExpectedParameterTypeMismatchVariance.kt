@@ -1,19 +1,20 @@
+// !DIAGNOSTICS: -UNUSED_PARAMETER
 package a
 
-trait Super
-trait Trait : Super
+interface Super
+interface Trait : Super
 class Sub : Trait
 
 fun foo(f: (Trait) -> Trait) = f
 
 fun test(s: Sub) {
     foo {
-        (t: Super): Sub -> s
+        t: Super -> s
     }
     foo {
-        (t: Trait): Trait -> s
+        t: Trait -> s
     }
-    foo {
-        (<!EXPECTED_PARAMETER_TYPE_MISMATCH!>t: Sub<!>): <!EXPECTED_RETURN_TYPE_MISMATCH!>Super<!> -> s
-    }
+
+    foo(<!TYPE_MISMATCH!>fun(<!EXPECTED_PARAMETER_TYPE_MISMATCH!>t: Sub<!>) = s<!>)
+    foo(<!TYPE_MISMATCH!>fun(t): Super = s<!>)
 }

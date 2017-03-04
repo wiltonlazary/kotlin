@@ -1,13 +1,13 @@
 /**
-h1. Syntax
+# Syntax
 
-*Relevant pages:* [Namespaces]
+Relevant pages: [Packages](packages.html)
 */
 
 
 [start]
 kotlinFile
-  : preamble toplevelObject*
+  : preamble topLevelObject*
   ;
 
 [start]
@@ -16,42 +16,41 @@ script
   ;
 
 preamble
-  : packageHeader? import*
+  : fileAnnotations? packageHeader? import*
+  ;
+
+fileAnnotations
+  : fileAnnotation*
+  ;
+
+fileAnnotation
+  : "@" "file" ":" ("[" unescapedAnnotation+ "]" | unescapedAnnotation)
   ;
 
 packageHeader
   : modifiers "package" SimpleName{"."} SEMI?
   ;
 
+/**
+See [Packages](packages.html)
+*/
+
 import
   : "import" SimpleName{"."} ("." "*" | "as" SimpleName)? SEMI?
   ;
 
 /**
-bq. See [Imports|Namespaces#Imports]
+See [Imports](packages.html#imports)
 */
 
-toplevelObject
-  : package
+topLevelObject
   : class
   : object
   : function
   : property
-  : typedef
+  : typeAlias
   ;
 
-package
-  : "package" SimpleName{"."} "{"
-       import*
-       toplevelObject*
-    "}"
-  ;
-
-/**
-bq. See [Namespaces]
-*/
-
-[undocumented]
-typedef
-  : modifiers "type" SimpleName (typeParameters typeConstraints)? "=" type
+typeAlias
+  : modifiers "typealias" SimpleName typeParameters? "=" type
   ;

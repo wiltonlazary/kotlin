@@ -1,8 +1,8 @@
-// import all members from class object
+// import all members from companion object
 package c
 
-import c.A.*
-import c.<!CANNOT_IMPORT_FROM_ELEMENT!>M<!>.*
+import c.A.Companion.B
+import c.<!CANNOT_ALL_UNDER_IMPORT_FROM_SINGLETON!>M<!>.*
 
 fun foo() {
     val <!UNUSED_VARIABLE!>b<!>: B = B()
@@ -10,9 +10,9 @@ fun foo() {
 }
 
 class A() {
-    class object {
+    companion object {
         class B() {
-            class object {
+            companion object {
             }
         }
     }

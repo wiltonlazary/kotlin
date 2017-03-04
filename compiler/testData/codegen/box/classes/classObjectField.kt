@@ -1,5 +1,5 @@
 class A() {
-    class object {
+    companion object {
         val value = 10
     }
 }

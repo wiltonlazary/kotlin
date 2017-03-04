@@ -1,6 +1,6 @@
--sourceFiles
 $TESTDATA_DIR$/simple2js.kt
+-no-stdlib
 -output
 $TEMP_DIR$/out.js
--outputPostfix
+-output-postfix
 not/existing/path

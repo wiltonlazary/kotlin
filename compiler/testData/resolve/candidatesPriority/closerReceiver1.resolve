@@ -1,5 +1,5 @@
 class A {
-    fun B.foo() = 2
+    ~foo~fun B.foo() = 2
 }
 
 class B {

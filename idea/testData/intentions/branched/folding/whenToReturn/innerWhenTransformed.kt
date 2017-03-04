@@ -1,3 +1,5 @@
+fun <T> doSomething(a: T) {}
+
 fun test(n: Int): String {
     if (3 > 2) {
         <caret>when (n) {
@@ -5,7 +7,7 @@ fun test(n: Int): String {
             else -> return "two"
         }
     } else {
-        println("***")
+        doSomething("***")
         return "???"
     }
 }

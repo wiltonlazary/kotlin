@@ -4,5 +4,5 @@ fun test2() {
     1.test1()
 }
 
-// 2 INVOKESTATIC _DefaultPackage-1-[0-9a-f]+\.test1 \(I\)V
-// 1 INVOKESTATIC _DefaultPackage-1-[0-9a-f]+\.test2 \(\)V
+// 1 INVOKESTATIC _1Kt.test1 \(I\)V
+// 0 INVOKESTATIC _1Kt.test2 \(\)V

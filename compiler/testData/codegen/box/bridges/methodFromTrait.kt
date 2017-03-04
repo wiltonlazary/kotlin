@@ -1,4 +1,4 @@
-trait A<T, U> {
+interface A<T, U> {
     fun foo(t: T, u: U) = "A"
 }
 
@@ -8,9 +8,10 @@ class Z<T> : A<T, Int> {
 
 fun box(): String {
     val z = Z<Int>()
+    val a: A<Int, Int> = z
     return when {
-        z.foo(0, 0)                 != "Z" -> "Fail #1"
-        (z : A<Int, Int>).foo(0, 0) != "Z" -> "Fail #2"
+        z.foo(0, 0) != "Z" -> "Fail #1"
+        a.foo(0, 0) != "Z" -> "Fail #2"
         else -> "OK"
     }
 }

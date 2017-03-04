@@ -1,12 +1,15 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 class MyList: List<String> {
-    override fun size(): Int = 0
+    override val size: Int get() = 0
     override fun isEmpty(): Boolean = true
-    override fun contains(o: Any?): Boolean = false
+    override fun contains(o: String): Boolean = false
     override fun iterator(): Iterator<String> = throw Error()
-    override fun containsAll(c: Collection<Any?>): Boolean = false
+    override fun containsAll(c: Collection<String>): Boolean = false
     override fun get(index: Int): String = throw IndexOutOfBoundsException()
-    override fun indexOf(o: Any?): Int = -1
-    override fun lastIndexOf(o: Any?): Int = -1
+    override fun indexOf(o: String): Int = -1
+    override fun lastIndexOf(o: String): Int = -1
     override fun listIterator(): ListIterator<String> = throw Error()
     override fun listIterator(index: Int): ListIterator<String> = throw Error()
     override fun subList(fromIndex: Int, toIndex: Int): List<String> = this
@@ -23,7 +26,7 @@ fun expectUoe(block: () -> Any) {
 }
 
 fun box(): String {
-    val list = MyList() as MutableList<String>
+    val list = MyList() as java.util.List<String>
 
     expectUoe { list.add("") }
     expectUoe { list.remove("") }

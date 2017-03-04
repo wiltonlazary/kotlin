@@ -5,7 +5,7 @@ buildscript {
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:0.5.+'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$ext.kotlin_version"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
 apply plugin: 'android'
@@ -49,7 +49,6 @@ android {
         // tests/java, tests/res, tests/assets, ...
         // This is a *reset* so it replaces the default paths
         instrumentTest.setRoot('tests')
-        main.java.srcDirs += 'src/main/kotlin'
 
         // Could also be done with:
         //main.manifest.srcFile 'AndroidManifest.xml'
@@ -64,5 +63,5 @@ repositories {
     mavenCentral()
 }
 dependencies {
-    compile "org.jetbrains.kotlin:kotlin-stdlib:$ext.kotlin_version"
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jre7:$kotlin_version"
 }

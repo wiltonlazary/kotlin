@@ -4,28 +4,26 @@ open class A() {
   fun foo() : Int = 1
 }
 
-trait B {
+interface B {
   fun bar() : Double = 1.0;
 }
 
 class C() : A(), B
 
 class D() {
-  class object : A(), B {}
+  companion object : A(), B {}
 }
 
-class Test1<T : A>()
+class Test1<T>()
   where
+    T : A,
     T : B,
-    <error>B</error> : T, // error
-    <error>class object T : A</error>,
-    <error>class object T : B</error>,
-    <error>class object <error>B</error> : T</error>
+    <error>B</error> : T // error
   {
 
   fun test(t : T) {
-    T.foo()
-    T.bar()
+    <error>T</error>.<error>foo</error>()
+    <error>T</error>.<error>bar</error>()
     t.foo()
     t.bar()
   }
@@ -44,18 +42,16 @@ class Bar<T : <warning>Foo</warning>>
 class Buzz<T> where T : <warning>Bar<<error>Int</error>></warning>, T : <error>nioho</error>
 
 class X<T : <warning>Foo</warning>>
-class Y<<error>T</error> : <warning>Foo</warning>> where T : <warning>Bar<Foo></warning>
+class Y<<error>T</error>> where T :  <warning>Foo</warning>, T : <error>Bar<Foo></error>
 
-fun <T : A> test2(t : T)
+fun <T> test2(t : T)
   where
+    T : A,
     T : B,
-    <error>B</error> : T,
-    <error>class object <error>B</error> : T</error>,
-    <error>class object T : B</error>,
-    <error>class object T : A</error>
+    <error>B</error> : T
 {
-  T.foo()
-  T.bar()
+  <error>T</error>.<error>foo</error>()
+  <error>T</error>.<error>bar</error>()
   t.foo()
   t.bar()
 }
@@ -64,9 +60,6 @@ val t1 = test2<<error>A</error>>(A())
 val t2 = test2<<error>B</error>>(C())
 val t3 = test2<C>(C())
 
-class Test<<error>T</error>>
-  where
-    <error>class object T : <error>Foo</error></error>,
-    <error>class object T : A</error> {}
+val <T, B: T> Pair<T, B>.x : Int get() = 0
 
-val <T, B : T> x : Int = 0
+class Pair<A, B>()

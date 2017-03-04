@@ -1,5 +1,11 @@
 JetFile: DocCommentAtBeginningOfFile1.kt
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
+    <empty list>
   KDoc
     PsiElement(KDOC_START)('/**')
-  NAMESPACE_HEADER
+    KDOC_SECTION
+      <empty list>
+  PsiErrorElement:Unclosed comment
     <empty list>

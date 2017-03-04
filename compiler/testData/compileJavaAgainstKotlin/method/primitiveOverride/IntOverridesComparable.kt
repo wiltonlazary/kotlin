@@ -1,4 +1,6 @@
-trait A<T : Comparable<T>> {
+package test
+
+interface A<T : Comparable<T>> {
     fun foo(): T
 }
 

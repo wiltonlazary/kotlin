@@ -1,3 +1,4 @@
+//ALLOW_AST_ACCESS
 package test
 
 annotation class IntAnno(val value: Int)
@@ -9,12 +10,12 @@ annotation class BooleanAnno(val value: Boolean)
 annotation class FloatAnno(val value: Float)
 annotation class DoubleAnno(val value: Double)
 
-IntAnno(42.toInt())
-ShortAnno(42.toShort())
-ByteAnno(42.toByte())
-LongAnno(42.toLong())
-CharAnno('A')
-BooleanAnno(false)
-FloatAnno(3.14.toFloat())
-DoubleAnno(3.14)
+@IntAnno(42.toInt())
+@ShortAnno(42.toShort())
+@ByteAnno(42.toByte())
+@LongAnno(42.toLong())
+@CharAnno('A')
+@BooleanAnno(false)
+@FloatAnno(3.14.toFloat())
+@DoubleAnno(3.14)
 class Class

@@ -1,4 +1,6 @@
 target
-.idea
+/doc/
+.idea/
+!.idea/runConfigurations
 *.iml
 *.ipr

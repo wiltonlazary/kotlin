@@ -1,14 +1,17 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 class It {
     var hasNext = true
-    fun hasNext() = if (hasNext) {hasNext = false; true} else false
+    operator fun hasNext() = if (hasNext) {hasNext = false; true} else false
 }
 
 class C {
-    fun iterator(): It = It()
+    operator fun iterator(): It = It()
 }
 
 class X {
-    fun It.next() = 5
+    operator fun It.next() = 5
 
     fun test() {
         for (i in C()) {

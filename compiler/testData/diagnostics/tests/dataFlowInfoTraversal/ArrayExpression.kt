@@ -1,5 +1,8 @@
+// !CHECK_TYPE
+
 fun foo(arr: Array<out Number>): Int {
+    @Suppress("UNCHECKED_CAST")
     val result = (arr as Array<Int>)[0]
-    <!DEBUG_INFO_AUTOCAST!>arr<!> : Array<Int>
+    checkSubtype<Array<Int>>(<!DEBUG_INFO_SMARTCAST!>arr<!>)
     return result
 }

@@ -1,11 +1,11 @@
 enum class E {
-    FIRST
+    FIRST,
 
     SECOND {
-        <!CLASS_OBJECT_NOT_ALLOWED!>class object {
+        <!WRONG_MODIFIER_CONTAINING_DECLARATION!>companion<!> object {
             fun foo() = 42
-        }<!>
-    }
+        }
+    };
 }
 
 fun f() = E.SECOND.<!UNRESOLVED_REFERENCE!>foo<!>()

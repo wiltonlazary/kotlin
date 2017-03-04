@@ -1,11 +1,11 @@
-// PSI_ELEMENT: org.jetbrains.jet.lang.psi.JetClass
+// PSI_ELEMENT: org.jetbrains.kotlin.psi.KtClass
 // OPTIONS: derivedClasses
 fun foo() {
     open class <caret>A
 
     val b = object: A() {}
 
-    trait T: A
+    interface T: A
 
     fun bar() {
         val c = object: A() {}

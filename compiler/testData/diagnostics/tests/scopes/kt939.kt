@@ -1,6 +1,5 @@
 package kt939
 
-
 //KT-939 CommonSupertypes erases scopes associated to types
 
 fun compare(o1 : String?, o2 : String?) : Int {

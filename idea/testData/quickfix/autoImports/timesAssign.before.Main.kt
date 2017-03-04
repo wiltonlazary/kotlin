@@ -1,7 +1,9 @@
 // "Import" "true"
 // ERROR: Unresolved reference: *=
 
-trait H
+package h
+
+interface H
 
 fun f(h: H) {
     h <caret>*= 3

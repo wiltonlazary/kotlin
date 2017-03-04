@@ -1,16 +1,16 @@
 package h
 
-trait A<T> {}
+interface A<T> {}
 
 fun <T> newA(): A<T> = throw Exception()
 
-trait Z
+interface Z
 
 fun <T> id(t: T): T = t
 
 //binary expressions
 //identifier
-fun <T> Z.foo(a: A<T>): A<T> = a
+infix fun <T> Z.foo(a: A<T>): A<T> = a
 
 fun test(z: Z) {
     z <!TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>foo<!> <!TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>newA<!>()
@@ -20,7 +20,7 @@ fun test(z: Z) {
 }
 
 //binary operation expression
-fun <T> Z.plus(a: A<T>): A<T> = a
+operator fun <T> Z.plus(a: A<T>): A<T> = a
 
 fun test1(z: Z) {
     id(z <!TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>+<!> <!TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>newA<!>())
@@ -32,7 +32,7 @@ fun test1(z: Z) {
 }
 
 //comparison operation
-fun <T> Z.compareTo(a: A<T>): Int { use(a); return 1 }
+operator fun <T> Z.compareTo(a: A<T>): Int { use(a); return 1 }
 
 fun test2(z: Z) {
     val a: Boolean = id(z <!TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!><<!> <!TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>newA<!>())
@@ -41,7 +41,7 @@ fun test2(z: Z) {
 }
 
 //'equals' operation
-fun Z.equals(any: Any): Int { use(any); return 1 }
+fun Z.<!EXTENSION_SHADOWED_BY_MEMBER!>equals<!>(any: Any): Int { use(any); return 1 }
 
 fun test3(z: Z) {
     z == <!TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>newA<!>()

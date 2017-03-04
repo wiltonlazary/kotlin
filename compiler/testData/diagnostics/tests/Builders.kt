@@ -49,27 +49,27 @@ fun main(args : Array<String>) {
   println(result)
 }
 
-trait Element {
-  fun render(builder : StringBuilder, indent : String)
+abstract class Element {
+  abstract fun render(builder : StringBuilder, indent : String)
 
-  fun toString() : String? {
+  override fun toString() : String {
     val builder = StringBuilder()
     render(builder, "")
     return builder.toString()
   }
 }
 
-class TextElement(val text : String) : Element {
+class TextElement(val text : String) : Element() {
   override fun render(builder : StringBuilder, indent : String) {
     builder.append("$indent$text\n")
   }
 }
 
-abstract class Tag(val name : String) : Element {
+abstract class Tag(val name : String) : Element() {
   val children = ArrayList<Element>()
   val attributes = HashMap<String, String>()
 
-  protected fun initTag<T : Element>(tag : T, init : T.() -> Unit) : T {
+  protected fun <T : Element> initTag(tag : T, init : T.() -> Unit) : T {
     tag.init()
     children.add(tag)
     return tag
@@ -85,7 +85,7 @@ abstract class Tag(val name : String) : Element {
 
   private fun renderAttributes() : String? {
     val builder = StringBuilder()
-    for (a in attributes.keySet()) {
+    for (a in attributes.keys) {
       builder.append(" $a=\"${attributes[a]}\"")
     }
     return builder.toString()
@@ -93,7 +93,7 @@ abstract class Tag(val name : String) : Element {
 }
 
 abstract class TagWithText(name : String) : Tag(name) {
-  fun String.plus() {
+  operator fun String.unaryPlus() {
     children.add(TextElement(this))
   }
 }
@@ -135,7 +135,7 @@ class A() : BodyTag("a") {
     get() = attributes["href"]
     set(value) {
        if (value != null) {
-           attributes.put("href", <!DEBUG_INFO_AUTOCAST!>value<!>)
+           attributes.put("href", <!DEBUG_INFO_SMARTCAST!>value<!>)
 //         attributes["href"] = value //doesn't work: KT-1355
        }
     }
@@ -148,7 +148,7 @@ fun html(init : HTML.() -> Unit) : HTML {
 }
 
 // An excerpt from the Standard Library
-fun <K, V> MutableMap<K, V>.set(key : K, value : V) = this.put(key, value)
+operator fun <K, V> MutableMap<K, V>.set(key : K, value : V) = this.put(key, value)
 
 fun println(message : Any?) {
   System.out.println(message)

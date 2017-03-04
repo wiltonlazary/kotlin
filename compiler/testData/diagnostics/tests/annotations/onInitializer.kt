@@ -1,15 +1,11 @@
 class A {
-    ann {}
-    [ann] {}
-    <!UNRESOLVED_REFERENCE!>aaa<!> {}
-    [<!UNRESOLVED_REFERENCE!>aaa<!>] {}
+    <!WRONG_ANNOTATION_TARGET!>@ann<!> init {}
+    <!WRONG_ANNOTATION_TARGET!>@<!UNRESOLVED_REFERENCE!>aaa<!><!> init {}
 }
 
-trait T {
-    <!ANONYMOUS_INITIALIZER_IN_TRAIT!>ann {}<!>
-    <!ANONYMOUS_INITIALIZER_IN_TRAIT!>[ann] {}<!>
-    <!ANONYMOUS_INITIALIZER_IN_TRAIT!><!UNRESOLVED_REFERENCE!>aaa<!> {}<!>
-    <!ANONYMOUS_INITIALIZER_IN_TRAIT!>[<!UNRESOLVED_REFERENCE!>aaa<!>] {}<!>
+interface T {
+    <!WRONG_ANNOTATION_TARGET!>@ann<!> <!ANONYMOUS_INITIALIZER_IN_INTERFACE!>init<!> {}
+    <!WRONG_ANNOTATION_TARGET!>@<!UNRESOLVED_REFERENCE!>aaa<!><!> <!ANONYMOUS_INITIALIZER_IN_INTERFACE!>init<!> {}
 }
 
 annotation class ann

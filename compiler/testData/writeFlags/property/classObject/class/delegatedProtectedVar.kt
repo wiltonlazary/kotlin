@@ -1,16 +1,18 @@
+import kotlin.reflect.KProperty
+
 class TestDelegate() {
-    fun get(thisRef: Any?, desc: PropertyMetadata): Int {
+    operator fun getValue(thisRef: Any?, desc: KProperty<*>): Int {
         return 10
     }
 
-    public open fun set(thisRef: Any?, desc: PropertyMetadata, svalue : Int) {
+    operator open fun setValue(thisRef: Any?, desc: KProperty<*>, svalue : Int) {
 
     }
 }
 
 
 class Test {
-  class object {
+  companion object {
     protected var prop: Int by TestDelegate()
   }
 }
@@ -20,11 +22,11 @@ class Test {
 // ABSENT: TRUE
 
 // TESTED_OBJECT_KIND: property
-// TESTED_OBJECTS: Test$object, prop
+// TESTED_OBJECTS: Test$Companion, prop
 // ABSENT: TRUE
 
 // TESTED_OBJECT_KIND: property
-// TESTED_OBJECTS: Test$object, prop$delegate
+// TESTED_OBJECTS: Test$Companion, prop$delegate
 // ABSENT: TRUE
 
 // TESTED_OBJECT_KIND: property

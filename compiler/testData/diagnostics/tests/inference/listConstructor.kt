@@ -1,3 +1,5 @@
+// !CHECK_TYPE
+
 package a
 //+JDK
 import java.util.*
@@ -11,16 +13,16 @@ fun test() {
     val xs1 = cons("", nil())
     val xs2 = cons(1, nil<Any>())
 
-    xs : List<Int>
-    xs1 : List<String>
-    xs2 : List<Any>
+    checkSubtype<List<Int>>(xs)
+    checkSubtype<List<String>>(xs1)
+    checkSubtype<List<Any>>(xs2)
 }
 
 
 // ---------------------
 // copy from kotlin util
 
-fun arrayList<T>(vararg values: T) : ArrayList<T> = values.toCollection(ArrayList<T>(values.size))
+fun <T> arrayList(vararg values: T) : ArrayList<T> = values.toCollection(ArrayList<T>(values.size))
 
 fun <T, C: MutableCollection<in T>> Array<T>.toCollection(result: C) : C {
     for (element in this) result.add(element)

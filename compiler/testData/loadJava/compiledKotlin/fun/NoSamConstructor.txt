@@ -1,5 +1,5 @@
 package test
 
-public trait Runnable {
-    internal abstract fun run(): jet.Unit
+public interface Runnable {
+    public abstract fun run(): kotlin.Unit
 }

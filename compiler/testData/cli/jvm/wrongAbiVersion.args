@@ -1,6 +1,5 @@
--src
 $TESTDATA_DIR$/wrongAbiVersion.kt
 -classpath
-$TESTDATA_DIR$/wrongAbiVersionLib
--output
+$TESTDATA_DIR$/wrongAbiVersionLib/bin
+-d
 $TEMP_DIR$

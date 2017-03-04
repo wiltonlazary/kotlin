@@ -1,5 +1,7 @@
 JetFile: FunctionTypesAsArguments.kt
-  NAMESPACE_HEADER
+  PACKAGE_DIRECTIVE
+    <empty list>
+  IMPORT_LIST
     <empty list>
   PROPERTY
     PsiElement(val)('val')
@@ -45,8 +47,8 @@ JetFile: FunctionTypesAsArguments.kt
         VALUE_ARGUMENT_LIST
           PsiElement(LPAR)('(')
           PsiElement(RPAR)(')')
-  PsiWhiteSpace('   ')
-  PsiComment(EOL_COMMENT)('// multiple errors')
+    PsiWhiteSpace('   ')
+    PsiComment(EOL_COMMENT)('// multiple errors')
   PsiWhiteSpace('\n\n')
   CLASS
     PsiElement(class)('class')

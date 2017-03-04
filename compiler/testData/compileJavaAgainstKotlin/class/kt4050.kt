@@ -1,9 +1,11 @@
 package test
 
-enum class MyEnum(deprecated("") val ord: Int) {
-    ENTRY: MyEnum(239)
+annotation class AAA
 
-    fun f(Deprecated p: Int) {
+enum class MyEnum(@param:AAA @property:Deprecated("") val ord: Int) {
+    ENTRY(239);
+
+    fun f(@java.lang.Deprecated p: Int) {
 
     }
 }

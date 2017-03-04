@@ -1,3 +1,5 @@
+// !CHECK_TYPE
+
 //KT-1944 Inference fails on run()
 package j
 
@@ -7,8 +9,6 @@ class P {
 
     fun foo() {
         val r = run {x = 5} // ERROR
-        r : Unit
+        checkSubtype<Unit>(r)
     }
 }
-
-fun <T> run(f: () -> T) : T = f()

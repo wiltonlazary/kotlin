@@ -1,16 +1,16 @@
-// KT-338 Support autocasts in nested declarations
+// KT-338 Support.smartcasts in nested declarations
 
 fun f(a: Any?) {
   if (a is B) {
-    class C : X(<!DEBUG_INFO_AUTOCAST!>a<!>) {
-      {
-        <!DEBUG_INFO_AUTOCAST!>a<!>.foo()
+    class C : X(<!DEBUG_INFO_SMARTCAST!>a<!>) {
+      init {
+        <!DEBUG_INFO_SMARTCAST!>a<!>.foo()
       }
     }
   }
 }
 
-trait B {
+interface B {
   fun foo() {}
 }
-open class X(b: B)
+open class X(<!UNUSED_PARAMETER!>b<!>: B)

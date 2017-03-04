@@ -2,16 +2,16 @@
 
 class A {
     inner class B {
-        <!CLASS_OBJECT_NOT_ALLOWED!>class object { }<!>
+        companion <!NESTED_OBJECT_NOT_ALLOWED!>object<!> { }
     }
 }
 
 class B {
-    class object {
+    companion object {
         class B {
-            class object {
+            companion object {
                 class C {
-                    class object { }
+                    companion object { }
                 }
             }
         }
@@ -20,6 +20,6 @@ class B {
 
 class C {
     class D {
-        class object { }
+        companion object { }
     }
 }

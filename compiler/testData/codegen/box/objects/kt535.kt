@@ -1,16 +1,19 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 class Identifier<T>(t : T?, myHasDollar : Boolean) {
     private val myT : T?
 
     public fun getName() : T? { return myT }
 
-    class object {
-        open public fun init<T>(name : T?) : Identifier<T> {
-            val __ = Identifier<T>(name, false)
-            return __
+    companion object {
+        open public fun <T> init(name : T?) : Identifier<T> {
+            val id = Identifier<T>(name, false)
+            return id
         }
     }
-    {
-        $myT = t
+    init {
+        myT = t
     }
 }
 

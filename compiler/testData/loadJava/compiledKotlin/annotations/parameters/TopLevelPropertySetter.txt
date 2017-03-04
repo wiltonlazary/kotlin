@@ -1,13 +1,13 @@
 package test
 
-internal var foo: jet.Int
-    internal fun <get-foo>(): jet.Int
-    internal fun <set-foo>(/*0*/ test.A() test.B() value: jet.Int): jet.Unit
+public var foo: kotlin.Int
+    public fun <get-foo>(): kotlin.Int
+    public fun <set-foo>(/*0*/ @test.A @test.B value: kotlin.Int): kotlin.Unit
 
-internal final annotation class A : jet.Annotation {
+public final annotation class A : kotlin.Annotation {
     /*primary*/ public constructor A()
 }
 
-internal final annotation class B : jet.Annotation {
+public final annotation class B : kotlin.Annotation {
     /*primary*/ public constructor B()
 }

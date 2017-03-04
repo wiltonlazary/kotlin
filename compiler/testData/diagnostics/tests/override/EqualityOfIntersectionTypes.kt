@@ -1,15 +1,15 @@
-trait Foo
-trait Bar
+interface Foo
+interface Bar
 
-trait A {
+interface A {
     fun <T> foo()
     where T : Foo, T : Bar
-    = Unit.VALUE
+    = Unit
 }
 
 class B : A {
     override fun <T> foo()
     where T : Foo, T : Bar
-    = Unit.VALUE
+    = Unit
 
 }

@@ -1,7 +1,9 @@
 // "Import" "true"
 // ERROR: Unresolved reference: foo
 
-trait H
+package h
+
+interface H
 
 fun f(h: H) {
     h <caret>foo h

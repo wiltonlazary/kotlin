@@ -1,3 +1,6 @@
+// TODO: muted automatically, investigate should it be ran for JS or not
+// IGNORE_BACKEND: JS
+
 package bottles
 
 fun box() : String {
@@ -26,5 +29,5 @@ fun bottlesOfBeer(count : Int) :  String {
 // An excerpt from the standard library
 fun print(message : String) { System.out?.print(message) }
 fun println(message : String) { System.out?.println(message) }
-fun StringBuilder.plusAssign(o : Any) { append(o) }
+operator fun StringBuilder.plusAssign(o : Any) { append(o) }
 val <T> Array<T>.isEmpty : Boolean get() = size == 0

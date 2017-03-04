@@ -6,9 +6,9 @@ open class B() : A() {
 
 
 class C() {
-  fun a<T>(x: (T)->T, y: T): T {
+  fun <T> a(x: (T)->T, y: T): T {
     return x(x(y))
   }
 
-  val x: B = a({it.b()}, B())
+  val x: B = <!DEBUG_INFO_LEAKING_THIS!>a<!>({it.b()}, B())
 }

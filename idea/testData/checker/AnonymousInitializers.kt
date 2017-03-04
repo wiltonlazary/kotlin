@@ -1,30 +1,27 @@
-trait NoC {
-  <error>{
-
-  }</error>
-
-  val a : Int get() = 1
-
-  <error>{
-
-  }</error>
-}
-
-class WithC() {
-  val x : Int
-  {
-    $x = 1
-    <error>$y</error> = 2
-    val b = x
+interface NoC {
+  <error>init</error> {
 
   }
 
   val a : Int get() = 1
 
-  {
-    val z = <error>b</error>
-    val zz = x
-    val zzz = <error>$a</error>
+  <error>init</error> {
+
+  }
+}
+
+class WithC() {
+  val x : Int = 42
+  init {
+    val <warning>b</warning> = x
+
+  }
+
+  val a : Int get() = 1
+
+  init {
+    val <warning>z</warning> = <error>b</error>
+    val <warning>zz</warning> = x
   }
 
 }

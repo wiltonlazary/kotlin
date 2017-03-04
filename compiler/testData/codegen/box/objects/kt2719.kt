@@ -1,5 +1,5 @@
 class Clazz {
-    class object {
+    companion object {
         val a = object {
             fun run(x: String) = x
         }

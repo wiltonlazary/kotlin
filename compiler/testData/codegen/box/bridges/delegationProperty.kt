@@ -1,4 +1,4 @@
-trait A<T> {
+interface A<T> {
     var result: T
 }
 
@@ -11,5 +11,5 @@ fun box(): String {
     val b: A<String> = B(o)
     b.result = "OK"
     if (b.result != "OK") return "Fail"
-    return (b : A<String>).result
+    return b.result
 }
