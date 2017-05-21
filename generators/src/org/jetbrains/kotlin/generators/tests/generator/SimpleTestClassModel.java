@@ -19,7 +19,6 @@ package org.jetbrains.kotlin.generators.tests.generator;
 import com.google.common.collect.Lists;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.Processor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
@@ -31,12 +30,8 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 public class SimpleTestClassModel implements TestClassModel {
-    private static final Comparator<TestEntityModel> BY_NAME = new Comparator<TestEntityModel>() {
-        @Override
-        public int compare(@NotNull TestEntityModel o1, @NotNull TestEntityModel o2) {
-            return o1.getName().compareTo(o2.getName());
-        }
-    };
+    private static final Comparator<TestEntityModel> BY_NAME = Comparator.comparing(TestEntityModel::getName);
+
     @NotNull
     private final File rootFile;
     private final boolean recursive;
@@ -77,7 +72,7 @@ public class SimpleTestClassModel implements TestClassModel {
         this.testClassName = testClassName;
         this.targetBackend = targetBackend;
         this.checkFilenameStartsLowerCase = checkFilenameStartsLowerCase;
-        this.excludeDirs = excludeDirs.isEmpty() ? Collections.<String>emptySet() : new LinkedHashSet<String>(excludeDirs);
+        this.excludeDirs = excludeDirs.isEmpty() ? Collections.emptySet() : new LinkedHashSet<>(excludeDirs);
     }
 
     @NotNull
@@ -101,7 +96,7 @@ public class SimpleTestClassModel implements TestClassModel {
                     }
                 }
             }
-            Collections.sort(children, BY_NAME);
+            children.sort(BY_NAME);
             innerTestClasses = children;
         }
         return innerTestClasses;
@@ -111,7 +106,7 @@ public class SimpleTestClassModel implements TestClassModel {
     private Set<String> excludesStripOneDirectory(@NotNull String directoryName) {
         if (excludeDirs.isEmpty()) return excludeDirs;
 
-        Set<String> result = new LinkedHashSet<String>();
+        Set<String> result = new LinkedHashSet<>();
         for (String excludeDir : excludeDirs) {
             int firstSlash = excludeDir.indexOf('/');
             if (firstSlash >= 0 && excludeDir.substring(0, firstSlash).equals(directoryName)) {
@@ -123,12 +118,7 @@ public class SimpleTestClassModel implements TestClassModel {
     }
 
     private static boolean dirHasFilesInside(@NotNull File dir) {
-        return !FileUtil.processFilesRecursively(dir, new Processor<File>() {
-            @Override
-            public boolean process(File file) {
-                return file.isDirectory();
-            }
-        });
+        return !FileUtil.processFilesRecursively(dir, File::isDirectory);
     }
 
     private static boolean dirHasSubDirs(@NotNull File dir) {
@@ -149,9 +139,9 @@ public class SimpleTestClassModel implements TestClassModel {
     public Collection<MethodModel> getMethods() {
         if (testMethods == null) {
             if (!rootFile.isDirectory()) {
-                testMethods = Collections.<MethodModel>singletonList(new SimpleTestMethodModel(rootFile, rootFile, doTestMethodName,
-                                                                                                   filenamePattern, checkFilenameStartsLowerCase,
-                                                                                                   targetBackend));
+                testMethods = Collections.singletonList(new SimpleTestMethodModel(
+                        rootFile, rootFile, doTestMethodName, filenamePattern, checkFilenameStartsLowerCase, targetBackend
+                ));
             }
             else {
                 List<MethodModel> result = Lists.newArrayList();
@@ -171,7 +161,7 @@ public class SimpleTestClassModel implements TestClassModel {
                         }
                     }
                 }
-                Collections.sort(result, BY_NAME);
+                result.sort(BY_NAME);
 
                 testMethods = result;
             }

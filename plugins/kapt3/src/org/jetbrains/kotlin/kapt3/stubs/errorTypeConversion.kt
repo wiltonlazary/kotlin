@@ -29,6 +29,7 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.Variance
+import org.jetbrains.kotlin.types.isError
 
 internal fun convertKtType(
         reference: KtTypeReference?,
@@ -42,7 +43,7 @@ internal fun convertKtType(
         val kotlinType = converter.kaptContext.bindingContext[BindingContext.TYPE, reference]
         if (kotlinType != null && !kotlinType.containsErrorTypes()) {
             val signatureWriter = BothSignatureWriter(BothSignatureWriter.Mode.TYPE)
-            converter.typeMapper.mapType(kotlinType, signatureWriter,
+            converter.kaptContext.generationState.typeMapper.mapType(kotlinType, signatureWriter,
                     if (shouldBeBoxed) TypeMappingMode.GENERIC_ARGUMENT else TypeMappingMode.DEFAULT)
 
             return SignatureParser(converter.treeMaker).parseFieldSignature(
@@ -73,7 +74,7 @@ private fun convertUserType(type: KtUserType, converter: ClassFileToSourceStubCo
         // This could be List<SomeErrorType> or similar. List should be converted to java.util.List in this case.
         val referenceTarget = converter.kaptContext.bindingContext[BindingContext.REFERENCE_TARGET, type.referenceExpression]
         if (referenceTarget is ClassDescriptor) {
-            treeMaker.FqName(converter.typeMapper.mapType(referenceTarget.defaultType).className)
+            treeMaker.FqName(converter.kaptContext.generationState.typeMapper.mapType(referenceTarget.defaultType).className)
         }
         else {
             treeMaker.SimpleName(referencedName)

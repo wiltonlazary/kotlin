@@ -49,15 +49,17 @@ import org.jetbrains.kotlin.asJava.toLightClass
 import org.jetbrains.kotlin.asJava.toLightMethods
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotated
-import org.jetbrains.kotlin.idea.caches.resolve.analyze
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.findModuleDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.core.toDescriptor
 import org.jetbrains.kotlin.idea.findUsages.KotlinFindUsagesHandlerFactory
 import org.jetbrains.kotlin.idea.findUsages.handlers.KotlinFindClassUsagesHandler
+import org.jetbrains.kotlin.idea.highlighter.allImplementingCompatibleModules
 import org.jetbrains.kotlin.idea.highlighter.markers.hasImplementationsOf
 import org.jetbrains.kotlin.idea.imports.importableFqName
 import org.jetbrains.kotlin.idea.references.mainReference
+import org.jetbrains.kotlin.idea.references.resolveMainReferenceToDescriptors
 import org.jetbrains.kotlin.idea.search.usagesSearch.dataClassComponentFunction
 import org.jetbrains.kotlin.idea.search.usagesSearch.descriptor
 import org.jetbrains.kotlin.idea.search.usagesSearch.getAccessorNames
@@ -67,9 +69,9 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.util.findCallableMemberBySignature
-import org.jetbrains.kotlin.utils.singletonOrEmptyList
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.awt.Insets
@@ -116,9 +118,11 @@ class UnusedSymbolInspection : AbstractKotlinInspection() {
         // variation of IDEA's AnnotationUtil.checkAnnotatedUsingPatterns()
         private fun checkAnnotatedUsingPatterns(annotated: Annotated, annotationPatterns: Collection<String>): Boolean {
             val annotationsPresent = annotated.annotations
-                    .map { it.type }
-                    .filter { !it.isError }
-                    .mapNotNull { it.constructor.declarationDescriptor?.let { DescriptorUtils.getFqName(it).asString() } }
+                    .map(AnnotationDescriptor::getType)
+                    .filterNot(KotlinType::isError)
+                    .mapNotNull { it.constructor.declarationDescriptor?.let { descriptor ->
+                        DescriptorUtils.getFqName(descriptor).asString()
+                    } }
 
             if (annotationsPresent.isEmpty()) return false
 
@@ -216,9 +220,9 @@ class UnusedSymbolInspection : AbstractKotlinInspection() {
         if (useScope is GlobalSearchScope) {
             var zeroOccurrences = true
 
-            for (name in listOf(declaration.name) + declaration.getAccessorNames() + declaration.getClassNameForCompanionObject().singletonOrEmptyList()) {
+            for (name in listOf(declaration.name) + declaration.getAccessorNames() + listOfNotNull(declaration.getClassNameForCompanionObject())) {
                 if (name == null) continue
-                when (psiSearchHelper.isCheapEnoughToSearch(name!!, useScope, null, null)) {
+                when (psiSearchHelper.isCheapEnoughToSearch(name, useScope, null, null)) {
                     ZERO_OCCURRENCES -> {} // go on, check other names
                     FEW_OCCURRENCES -> zeroOccurrences = false
                     TOO_MANY_OCCURRENCES -> return true // searching usages is too expensive; behave like it is used
@@ -332,7 +336,7 @@ class UnusedSymbolInspection : AbstractKotlinInspection() {
         descriptor as? MemberDescriptor ?: return false
         val commonModuleDescriptor = declaration.containingKtFile.findModuleDescriptor()
 
-        return commonModuleDescriptor.allImplementingModules.any { it.hasImplementationsOf(descriptor) } ||
+        return commonModuleDescriptor.allImplementingCompatibleModules.any { it.hasImplementationsOf(descriptor) } ||
                commonModuleDescriptor.hasImplementationsOf(descriptor)
     }
 
@@ -352,8 +356,7 @@ class UnusedSymbolInspection : AbstractKotlinInspection() {
 
         for (annotationEntry in declaration.annotationEntries) {
             val typeElement = annotationEntry.typeReference?.typeElement as? KtUserType ?: continue
-            val bindingContext = annotationEntry.analyze(BodyResolveMode.PARTIAL)
-            val target = typeElement.referenceExpression?.mainReference?.resolveToDescriptors(bindingContext)?.singleOrNull() ?: continue
+            val target = typeElement.referenceExpression?.resolveMainReferenceToDescriptors()?.singleOrNull() ?: continue
             val fqName = target.importableFqName?.asString() ?: continue
 
             // checks taken from com.intellij.codeInspection.util.SpecialAnnotationsUtilBase.createAddToSpecialAnnotationFixes

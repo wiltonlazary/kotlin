@@ -21,6 +21,7 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiComment
 import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
+import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
@@ -38,7 +39,10 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getCalleeExpressionIfAny
+import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitClassReceiver
+import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 import org.jetbrains.kotlin.types.KotlinType
 
 class ObjectLiteralToLambdaInspection : IntentionBasedInspection<KtObjectLiteralExpression>(ObjectLiteralToLambdaIntention::class)
@@ -61,21 +65,29 @@ class ObjectLiteralToLambdaIntention : SelfTargetingRangeIntention<KtObjectLiter
         if (singleFunction.valueParameters.any { it.name == null }) return null
 
         val bodyExpression = singleFunction.bodyExpression!!
+        val context = bodyExpression.analyze()
+        val containingDeclaration = functionDescriptor.containingDeclaration
 
         // this-reference
-        val thisReferences = bodyExpression.collectDescendantsOfType<KtThisExpression> { it !is KtClassOrObject }
-        for (thisReference in thisReferences) {
-            val context = thisReference.analyze(BodyResolveMode.PARTIAL)
-            val thisDescriptor = context[BindingContext.REFERENCE_TARGET, thisReference.instanceReference]
-            if (thisDescriptor == functionDescriptor.containingDeclaration) {
-                return null
-            }
-        }
+        if (bodyExpression.anyDescendantOfType<KtThisExpression> { thisReference ->
+            context[BindingContext.REFERENCE_TARGET, thisReference.instanceReference] == containingDeclaration
+        }) return null
 
         // Recursive call, skip labels
         if (ReferencesSearch.search(singleFunction, LocalSearchScope(bodyExpression)).any { it.element !is KtLabelReferenceExpression }) {
             return null
         }
+
+        fun ReceiverValue?.isImplicitClassFor(descriptor: DeclarationDescriptor) =
+                this is ImplicitClassReceiver && classDescriptor == descriptor
+
+        if (bodyExpression.anyDescendantOfType<KtExpression> { expression ->
+            val resolvedCall = expression.getResolvedCall(context)
+            resolvedCall?.let {
+                it.dispatchReceiver.isImplicitClassFor(containingDeclaration) ||
+                it.extensionReceiver.isImplicitClassFor(containingDeclaration)
+            } ?: false
+        }) return null
 
         return TextRange(element.objectDeclaration.getObjectKeyword()!!.startOffset, baseTypeRef.endOffset)
     }
@@ -146,7 +158,7 @@ class ObjectLiteralToLambdaIntention : SelfTargetingRangeIntention<KtObjectLiter
         }
         else {
             val endOffset = (callee.parent as? KtCallExpression)?.typeArgumentList?.endOffset ?: callee.endOffset
-            ShortenReferences.DEFAULT.process(replaced.getContainingKtFile(), replaced.startOffset, endOffset)
+            ShortenReferences.DEFAULT.process(replaced.containingKtFile, replaced.startOffset, endOffset)
         }
     }
 
@@ -162,7 +174,7 @@ class ObjectLiteralToLambdaIntention : SelfTargetingRangeIntention<KtObjectLiter
         val singleFunction = objectDeclaration.declarations.singleOrNull() as? KtNamedFunction ?: return null
         if (!singleFunction.hasModifier(KtTokens.OVERRIDE_KEYWORD)) return null
 
-        val delegationSpecifier = objectDeclaration.getSuperTypeListEntries().singleOrNull() ?: return null
+        val delegationSpecifier = objectDeclaration.superTypeListEntries.singleOrNull() ?: return null
         val typeRef = delegationSpecifier.typeReference ?: return null
         val bindingContext = typeRef.analyze(BodyResolveMode.PARTIAL)
         val baseType = bindingContext[BindingContext.TYPE, typeRef] ?: return null

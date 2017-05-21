@@ -26,7 +26,6 @@ import org.jetbrains.kotlin.codegen.binding.CodegenBinding
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
 import org.jetbrains.kotlin.codegen.topLevelClassAsmType
 import org.jetbrains.kotlin.codegen.topLevelClassInternalName
-import org.jetbrains.kotlin.coroutines.isSuspendLambda
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.ValueParameterDescriptorImpl
@@ -50,19 +49,19 @@ import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
+import org.jetbrains.org.objectweb.asm.commons.Method
 import org.jetbrains.org.objectweb.asm.tree.MethodNode
 
 // These classes do not actually exist at runtime
-val CONTINUATION_METHOD_ANNOTATION_DESC = "Lkotlin/ContinuationMethod;"
-
 const val COROUTINE_MARKER_OWNER = "kotlin/coroutines/Markers"
 const val BEFORE_SUSPENSION_POINT_MARKER_NAME = "beforeSuspensionPoint"
 const val AFTER_SUSPENSION_POINT_MARKER_NAME = "afterSuspensionPoint"
-const val ACTUAL_COROUTINE_START_MARKER_NAME = "actualCoroutineStart"
 
 const val COROUTINE_LABEL_FIELD_NAME = "label"
 const val SUSPEND_FUNCTION_CREATE_METHOD_NAME = "create"
 const val DO_RESUME_METHOD_NAME = "doResume"
+const val DATA_FIELD_NAME = "data"
+const val EXCEPTION_FIELD_NAME = "exception"
 
 @JvmField
 val COROUTINES_JVM_INTERNAL_PACKAGE_FQ_NAME =
@@ -137,7 +136,7 @@ fun ResolvedCall<*>.replaceSuspensionFunctionWithRealDescriptor(
         newCall.recordValueArgument(newCandidateDescriptor.valueParameters[it.key.index], it.value)
     }
 
-    val psiFactory = KtPsiFactory(project)
+    val psiFactory = KtPsiFactory(project, markGenerated = false)
     val arguments = psiFactory.createCallArguments("(this)").arguments.single()
     val thisExpression = arguments.getArgumentExpression()!!
     newCall.recordValueArgument(
@@ -154,18 +153,11 @@ fun ResolvedCall<*>.replaceSuspensionFunctionWithRealDescriptor(
     return ResolvedCallWithRealDescriptor(newCall, thisExpression)
 }
 
-fun ResolvedCall<*>.isSuspensionPointInStateMachine(bindingContext: BindingContext): Boolean {
-    if (resultingDescriptor.safeAs<FunctionDescriptor>()?.isSuspend != true) return false
-    val enclosingSuspendFunction = bindingContext[BindingContext.ENCLOSING_SUSPEND_FUNCTION_FOR_SUSPEND_FUNCTION_CALL, call] ?: return false
-
-    return enclosingSuspendFunction.isStateMachineNeeded(bindingContext)
-}
-
-fun FunctionDescriptor.isStateMachineNeeded(bindingContext: BindingContext) =
-        isSuspendLambda || containsNonTailSuspensionCalls(bindingContext)
-
-fun FunctionDescriptor.containsNonTailSuspensionCalls(bindingContext: BindingContext) =
-        bindingContext[BindingContext.CONTAINS_NON_TAIL_SUSPEND_CALLS, original] == true
+fun ResolvedCall<*>.isSuspendNoInlineCall() =
+        resultingDescriptor.safeAs<FunctionDescriptor>()
+                ?.let {
+                    it.isSuspend && (!it.isInline || it.isBuiltInSuspendCoroutineOrReturnInJvm())
+                } == true
 
 fun CallableDescriptor.isSuspendFunctionNotSuspensionView(): Boolean {
     if (this !is FunctionDescriptor) return false
@@ -185,7 +177,7 @@ fun <D : FunctionDescriptor> getOrCreateJvmSuspendFunctionView(function: D, bind
     bindingContext?.get(CodegenBinding.SUSPEND_FUNCTION_TO_JVM_VIEW, function)?.let { return it as D }
 
     val continuationParameter = ValueParameterDescriptorImpl(
-            function, null, function.valueParameters.size, Annotations.EMPTY, Name.identifier("\$continuation"),
+            function, null, function.valueParameters.size, Annotations.EMPTY, Name.identifier("continuation"),
             // Add j.l.Object to invoke(), because that is the type of parameters we have in FunctionN+1
             if (function.containingDeclaration.safeAs<ClassDescriptor>()?.defaultType?.isBuiltinFunctionalType == true)
                 function.builtIns.nullableAnyType
@@ -307,3 +299,6 @@ fun InstructionAdapter.invokeDoResumeWithUnit(thisName: String) {
             false
     )
 }
+
+fun Method.getImplForOpenMethod(ownerInternalName: String) =
+        Method("$name\$suspendImpl", returnType, arrayOf(Type.getObjectType(ownerInternalName)) + argumentTypes)

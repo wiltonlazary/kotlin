@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.resolve.lazy
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.config.LanguageFeature.DefaultImportOfPackageKotlinComparisons
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.TypeAliasDescriptor
@@ -30,7 +31,6 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.storage.getValue
-import org.jetbrains.kotlin.utils.addToStdlib.check
 
 class DefaultImportProvider(
         storageManager: StorageManager,
@@ -38,8 +38,9 @@ class DefaultImportProvider(
         private val targetPlatform: TargetPlatform,
         private val languageVersionSettings: LanguageVersionSettings
 ) {
-    val defaultImports: List<ImportPath>
-            by storageManager.createLazyValue { targetPlatform.getDefaultImports(languageVersionSettings) }
+    val defaultImports: List<ImportPath> by storageManager.createLazyValue {
+        targetPlatform.getDefaultImports(languageVersionSettings.supportsFeature(DefaultImportOfPackageKotlinComparisons))
+    }
 
     val excludedImports: List<FqName> by storageManager.createLazyValue {
         val packagesWithAliases = listOf(KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME, KotlinBuiltIns.TEXT_PACKAGE_FQ_NAME)
@@ -56,7 +57,7 @@ class DefaultImportProvider(
                 defaultImports
                         .filter { it.isAllUnder }
                         .mapNotNull {
-                            it.fqnPart().check { !it.isSubpackageOf(KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME) }
+                            it.fqName.takeUnless { it.isSubpackageOf(KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME) }
                         }
         val nonKotlinAliasedTypeFqNames =
                 builtinTypeAliases

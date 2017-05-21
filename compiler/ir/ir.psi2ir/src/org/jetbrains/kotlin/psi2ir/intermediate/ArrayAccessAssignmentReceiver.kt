@@ -16,9 +16,11 @@
 
 package org.jetbrains.kotlin.psi2ir.intermediate
 
-import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
 import org.jetbrains.kotlin.ir.expressions.impl.IrBlockImpl
 import org.jetbrains.kotlin.ir.expressions.impl.inlineStatement
+import org.jetbrains.kotlin.ir.expressions.isAssignmentOperatorWithResult
 import org.jetbrains.kotlin.psi2ir.generators.CallGenerator
 import org.jetbrains.kotlin.types.KotlinType
 import java.lang.AssertionError
@@ -33,8 +35,8 @@ class ArrayAccessAssignmentReceiver(
         val endOffset: Int,
         val origin: IrStatementOrigin
 ) : AssignmentReceiver {
-    private val type: KotlinType = indexedGetCall?.let { it.descriptor.returnType!! } ?:
-                                   indexedSetCall?.let { it.descriptor.valueParameters.last().type } ?:
+    private val type: KotlinType = indexedGetCall?.run { descriptor.returnType!! } ?:
+                                   indexedSetCall?.run { descriptor.valueParameters.last().type } ?:
                                    throw AssertionError("Array access should have either indexed-get call or indexed-set call")
 
     override fun assign(withLValue: (LValue) -> IrExpression): IrExpression {

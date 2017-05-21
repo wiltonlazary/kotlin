@@ -18,11 +18,14 @@ package org.jetbrains.kotlin.idea.decompiler.navigation
 
 import com.intellij.openapi.project.Project
 import com.intellij.psi.search.EverythingGlobalScope
+import com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.kotlin.analyzer.ModuleInfo
 import org.jetbrains.kotlin.builtins.DefaultBuiltIns
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
-import org.jetbrains.kotlin.idea.caches.resolve.*
+import org.jetbrains.kotlin.idea.caches.resolve.BinaryModuleInfo
+import org.jetbrains.kotlin.idea.caches.resolve.LOG
 import org.jetbrains.kotlin.idea.decompiler.KtDecompiledFile
 import org.jetbrains.kotlin.idea.decompiler.textBuilder.DecompiledTextIndexer
 import org.jetbrains.kotlin.idea.stubindex.*
@@ -44,27 +47,39 @@ import java.util.*
 
 fun findDecompiledDeclaration(
         project: Project,
-        referencedDescriptor: DeclarationDescriptor
+        referencedDescriptor: DeclarationDescriptor,
+        // TODO: should not require explicitly specified scope to search for builtIns, use SourceElement to provide such information
+        builtInsSearchScope: GlobalSearchScope?
 ): KtDeclaration? {
     if (ErrorUtils.isError(referencedDescriptor)) return null
     if (isLocal(referencedDescriptor)) return null
     if (referencedDescriptor is PackageFragmentDescriptor || referencedDescriptor is PackageViewDescriptor) return null
 
-    val decompiledFiles = findDecompiledFilesForDescriptor(project, referencedDescriptor)
+    val binaryInfo = referencedDescriptor.module.getCapability(ModuleInfo.Capability) as? BinaryModuleInfo
 
-    val referencedModule = referencedDescriptor.module
-    return decompiledFiles.asSequence().mapNotNull { file ->
-        val moduleInfo = file.getNullableModuleInfo()
-        val libraryInfo = when (moduleInfo) {
-            is LibraryInfo -> moduleInfo
-            is LibrarySourceInfo -> LibraryInfo(project, moduleInfo.library)
-            else -> null
-        }
-        val libraryModule = libraryInfo?.let { file.getResolutionFacade().findModuleDescriptor(it) }
-        if (libraryModule != null
-            && referencedModule.name != KotlinBuiltIns.BUILTINS_MODULE_NAME
-            && referencedModule.name != libraryModule.name) return@mapNotNull null
+    binaryInfo?.binariesScope()?.let {
+        return findInScope(referencedDescriptor, it)
+    }
+    if (KotlinBuiltIns.isBuiltIn(referencedDescriptor)) {
+        // builtin module does not contain information about it's origin
+        return builtInsSearchScope?.let { findInScope(referencedDescriptor, it) }
+               // fallback on searching everywhere since builtIns are accessible from any context
+               ?: findInScope(referencedDescriptor, GlobalSearchScope.allScope(project))
+               ?: findInScope(referencedDescriptor, EverythingGlobalScope(project))
+    }
+    return null
+}
 
+private fun findInScope(referencedDescriptor: DeclarationDescriptor, scope: GlobalSearchScope): KtDeclaration? {
+    val project = scope.project ?: return null
+    val decompiledFiles = findCandidateDeclarationsInIndex(
+            referencedDescriptor, KotlinSourceFilterScope.libraryClassFiles(scope, project), project
+    ).mapNotNullTo(LinkedHashSet()) {
+        it?.containingFile as? KtDecompiledFile
+    }
+
+    return decompiledFiles.asSequence().mapNotNull {
+        file ->
         ByDescriptorIndexer.getDeclarationForDescriptor(referencedDescriptor, file)
     }.firstOrNull()
 }
@@ -78,31 +93,23 @@ private fun isLocal(descriptor: DeclarationDescriptor): Boolean {
     }
 }
 
-private fun findDecompiledFilesForDescriptor(
-        project: Project,
-        referencedDescriptor: DeclarationDescriptor
-): Collection<KtDecompiledFile> {
-    return findCandidateDeclarationsInIndex(project, referencedDescriptor).mapNotNullTo(LinkedHashSet()) {
-        it?.containingFile as? KtDecompiledFile
-    }
-}
 
 private fun findCandidateDeclarationsInIndex(
-        project: Project,
-        referencedDescriptor: DeclarationDescriptor
+        referencedDescriptor: DeclarationDescriptor,
+        scope: GlobalSearchScope,
+        project: Project
 ): Collection<KtDeclaration?> {
-    val scope = KotlinSourceFilterScope.libraryClassFiles(EverythingGlobalScope(project), project)
-
     val containingClass = DescriptorUtils.getParentOfType(referencedDescriptor, ClassDescriptor::class.java, false)
     if (containingClass != null) {
         return KotlinFullClassNameIndex.getInstance().get(containingClass.fqNameSafe.asString(), project, scope)
     }
 
-    val topLevelDeclaration = DescriptorUtils.getParentOfType(referencedDescriptor, PropertyDescriptor::class.java, false)
-                              ?: DescriptorUtils.getParentOfType(referencedDescriptor, TypeAliasConstructorDescriptor::class.java, false)?.typeAliasDescriptor
-                              ?: DescriptorUtils.getParentOfType(referencedDescriptor, FunctionDescriptor::class.java, false)
-                              ?: DescriptorUtils.getParentOfType(referencedDescriptor, TypeAliasDescriptor::class.java, false)
-                              ?: return emptyList()
+    val topLevelDeclaration =
+            DescriptorUtils.getParentOfType(referencedDescriptor, PropertyDescriptor::class.java, false) as DeclarationDescriptor?
+            ?: DescriptorUtils.getParentOfType(referencedDescriptor, TypeAliasConstructorDescriptor::class.java, false)?.typeAliasDescriptor
+            ?: DescriptorUtils.getParentOfType(referencedDescriptor, FunctionDescriptor::class.java, false)
+            ?: DescriptorUtils.getParentOfType(referencedDescriptor, TypeAliasDescriptor::class.java, false)
+            ?: return emptyList()
 
     // filter out synthetic descriptors
     if (!DescriptorUtils.isTopLevelDeclaration(topLevelDeclaration)) return emptyList()
@@ -145,7 +152,7 @@ object ByDescriptorIndexer : DecompiledTextIndexer<String> {
 
         if (original is ConstructorDescriptor && original.isPrimary) {
             val classOrObject = getDeclarationForDescriptor(original.containingDeclaration, file) as? KtClassOrObject
-            return classOrObject?.getPrimaryConstructor() ?: classOrObject
+            return classOrObject?.primaryConstructor ?: classOrObject
         }
 
         val descriptorKey = original.toStringKey()

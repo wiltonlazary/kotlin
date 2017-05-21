@@ -60,6 +60,7 @@ import com.intellij.util.VisibilityUtil
 import com.intellij.util.containers.MultiMap
 import org.jetbrains.kotlin.asJava.LightClassUtil
 import org.jetbrains.kotlin.asJava.elements.KtLightMethod
+import org.jetbrains.kotlin.asJava.getAccessorLightMethods
 import org.jetbrains.kotlin.asJava.namedUnwrappedElement
 import org.jetbrains.kotlin.asJava.toLightClass
 import org.jetbrains.kotlin.descriptors.*
@@ -74,7 +75,7 @@ import org.jetbrains.kotlin.idea.caches.resolve.getJavaMemberDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
 import org.jetbrains.kotlin.idea.core.*
-import org.jetbrains.kotlin.idea.highlighter.markers.getAccessorLightMethods
+import org.jetbrains.kotlin.idea.core.util.showYesNoCancelDialog
 import org.jetbrains.kotlin.idea.intentions.RemoveCurlyBracesFromTemplateIntention
 import org.jetbrains.kotlin.idea.j2k.IdeaJavaToKotlinServices
 import org.jetbrains.kotlin.idea.refactoring.changeSignature.KotlinValVar
@@ -104,6 +105,8 @@ import java.io.File
 import java.lang.annotation.Retention
 import java.util.*
 import javax.swing.Icon
+
+val CHECK_SUPER_METHODS_YES_NO_DIALOG = "CHECK_SUPER_METHODS_YES_NO_DIALOG"
 
 @JvmOverloads
 fun getOrCreateKotlinFile(fileName: String,
@@ -139,7 +142,13 @@ fun VirtualFile.toPsiFileOrDirectory(project: Project): PsiFileSystemItem? = if 
 
 fun PsiElement.getUsageContext(): PsiElement {
     return when (this) {
-        is KtElement -> PsiTreeUtil.getParentOfType(this, KtPropertyAccessor::class.java, KtNamedDeclaration::class.java, KtFile::class.java)!!
+        is KtElement -> PsiTreeUtil.getParentOfType(
+                this,
+                KtPropertyAccessor::class.java,
+                KtProperty::class.java,
+                KtFunction::class.java,
+                KtClassOrObject::class.java
+        ) ?: containingFile
         else -> ConflictsUtil.getContainer(this)
     }
 }
@@ -253,7 +262,7 @@ fun <T, E : PsiElement> getPsiElementPopup(
 
     val list = JBList(elements.map(toPsi))
     list.cellRenderer = renderer
-    list.addListSelectionListener { e ->
+    list.addListSelectionListener {
         highlighter?.dropHighlight()
         val index = list.selectedIndex
         if (index >= 0) {
@@ -468,7 +477,7 @@ private fun copyModifierListItems(from: PsiModifierList, to: PsiModifierList, wi
         }
     }
     for (annotation in from.annotations) {
-        val annotationName = annotation.qualifiedName!!
+        val annotationName = annotation.qualifiedName ?: continue
 
         if (Retention::class.java.name != annotationName) {
             to.addAnnotation(annotationName)
@@ -778,8 +787,10 @@ fun dropOverrideKeywordIfNecessary(element: KtNamedDeclaration) {
     }
 }
 
-fun getQualifiedTypeArgumentList(initializer: KtExpression): KtTypeArgumentList? {
-    val context = initializer.analyze(BodyResolveMode.PARTIAL)
+fun getQualifiedTypeArgumentList(
+        initializer: KtExpression,
+        context: BindingContext = initializer.analyze(BodyResolveMode.PARTIAL)
+): KtTypeArgumentList? {
     val call = initializer.getResolvedCall(context) ?: return null
     val typeArgumentMap = call.typeArguments
     val typeArguments = call.candidateDescriptor.typeParameters.mapNotNull { typeArgumentMap[it] }
@@ -837,7 +848,7 @@ fun checkSuperMethods(
         return overriddenElementsToDescriptor.entries.map { entry ->
             val (element, descriptor) = entry
             val description = when (element) {
-                is KtNamedFunction, is KtProperty -> formatClassDescriptor(descriptor.containingDeclaration)
+                is KtNamedFunction, is KtProperty, is KtParameter -> formatClassDescriptor(descriptor.containingDeclaration)
                 is PsiMethod -> {
                     val psiClass = element.containingClass ?: error("Invalid element: ${element.getText()}")
                     formatPsiClass(psiClass, true, false)
@@ -852,8 +863,6 @@ fun checkSuperMethods(
             declarationDescriptor: CallableDescriptor,
             overriddenElementsToDescriptor: Map<PsiElement, CallableDescriptor>
     ): List<PsiElement> {
-        if (ApplicationManager.getApplication().isUnitTestMode) return overriddenElementsToDescriptor.keys.toList()
-
         val superClassDescriptions = getClassDescriptions(overriddenElementsToDescriptor)
 
         val message = KotlinBundle.message(
@@ -863,7 +872,9 @@ fun checkSuperMethods(
                 actionString
         )
 
-        val exitCode = Messages.showYesNoCancelDialog(declaration.project, message, IdeBundle.message("title.warning"), Messages.getQuestionIcon())
+        val exitCode = showYesNoCancelDialog(
+                CHECK_SUPER_METHODS_YES_NO_DIALOG,
+                declaration.project, message, IdeBundle.message("title.warning"), Messages.getQuestionIcon(), Messages.YES)
         when (exitCode) {
             Messages.YES -> return overriddenElementsToDescriptor.keys.toList()
             Messages.NO -> return listOf(declaration)
@@ -880,7 +891,7 @@ fun checkSuperMethods(
     val overriddenElementsToDescriptor = HashMap<PsiElement, CallableDescriptor>()
     for (overriddenDescriptor in DescriptorUtils.getAllOverriddenDescriptors(declarationDescriptor)) {
         val overriddenDeclaration = DescriptorToSourceUtilsIde.getAnyDeclaration(project, overriddenDescriptor) ?: continue
-        if (overriddenDeclaration is KtNamedFunction || overriddenDeclaration is KtProperty || overriddenDeclaration is PsiMethod) {
+        if (overriddenDeclaration is KtNamedFunction || overriddenDeclaration is KtProperty || overriddenDeclaration is PsiMethod || overriddenDeclaration is KtParameter) {
             overriddenElementsToDescriptor[overriddenDeclaration] = overriddenDescriptor
         }
     }
@@ -932,7 +943,7 @@ fun checkSuperMethodsWithPopup(
         append(" of ")
         append(SymbolPresentationUtil.getSymbolPresentableText(superClass))
     }
-    val list = JBList(renameBase, renameCurrent)
+    val list = JBList<String>(renameBase, renameCurrent)
     JBPopupFactory.getInstance()
             .createListPopupBuilder(list)
             .setTitle(title)

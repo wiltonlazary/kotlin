@@ -169,7 +169,6 @@ public class ExperimentalIncrementalJpsTestGenerated extends AbstractExperimenta
             String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/multiModule/twoDependants/");
             doTest(fileName);
         }
-
     }
 
     @TestMetadata("jps-plugin/testData/incremental/pureKotlin")
@@ -549,6 +548,24 @@ public class ExperimentalIncrementalJpsTestGenerated extends AbstractExperimenta
         @TestMetadata("internalMemberInClassChanged")
         public void testInternalMemberInClassChanged() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/pureKotlin/internalMemberInClassChanged/");
+            doTest(fileName);
+        }
+
+        @TestMetadata("internalTypealias")
+        public void testInternalTypealias() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/pureKotlin/internalTypealias/");
+            doTest(fileName);
+        }
+
+        @TestMetadata("internalTypealiasConstructor")
+        public void testInternalTypealiasConstructor() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/pureKotlin/internalTypealiasConstructor/");
+            doTest(fileName);
+        }
+
+        @TestMetadata("internalTypealiasObject")
+        public void testInternalTypealiasObject() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/pureKotlin/internalTypealiasObject/");
             doTest(fileName);
         }
 
@@ -1012,7 +1029,6 @@ public class ExperimentalIncrementalJpsTestGenerated extends AbstractExperimenta
                 String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/withJava/convertBetweenJavaAndKotlin/kotlinToJava/");
                 doTest(fileName);
             }
-
         }
 
         @TestMetadata("jps-plugin/testData/incremental/withJava/javaUsedInKotlin")
@@ -1065,6 +1081,24 @@ public class ExperimentalIncrementalJpsTestGenerated extends AbstractExperimenta
                 doTest(fileName);
             }
 
+            @TestMetadata("javaFieldNullabilityChanged")
+            public void testJavaFieldNullabilityChanged() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/withJava/javaUsedInKotlin/javaFieldNullabilityChanged/");
+                doTest(fileName);
+            }
+
+            @TestMetadata("javaMethodParamNullabilityChanged")
+            public void testJavaMethodParamNullabilityChanged() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/withJava/javaUsedInKotlin/javaMethodParamNullabilityChanged/");
+                doTest(fileName);
+            }
+
+            @TestMetadata("javaMethodReturnTypeNullabilityChanged")
+            public void testJavaMethodReturnTypeNullabilityChanged() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/withJava/javaUsedInKotlin/javaMethodReturnTypeNullabilityChanged/");
+                doTest(fileName);
+            }
+
             @TestMetadata("methodAddedInSuper")
             public void testMethodAddedInSuper() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/withJava/javaUsedInKotlin/methodAddedInSuper/");
@@ -1102,7 +1136,6 @@ public class ExperimentalIncrementalJpsTestGenerated extends AbstractExperimenta
                     String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/withJava/javaUsedInKotlin/samConversions/methodSignatureChanged/");
                     doTest(fileName);
                 }
-
             }
         }
 
@@ -1197,7 +1230,6 @@ public class ExperimentalIncrementalJpsTestGenerated extends AbstractExperimenta
                 String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/withJava/kotlinUsedInJava/propertyRenamed/");
                 doTest(fileName);
             }
-
         }
     }
 
@@ -1292,7 +1324,6 @@ public class ExperimentalIncrementalJpsTestGenerated extends AbstractExperimenta
             String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/inlineFunCallSite/topLevelProperty/");
             doTest(fileName);
         }
-
     }
 
     @TestMetadata("jps-plugin/testData/incremental/classHierarchyAffected")
@@ -1572,6 +1603,5 @@ public class ExperimentalIncrementalJpsTestGenerated extends AbstractExperimenta
             String fileName = KotlinTestUtils.navigationMetadata("jps-plugin/testData/incremental/classHierarchyAffected/varianceChanged/");
             doTest(fileName);
         }
-
     }
 }

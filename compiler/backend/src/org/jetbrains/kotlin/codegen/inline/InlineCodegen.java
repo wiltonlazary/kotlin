@@ -20,7 +20,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.util.ArrayUtil;
-import kotlin.jvm.functions.Function0;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.backend.common.CodegenUtil;
@@ -28,7 +27,6 @@ import org.jetbrains.kotlin.builtins.BuiltInsPackageFragment;
 import org.jetbrains.kotlin.codegen.*;
 import org.jetbrains.kotlin.codegen.context.*;
 import org.jetbrains.kotlin.codegen.coroutines.CoroutineCodegenUtilKt;
-import org.jetbrains.kotlin.codegen.coroutines.SuspendFunctionGenerationStrategy;
 import org.jetbrains.kotlin.codegen.intrinsics.IntrinsicArrayConstructorsKt;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper;
@@ -38,6 +36,7 @@ import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCache;
 import org.jetbrains.kotlin.name.ClassId;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.psi.*;
+import org.jetbrains.kotlin.renderer.DescriptorRenderer;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
@@ -71,6 +70,7 @@ import static org.jetbrains.kotlin.codegen.AsmUtil.getMethodAsmFlags;
 import static org.jetbrains.kotlin.codegen.AsmUtil.isPrimitive;
 import static org.jetbrains.kotlin.codegen.inline.InlineCodegenUtil.*;
 import static org.jetbrains.kotlin.descriptors.annotations.AnnotationUtilKt.isInlineOnly;
+import static org.jetbrains.kotlin.resolve.inline.InlineUtil.isInlinableParameterExpression;
 import static org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isFunctionLiteral;
 
 public class InlineCodegen extends CallGenerator {
@@ -88,11 +88,11 @@ public class InlineCodegen extends CallGenerator {
     private final boolean isSameModule;
 
     private final ParametersBuilder invocationParamBuilder = ParametersBuilder.newBuilder();
-    private final Map<Integer, LambdaInfo> expressionMap = new HashMap<Integer, LambdaInfo>();
+    private final Map<Integer, LambdaInfo> expressionMap = new LinkedHashMap<>();
 
     private final ReifiedTypeInliner reifiedTypeInliner;
 
-    @Nullable
+    @NotNull
     private final TypeParameterMappings typeParameterMappings;
 
     private LambdaInfo activeLambda;
@@ -101,12 +101,16 @@ public class InlineCodegen extends CallGenerator {
 
     private Runnable delayedHiddenWriting;
 
+    private List<Integer> maskValues = new ArrayList<>();
+    private int maskStartIndex = -1;
+    private int methodHandleInDefaultMethodIndex = -1;
+
     public InlineCodegen(
             @NotNull ExpressionCodegen codegen,
             @NotNull GenerationState state,
             @NotNull FunctionDescriptor function,
             @NotNull KtElement callElement,
-            @Nullable TypeParameterMappings typeParameterMappings
+            @NotNull TypeParameterMappings typeParameterMappings
     ) {
         assert InlineUtil.isInline(function) || InlineUtil.isArrayConstructorWithLambda(function) :
                 "InlineCodegen can inline only inline functions and array constructors: " + function;
@@ -177,7 +181,7 @@ public class InlineCodegen extends CallGenerator {
         SMAPAndMethodNode nodeAndSmap = null;
         try {
             nodeAndSmap = createMethodNode(functionDescriptor, jvmSignature, codegen, context, callDefault, resolvedCall);
-            endCall(inlineCall(nodeAndSmap));
+            endCall(inlineCall(nodeAndSmap, callDefault));
         }
         catch (CompilationException e) {
             throw e;
@@ -202,7 +206,7 @@ public class InlineCodegen extends CallGenerator {
         MethodNode node = nodeAndSmap != null ? nodeAndSmap.getNode() : null;
         throw new CompilationException(
                 "Couldn't inline method call '" + functionDescriptor.getName() + "' into\n" +
-                contextDescriptor + "\n" +
+                DescriptorRenderer.DEBUG_TEXT.render(contextDescriptor) + "\n" +
                 (element != null ? element.getText() : "<no source>") +
                 (generateNodeText ? ("\nCause: " + InlineCodegenUtil.getNodeText(node)) : ""),
                 e, callElement
@@ -228,7 +232,7 @@ public class InlineCodegen extends CallGenerator {
 
     @NotNull
     static SMAPAndMethodNode createMethodNode(
-            @NotNull final FunctionDescriptor functionDescriptor,
+            @NotNull FunctionDescriptor functionDescriptor,
             @NotNull JvmMethodSignature jvmSignature,
             @NotNull ExpressionCodegen codegen,
             @NotNull CodegenContext context,
@@ -258,28 +262,25 @@ public class InlineCodegen extends CallGenerator {
             );
         }
 
-        final GenerationState state = codegen.getState();
-        final Method asmMethod =
+        GenerationState state = codegen.getState();
+        Method asmMethod =
                 callDefault
                 ? state.getTypeMapper().mapDefaultMethod(functionDescriptor, context.getContextKind())
                 : jvmSignature.getAsmMethod();
 
         MethodId methodId = new MethodId(DescriptorUtils.getFqNameSafe(functionDescriptor.getContainingDeclaration()), asmMethod);
-        final CallableMemberDescriptor directMember = getDirectMemberAndCallableFromObject(functionDescriptor);
+        CallableMemberDescriptor directMember = getDirectMemberAndCallableFromObject(functionDescriptor);
         if (!isBuiltInArrayIntrinsic(functionDescriptor) && !(directMember instanceof DeserializedCallableMemberDescriptor)) {
             return doCreateMethodNodeFromSource(functionDescriptor, jvmSignature, codegen, context, callDefault, state, asmMethod);
         }
 
         SMAPAndMethodNode resultInCache = InlineCacheKt.getOrPut(
-                state.getInlineCache().getMethodNodeById(), methodId, new Function0<SMAPAndMethodNode>() {
-                    @Override
-                    public SMAPAndMethodNode invoke() {
-                        SMAPAndMethodNode result = doCreateMethodNodeFromCompiled(directMember, state, asmMethod);
-                        if (result == null) {
-                            throw new IllegalStateException("Couldn't obtain compiled function body for " + functionDescriptor);
-                        }
-                        return result;
+                state.getInlineCache().getMethodNodeById(), methodId, () -> {
+                    SMAPAndMethodNode result = doCreateMethodNodeFromCompiled(directMember, state, asmMethod);
+                    if (result == null) {
+                        throw new IllegalStateException("Couldn't obtain compiled function body for " + functionDescriptor);
                     }
+                    return result;
                 }
         );
 
@@ -309,19 +310,14 @@ public class InlineCodegen extends CallGenerator {
     @Nullable
     private static SMAPAndMethodNode doCreateMethodNodeFromCompiled(
             @NotNull CallableMemberDescriptor callableDescriptor,
-            @NotNull final GenerationState state,
+            @NotNull GenerationState state,
             @NotNull Method asmMethod
     ) {
         if (isBuiltInArrayIntrinsic(callableDescriptor)) {
             ClassId classId = IntrinsicArrayConstructorsKt.getClassId();
-            byte[] bytes = InlineCacheKt.getOrPut(state.getInlineCache().getClassBytes(), classId, new Function0<byte[]>() {
-                @Override
-                public byte[] invoke() {
-                    return IntrinsicArrayConstructorsKt.getBytecode();
-                }
-            });
-
-            return InlineCodegenUtil.getMethodNode(bytes, asmMethod.getName(), asmMethod.getDescriptor(), classId, state);
+            byte[] bytes =
+                    InlineCacheKt.getOrPut(state.getInlineCache().getClassBytes(), classId, IntrinsicArrayConstructorsKt::getBytecode);
+            return InlineCodegenUtil.getMethodNode(bytes, asmMethod.getName(), asmMethod.getDescriptor(), classId.asString());
         }
 
         assert callableDescriptor instanceof DeserializedCallableMemberDescriptor : "Not a deserialized function or proper: " + callableDescriptor;
@@ -329,26 +325,22 @@ public class InlineCodegen extends CallGenerator {
         KotlinTypeMapper.ContainingClassesInfo containingClasses =
                 state.getTypeMapper().getContainingClassesForDeserializedCallable((DeserializedCallableMemberDescriptor) callableDescriptor);
 
-        final ClassId containerId = containingClasses.getImplClassId();
+        ClassId containerId = containingClasses.getImplClassId();
 
-        byte[] bytes = InlineCacheKt.getOrPut(state.getInlineCache().getClassBytes(), containerId, new Function0<byte[]>() {
-            @Override
-            public byte[] invoke() {
-                VirtualFile file = InlineCodegenUtil.findVirtualFile(state, containerId);
-                if (file == null) {
-                    throw new IllegalStateException("Couldn't find declaration file for " + containerId);
-                }
-                try {
-                    return file.contentsToByteArray();
-                }
-                catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+        byte[] bytes = InlineCacheKt.getOrPut(state.getInlineCache().getClassBytes(), containerId, () -> {
+            VirtualFile file = InlineCodegenUtil.findVirtualFile(state, containerId);
+            if (file == null) {
+                throw new IllegalStateException("Couldn't find declaration file for " + containerId);
+            }
+            try {
+                return file.contentsToByteArray();
+            }
+            catch (IOException e) {
+                throw new RuntimeException(e);
             }
         });
 
-
-        return InlineCodegenUtil.getMethodNode(bytes, asmMethod.getName(), asmMethod.getDescriptor(), containerId, state);
+        return InlineCodegenUtil.getMethodNode(bytes, asmMethod.getName(), asmMethod.getDescriptor(), containerId.asString());
     }
 
     @NotNull
@@ -390,7 +382,7 @@ public class InlineCodegen extends CallGenerator {
                     implementationOwner.getInternalName()
             );
             if (!(element instanceof KtNamedFunction)) {
-                throw new IllegalStateException("Propertiy accessors with default parameters not supported " + callableDescriptor);
+                throw new IllegalStateException("Property accessors with default parameters not supported " + callableDescriptor);
             }
             FunctionCodegen.generateDefaultImplBody(
                     methodContext, callableDescriptor, maxCalcAdapter, DefaultParameterValueLoader.DEFAULT,
@@ -416,11 +408,22 @@ public class InlineCodegen extends CallGenerator {
     }
 
     @NotNull
-    private InlineResult inlineCall(@NotNull SMAPAndMethodNode nodeAndSmap) {
+    private InlineResult inlineCall(@NotNull SMAPAndMethodNode nodeAndSmap, boolean callDefault) {
         assert delayedHiddenWriting == null : "'putHiddenParamsIntoLocals' should be called after 'processAndPutHiddenParameters(true)'";
         DefaultSourceMapper defaultSourceMapper = codegen.getParentCodegen().getOrCreateSourceMapper();
         defaultSourceMapper.setCallSiteMarker(new CallSiteMarker(codegen.getLastLineNumber()));
         MethodNode node = nodeAndSmap.getNode();
+        if (callDefault) {
+            List<DefaultLambda> defaultLambdas = DefaultMethodUtilKt.expandMaskConditionsAndUpdateVariableNodes(
+                    node, maskStartIndex, maskValues, methodHandleInDefaultMethodIndex,
+                    DefaultMethodUtilKt.extractDefaultLambdaOffsetAndDescriptor(jvmSignature, functionDescriptor)
+            );
+            for (DefaultLambda lambda : defaultLambdas) {
+                invocationParamBuilder.buildParameters().getParameterByDeclarationSlot(lambda.getOffset()).setLambda(lambda);
+                LambdaInfo prev = expressionMap.put(lambda.getOffset(), lambda);
+                assert prev == null : "Lambda with offset " + lambda.getOffset() + " already exists: " + prev;
+            }
+        }
         ReifiedTypeParametersUsages reificationResult = reifiedTypeInliner.reifyInstructions(node);
         generateClosuresBodies();
 
@@ -453,15 +456,9 @@ public class InlineCodegen extends CallGenerator {
         result.getReifiedTypeParametersUsages().mergeAll(reificationResult);
 
         CallableMemberDescriptor descriptor = getLabelOwnerDescriptor(codegen.getContext());
-        final Set<String> labels = getDeclarationLabels(DescriptorToSourceUtils.descriptorToDeclaration(descriptor), descriptor);
-        LabelOwner labelOwner = new LabelOwner() {
-            @Override
-            public boolean isMyLabel(@NotNull String name) {
-                return labels.contains(name);
-            }
-        };
+        Set<String> labels = getDeclarationLabels(DescriptorToSourceUtils.descriptorToDeclaration(descriptor), descriptor);
 
-        List<MethodInliner.PointForExternalFinallyBlocks> infos = MethodInliner.processReturns(adapter, labelOwner, true, null);
+        List<MethodInliner.PointForExternalFinallyBlocks> infos = MethodInliner.processReturns(adapter, labels::contains, true, null);
         generateAndInsertFinallyBlocks(
                 adapter, infos, ((StackValue.Local) remapper.remap(parameters.getArgsSizeOnStack() + 1).value).index
         );
@@ -526,43 +523,19 @@ public class InlineCodegen extends CallGenerator {
 
     private void generateClosuresBodies() {
         for (LambdaInfo info : expressionMap.values()) {
-            info.setNode(generateLambdaBody(info));
+            info.generateLambdaBody(codegen, reifiedTypeInliner);
         }
     }
 
     @NotNull
-    private SMAPAndMethodNode generateLambdaBody(@NotNull LambdaInfo info) {
-        KtExpression declaration = info.getFunctionWithBodyOrCallableReference();
-        FunctionDescriptor descriptor = info.getFunctionDescriptor();
-
-        ClassContext closureContext = info.isPropertyReference()
-                                        ? codegen.getContext().intoAnonymousClass(info.getClassDescriptor(), codegen, OwnerKind.IMPLEMENTATION)
-                                        : codegen.getContext().intoClosure(descriptor, codegen, typeMapper);
-        MethodContext context = closureContext.intoInlinedLambda(descriptor, info.isCrossInline, info.isPropertyReference());
-
-        JvmMethodSignature jvmMethodSignature = typeMapper.mapSignatureSkipGeneric(descriptor);
-        Method asmMethod = jvmMethodSignature.getAsmMethod();
-        MethodNode methodNode = new MethodNode(
-                InlineCodegenUtil.API, getMethodAsmFlags(descriptor, context.getContextKind(), state),
-                asmMethod.getName(), asmMethod.getDescriptor(), null, null
-        );
-
-        MethodVisitor adapter = InlineCodegenUtil.wrapWithMaxLocalCalc(methodNode);
-
-        SMAP smap = generateMethodBody(adapter, descriptor, context, declaration, jvmMethodSignature, codegen, info);
-        adapter.visitMaxs(-1, -1);
-        return new SMAPAndMethodNode(methodNode, smap);
-    }
-
-    @NotNull
-    private static SMAP generateMethodBody(
+    public static SMAP generateMethodBody(
             @NotNull MethodVisitor adapter,
             @NotNull FunctionDescriptor descriptor,
             @NotNull MethodContext context,
             @NotNull KtExpression expression,
             @NotNull JvmMethodSignature jvmMethodSignature,
             @NotNull ExpressionCodegen codegen,
-            @Nullable LambdaInfo lambdaInfo
+            @Nullable ExpressionLambda lambdaInfo
     ) {
         boolean isLambda = lambdaInfo != null;
         GenerationState state = codegen.getState();
@@ -587,7 +560,8 @@ public class InlineCodegen extends CallGenerator {
                 Type asmType = state.getTypeMapper().mapClass(lambdaInfo.getClassDescriptor());
                 PropertyReferenceInfo info = lambdaInfo.getPropertyReferenceInfo();
                 strategy = new PropertyReferenceCodegen.PropertyReferenceGenerationStrategy(
-                        true, info.getGetFunction(), info.getTarget(), asmType, receiverType, lambdaInfo.expression, state, true);
+                        true, info.getGetFunction(), info.getTarget(), asmType, receiverType,
+                        lambdaInfo.getFunctionWithBodyOrCallableReference(), state, true);
             }
             else {
                 strategy = new FunctionReferenceGenerationStrategy(
@@ -603,14 +577,6 @@ public class InlineCodegen extends CallGenerator {
         }
         else if (expression instanceof KtFunctionLiteral) {
             strategy = new ClosureGenerationStrategy(state, (KtDeclarationWithBody) expression);
-        }
-        else if (descriptor.isSuspend() && expression instanceof KtFunction) {
-            strategy =
-                    new SuspendFunctionGenerationStrategy(
-                            state,
-                            CoroutineCodegenUtilKt.<FunctionDescriptor>unwrapInitialDescriptorForSuspendFunction(descriptor),
-                            (KtFunction) expression
-                    );
         }
         else {
             strategy = new FunctionGenerationStrategy.FunctionDefault(state, (KtDeclarationWithBody) expression);
@@ -681,20 +647,21 @@ public class InlineCodegen extends CallGenerator {
         }
     }
 
-    @Override
-    public void afterParameterPut(@NotNull Type type, @Nullable StackValue stackValue, int parameterIndex) {
-        putArgumentOrCapturedToLocalVal(type, stackValue, -1, parameterIndex);
-    }
-
     private void putArgumentOrCapturedToLocalVal(
             @NotNull Type type,
-            @Nullable StackValue stackValue,
+            @NotNull StackValue stackValue,
             int capturedParamIndex,
-            int parameterIndex
+            int parameterIndex,
+            @NotNull ValueKind kind
     ) {
+        boolean isDefaultParameter = kind == ValueKind.DEFAULT_PARAMETER;
+        if (!isDefaultParameter && shouldPutGeneralValue(type, stackValue)) {
+            stackValue.put(type, codegen.v);
+        }
+
         if (!asFunctionInline && Type.VOID_TYPE != type) {
             //TODO remap only inlinable closure => otherwise we could get a lot of problem
-            boolean couldBeRemapped = !shouldPutValue(type, stackValue);
+            boolean couldBeRemapped = !shouldPutGeneralValue(type, stackValue) && kind != ValueKind.DEFAULT_PARAMETER;
             StackValue remappedValue = couldBeRemapped ? stackValue : null;
 
             ParameterInfo info;
@@ -707,17 +674,16 @@ public class InlineCodegen extends CallGenerator {
                 info = invocationParamBuilder.addNextValueParameter(type, false, remappedValue, parameterIndex);
             }
 
-            recordParameterValueInLocalVal(false, info);
+            recordParameterValueInLocalVal(
+                    false,
+                    isDefaultParameter || kind == ValueKind.DEFAULT_LAMBDA_CAPTURED_PARAMETER,
+                    info
+            );
         }
     }
 
     /*descriptor is null for captured vars*/
-    private static boolean shouldPutValue(@NotNull Type type, @Nullable StackValue stackValue) {
-        if (stackValue == null) {
-            //default or vararg
-            return true;
-        }
-
+    private static boolean shouldPutGeneralValue(@NotNull Type type, @NotNull StackValue stackValue) {
         //remap only inline functions (and maybe non primitives)
         //TODO - clean asserion and remapping logic
         if (isPrimitive(type) != isPrimitive(stackValue.type)) {
@@ -746,8 +712,8 @@ public class InlineCodegen extends CallGenerator {
         return true;
     }
 
-    private Runnable recordParameterValueInLocalVal(boolean delayedWritingToLocals, @NotNull final ParameterInfo... infos) {
-        final int[] index = new int[infos.length];
+    private Runnable recordParameterValueInLocalVal(boolean delayedWritingToLocals, boolean skipStore, @NotNull ParameterInfo... infos) {
+        int[] index = new int[infos.length];
         for (int i = 0; i < infos.length; i++) {
             ParameterInfo info = infos[i];
             if (!info.isSkippedOrRemapped()) {
@@ -758,19 +724,18 @@ public class InlineCodegen extends CallGenerator {
             }
         }
 
-        Runnable runnable = new Runnable() {
-            @Override
-            public void run() {
-                for (int i = infos.length - 1; i >= 0; i--) {
-                    ParameterInfo info = infos[i];
-                    if (!info.isSkippedOrRemapped()) {
-                        Type type = info.type;
-                        StackValue.Local local = StackValue.local(index[i], type);
+        Runnable runnable = () -> {
+            for (int i = infos.length - 1; i >= 0; i--) {
+                ParameterInfo info = infos[i];
+                if (!info.isSkippedOrRemapped()) {
+                    Type type = info.type;
+                    StackValue.Local local = StackValue.local(index[i], type);
+                    if (!skipStore) {
                         local.store(StackValue.onStack(type), codegen.v);
-                        if (info instanceof CapturedParamInfo) {
-                            info.setRemapValue(local);
-                            ((CapturedParamInfo) info).setSynthetic(true);
-                        }
+                    }
+                    if (info instanceof CapturedParamInfo) {
+                        info.setRemapValue(local);
+                        ((CapturedParamInfo) info).setSynthetic(true);
                     }
                 }
             }
@@ -797,7 +762,7 @@ public class InlineCodegen extends CallGenerator {
         invocationParamBuilder.markValueParametersStart();
         List<ParameterInfo> hiddenParameters = invocationParamBuilder.buildParameters().getParameters();
 
-        delayedHiddenWriting = recordParameterValueInLocalVal(justProcess, hiddenParameters.toArray(new ParameterInfo[hiddenParameters.size()]));
+        delayedHiddenWriting = recordParameterValueInLocalVal(justProcess, false, hiddenParameters.toArray(new ParameterInfo[hiddenParameters.size()]));
     }
 
     private void leaveTemps() {
@@ -819,18 +784,12 @@ public class InlineCodegen extends CallGenerator {
                isInlinableParameterExpression(deparenthesized);
     }
 
-    private static boolean isInlinableParameterExpression(@Nullable KtExpression deparenthesized) {
-        return deparenthesized instanceof KtLambdaExpression ||
-               deparenthesized instanceof KtNamedFunction ||
-               deparenthesized instanceof KtCallableReferenceExpression;
-    }
-
     private LambdaInfo rememberClosure(@NotNull KtExpression expression, @NotNull Type type, @NotNull ValueParameterDescriptor parameter) {
         KtExpression lambda = KtPsiUtil.deparenthesize(expression);
         assert isInlinableParameterExpression(lambda) : "Couldn't find inline expression in " + expression.getText();
 
         LambdaInfo info =
-                new LambdaInfo(lambda, typeMapper, parameter.isCrossinline(), getBoundCallableReferenceReceiver(expression) != null);
+                new ExpressionLambda(lambda, typeMapper, parameter.isCrossinline(), getBoundCallableReferenceReceiver(expression) != null);
 
         ParameterInfo closureInfo = invocationParamBuilder.addNextValueParameter(type, true, null, parameter.getIndex());
         closureInfo.setLambda(info);
@@ -840,7 +799,7 @@ public class InlineCodegen extends CallGenerator {
 
     @NotNull
     public static Set<String> getDeclarationLabels(@Nullable PsiElement lambdaOrFun, @NotNull DeclarationDescriptor descriptor) {
-        Set<String> result = new HashSet<String>();
+        Set<String> result = new HashSet<>();
 
         if (lambdaOrFun != null) {
             Name label = LabelResolver.INSTANCE.getLabelNameIfAny(lambdaOrFun);
@@ -861,15 +820,42 @@ public class InlineCodegen extends CallGenerator {
     private void putClosureParametersOnStack() {
         for (LambdaInfo next : expressionMap.values()) {
             //closure parameters for bounded callable references are generated inplace
-            if (next.isBoundCallableReference()) continue;
+            if (next instanceof ExpressionLambda && next.isBoundCallableReference()) continue;
             putClosureParametersOnStack(next, null);
         }
     }
 
     private void putClosureParametersOnStack(@NotNull LambdaInfo next, @Nullable StackValue functionReferenceReceiver) {
         activeLambda = next;
-        codegen.pushClosureOnStack(next.getClassDescriptor(), true, this, functionReferenceReceiver);
+        if (next instanceof ExpressionLambda) {
+            codegen.pushClosureOnStack(((ExpressionLambda) next).getClassDescriptor(), true, this, functionReferenceReceiver);
+        }
+        else if (next instanceof DefaultLambda) {
+            rememberCapturedForDefaultLambda((DefaultLambda) next);
+        }
+        else {
+            throw new RuntimeException("Unknown lambda: " + next);
+        }
         activeLambda = null;
+    }
+
+    private void rememberCapturedForDefaultLambda(@NotNull DefaultLambda defaultLambda) {
+        List<CapturedParamDesc> vars = defaultLambda.getCapturedVars();
+        int paramIndex = 0;
+        for (CapturedParamDesc captured : vars) {
+            putArgumentOrCapturedToLocalVal(
+                    captured.getType(),
+                    //HACK: actually parameter would be placed on stack in default function
+                    // also see ValueKind.DEFAULT_LAMBDA_CAPTURED_PARAMETER check
+                    StackValue.onStack(captured.getType()),
+                    paramIndex,
+                    paramIndex,
+                    ValueKind.DEFAULT_LAMBDA_CAPTURED_PARAMETER
+            );
+
+            paramIndex++;
+            defaultLambda.getParameterOffsetsInDefault().add(invocationParamBuilder.getNextParameterOffset());
+        }
     }
 
     @NotNull
@@ -920,7 +906,7 @@ public class InlineCodegen extends CallGenerator {
         }
         else {
             StackValue value = codegen.gen(argumentExpression);
-            putValueIfNeeded(parameterType, value, valueParameterDescriptor.getIndex());
+            putValueIfNeeded(parameterType, value, ValueKind.GENERAL, valueParameterDescriptor.getIndex());
         }
     }
 
@@ -939,23 +925,37 @@ public class InlineCodegen extends CallGenerator {
     }
 
     @Override
-    public void putValueIfNeeded(@NotNull Type parameterType, @NotNull StackValue value) {
-        putValueIfNeeded(parameterType, value, -1);
+    public void putValueIfNeeded(@NotNull Type parameterType, @NotNull StackValue value, @NotNull ValueKind kind, int parameterIndex) {
+        if (processDefaultMaskOrMethodHandler(value, kind)) return;
+
+        assert maskValues.isEmpty() : "Additional default call arguments should be last ones, but " + value;
+
+        putArgumentOrCapturedToLocalVal(parameterType, value, -1, parameterIndex, kind);
     }
 
-    private void putValueIfNeeded(@NotNull Type parameterType, @NotNull StackValue value, int index) {
-        if (shouldPutValue(parameterType, value)) {
-            value.put(parameterType, codegen.v);
+    private boolean processDefaultMaskOrMethodHandler(@NotNull StackValue value, @NotNull ValueKind kind) {
+        if (kind != ValueKind.DEFAULT_MASK && kind != ValueKind.METHOD_HANDLE_IN_DEFAULT) {
+            return false;
         }
-        afterParameterPut(parameterType, value, index);
+        assert value instanceof StackValue.Constant : "Additional default method argument should be constant, but " + value;
+        Object constantValue = ((StackValue.Constant) value).value;
+        if (kind == ValueKind.DEFAULT_MASK) {
+            assert constantValue instanceof Integer : "Mask should be of Integer type, but " + constantValue;
+            maskValues.add((Integer) constantValue);
+            if (maskStartIndex == -1) {
+                maskStartIndex = invocationParamBuilder.getNextParameterOffset();
+            }
+        }
+        else {
+            assert constantValue == null : "Additional method handle for default argument should be null, but " + constantValue;
+            methodHandleInDefaultMethodIndex = maskStartIndex + maskValues.size();
+        }
+        return true;
     }
 
     @Override
     public void putCapturedValueOnStack(@NotNull StackValue stackValue, @NotNull Type valueType, int paramIndex) {
-        if (shouldPutValue(stackValue.type, stackValue)) {
-            stackValue.put(stackValue.type, codegen.v);
-        }
-        putArgumentOrCapturedToLocalVal(stackValue.type, stackValue, paramIndex, paramIndex);
+        putArgumentOrCapturedToLocalVal(stackValue.type, stackValue, paramIndex, paramIndex, ValueKind.CAPTURED);
     }
 
     private void generateAndInsertFinallyBlocks(
@@ -965,8 +965,7 @@ public class InlineCodegen extends CallGenerator {
     ) {
         if (!codegen.hasFinallyBlocks()) return;
 
-        Map<AbstractInsnNode, MethodInliner.PointForExternalFinallyBlocks> extensionPoints =
-                new HashMap<AbstractInsnNode, MethodInliner.PointForExternalFinallyBlocks>();
+        Map<AbstractInsnNode, MethodInliner.PointForExternalFinallyBlocks> extensionPoints = new HashMap<>();
         for (MethodInliner.PointForExternalFinallyBlocks insertPoint : insertPoints) {
             extensionPoints.put(insertPoint.beforeIns, insertPoint);
         }

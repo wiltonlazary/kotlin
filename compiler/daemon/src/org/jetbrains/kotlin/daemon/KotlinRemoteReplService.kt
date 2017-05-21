@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,13 @@ package org.jetbrains.kotlin.daemon
 
 import com.intellij.openapi.Disposable
 import org.jetbrains.kotlin.cli.common.messages.*
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.ERROR
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.INFO
 import org.jetbrains.kotlin.cli.common.repl.*
 import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoots
 import org.jetbrains.kotlin.cli.jvm.repl.GenericReplCompiler
 import org.jetbrains.kotlin.cli.jvm.repl.GenericReplCompilerState
-import org.jetbrains.kotlin.config.CommonConfigurationKeys
-import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.daemon.common.CompileService
 import org.jetbrains.kotlin.daemon.common.RemoteOperationsTracer
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
@@ -49,35 +50,30 @@ open class KotlinJvmReplService(
 ) : ReplCompileAction, ReplCheckAction, CreateReplStageStateAction {
 
     protected val configuration = CompilerConfiguration().apply {
-        addJvmClasspathRoots(PathUtil.getJdkClassesRoots())
-        addJvmClasspathRoots(PathUtil.getKotlinPathsForCompiler().let { listOf(it.runtimePath, it.reflectPath, it.scriptRuntimePath) })
+        addJvmClasspathRoots(PathUtil.getJdkClassesRootsFromCurrentJre())
+        addJvmClasspathRoots(PathUtil.getKotlinPathsForCompiler().let { listOf(it.stdlibPath, it.reflectPath, it.scriptRuntimePath) })
         addJvmClasspathRoots(templateClasspath)
         put(CommonConfigurationKeys.MODULE_NAME, "kotlin-script")
-        put(CommonConfigurationKeys.SKIP_METADATA_VERSION_CHECK, true)
+        languageVersionSettings = LanguageVersionSettingsImpl(LanguageVersion.LATEST_STABLE, ApiVersion.LATEST_STABLE).apply {
+            switchFlag(AnalysisFlags.skipMetadataVersionCheck, true)
+        }
     }
 
     protected fun makeScriptDefinition(templateClasspath: List<File>, templateClassName: String): KotlinScriptDefinition? {
-        val classloader = URLClassLoader(templateClasspath.map { it.toURI().toURL() }.toTypedArray(), this.javaClass.classLoader)
+        val classloader = URLClassLoader(templateClasspath.map { it.toURI().toURL() }.toTypedArray(), this::class.java.classLoader)
 
         try {
             val cls = classloader.loadClass(templateClassName)
             val def = KotlinScriptDefinitionFromAnnotatedTemplate(cls.kotlin, null, null, emptyMap())
-            messageCollector.report(
-                    CompilerMessageSeverity.INFO,
-                    "New script definition $templateClassName: files pattern = \"${def.scriptFilePattern}\", resolver = ${def.resolver?.javaClass?.name}",
-                    CompilerMessageLocation.NO_LOCATION
-            )
+            messageCollector.report(INFO, "New script definition $templateClassName: files pattern = \"${def.scriptFilePattern}\", " +
+                                          "resolver = ${def.resolver?.javaClass?.name}")
             return def
         }
         catch (ex: ClassNotFoundException) {
-            messageCollector.report(
-                    CompilerMessageSeverity.ERROR, "Cannot find script definition template class $templateClassName", CompilerMessageLocation.NO_LOCATION
-            )
+            messageCollector.report(ERROR, "Cannot find script definition template class $templateClassName")
         }
         catch (ex: Exception) {
-            messageCollector.report(
-                    CompilerMessageSeverity.ERROR, "Error processing script definition template $templateClassName: ${ex.message}", CompilerMessageLocation.NO_LOCATION
-            )
+            messageCollector.report(ERROR, "Error processing script definition template $templateClassName: ${ex.message}")
         }
         return null
     }
@@ -102,8 +98,7 @@ open class KotlinJvmReplService(
     override fun check(state: IReplStageState<*>, codeLine: ReplCodeLine): ReplCheckResult {
         operationsTracer?.before("check")
         try {
-            return replCompiler?.check(state, codeLine)
-                   ?: ReplCheckResult.Error("Initialization error", CompilerMessageLocation.NO_LOCATION)
+            return replCompiler?.check(state, codeLine) ?: ReplCheckResult.Error("Initialization error")
         }
         finally {
             operationsTracer?.after("check")
@@ -113,8 +108,7 @@ open class KotlinJvmReplService(
     override fun compile(state: IReplStageState<*>, codeLine: ReplCodeLine): ReplCompileResult {
         operationsTracer?.before("compile")
         try {
-            return replCompiler?.compile(state, codeLine)
-                   ?: ReplCompileResult.Error("Initialization error", CompilerMessageLocation.NO_LOCATION)
+            return replCompiler?.compile(state, codeLine) ?: ReplCompileResult.Error("Initialization error")
         }
         finally {
             operationsTracer?.after("compile")
@@ -149,7 +143,7 @@ internal class KeepFirstErrorMessageCollector(compilerMessagesStream: PrintStrea
     internal var firstErrorMessage: String? = null
     internal var firstErrorLocation: CompilerMessageLocation? = null
 
-    override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation) {
+    override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation?) {
         if (firstErrorMessage == null && severity.isError) {
             firstErrorMessage = message
             firstErrorLocation = location

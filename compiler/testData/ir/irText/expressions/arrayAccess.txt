@@ -12,6 +12,7 @@ FILE /arrayAccess.kt
       RETURN type=kotlin.Nothing from='foo(): Int'
         CONST Int type=kotlin.Int value='1'
   FUN public fun test(a: kotlin.IntArray): kotlin.Int
+    VALUE_PARAMETER value-parameter a: kotlin.IntArray
     BLOCK_BODY
       RETURN type=kotlin.Nothing from='test(IntArray): Int'
         CALL 'plus(Int): Int' type=kotlin.Int origin=PLUS
@@ -25,3 +26,4 @@ FILE /arrayAccess.kt
           other: CALL 'get(Int): Int' type=kotlin.Int origin=GET_ARRAY_ELEMENT
             $this: GET_VAR 'value-parameter a: IntArray' type=kotlin.IntArray origin=null
             index: CALL 'foo(): Int' type=kotlin.Int origin=null
+

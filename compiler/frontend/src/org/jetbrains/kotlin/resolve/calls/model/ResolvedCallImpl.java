@@ -53,7 +53,7 @@ public class ResolvedCallImpl<D extends CallableDescriptor> implements MutableRe
             @NotNull TracingStrategy tracing,
             @NotNull MutableDataFlowInfoForArguments dataFlowInfoForArguments
     ) {
-        return new ResolvedCallImpl<D>(candidate, trace, tracing, dataFlowInfoForArguments);
+        return new ResolvedCallImpl<>(candidate, trace, tracing, dataFlowInfoForArguments);
     }
 
     private final Call call;
@@ -127,23 +127,17 @@ public class ResolvedCallImpl<D extends CallableDescriptor> implements MutableRe
 
     @NotNull
     private static Map<ValueParameterDescriptor, ResolvedValueArgument> createValueArgumentsMap(CallableDescriptor descriptor) {
-        return descriptor.getValueParameters().isEmpty()
-               ? Collections.<ValueParameterDescriptor, ResolvedValueArgument>emptyMap()
-               : Maps.<ValueParameterDescriptor, ResolvedValueArgument>newLinkedHashMap();
+        return descriptor.getValueParameters().isEmpty() ? Collections.emptyMap() : Maps.newLinkedHashMap();
     }
 
     @NotNull
     private static Map<ValueArgument, ArgumentMatchImpl> createArgumentsToParameterMap(CallableDescriptor descriptor) {
-        return descriptor.getValueParameters().isEmpty()
-               ? Collections.<ValueArgument, ArgumentMatchImpl>emptyMap()
-               : Maps.<ValueArgument, ArgumentMatchImpl>newHashMap();
+        return descriptor.getValueParameters().isEmpty() ? Collections.emptyMap() : Maps.newHashMap();
     }
 
     @NotNull
     private static Map<TypeParameterDescriptor, KotlinType> createTypeArgumentsMap(CallableDescriptor descriptor) {
-        return descriptor.getTypeParameters().isEmpty()
-               ? Collections.<TypeParameterDescriptor, KotlinType>emptyMap()
-               : Maps.<TypeParameterDescriptor, KotlinType>newLinkedHashMap();
+        return descriptor.getTypeParameters().isEmpty() ? Collections.emptyMap() : Maps.newLinkedHashMap();
     }
 
     @Override
@@ -212,7 +206,7 @@ public class ResolvedCallImpl<D extends CallableDescriptor> implements MutableRe
         List<ValueParameterDescriptor> substitutedParameters = resultingDescriptor.getValueParameters();
 
         Collection<Map.Entry<ValueParameterDescriptor, ResolvedValueArgument>> valueArgumentsBeforeSubstitution =
-                new SmartList<Map.Entry<ValueParameterDescriptor, ResolvedValueArgument>>(valueArguments.entrySet());
+                new SmartList<>(valueArguments.entrySet());
 
         valueArguments.clear();
 
@@ -223,7 +217,7 @@ public class ResolvedCallImpl<D extends CallableDescriptor> implements MutableRe
         }
 
         Collection<Map.Entry<ValueArgument, ArgumentMatchImpl>> unsubstitutedArgumentMappings =
-                new SmartList<Map.Entry<ValueArgument, ArgumentMatchImpl>>(argumentToParameterMap.entrySet());
+                new SmartList<>(argumentToParameterMap.entrySet());
 
         argumentToParameterMap.clear();
         for (Map.Entry<ValueArgument, ArgumentMatchImpl> entry : unsubstitutedArgumentMappings) {
@@ -283,7 +277,7 @@ public class ResolvedCallImpl<D extends CallableDescriptor> implements MutableRe
     @Nullable
     @Override
     public List<ResolvedValueArgument> getValueArgumentsByIndex() {
-        List<ResolvedValueArgument> arguments = new ArrayList<ResolvedValueArgument>(candidateDescriptor.getValueParameters().size());
+        List<ResolvedValueArgument> arguments = new ArrayList<>(candidateDescriptor.getValueParameters().size());
         for (int i = 0; i < candidateDescriptor.getValueParameters().size(); ++i) {
             arguments.add(null);
         }

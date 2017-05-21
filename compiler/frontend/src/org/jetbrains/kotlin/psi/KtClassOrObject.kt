@@ -84,7 +84,7 @@ abstract class KtClassOrObject :
         return getOrCreateBody().addBefore(declaration, anchorAfter) as T
     }
 
-    fun isTopLevel(): Boolean = stub?.isTopLevel() ?: (parent == null || parent is KtFile)
+    fun isTopLevel(): Boolean = stub?.isTopLevel() ?: (parent is KtFile)
 
     override fun isLocal(): Boolean = stub?.isLocal() ?: KtPsiUtil.isLocal(this)
 
@@ -104,7 +104,7 @@ abstract class KtClassOrObject :
 
     override fun hasPrimaryConstructor(): Boolean = hasExplicitPrimaryConstructor() || !hasSecondaryConstructors()
 
-    private fun hasSecondaryConstructors(): Boolean = !getSecondaryConstructors().isEmpty()
+    private fun hasSecondaryConstructors(): Boolean = !secondaryConstructors.isEmpty()
 
     override fun getSecondaryConstructors(): List<KtSecondaryConstructor> = getBody()?.secondaryConstructors.orEmpty()
 

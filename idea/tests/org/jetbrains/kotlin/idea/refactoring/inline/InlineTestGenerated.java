@@ -50,9 +50,27 @@ public class InlineTestGenerated extends AbstractInlineTest {
             doTest(fileName);
         }
 
+        @TestMetadata("LocalCapturing.kt")
+        public void testLocalCapturing() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/LocalCapturing.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("LocalSimple.kt")
+        public void testLocalSimple() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/LocalSimple.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("MultipleReturns.kt")
         public void testMultipleReturns() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/MultipleReturns.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("Reference.kt")
+        public void testReference() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/Reference.kt");
             doTest(fileName);
         }
 
@@ -65,6 +83,12 @@ public class InlineTestGenerated extends AbstractInlineTest {
         @TestMetadata("UnitReturnType.kt")
         public void testUnitReturnType() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/UnitReturnType.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("UnitReturnType2.kt")
+        public void testUnitReturnType2() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/UnitReturnType2.kt");
             doTest(fileName);
         }
 
@@ -94,9 +118,33 @@ public class InlineTestGenerated extends AbstractInlineTest {
                 doTest(fileName);
             }
 
+            @TestMetadata("DoNotKeepString.kt")
+            public void testDoNotKeepString() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/DoNotKeepString.kt");
+                doTest(fileName);
+            }
+
             @TestMetadata("ExplicitReturnType.kt")
             public void testExplicitReturnType() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/ExplicitReturnType.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("explicitTypeArgument.kt")
+            public void testExplicitTypeArgument() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/explicitTypeArgument.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("explicitTypeArgumentComplex.kt")
+            public void testExplicitTypeArgumentComplex() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/explicitTypeArgumentComplex.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("explicitTypeArgumentNotNeeded.kt")
+            public void testExplicitTypeArgumentNotNeeded() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/explicitTypeArgumentNotNeeded.kt");
                 doTest(fileName);
             }
 
@@ -112,6 +160,60 @@ public class InlineTestGenerated extends AbstractInlineTest {
                 doTest(fileName);
             }
 
+            @TestMetadata("FunctionalType.kt")
+            public void testFunctionalType() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/FunctionalType.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("Lambda.kt")
+            public void testLambda() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/Lambda.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("Lambda1.kt")
+            public void testLambda1() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/Lambda1.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("Lambda2.kt")
+            public void testLambda2() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/Lambda2.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("LambdaGeneric.kt")
+            public void testLambdaGeneric() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/LambdaGeneric.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("ManyParams.kt")
+            public void testManyParams() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/ManyParams.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("MultipleInComposition.kt")
+            public void testMultipleInComposition() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/MultipleInComposition.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("MultipleInExpression.kt")
+            public void testMultipleInExpression() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/MultipleInExpression.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("Recursive.kt")
+            public void testRecursive() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/Recursive.kt");
+                doTest(fileName);
+            }
+
             @TestMetadata("SafeCall.kt")
             public void testSafeCall() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/SafeCall.kt");
@@ -121,6 +223,141 @@ public class InlineTestGenerated extends AbstractInlineTest {
             @TestMetadata("Simple.kt")
             public void testSimple() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/Simple.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("StringTemplate.kt")
+            public void testStringTemplate() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/StringTemplate.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("WithReference.kt")
+            public void testWithReference() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/expressionBody/WithReference.kt");
+                doTest(fileName);
+            }
+        }
+
+        @TestMetadata("idea/testData/refactoring/inline/function/fromIntellij")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class FromIntellij extends AbstractInlineTest {
+            public void testAllFilesPresentInFromIntellij() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/refactoring/inline/function/fromIntellij"), Pattern.compile("^(\\w+)\\.kt$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("ArrayAccess.kt")
+            public void testArrayAccess() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/ArrayAccess.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("AvoidMultipleSubstitutionsInParameterTypes.kt")
+            public void testAvoidMultipleSubstitutionsInParameterTypes() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/AvoidMultipleSubstitutionsInParameterTypes.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("CallInFor.kt")
+            public void testCallInFor() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/CallInFor.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("CallUnderIf.kt")
+            public void testCallUnderIf() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/CallUnderIf.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("EnumConstructor.kt")
+            public void testEnumConstructor() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/EnumConstructor.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("FieldInitializer.kt")
+            public void testFieldInitializer() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/FieldInitializer.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("FlatVarargs.kt")
+            public void testFlatVarargs() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/FlatVarargs.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("InaccessibleFieldInSuperclass.kt")
+            public void testInaccessibleFieldInSuperclass() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/InaccessibleFieldInSuperclass.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("InferredType.kt")
+            public void testInferredType() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/InferredType.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("InlineAnonymousClassWithPrivateMethod.kt")
+            public void testInlineAnonymousClassWithPrivateMethod() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/InlineAnonymousClassWithPrivateMethod.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("InlineMultipleOccurrencesInFieldInitializer.kt")
+            public void testInlineMultipleOccurrencesInFieldInitializer() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/InlineMultipleOccurrencesInFieldInitializer.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("InlineWithQualifier.kt")
+            public void testInlineWithQualifier() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/InlineWithQualifier.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("InlineWithTry.kt")
+            public void testInlineWithTry() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/InlineWithTry.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("NotAStatement.kt")
+            public void testNotAStatement() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/NotAStatement.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("ParamNameConflictsWithLocalVar.kt")
+            public void testParamNameConflictsWithLocalVar() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/ParamNameConflictsWithLocalVar.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("SideEffect.kt")
+            public void testSideEffect() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/SideEffect.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("Substitution.kt")
+            public void testSubstitution() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/Substitution.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("VoidWithReturn.kt")
+            public void testVoidWithReturn() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/VoidWithReturn.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("WithSuperInside.kt")
+            public void testWithSuperInside() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/fromIntellij/WithSuperInside.kt");
                 doTest(fileName);
             }
         }
@@ -151,15 +388,63 @@ public class InlineTestGenerated extends AbstractInlineTest {
                 doTest(fileName);
             }
 
+            @TestMetadata("ClassDelegate.kt")
+            public void testClassDelegate() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/returnAtEnd/ClassDelegate.kt");
+                doTest(fileName);
+            }
+
             @TestMetadata("ConvertToBlockBody.kt")
             public void testConvertToBlockBody() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/returnAtEnd/ConvertToBlockBody.kt");
                 doTest(fileName);
             }
 
+            @TestMetadata("DefaultParameter.kt")
+            public void testDefaultParameter() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/returnAtEnd/DefaultParameter.kt");
+                doTest(fileName);
+            }
+
             @TestMetadata("MultipleStatements.kt")
             public void testMultipleStatements() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/returnAtEnd/MultipleStatements.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("OnLocalMemberLevel.kt")
+            public void testOnLocalMemberLevel() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/returnAtEnd/OnLocalMemberLevel.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("OnMemberLevel.kt")
+            public void testOnMemberLevel() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/returnAtEnd/OnMemberLevel.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("OnTopLevel.kt")
+            public void testOnTopLevel() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/returnAtEnd/OnTopLevel.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("PrivateMember.kt")
+            public void testPrivateMember() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/returnAtEnd/PrivateMember.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("PublicMember.kt")
+            public void testPublicMember() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/returnAtEnd/PublicMember.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("Recursive.kt")
+            public void testRecursive() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/function/returnAtEnd/Recursive.kt");
                 doTest(fileName);
             }
 
@@ -394,6 +679,12 @@ public class InlineTestGenerated extends AbstractInlineTest {
                 doTest(fileName);
             }
 
+            @TestMetadata("CallCorrected.kt")
+            public void testCallCorrected() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/inlineVariableOrProperty/addParenthesis/CallCorrected.kt");
+                doTest(fileName);
+            }
+
             @TestMetadata("CallDontAdd.kt")
             public void testCallDontAdd() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/inlineVariableOrProperty/addParenthesis/CallDontAdd.kt");
@@ -463,6 +754,12 @@ public class InlineTestGenerated extends AbstractInlineTest {
             @TestMetadata("IfIntoPrefix.kt")
             public void testIfIntoPrefix() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/inlineVariableOrProperty/addParenthesis/IfIntoPrefix.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("IndexedCorrected.kt")
+            public void testIndexedCorrected() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/inlineVariableOrProperty/addParenthesis/IndexedCorrected.kt");
                 doTest(fileName);
             }
 
@@ -694,6 +991,12 @@ public class InlineTestGenerated extends AbstractInlineTest {
             @TestMetadata("keepImport.kt")
             public void testKeepImport() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/inlineVariableOrProperty/property/keepImport.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("Library.kt")
+            public void testLibrary() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/refactoring/inline/inlineVariableOrProperty/property/Library.kt");
                 doTest(fileName);
             }
 

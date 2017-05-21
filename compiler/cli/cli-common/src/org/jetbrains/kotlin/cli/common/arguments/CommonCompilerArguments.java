@@ -17,11 +17,12 @@
 package org.jetbrains.kotlin.cli.common.arguments;
 
 import com.intellij.util.SmartList;
-import com.sampullara.cli.Argument;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.Serializable;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public abstract class CommonCompilerArguments implements Serializable {
     public static final long serialVersionUID = 0L;
@@ -29,80 +30,98 @@ public abstract class CommonCompilerArguments implements Serializable {
     public static final String PLUGIN_OPTION_FORMAT = "plugin:<pluginId>:<optionName>=<value>";
 
     @GradleOption(DefaultValues.LanguageVersions.class)
-    @Argument(value = "language-version", description = "Provide source compatibility with specified language version")
-    @ValueDescription("<version>")
+    @Argument(
+            value = "-language-version",
+            valueDescription = "<version>",
+            description = "Provide source compatibility with specified language version"
+    )
     public String languageVersion;
 
     @GradleOption(DefaultValues.LanguageVersions.class)
-    @Argument(value = "api-version", description = "Allow to use declarations only from the specified version of bundled libraries")
-    @ValueDescription("<version>")
+    @Argument(
+            value = "-api-version",
+            valueDescription = "<version>",
+            description = "Allow to use declarations only from the specified version of bundled libraries"
+    )
     public String apiVersion;
 
     @GradleOption(DefaultValues.BooleanFalseDefault.class)
-    @Argument(value = "nowarn", description = "Generate no warnings")
+    @Argument(value = "-nowarn", description = "Generate no warnings")
     public boolean suppressWarnings;
 
     @GradleOption(DefaultValues.BooleanFalseDefault.class)
-    @Argument(value = "verbose", description = "Enable verbose logging output")
+    @Argument(value = "-verbose", description = "Enable verbose logging output")
     public boolean verbose;
 
-    @Argument(value = "version", description = "Display compiler version")
+    @Argument(value = "-version", description = "Display compiler version")
     public boolean version;
 
-    @Argument(value = "help", alias = "h", description = "Print a synopsis of standard options")
+    @Argument(value = "-help", shortName = "-h", description = "Print a synopsis of standard options")
     public boolean help;
 
-    @Argument(value = "X", description = "Print a synopsis of advanced options")
+    @Argument(value = "-X", description = "Print a synopsis of advanced options")
     public boolean extraHelp;
 
-    @Argument(value = "Xno-inline", description = "Disable method inlining")
+    @Argument(value = "-P", valueDescription = PLUGIN_OPTION_FORMAT, description = "Pass an option to a plugin")
+    public String[] pluginOptions;
+
+    // Advanced options
+
+    @Argument(value = "-Xno-inline", description = "Disable method inlining")
     public boolean noInline;
 
     // TODO Remove in 1.0
-    @Argument(value = "Xrepeat", description = "Repeat compilation (for performance analysis)")
-    @ValueDescription("<count>")
+    @Argument(
+            value = "-Xrepeat",
+            valueDescription = "<count>",
+            description = "Repeat compilation (for performance analysis)"
+    )
     public String repeat;
 
-    @Argument(value = "Xskip-metadata-version-check", description = "Load classes with bad metadata version anyway (incl. pre-release classes)")
+    @Argument(value = "-Xskip-metadata-version-check", description = "Load classes with bad metadata version anyway (incl. pre-release classes)")
     public boolean skipMetadataVersionCheck;
 
-    @Argument(value = "Xallow-kotlin-package", description = "Allow compiling code in package 'kotlin'")
+    @Argument(value = "-Xallow-kotlin-package", description = "Allow compiling code in package 'kotlin'")
     public boolean allowKotlinPackage;
 
-    @Argument(value = "Xplugin", description = "Load plugins from the given classpath")
-    @ValueDescription("<path>")
+    @Argument(value = "-Xreport-output-files", description = "Report source to output files mapping")
+    public boolean reportOutputFiles;
+
+    @Argument(value = "-Xplugin", valueDescription = "<path>", description = "Load plugins from the given classpath")
     public String[] pluginClasspaths;
 
-    @Argument(value = "Xmulti-platform", description = "Enable experimental language support for multi-platform projects")
+    @Argument(value = "-Xmulti-platform", description = "Enable experimental language support for multi-platform projects")
     public boolean multiPlatform;
 
-    @Argument(value = "Xno-check-impl", description = "Do not check presence of 'impl' modifier in multi-platform projects")
+    @Argument(value = "-Xno-check-impl", description = "Do not check presence of 'impl' modifier in multi-platform projects")
     public boolean noCheckImpl;
 
-    @Argument(value = "Xskip-java-check", description = "Do not warn when running the compiler under Java 6 or 7")
-    public boolean noJavaVersionWarning;
+    @Argument(
+            value = "-Xintellij-plugin-root",
+            valueDescription = "<path>",
+            description = "Path to the kotlin-compiler.jar or directory where IntelliJ configuration files can be found"
+    )
+    public String intellijPluginRoot;
 
-    @Argument(value = "Xcoroutines=warn")
-    public boolean coroutinesWarn;
+    @Argument(
+            value = "-Xcoroutines",
+            valueDescription = "{enable|warn|error}",
+            description = "Enable coroutines or report warnings or errors on declarations and use sites of 'suspend' modifier"
+    )
+    public String coroutinesState = WARN;
 
-    @Argument(value = "Xcoroutines=error")
-    public boolean coroutinesError;
+    public List<String> freeArgs = new SmartList<>();
 
-    @Argument(value = "Xcoroutines=enable")
-    public boolean coroutinesEnable;
-
-    @Argument(value = "P", description = "Pass an option to a plugin")
-    @ValueDescription(PLUGIN_OPTION_FORMAT)
-    public String[] pluginOptions;
-
-    public List<String> freeArgs = new SmartList<String>();
-
-    public List<String> unknownExtraFlags = new SmartList<String>();
+    public transient ArgumentParseErrors errors = new ArgumentParseErrors();
 
     @NotNull
-    public String executableScriptFileName() {
-        return "kotlinc";
+    public static CommonCompilerArguments createDefaultInstance() {
+        return new DummyImpl();
     }
+
+    public static final String WARN = "warn";
+    public static final String ERROR = "error";
+    public static final String ENABLE = "enable";
 
     // Used only for serialize and deserialize settings. Don't use in other places!
     public static final class DummyImpl extends CommonCompilerArguments {}

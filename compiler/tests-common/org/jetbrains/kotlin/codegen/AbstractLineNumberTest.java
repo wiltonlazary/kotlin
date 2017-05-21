@@ -22,7 +22,6 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import kotlin.Pair;
 import kotlin.collections.CollectionsKt;
-import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.backend.common.output.OutputFile;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
@@ -83,9 +82,7 @@ public abstract class AbstractLineNumberTest extends TestCaseWithTmpdir {
             throw ExceptionUtilsKt.rethrow(e);
         }
 
-        return new Pair<KtFile, KotlinCoreEnvironment>(
-                KotlinTestUtils.createFile(file.getName(), text, environment.getProject()), environment
-        );
+        return new Pair<>(KotlinTestUtils.createFile(file.getName(), text, environment.getProject()), environment);
     }
 
     private void doTest(@NotNull String filename, boolean custom) {
@@ -115,12 +112,7 @@ public abstract class AbstractLineNumberTest extends TestCaseWithTmpdir {
     }
 
     private static String getActualLineNumbersAsString(List<String> lines) {
-        return CollectionsKt.joinToString(lines, " ", "// ", "", -1, "...", new Function1<String, CharSequence>() {
-            @Override
-            public CharSequence invoke(String lineNumber) {
-                return lineNumber;
-            }
-        });
+        return CollectionsKt.joinToString(lines, " ", "// ", "", -1, "...", lineNumber -> lineNumber);
     }
 
     @NotNull
@@ -167,8 +159,8 @@ public abstract class AbstractLineNumberTest extends TestCaseWithTmpdir {
 
     @NotNull
     private static List<String> readTestFunLineNumbers(@NotNull ClassReader cr) {
-        final List<Label> labels = Lists.newArrayList();
-        final Map<Label, String> labels2LineNumbers = Maps.newHashMap();
+        List<Label> labels = Lists.newArrayList();
+        Map<Label, String> labels2LineNumbers = Maps.newHashMap();
 
         ClassVisitor visitor = new ClassVisitor(Opcodes.ASM5) {
             @Override
@@ -212,8 +204,8 @@ public abstract class AbstractLineNumberTest extends TestCaseWithTmpdir {
 
     @NotNull
     private static List<String> readAllLineNumbers(@NotNull ClassReader reader) {
-        final List<String> result = new ArrayList<String>();
-        final Set<String> visitedLabels = new HashSet<String>();
+        List<String> result = new ArrayList<>();
+        Set<String> visitedLabels = new HashSet<>();
 
         reader.accept(new ClassVisitor(Opcodes.ASM5) {
             @Override

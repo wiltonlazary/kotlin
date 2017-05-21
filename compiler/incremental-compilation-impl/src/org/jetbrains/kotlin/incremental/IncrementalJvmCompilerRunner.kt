@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.incremental
 
+import com.intellij.util.io.PersistentEnumeratorBase
 import org.jetbrains.kotlin.annotation.AnnotationFileUpdater
 import org.jetbrains.kotlin.build.GeneratedFile
 import org.jetbrains.kotlin.build.GeneratedJvmClass
@@ -26,7 +27,6 @@ import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.messages.OutputMessageUtil
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
-import com.intellij.util.io.PersistentEnumeratorBase
 import org.jetbrains.kotlin.compilerRunner.ArgumentUtils
 import org.jetbrains.kotlin.compilerRunner.OutputItemsCollector
 import org.jetbrains.kotlin.compilerRunner.OutputItemsCollectorImpl
@@ -274,11 +274,8 @@ class IncrementalJvmCompilerRunner(
                 // there is no point in updating annotation file since all files will be compiled anyway
                 kaptAnnotationsFileUpdater = null
             }
-            else -> throw IllegalStateException("Unknown CompilationMode ${compilationMode.javaClass}")
+            else -> throw IllegalStateException("Unknown CompilationMode ${compilationMode::class.java}")
         }
-
-        @Suppress("NAME_SHADOWING")
-        var compilationMode = compilationMode
 
         val currentBuildInfo = BuildInfo(startTS = System.currentTimeMillis())
         BuildInfo.write(currentBuildInfo, lastBuildInfoFile)
@@ -291,7 +288,7 @@ class IncrementalJvmCompilerRunner(
             val lookupTracker = LookupTrackerImpl(LookupTracker.DO_NOTHING)
             val outdatedClasses = caches.incrementalCache.classesBySources(dirtySources)
             caches.incrementalCache.markOutputClassesDirty(dirtySources)
-            caches.incrementalCache.removeClassfilesBySources(dirtySources)
+            caches.incrementalCache.removeOutputForSourceFiles(dirtySources)
 
             val (sourcesToCompile, removedKotlinSources) = dirtySources.partition(File::exists)
 
@@ -303,8 +300,8 @@ class IncrementalJvmCompilerRunner(
 
             val compilerOutput = compileChanged(listOf(targetId), sourcesToCompile.toSet(), args, { caches.incrementalCache }, lookupTracker, messageCollector)
             exitCode = compilerOutput.exitCode
-            val generatedClassFiles = compilerOutput.generatedFiles
-            anyClassesCompiled = anyClassesCompiled || generatedClassFiles.isNotEmpty() || removedKotlinSources.isNotEmpty()
+            val generatedFiles = compilerOutput.generatedFiles
+            anyClassesCompiled = anyClassesCompiled || generatedFiles.isNotEmpty() || removedKotlinSources.isNotEmpty()
 
             if (exitCode == ExitCode.OK) {
                 dirtySourcesSinceLastTimeFile.delete()
@@ -316,15 +313,16 @@ class IncrementalJvmCompilerRunner(
 
             if (compilationMode is CompilationMode.Incremental) {
                 val dirtySourcesSet = dirtySources.toHashSet()
-                val additionalDirtyFiles = additionalDirtyFiles(caches, generatedClassFiles).filter { it !in dirtySourcesSet }
+                val additionalDirtyFiles = additionalDirtyFiles(caches, generatedFiles).filter { it !in dirtySourcesSet }
                 if (additionalDirtyFiles.isNotEmpty()) {
                     dirtySources.addAll(additionalDirtyFiles)
                     continue
                 }
             }
 
-            allGeneratedFiles.addAll(generatedClassFiles)
-            val compilationResult = updateIncrementalCaches(listOf(targetId), generatedClassFiles,
+            allGeneratedFiles.addAll(generatedFiles)
+            caches.incrementalCache.registerOutputForSourceFiles(generatedFiles)
+            val compilationResult = updateIncrementalCaches(listOf(targetId), generatedFiles,
                     compiledWithErrors = exitCode != ExitCode.OK,
                     getIncrementalCache = { caches.incrementalCache })
 
@@ -356,7 +354,7 @@ class IncrementalJvmCompilerRunner(
                 changesRegistry.registerChanges(currentBuildInfo.startTS, dirtyData)
             }
             else {
-                assert(compilationMode is CompilationMode.Rebuild) { "Unexpected compilation mode: ${compilationMode.javaClass}" }
+                assert(compilationMode is CompilationMode.Rebuild) { "Unexpected compilation mode: ${compilationMode::class.java}" }
                 changesRegistry.unknownChanges(currentBuildInfo.startTS)
             }
         }
@@ -400,7 +398,6 @@ class IncrementalJvmCompilerRunner(
                 KotlinClassHeader.Kind.MULTIFILE_CLASS_PART -> {
                     result.addAll(partsByFacadeName(outputClass.classHeader.multifileClassName!!))
                 }
-
             }
         }
 
@@ -428,6 +425,7 @@ class IncrementalJvmCompilerRunner(
         val destination = args.destination
         args.destination = null
         args.module = moduleFile.absolutePath
+        args.reportOutputFiles = true
         val outputItemCollector = OutputItemsCollectorImpl()
         @Suppress("NAME_SHADOWING")
         val messageCollector = MessageCollectorWrapper(messageCollector, outputItemCollector)
@@ -457,7 +455,7 @@ class IncrementalJvmCompilerRunner(
             private val delegate: MessageCollector,
             private val outputCollector: OutputItemsCollector
     ) : MessageCollector by delegate {
-        override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation) {
+        override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation?) {
             // TODO: consider adding some other way of passing input -> output mapping from compiler, e.g. dedicated service
             OutputMessageUtil.parseOutputMessage(message)?.let {
                 outputCollector.add(it.sourceFiles, it.outputFile)

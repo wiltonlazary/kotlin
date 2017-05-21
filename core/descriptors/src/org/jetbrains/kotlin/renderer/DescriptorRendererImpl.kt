@@ -31,12 +31,12 @@ import org.jetbrains.kotlin.resolve.constants.AnnotationValue
 import org.jetbrains.kotlin.resolve.constants.ArrayValue
 import org.jetbrains.kotlin.resolve.constants.ConstantValue
 import org.jetbrains.kotlin.resolve.constants.KClassValue
+import org.jetbrains.kotlin.resolve.descriptorUtil.annotationClass
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasDefaultValue
 import org.jetbrains.kotlin.serialization.deserialization.NotFoundClasses
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.ErrorUtils.UninferredParameterTypeConstructor
 import org.jetbrains.kotlin.types.TypeUtils.CANT_INFER_FUNCTION_PARAM_TYPE
-import java.lang.UnsupportedOperationException
 import java.util.*
 
 internal class DescriptorRendererImpl(
@@ -282,7 +282,7 @@ internal class DescriptorRendererImpl(
         return when (cd) {
             is TypeParameterDescriptor, is ClassDescriptor, is TypeAliasDescriptor -> renderClassifierName(cd)
             null -> typeConstructor.toString()
-            else -> error("Unexpected classifier: " + cd.javaClass)
+            else -> error("Unexpected classifier: " + cd::class.java)
         }
     }
 
@@ -397,7 +397,7 @@ internal class DescriptorRendererImpl(
 
         val sortedAnnotations = annotated.annotations.getAllAnnotations()
         for ((annotation, target) in sortedAnnotations) {
-            val annotationClass = annotation.type.constructor.declarationDescriptor as ClassDescriptor
+            val annotationClass = annotation.annotationClass!!
 
             if (!excluded.contains(DescriptorUtils.getFqNameSafe(annotationClass))) {
                 append(renderAnnotation(annotation, target)).append(" ")
@@ -1048,8 +1048,8 @@ internal class DescriptorRendererImpl(
             renderFunction(descriptor, builder)
         }
 
-        override fun visitReceiverParameterDescriptor(descriptor: ReceiverParameterDescriptor, data: StringBuilder) {
-            throw UnsupportedOperationException("Don't render receiver parameters")
+        override fun visitReceiverParameterDescriptor(descriptor: ReceiverParameterDescriptor, builder: StringBuilder) {
+            builder.append(descriptor.name) // renders <this>
         }
 
         override fun visitConstructorDescriptor(constructorDescriptor: ConstructorDescriptor, builder: StringBuilder) {

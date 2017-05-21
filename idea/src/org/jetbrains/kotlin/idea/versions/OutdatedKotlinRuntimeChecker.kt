@@ -26,6 +26,7 @@ import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.LibraryOrderEntry
 import com.intellij.openapi.roots.ModuleRootManager
+import com.intellij.openapi.roots.OrderRootType
 import com.intellij.openapi.roots.libraries.Library
 import com.intellij.util.PathUtil.getLocalFile
 import com.intellij.util.text.VersionComparatorUtil
@@ -71,12 +72,20 @@ private fun getKotlinLibraryVersionProperties(library: Library) =
         getLibraryProperties(JavaRuntimePresentationProvider.getInstance(), library) ?:
         getLibraryProperties(JSLibraryStdPresentationProvider.getInstance(), library)
 
-fun findKotlinRuntimeLibrary(module: Module): Library? {
+fun findKotlinRuntimeLibrary(module: Module, predicate: (Library) -> Boolean = ::isKotlinRuntime): Library? {
     val orderEntries = ModuleRootManager.getInstance(module).orderEntries.filterIsInstance<LibraryOrderEntry>()
     return orderEntries.asSequence()
             .mapNotNull { it.library }
-            .firstOrNull { getKotlinLibraryVersionProperties(it) != null }
+            .firstOrNull(predicate)
 }
+
+fun isKotlinRuntime(library: Library) = isKotlinJavaRuntime(library) || isKotlinJsRuntime(library)
+
+fun isKotlinJavaRuntime(library: Library) =
+        JavaRuntimeDetectionUtil.getRuntimeJar(library.getFiles(OrderRootType.CLASSES).asList()) != null
+
+fun isKotlinJsRuntime(library: Library) =
+        JsLibraryStdDetectionUtil.getJsStdLibJar(library.getFiles(OrderRootType.CLASSES).asList()) != null
 
 fun collectModulesWithOutdatedRuntime(libraries: List<VersionedLibrary>): List<Module> =
     libraries.flatMap { it.usedInModules }
@@ -108,68 +117,12 @@ fun notifyOutdatedKotlinRuntime(project: Project, outdatedLibraries: Collection<
         if (event.eventType == HyperlinkEvent.EventType.ACTIVATED) {
             if ("update" == event.description) {
                 val outdatedLibraries = findOutdatedKotlinLibraries(project).map { it.library }
-                updateLibraries(project, outdatedLibraries)
-                suggestDeleteKotlinJsIfNeeded(project, outdatedLibraries)
+                ApplicationManager.getApplication().invokeLater {
+                    updateLibraries(project, outdatedLibraries)
+                }
             }
             else if ("ignore" == event.description) {
                 PropertiesComponent.getInstance(project).setValue(SUPPRESSED_PROPERTY_NAME, pluginVersion)
-            }
-            else {
-                throw AssertionError()
-            }
-            notification.expire()
-        }
-    }), project)
-}
-
-fun deleteKotlinJs(project: Project) {
-    ApplicationManager.getApplication().invokeLater {
-        runWriteAction {
-            val kotlinJsFile = project.baseDir.findFileByRelativePath("script/kotlin.js") ?: return@runWriteAction
-
-            val fileToDelete = getLocalFile(kotlinJsFile)
-            try {
-                val parent = fileToDelete.parent
-                fileToDelete.delete(null)
-                parent.refresh(false, true)
-            }
-            catch (ex: IOException) {
-                Notifications.Bus.notify(
-                        Notification(OUTDATED_RUNTIME_GROUP_DISPLAY_ID, "Error", "Could not delete 'script/kotlin.js': " + ex.message, NotificationType.ERROR))
-            }
-        }
-    }
-}
-
-private fun suggestDeleteKotlinJsIfNeeded(project: Project, outdatedLibraries: Collection<Library>) {
-    project.baseDir.findFileByRelativePath("script/kotlin.js") ?: return
-
-    var addNotification = false
-    for (library in outdatedLibraries) {
-        if (isDetected(JSLibraryStdPresentationProvider.getInstance(), library)) {
-            val jsStdlibJar = getJsStdLibJar(library)
-            assert(jsStdlibJar != null) { "jslibFile should not be null" }
-
-            if (jsStdlibJar!!.findFileByRelativePath("kotlin.js") == null) {
-                addNotification = true
-                break
-            }
-        }
-    }
-    if (!addNotification) return
-
-    val message = "<p>File 'script/kotlin.js' was probably created by an older version of the Kotlin plugin.</p>" +
-                  "<p>The new Kotlin plugin copies an up-to-date version of this file to the output directory automatically, so the old version of it can be deleted.</p>" +
-                  "<p><a href=\"delete\">Delete this file</a> <a href=\"ignore\">Ignore</a></p>"
-
-    Notifications.Bus.notify(Notification(OUTDATED_RUNTIME_GROUP_DISPLAY_ID, "Outdated Kotlin Runtime", message,
-                                          NotificationType.WARNING, NotificationListener { notification, event ->
-        if (event.eventType == HyperlinkEvent.EventType.ACTIVATED) {
-            if ("delete" == event.description) {
-                deleteKotlinJs(project)
-            }
-            else if ("ignore" == event.description) {
-                // pass
             }
             else {
                 throw AssertionError()

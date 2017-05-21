@@ -21,8 +21,8 @@ import com.android.ide.common.resources.configuration.FolderConfiguration
 import com.android.ide.common.resources.configuration.LocaleQualifier
 import com.android.resources.ResourceType
 import com.android.tools.idea.folding.AndroidFoldingSettings
-import com.android.tools.idea.rendering.AppResourceRepository
-import com.android.tools.idea.rendering.LocalResourceRepository
+import com.android.tools.idea.res.AppResourceRepository
+import com.android.tools.idea.res.LocalResourceRepository
 import com.intellij.lang.ASTNode
 import com.intellij.lang.folding.FoldingBuilderEx
 import com.intellij.lang.folding.FoldingDescriptor
@@ -32,9 +32,9 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiClass
-import com.intellij.psi.PsiClassOwner
 import com.intellij.psi.PsiElement
 import com.intellij.psi.impl.source.SourceTreeToPsiMap
+import org.jetbrains.android.facet.AndroidFacet
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.uast.*
 import org.jetbrains.uast.visitor.AbstractUastVisitor
@@ -72,7 +72,7 @@ class ResourceFoldingBuilder : FoldingBuilderEx() {
     }
 
     override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> {
-        if (root !is KtFile || quick && !UNIT_TEST_MODE || !isFoldingEnabled) {
+        if (root !is KtFile || quick && !UNIT_TEST_MODE || !isFoldingEnabled || AndroidFacet.getInstance(root) == null) {
             return emptyArray()
         }
 
@@ -102,7 +102,7 @@ class ResourceFoldingBuilder : FoldingBuilderEx() {
 
         val element = getOutermostQualified() ?: this
 
-        (element.containingElement as? UCallExpression)?.run {
+        (element.uastParent as? UCallExpression)?.run {
             if (isFoldableGetResourceValueCall()) {
                 return getOutermostQualified()?.createFoldingDescriptor() ?: createFoldingDescriptor()
             }

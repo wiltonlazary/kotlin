@@ -224,6 +224,12 @@ public class PsiCheckerTestGenerated extends AbstractPsiCheckerTest {
             doTest(fileName);
         }
 
+        @TestMetadata("ObjectLiteralInDelegate.kt")
+        public void testObjectLiteralInDelegate() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/checker/ObjectLiteralInDelegate.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("Objects.kt")
         public void testObjects() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/checker/Objects.kt");
@@ -914,6 +920,12 @@ public class PsiCheckerTestGenerated extends AbstractPsiCheckerTest {
         @TestMetadata("SmartCastOnWhen.kt")
         public void testSmartCastOnWhen() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/checker/infos/SmartCastOnWhen.kt");
+            doTestWithInfos(fileName);
+        }
+
+        @TestMetadata("SmartCastTarget.kt")
+        public void testSmartCastTarget() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/checker/infos/SmartCastTarget.kt");
             doTestWithInfos(fileName);
         }
 

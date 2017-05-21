@@ -103,9 +103,16 @@ private fun List<ConcreteFunction>.writeTo(file: File, sourceFile: SourceFile, p
             writer.appendln("import kotlin.js.*")
             if (sourceFile == SourceFile.Arrays) {
                 writer.appendln("import primitiveArrayConcat")
+                writer.appendln("import withType")
             }
         }
-        writer.append("import kotlin.comparisons.*\n\n")
+        writer.appendln("import kotlin.comparisons.*")
+
+        if (platform != Platform.Common && sourceFile == SourceFile.Sequences) {
+            writer.appendln("import kotlin.coroutines.experimental.*")
+        }
+
+        writer.appendln()
 
         for (f in this) {
             f.textBuilder(writer)

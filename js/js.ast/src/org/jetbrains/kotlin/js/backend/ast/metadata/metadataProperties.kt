@@ -52,6 +52,10 @@ var JsInvocation.typeCheck: TypeCheck? by MetadataProperty(default = null)
 
 var JsInvocation.boxing: Boolean by MetadataProperty(default = false)
 
+var JsVars.exportedPackage: String? by MetadataProperty(default = null)
+
+var JsExpressionStatement.exportedTag: String? by MetadataProperty(default = null)
+
 /**
  * For function and lambda bodies indicates what declaration corresponds to.
  * When absent (`null`) on body of a named function, this function is from external JS module.
@@ -77,6 +81,8 @@ var HasMetadata.sideEffects: SideEffectKind by MetadataProperty(default = SideEf
  */
 var JsExpression.isSuspend: Boolean by MetadataProperty(default = false)
 
+var JsExpression.isTailCallSuspend: Boolean by MetadataProperty(default = false)
+
 /**
  * Denotes a reference to coroutine's `result` field that contains result of
  * last suspended invocation.
@@ -98,18 +104,15 @@ var JsName.imported by MetadataProperty(default = false)
 
 var JsFunction.coroutineMetadata: CoroutineMetadata? by MetadataProperty(default = null)
 
-class CoroutineMetadata(
+data class CoroutineMetadata(
         val doResumeName: JsName,
-        val resumeName: JsName,
         val stateName: JsName,
         val exceptionStateName: JsName,
         val finallyPathName: JsName,
         val resultName: JsName,
         val exceptionName: JsName,
-        val facadeName: JsName,
         val baseClassRef: JsExpression,
         val suspendObjectRef: JsExpression,
-        val isLambda: Boolean,
         val hasController: Boolean,
         val hasReceiver: Boolean
 )

@@ -45,20 +45,25 @@ messages/**)
 -dontwarn com.google.j2objc.annotations.Weak
 -dontwarn org.iq80.snappy.HadoopSnappyCodec$SnappyCompressionInputStream
 -dontwarn org.iq80.snappy.HadoopSnappyCodec$SnappyCompressionOutputStream
+-dontwarn com.google.common.util.concurrent.*
+-dontwarn org.apache.xerces.dom.**
+-dontwarn org.apache.xerces.util.**
+-dontwarn org.w3c.dom.ElementTraversal
+-dontwarn javaslang.match.annotation.Unapply
+-dontwarn javaslang.match.annotation.Patterns
 
 -libraryjars '<rtjar>'
 -libraryjars '<jssejar>'
 -libraryjars '<bootstrap.runtime>'
 -libraryjars '<bootstrap.reflect>'
 -libraryjars '<bootstrap.script.runtime>'
+-libraryjars '<tools.jar>'
 
--target 1.6
 -dontoptimize
 -dontobfuscate
 
 -keep class org.fusesource.** { *; }
 -keep class com.sun.jna.** { *; }
--keep class org.jdom.input.JAXPParserFactory { *; }
 
 -keep class org.jetbrains.annotations.** {
     public protected *;
@@ -95,7 +100,7 @@ messages/**)
 }
 
 -keepclassmembers class com.intellij.openapi.vfs.VirtualFile {
-    public InputStream getInputStream();
+    public protected *;
 }
 
 -keep class com.intellij.openapi.vfs.StandardFileSystems {
@@ -115,15 +120,16 @@ messages/**)
     public protected *;
 }
 
+# This is needed so that the platform code which parses XML wouldn't fail, see KT-16968
+# This API is used from org.jdom.input.SAXBuilder via reflection.
+-keep class org.jdom.input.JAXPParserFactory { public ** createParser(...); }
+
 # for kdoc & dokka
 -keep class com.intellij.openapi.util.TextRange { *; }
 -keep class com.intellij.lang.impl.PsiBuilderImpl* {
     public protected *;
 }
 -keep class com.intellij.openapi.util.text.StringHash { *; }
-
-# for gradle plugin and other server tools
--keep class com.intellij.openapi.util.io.ZipFileCache { public *; }
 
 # for j2k
 -keep class com.intellij.codeInsight.NullableNotNullManager { public protected *; }
@@ -180,6 +186,7 @@ messages/**)
 
 -keepclassmembers class org.jetbrains.org.objectweb.asm.Type {
     *** ARRAY;
+    *** OBJECT;
 }
 
 -keepclassmembers class org.jetbrains.org.objectweb.asm.ClassReader {
@@ -193,3 +200,7 @@ messages/**)
 
 # for building kotlin-build-common-test
 -keep class org.jetbrains.kotlin.build.SerializationUtilsKt { *; }
+
+# for tools.jar
+-keep class com.sun.tools.javac.** { *; }
+-keep class com.sun.source.** { *; }

@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.js.translate.context;
 import com.intellij.openapi.util.text.StringUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.builtins.PrimitiveType;
 import org.jetbrains.kotlin.descriptors.CallableDescriptor;
 import org.jetbrains.kotlin.descriptors.ClassDescriptor;
 import org.jetbrains.kotlin.descriptors.SimpleFunctionDescriptor;
@@ -29,9 +30,11 @@ import org.jetbrains.kotlin.js.backend.ast.*;
 import org.jetbrains.kotlin.js.backend.ast.metadata.MetadataProperties;
 import org.jetbrains.kotlin.js.backend.ast.metadata.SideEffectKind;
 import org.jetbrains.kotlin.js.backend.ast.metadata.TypeCheck;
+import org.jetbrains.kotlin.js.config.JsConfig;
 import org.jetbrains.kotlin.js.naming.NameSuggestion;
 import org.jetbrains.kotlin.js.naming.SuggestedName;
 import org.jetbrains.kotlin.js.resolve.JsPlatform;
+import org.jetbrains.kotlin.js.translate.intrinsic.functions.factories.ArrayFIF;
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils;
 import org.jetbrains.kotlin.js.translate.utils.JsDescriptorUtils;
 import org.jetbrains.kotlin.name.FqName;
@@ -113,7 +116,10 @@ public final class Namer {
     public static final String ENUM_ORDINAL_FIELD = "ordinal$";
 
     @NotNull
-    public static String getFunctionTag(@NotNull CallableDescriptor functionDescriptor) {
+    public static String getFunctionTag(@NotNull CallableDescriptor functionDescriptor, @NotNull JsConfig config) {
+        String intrinsicTag = ArrayFIF.INSTANCE.getTag(functionDescriptor, config);
+        if (intrinsicTag != null) return intrinsicTag;
+
         functionDescriptor = (CallableDescriptor) JsDescriptorUtils.findRealInlineDeclaration(functionDescriptor);
         String moduleName = getModuleName(functionDescriptor);
         FqNameUnsafe fqNameParent = DescriptorUtils.getFqName(functionDescriptor).parent();
@@ -200,21 +206,16 @@ public final class Namer {
     @NotNull
     private final JsExpression callSetProperty;
 
-    @NotNull
-    private final JsName isTypeName;
-
     private Namer(@NotNull JsScope rootScope) {
         kotlinScope = new JsObjectScope(rootScope, "Kotlin standard object");
 
         callGetProperty = kotlin("callGetter");
         callSetProperty = kotlin("callSetter");
-
-        isTypeName = kotlinScope.declareName("isType");
     }
 
     // TODO: get rid of this function
     @NotNull
-    public static String getStableMangledNameForDescriptor(@NotNull ClassDescriptor descriptor, @NotNull String functionName) {
+    private static String getStableMangledNameForDescriptor(@NotNull ClassDescriptor descriptor, @NotNull String functionName) {
         Collection<SimpleFunctionDescriptor> functions = descriptor.getDefaultType().getMemberScope().getContributedFunctions(
                 Name.identifier(functionName), NoLookupLocation.FROM_BACKEND);
         assert functions.size() == 1 : "Can't select a single function: " + functionName + " in " + descriptor;
@@ -284,12 +285,22 @@ public final class Namer {
     }
 
     @NotNull
+    public JsExpression isArray() {
+        return kotlin("isArray");
+    }
+
+    @NotNull
+    public JsExpression isPrimitiveArray(@NotNull PrimitiveType type) {
+        return kotlin("is" + type.getArrayTypeName().asString());
+    }
+
+    @NotNull
     private JsExpression invokeFunctionAndSetTypeCheckMetadata(
             @NotNull String functionName,
             @Nullable JsExpression argument,
             @NotNull TypeCheck metadata
     ) {
-        List<JsExpression> arguments = argument != null ? Collections.singletonList(argument) : Collections.<JsExpression>emptyList();
+        List<JsExpression> arguments = argument != null ? Collections.singletonList(argument) : Collections.emptyList();
         return invokeFunctionAndSetTypeCheckMetadata(functionName, arguments, metadata);
     }
 
@@ -307,8 +318,8 @@ public final class Namer {
     }
 
     @NotNull
-    public JsExpression isInstanceOf(@NotNull JsExpression instance, @NotNull JsExpression type) {
-        JsInvocation result = new JsInvocation(kotlin(isTypeName), instance, type);
+    public static JsExpression isInstanceOf(@NotNull JsExpression instance, @NotNull JsExpression type) {
+        JsInvocation result = new JsInvocation(new JsNameRef("isType", KOTLIN_NAME), instance, type);
         MetadataProperties.setSideEffects(result, SideEffectKind.PURE);
         return result;
     }

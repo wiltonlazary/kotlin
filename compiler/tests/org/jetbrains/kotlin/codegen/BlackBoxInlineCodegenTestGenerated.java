@@ -461,6 +461,12 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
             doTest(fileName);
         }
 
+        @TestMetadata("defaultParametersAndLastVararg.kt")
+        public void testDefaultParametersAndLastVararg() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/argumentOrder/defaultParametersAndLastVararg.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("extension.kt")
         public void testExtension() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/argumentOrder/extension.kt");
@@ -494,6 +500,12 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
         @TestMetadata("simpleInClass.kt")
         public void testSimpleInClass() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/argumentOrder/simpleInClass.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("varargAndDefaultParameters.kt")
+        public void testVarargAndDefaultParameters() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/argumentOrder/varargAndDefaultParameters.kt");
             doTest(fileName);
         }
     }
@@ -893,6 +905,12 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
             doTest(fileName);
         }
 
+        @TestMetadata("inlineLambdaInNoInlineDefault.kt")
+        public void testInlineLambdaInNoInlineDefault() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/inlineLambdaInNoInlineDefault.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("kt11479.kt")
         public void testKt11479() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/kt11479.kt");
@@ -902,6 +920,18 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
         @TestMetadata("kt11479InlinedDefaultParameter.kt")
         public void testKt11479InlinedDefaultParameter() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/kt11479InlinedDefaultParameter.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("kt14564.kt")
+        public void testKt14564() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/kt14564.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("kt14564_2.kt")
+        public void testKt14564_2() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/kt14564_2.kt");
             doTest(fileName);
         }
 
@@ -916,6 +946,249 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/simpleDefaultMethod.kt");
             doTest(fileName);
         }
+
+        @TestMetadata("varArgNoInline.kt")
+        public void testVarArgNoInline() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/varArgNoInline.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class LambdaInlining extends AbstractBlackBoxInlineCodegenTest {
+            public void testAllFilesPresentInLambdaInlining() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("defaultLambdaInNoInline.kt")
+            public void testDefaultLambdaInNoInline() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/defaultLambdaInNoInline.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("instanceCapuredInClass.kt")
+            public void testInstanceCapuredInClass() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/instanceCapuredInClass.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("instanceCapuredInInterface.kt")
+            public void testInstanceCapuredInInterface() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/instanceCapuredInInterface.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("jvmStaticDefault.kt")
+            public void testJvmStaticDefault() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/jvmStaticDefault.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("noInline.kt")
+            public void testNoInline() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/noInline.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("nonDefaultInlineInNoInline.kt")
+            public void testNonDefaultInlineInNoInline() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/nonDefaultInlineInNoInline.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("receiverClash.kt")
+            public void testReceiverClash() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/receiverClash.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("receiverClash2.kt")
+            public void testReceiverClash2() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/receiverClash2.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("receiverClashInClass.kt")
+            public void testReceiverClashInClass() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/receiverClashInClass.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("receiverClashInClass2.kt")
+            public void testReceiverClashInClass2() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/receiverClashInClass2.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("simple.kt")
+            public void testSimple() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/simple.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("simpleErased.kt")
+            public void testSimpleErased() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/simpleErased.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("simpleErasedStaticInstance.kt")
+            public void testSimpleErasedStaticInstance() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/simpleErasedStaticInstance.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("simpleExtension.kt")
+            public void testSimpleExtension() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/simpleExtension.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("simpleGeneric.kt")
+            public void testSimpleGeneric() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/simpleGeneric.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("simpleStaticInstance.kt")
+            public void testSimpleStaticInstance() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/simpleStaticInstance.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("thisClash.kt")
+            public void testThisClash() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/thisClash.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("thisClashInClass.kt")
+            public void testThisClashInClass() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/thisClashInClass.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences")
+            @TestDataPath("$PROJECT_ROOT")
+            @RunWith(JUnit3RunnerWithInners.class)
+            public static class CallableReferences extends AbstractBlackBoxInlineCodegenTest {
+                public void testAllFilesPresentInCallableReferences() throws Exception {
+                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+                }
+
+                @TestMetadata("boundFunctionReference.kt")
+                public void testBoundFunctionReference() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/boundFunctionReference.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("boundPropertyReference.kt")
+                public void testBoundPropertyReference() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/boundPropertyReference.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("constuctorReference.kt")
+                public void testConstuctorReference() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/constuctorReference.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("functionImportedFromObject.kt")
+                public void testFunctionImportedFromObject() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/functionImportedFromObject.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("functionReference.kt")
+                public void testFunctionReference() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/functionReference.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("functionReferenceFromClass.kt")
+                public void testFunctionReferenceFromClass() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/functionReferenceFromClass.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("functionReferenceFromObject.kt")
+                public void testFunctionReferenceFromObject() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/functionReferenceFromObject.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("innerClassConstuctorReference.kt")
+                public void testInnerClassConstuctorReference() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/innerClassConstuctorReference.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("privateFunctionReference.kt")
+                public void testPrivateFunctionReference() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/privateFunctionReference.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("privatePropertyReference.kt")
+                public void testPrivatePropertyReference() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/privatePropertyReference.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("propertyImportedFromObject.kt")
+                public void testPropertyImportedFromObject() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/propertyImportedFromObject.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("propertyReference.kt")
+                public void testPropertyReference() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/propertyReference.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("propertyReferenceFromClass.kt")
+                public void testPropertyReferenceFromClass() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/propertyReferenceFromClass.kt");
+                    doTest(fileName);
+                }
+
+                @TestMetadata("propertyReferenceFromObject.kt")
+                public void testPropertyReferenceFromObject() throws Exception {
+                    String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/lambdaInlining/callableReferences/propertyReferenceFromObject.kt");
+                    doTest(fileName);
+                }
+            }
+        }
+
+        @TestMetadata("compiler/testData/codegen/boxInline/defaultValues/maskElimination")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class MaskElimination extends AbstractBlackBoxInlineCodegenTest {
+            @TestMetadata("32Parameters.kt")
+            public void test32Parameters() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/maskElimination/32Parameters.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("33Parameters.kt")
+            public void test33Parameters() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/maskElimination/33Parameters.kt");
+                doTest(fileName);
+            }
+
+            public void testAllFilesPresentInMaskElimination() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/codegen/boxInline/defaultValues/maskElimination"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("simple.kt")
+            public void testSimple() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/defaultValues/maskElimination/simple.kt");
+                doTest(fileName);
+            }
+        }
     }
 
     @TestMetadata("compiler/testData/codegen/boxInline/delegatedProperty")
@@ -924,6 +1197,12 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
     public static class DelegatedProperty extends AbstractBlackBoxInlineCodegenTest {
         public void testAllFilesPresentInDelegatedProperty() throws Exception {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/codegen/boxInline/delegatedProperty"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("kt16864.kt")
+        public void testKt16864() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/delegatedProperty/kt16864.kt");
+            doTest(fileName);
         }
 
         @TestMetadata("local.kt")
@@ -1387,9 +1666,21 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
                 doTest(fileName);
             }
 
+            @TestMetadata("nonLocalReturnFromCatchBlock.kt")
+            public void testNonLocalReturnFromCatchBlock() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/nonLocalReturns/tryFinally/nonLocalReturnFromCatchBlock.kt");
+                doTest(fileName);
+            }
+
             @TestMetadata("nonLocalReturnFromOuterLambda.kt")
             public void testNonLocalReturnFromOuterLambda() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/nonLocalReturns/tryFinally/nonLocalReturnFromOuterLambda.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("nonLocalReturnToCatchBlock.kt")
+            public void testNonLocalReturnToCatchBlock() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/nonLocalReturns/tryFinally/nonLocalReturnToCatchBlock.kt");
                 doTest(fileName);
             }
 
@@ -1886,6 +2177,18 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
             doTest(fileName);
         }
 
+        @TestMetadata("kt15997.kt")
+        public void testKt15997() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/kt15997.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("kt15997_2.kt")
+        public void testKt15997_2() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/kt15997_2.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("kt6988.kt")
         public void testKt6988() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/kt6988.kt");
@@ -1975,6 +2278,63 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
             @TestMetadata("simpleSafe.kt")
             public void testSimpleSafe() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/checkCast/simpleSafe.kt");
+                doTest(fileName);
+            }
+        }
+
+        @TestMetadata("compiler/testData/codegen/boxInline/reified/defaultLambda")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class DefaultLambda extends AbstractBlackBoxInlineCodegenTest {
+            public void testAllFilesPresentInDefaultLambda() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/codegen/boxInline/reified/defaultLambda"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("chain.kt")
+            public void testChain() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/defaultLambda/chain.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("nested.kt")
+            public void testNested() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/defaultLambda/nested.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("nested2.kt")
+            public void testNested2() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/defaultLambda/nested2.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("nested2Static.kt")
+            public void testNested2Static() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/defaultLambda/nested2Static.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("nestedStatic.kt")
+            public void testNestedStatic() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/defaultLambda/nestedStatic.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("simple.kt")
+            public void testSimple() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/defaultLambda/simple.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("transitiveChain.kt")
+            public void testTransitiveChain() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/defaultLambda/transitiveChain.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("transitiveChainStatic.kt")
+            public void testTransitiveChainStatic() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/reified/defaultLambda/transitiveChainStatic.kt");
                 doTest(fileName);
             }
         }
@@ -2213,6 +2573,12 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
             doTest(fileName);
         }
 
+        @TestMetadata("defaultFunction.kt")
+        public void testDefaultFunction() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/smap/defaultFunction.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("oneFile.kt")
         public void testOneFile() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/smap/oneFile.kt");
@@ -2284,6 +2650,27 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
             @TestMetadata("severalMappingsForDefaultFile.kt")
             public void testSeveralMappingsForDefaultFile() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/smap/anonymous/severalMappingsForDefaultFile.kt");
+                doTest(fileName);
+            }
+        }
+
+        @TestMetadata("compiler/testData/codegen/boxInline/smap/defaultLambda")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class DefaultLambda extends AbstractBlackBoxInlineCodegenTest {
+            public void testAllFilesPresentInDefaultLambda() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/codegen/boxInline/smap/defaultLambda"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("nested.kt")
+            public void testNested() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/smap/defaultLambda/nested.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("simple.kt")
+            public void testSimple() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/smap/defaultLambda/simple.kt");
                 doTest(fileName);
             }
         }
@@ -2408,6 +2795,18 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
             doTest(fileName);
         }
 
+        @TestMetadata("loopInStoreLoadChains.kt")
+        public void testLoopInStoreLoadChains() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/special/loopInStoreLoadChains.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("loopInStoreLoadChains2.kt")
+        public void testLoopInStoreLoadChains2() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/special/loopInStoreLoadChains2.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("plusAssign.kt")
         public void testPlusAssign() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/special/plusAssign.kt");
@@ -2444,6 +2843,24 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
         @TestMetadata("kt11499.kt")
         public void testKt11499() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/stackOnReturn/kt11499.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("kt17591.kt")
+        public void testKt17591() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/stackOnReturn/kt17591.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("kt17591a.kt")
+        public void testKt17591a() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/stackOnReturn/kt17591a.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("kt17591b.kt")
+        public void testKt17591b() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/stackOnReturn/kt17591b.kt");
             doTest(fileName);
         }
 
@@ -2636,6 +3053,33 @@ public class BlackBoxInlineCodegenTestGenerated extends AbstractBlackBoxInlineCo
         @TestMetadata("tryCatchFinally.kt")
         public void testTryCatchFinally() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/tryCatchFinally/tryCatchFinally.kt");
+            doTest(fileName);
+        }
+    }
+
+    @TestMetadata("compiler/testData/codegen/boxInline/varargs")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class Varargs extends AbstractBlackBoxInlineCodegenTest {
+        public void testAllFilesPresentInVarargs() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/codegen/boxInline/varargs"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("kt17653.kt")
+        public void testKt17653() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/varargs/kt17653.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("varargAndDefaultParameters.kt")
+        public void testVarargAndDefaultParameters() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/varargs/varargAndDefaultParameters.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("varargAndDefaultParameters2.kt")
+        public void testVarargAndDefaultParameters2() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/codegen/boxInline/varargs/varargAndDefaultParameters2.kt");
             doTest(fileName);
         }
     }

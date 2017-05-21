@@ -47,7 +47,6 @@ import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.LazyWrappedType
 import org.jetbrains.kotlin.utils.DFS
 import org.jetbrains.kotlin.utils.SmartSet
-import org.jetbrains.kotlin.utils.addToStdlib.check
 import java.io.Serializable
 import java.util.*
 
@@ -57,7 +56,7 @@ open class JvmBuiltInsSettings(
         deferredOwnerModuleDescriptor: () -> ModuleDescriptor,
         isAdditionalBuiltInsFeatureSupported: () -> Boolean
 ) : AdditionalClassPartsProvider, PlatformDependentDeclarationFilter {
-    private val j2kClassMap = JavaToKotlinClassMap.INSTANCE
+    private val j2kClassMap = JavaToKotlinClassMap
 
     private val ownerModuleDescriptor: ModuleDescriptor by lazy(deferredOwnerModuleDescriptor)
     private val isAdditionalBuiltInsFeatureSupported: Boolean by lazy(isAdditionalBuiltInsFeatureSupported)
@@ -263,7 +262,7 @@ open class JvmBuiltInsSettings(
         // No additional members should be added to Any
         if (isAny) return null
 
-        val fqName = fqNameUnsafe.check { it.isSafe }?.toSafe() ?: return null
+        val fqName = fqNameUnsafe.takeIf { it.isSafe }?.toSafe() ?: return null
         val javaAnalogueFqName = j2kClassMap.mapKotlinToJava(fqName.toUnsafe())?.asSingleFqName() ?: return null
 
         return ownerModuleDescriptor.resolveClassByFqName(javaAnalogueFqName, NoLookupLocation.FROM_BUILTINS) as? LazyJavaClassDescriptor
@@ -327,7 +326,7 @@ open class JvmBuiltInsSettings(
             if (isArrayOrPrimitiveArray(fqName)) {
                 return true
             }
-            val javaClassId = JavaToKotlinClassMap.INSTANCE.mapKotlinToJava(fqName) ?: return false
+            val javaClassId = JavaToKotlinClassMap.mapKotlinToJava(fqName) ?: return false
             val classViaReflection = try {
                 Class.forName(javaClassId.asSingleFqName().asString())
             }

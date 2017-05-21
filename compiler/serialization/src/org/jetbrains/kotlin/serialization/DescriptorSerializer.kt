@@ -17,20 +17,18 @@
 package org.jetbrains.kotlin.serialization
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
-import org.jetbrains.kotlin.builtins.functions.FunctionClassDescriptor
-import org.jetbrains.kotlin.builtins.getFunctionalClassKind
 import org.jetbrains.kotlin.builtins.isSuspendFunctionType
 import org.jetbrains.kotlin.builtins.transformSuspendFunctionToRuntimeFunctionType
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotated
+import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.protobuf.MessageLite
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils.isEnumEntry
 import org.jetbrains.kotlin.resolve.MemberComparator
 import org.jetbrains.kotlin.resolve.constants.NullValue
-import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.SinceKotlinInfo
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.typeUtil.contains
@@ -67,7 +65,8 @@ class DescriptorSerializer private constructor(
 
         val flags = Flags.getClassFlags(
                 hasAnnotations(classDescriptor), classDescriptor.visibility, classDescriptor.modality, classDescriptor.kind,
-                classDescriptor.isInner, classDescriptor.isCompanionObject, classDescriptor.isData, classDescriptor.isExternal
+                classDescriptor.isInner, classDescriptor.isCompanionObject, classDescriptor.isData, classDescriptor.isExternal,
+                classDescriptor.isHeader
         )
         if (flags != builder.flags) {
             builder.flags = flags
@@ -152,8 +151,6 @@ class DescriptorSerializer private constructor(
 
         var hasGetter = false
         var hasSetter = false
-        val lateInit = descriptor.isLateInit
-        val isConst = descriptor.isConst
 
         val compileTimeConstant = descriptor.compileTimeInitializer
         val hasConstant = compileTimeConstant != null && compileTimeConstant !is NullValue
@@ -189,8 +186,8 @@ class DescriptorSerializer private constructor(
 
         val flags = Flags.getPropertyFlags(
                 hasAnnotations, descriptor.visibility, descriptor.modality, descriptor.kind, descriptor.isVar,
-                hasGetter, hasSetter, hasConstant, isConst, lateInit, descriptor.isExternal,
-                @Suppress("DEPRECATION") descriptor.isDelegated
+                hasGetter, hasSetter, hasConstant, descriptor.isConst, descriptor.isLateInit, descriptor.isExternal,
+                @Suppress("DEPRECATION") descriptor.isDelegated, descriptor.isHeader
         )
         if (flags != builder.flags) {
             builder.flags = flags
@@ -235,7 +232,8 @@ class DescriptorSerializer private constructor(
 
         val flags = Flags.getFunctionFlags(
                 hasAnnotations(descriptor), descriptor.visibility, descriptor.modality, descriptor.kind, descriptor.isOperator,
-                descriptor.isInfix, descriptor.isInline, descriptor.isTailrec, descriptor.isExternal, descriptor.isSuspend
+                descriptor.isInfix, descriptor.isInline, descriptor.isTailrec, descriptor.isExternal, descriptor.isSuspend,
+                descriptor.isHeader
         )
         if (flags != builder.flags) {
             builder.flags = flags
@@ -543,7 +541,7 @@ class DescriptorSerializer private constructor(
         return builder
     }
 
-    fun packagePartProto(members: Collection<DeclarationDescriptor>): ProtoBuf.Package.Builder {
+    fun packagePartProto(packageFqName: FqName, members: Collection<DeclarationDescriptor>): ProtoBuf.Package.Builder {
         val builder = ProtoBuf.Package.newBuilder()
 
         for (declaration in sort(members)) {
@@ -564,7 +562,7 @@ class DescriptorSerializer private constructor(
             builder.sinceKotlinInfoTable = sinceKotlinInfoProto
         }
 
-        extension.serializePackage(builder)
+        extension.serializePackage(packageFqName, builder)
 
         return builder
     }

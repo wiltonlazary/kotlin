@@ -18,15 +18,23 @@ package org.jetbrains.kotlin.ir.declarations.impl
 
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrBody
+import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
+import org.jetbrains.kotlin.ir.symbols.impl.IrSimpleFunctionSymbolImpl
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 
 class IrFunctionImpl(
         startOffset: Int,
         endOffset: Int,
         origin: IrDeclarationOrigin,
-        override val descriptor: FunctionDescriptor
-) : IrFunctionBase(startOffset, endOffset, origin) {
+        override val symbol: IrSimpleFunctionSymbol
+) : IrFunctionBase(startOffset, endOffset, origin), IrSimpleFunction {
+    override val descriptor: FunctionDescriptor = symbol.descriptor
+
+    constructor(startOffset: Int, endOffset: Int, origin: IrDeclarationOrigin, descriptor: FunctionDescriptor) :
+            this(startOffset, endOffset, origin, IrSimpleFunctionSymbolImpl(descriptor))
+
     constructor(
             startOffset: Int,
             endOffset: Int,
@@ -37,6 +45,10 @@ class IrFunctionImpl(
         this.body = body
     }
 
+    init {
+        symbol.bind(this)
+    }
+
     override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R =
-            visitor.visitFunction(this, data)
+            visitor.visitSimpleFunction(this, data)
 }

@@ -16,6 +16,8 @@
 
 package org.jetbrains.kotlin.config
 
+import com.intellij.openapi.util.text.StringUtil
+
 class CompilerSettings {
     @JvmField var additionalArguments: String = DEFAULT_ADDITIONAL_ARGUMENTS
     @JvmField var scriptTemplates: String = ""
@@ -27,4 +29,11 @@ class CompilerSettings {
         val DEFAULT_ADDITIONAL_ARGUMENTS = "-version"
         private val DEFAULT_OUTPUT_DIRECTORY = "lib"
     }
+}
+
+val CompilerSettings.additionalArgumentsAsList: List<String>
+    get() = splitArgumentString(additionalArguments)
+
+fun splitArgumentString(arguments: String) = StringUtil.splitHonorQuotes(arguments, ' ').map {
+    if (it.startsWith('"')) StringUtil.unescapeChar(StringUtil.unquoteString(it), '"') else it
 }

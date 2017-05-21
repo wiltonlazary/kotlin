@@ -34,9 +34,9 @@ fun captureFromArguments(
     val arguments = type.arguments
     if (arguments.all { it.projectionKind == Variance.INVARIANT }) return type
 
-    val newArguments = arguments.mapIndexed {
-        index, projection ->
-        if (projection.projectionKind == Variance.INVARIANT) return@mapIndexed projection
+    val newArguments = arguments.map {
+        projection ->
+        if (projection.projectionKind == Variance.INVARIANT) return@map projection
 
         val lowerType = if (!projection.isStarProjection && projection.projectionKind == Variance.IN_VARIANCE) {
             projection.type.unwrap()
@@ -86,13 +86,13 @@ class NewCapturedType(
         override val annotations: Annotations = Annotations.EMPTY,
         override val isMarkedNullable: Boolean = false
 ): SimpleType() {
-
-    constructor(captureStatus: CaptureStatus, lowerType: UnwrappedType?, projection: TypeProjection): this(captureStatus, NewCapturedTypeConstructor(projection), lowerType)
+    constructor(captureStatus: CaptureStatus, lowerType: UnwrappedType?, projection: TypeProjection) :
+            this(captureStatus, NewCapturedTypeConstructor(projection), lowerType)
 
     override val arguments: List<TypeProjection> get() = listOf()
+
     override val memberScope: MemberScope // todo what about foo().bar() where foo() return captured type?
         get() = ErrorUtils.createErrorScope("No member resolution should be done on captured type!", true)
-    override val isError: Boolean get() = false
 
     override fun replaceAnnotations(newAnnotations: Annotations) =
             NewCapturedType(captureStatus, constructor, lowerType, newAnnotations, isMarkedNullable)

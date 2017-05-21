@@ -54,7 +54,7 @@ class KotlinMavenPluginPhaseInspection : DomElementsInspection<MavenDomProjectMo
         val manager = MavenProjectsManager.getInstance(module.project)
         val mavenProject = manager.findProject(module) ?: return
 
-        val pom = PomFile(domFileElement.file)
+        val pom = PomFile.forFileOrNull(domFileElement.file) ?: return
         val hasJavaFiles = module.hasJavaFiles()
 
         // all executions including inherited
@@ -125,7 +125,7 @@ class KotlinMavenPluginPhaseInspection : DomElementsInspection<MavenDomProjectMo
                 if (hasJsExecution && jsDependencies.isEmpty()) {
                     holder.createProblem(kotlinPlugin.artifactId.createStableCopy(),
                                          HighlightSeverity.WARNING,
-                                         "Kotlin JavaScript compiler configured but no ${MAVEN_JS_STDLIB_ID} dependency",
+                                         "Kotlin JavaScript compiler configured but no $MAVEN_JS_STDLIB_ID dependency",
                                          FixAddStdlibLocalFix(domFileElement.file, MAVEN_JS_STDLIB_ID, kotlinPlugin.version.rawText))
                 }
             }
@@ -167,9 +167,7 @@ class KotlinMavenPluginPhaseInspection : DomElementsInspection<MavenDomProjectMo
         override fun getFamilyName() = "Create kotlin execution"
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
-            val pom = PomFile(file)
-
-            pom.addKotlinExecution(module, kotlinPlugin, goal, PomFile.getPhase(module.hasJavaFiles(), false), false, listOf(goal))
+            PomFile.forFileOrNull(file)?.addKotlinExecution(module, kotlinPlugin, goal, PomFile.getPhase(module.hasJavaFiles(), false), false, listOf(goal))
         }
     }
 
@@ -185,10 +183,10 @@ class KotlinMavenPluginPhaseInspection : DomElementsInspection<MavenDomProjectMo
 
     private class AddJavaExecutionsLocalFix(val module: Module, val file: XmlFile, val kotlinPlugin: MavenDomPlugin) : LocalQuickFix {
         override fun getName() = "Configure maven-compiler-plugin executions in the right order"
-        override fun getFamilyName() = getName()
+        override fun getFamilyName() = name
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
-            PomFile(file).addJavacExecutions(module, kotlinPlugin)
+            PomFile.forFileOrNull(file)?.addJavacExecutions(module, kotlinPlugin)
         }
     }
 
@@ -197,8 +195,7 @@ class KotlinMavenPluginPhaseInspection : DomElementsInspection<MavenDomProjectMo
         override fun getFamilyName() = "Add dependency"
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
-            val file = PomFile(pomFile)
-            file.addDependency(MavenId(KotlinMavenConfigurator.GROUP_ID, id, version), MavenArtifactScope.COMPILE)
+            PomFile.forFileOrNull(pomFile)?.addDependency(MavenId(KotlinMavenConfigurator.GROUP_ID, id, version), MavenArtifactScope.COMPILE)
         }
     }
 
@@ -207,9 +204,10 @@ class KotlinMavenPluginPhaseInspection : DomElementsInspection<MavenDomProjectMo
         override fun getFamilyName() = "Create kotlin execution"
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
-            val pom = PomFile(xmlFile)
-            val plugin = pom.addKotlinPlugin(version)
-            pom.addKotlinExecution(module, plugin, "compile", PomFile.getPhase(module.hasJavaFiles(), false), false, listOf(goal))
+            PomFile.forFileOrNull(xmlFile)?.let { pom ->
+                val plugin = pom.addKotlinPlugin(version)
+                pom.addKotlinExecution(module, plugin, "compile", PomFile.getPhase(module.hasJavaFiles(), false), false, listOf(goal))
+            }
         }
     }
 }

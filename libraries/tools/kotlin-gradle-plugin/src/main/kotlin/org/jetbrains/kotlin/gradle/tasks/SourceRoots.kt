@@ -58,8 +58,8 @@ internal sealed class SourceRoots(val kotlinSourceFiles: List<File>) {
     }
 }
 
-internal class FilteringSourceRootsContainer(val filter: (File) -> Boolean = { true }) {
-    private val mutableSourceRoots = mutableListOf<File>()
+internal class FilteringSourceRootsContainer(roots: List<File> = emptyList(), val filter: (File) -> Boolean = { true }) {
+    private val mutableSourceRoots = roots.filterTo(mutableListOf(), filter)
 
     val sourceRoots: List<File>
         get() = mutableSourceRoots
@@ -79,6 +79,8 @@ internal class FilteringSourceRootsContainer(val filter: (File) -> Boolean = { t
             when (source) {
                 is SourceDirectorySet -> filteredDirs += source.srcDirs.filter { filter(it) }
                 is File -> if (filter(source)) filteredDirs.add(source)
+                is Collection<*> -> source.forEach { filteredDirs += add(it) }
+                is Array<*> -> source.forEach { filteredDirs += add(it) }
             }
         }
 

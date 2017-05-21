@@ -41,6 +41,7 @@ import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.isError
 import org.jetbrains.uast.*
 import java.lang.ref.WeakReference
 import java.text.StringCharacterIterator
@@ -109,11 +110,7 @@ private fun KotlinType.containsLocalTypes(): Boolean {
         }
     }
 
-    if (arguments.any { it.type.containsLocalTypes() }) {
-        return true
-    }
-
-    return false
+    return arguments.any { !it.isStarProjection && it.type.containsLocalTypes() }
 }
 
 internal fun KtTypeReference?.toPsiType(source: UElement, boxed: Boolean = false): PsiType {

@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.preloading;
 import org.jetbrains.kotlin.preloading.instrumentation.Instrumenter;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
@@ -43,29 +44,26 @@ public class Preloader {
     }
 
     private static void run(String[] args) throws Exception {
-        final long startTime = System.nanoTime();
+        long startTime = System.nanoTime();
 
-        final Options options = parseOptions(args);
+        Options options = parseOptions(args);
 
         ClassLoader classLoader = createClassLoader(options);
 
-        final Handler handler = getHandler(options, classLoader);
+        Handler handler = getHandler(options, classLoader);
         ClassLoader preloaded = ClassPreloadingUtils.preloadClasses(options.classpath, options.estimate, classLoader, null, handler);
 
         Class<?> mainClass = preloaded.loadClass(options.mainClass);
         Method mainMethod = mainClass.getMethod("main", String[].class);
 
         Runtime.getRuntime().addShutdownHook(
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (options.measure) {
-                            System.out.println();
-                            System.out.println("=== Preloader's measurements: ");
-                            System.out.format("Total time: %.3fs\n", (System.nanoTime() - startTime) / 1e9);
-                        }
-                        handler.done();
+                new Thread(() -> {
+                    if (options.measure) {
+                        System.out.println();
+                        System.out.println("=== Preloader's measurements: ");
+                        System.out.format("Total time: %.3fs\n", (System.nanoTime() - startTime) / 1e9);
                     }
+                    handler.done();
                 })
         );
 
@@ -77,6 +75,13 @@ public class Preloader {
         ClassLoader parent = Preloader.class.getClassLoader();
 
         List<File> instrumenters = options.instrumenters;
+        if (options.arguments.contains("-Xuse-javac")) {
+            File toolsJar = getJdkToolsJar();
+            if (toolsJar != null) {
+                instrumenters.add(toolsJar);
+            }
+        }
+
         if (instrumenters.isEmpty()) return parent;
 
         URL[] classpath = new URL[instrumenters.size()];
@@ -87,14 +92,38 @@ public class Preloader {
         return new URLClassLoader(classpath, parent);
     }
 
+    private static File getJdkToolsJar() {
+        try {
+            String javaHomePath = System.getProperty("java.home");
+            if (javaHomePath == null || javaHomePath.isEmpty()) {
+                return null;
+            }
+            File javaHome = new File(javaHomePath);
+            File toolsJar = new File(javaHome, "lib/tools.jar");
+            if (toolsJar.exists()) {
+                return toolsJar.getCanonicalFile();
+            }
+
+            // We might be inside jre.
+            if (javaHome.getName().equals("jre")) {
+                toolsJar = new File(javaHome.getParent(), "lib/tools.jar");
+                if (toolsJar.exists()) {
+                    return toolsJar.getCanonicalFile();
+                }
+            }
+        } catch (IOException ignored) {}
+
+        return null;
+    }
+
     @SuppressWarnings("AssignmentToForLoopParameter")
     private static Options parseOptions(String[] args) throws Exception {
         List<File> classpath = Collections.emptyList();
         boolean measure = false;
-        List<File> instrumenters = Collections.emptyList();
+        List<File> instrumenters = new ArrayList<>();
         int estimate = DEFAULT_CLASS_NUMBER_ESTIMATE;
         String mainClass = null;
-        List<String> arguments = new ArrayList<String>();
+        List<String> arguments = new ArrayList<>();
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -133,7 +162,7 @@ public class Preloader {
 
     private static List<File> parseClassPath(String classpath) {
         String[] paths = classpath.split(File.pathSeparator);
-        List<File> files = new ArrayList<File>(paths.length);
+        List<File> files = new ArrayList<>(paths.length);
         for (String path : paths) {
             File file = new File(path);
             if (!file.exists()) {
@@ -147,10 +176,10 @@ public class Preloader {
     private static Handler getHandler(Options options, ClassLoader withInstrumenter) {
         if (!options.measure) return new Handler();
 
-        final Instrumenter instrumenter = options.instrumenters.isEmpty() ? Instrumenter.DO_NOTHING : loadInstrumenter(withInstrumenter);
+        Instrumenter instrumenter = options.instrumenters.isEmpty() ? Instrumenter.DO_NOTHING : loadInstrumenter(withInstrumenter);
 
-        final int[] counter = new int[1];
-        final int[] size = new int[1];
+        int[] counter = new int[1];
+        int[] size = new int[1];
         return new Handler() {
             @Override
             public void beforeDefineClass(String name, int sizeInBytes) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ import org.jetbrains.kotlin.load.java.structure.JavaValueParameter
 import org.jetbrains.kotlin.load.java.typeEnhancement.enhanceSignatures
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.retainMostSpecificInEachOverridableGroup
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindExclude.NonExtensions
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
@@ -46,7 +47,6 @@ import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.utils.Printer
 import org.jetbrains.kotlin.utils.addIfNotNull
-import org.jetbrains.kotlin.utils.toReadOnlyList
 import java.util.*
 
 abstract class LazyJavaScope(protected val c: LazyJavaResolverContext) : MemberScopeImpl() {
@@ -67,7 +67,7 @@ abstract class LazyJavaScope(protected val c: LazyJavaResolverContext) : MemberS
 
     protected abstract fun computeMemberIndex(): DeclaredMemberIndex
 
-    // Fake overrides, SAM constructors/adapters, values()/valueOf(), etc.
+    // Fake overrides, values()/valueOf(), etc.
     protected abstract fun computeNonDeclaredFunctions(result: MutableCollection<SimpleFunctionDescriptor>, name: Name)
 
     protected abstract fun getDispatchReceiverParameter(): ReceiverParameterDescriptor?
@@ -82,14 +82,13 @@ abstract class LazyJavaScope(protected val c: LazyJavaResolverContext) : MemberS
 
             c.components.javaResolverCache.recordMethod(method, descriptor)
             result.add(descriptor)
-            if (method.isStatic) {
-                result.addIfNotNull(c.components.samConversionResolver.resolveSamAdapter(descriptor))
-            }
         }
+
+        result.retainMostSpecificInEachOverridableGroup()
 
         computeNonDeclaredFunctions(result, name)
 
-        enhanceSignatures(result).toReadOnlyList()
+        enhanceSignatures(result).toList()
     }
 
     open protected fun JavaMethodDescriptor.isVisibleAsFunction() = true
@@ -183,7 +182,7 @@ abstract class LazyJavaScope(protected val c: LazyJavaResolverContext) : MemberS
 
             val name = if (function.name.asString() == "equals" &&
                            jValueParameters.size == 1 &&
-                           c.module.builtIns.getNullableAnyType() == outType) {
+                           c.module.builtIns.nullableAnyType == outType) {
                 // This is a hack to prevent numerous warnings on Kotlin classes that inherit Java classes: if you override "equals" in such
                 // class without this hack, you'll be warned that in the superclass the name is "p0" (regardless of the fact that it's
                 // "other" in Any)
@@ -245,9 +244,9 @@ abstract class LazyJavaScope(protected val c: LazyJavaResolverContext) : MemberS
         computeNonDeclaredProperties(name, properties)
 
         if (DescriptorUtils.isAnnotationClass(ownerDescriptor))
-            properties.toReadOnlyList()
+            properties.toList()
         else
-            enhanceSignatures(properties).toReadOnlyList()
+            enhanceSignatures(properties).toList()
     }
 
     private fun resolveProperty(field: JavaField): PropertyDescriptor {
@@ -258,7 +257,7 @@ abstract class LazyJavaScope(protected val c: LazyJavaResolverContext) : MemberS
 
         propertyDescriptor.setType(propertyType, listOf(), getDispatchReceiverParameter(), null as KotlinType?)
 
-        if (DescriptorUtils.shouldRecordInitializerForProperty(propertyDescriptor, propertyDescriptor.getType())) {
+        if (DescriptorUtils.shouldRecordInitializerForProperty(propertyDescriptor, propertyDescriptor.type)) {
             propertyDescriptor.setCompileTimeInitializer(
                     c.storageManager.createNullableLazyValue {
                         c.components.javaPropertyInitializerEvaluator.getInitializerConstant(field, propertyDescriptor)
@@ -286,7 +285,7 @@ abstract class LazyJavaScope(protected val c: LazyJavaResolverContext) : MemberS
     private fun getPropertyType(field: JavaField, annotations: Annotations): KotlinType {
         // Fields do not have their own generic parameters.
         // Simple static constants should not have flexible types.
-        val allowFlexible = !(field.isFinalStatic && c.components.javaPropertyInitializerEvaluator.isNotNullCompileTimeConstant(field))
+        val allowFlexible = !(field.isFinalStatic && field.hasConstantNotNullInitializer)
         val propertyType = c.typeResolver.transformJavaType(
                 field.type,
                 LazyJavaTypeAttributes(TypeUsage.MEMBER_SIGNATURE_INVARIANT, annotations, allowFlexible)
@@ -337,7 +336,7 @@ abstract class LazyJavaScope(protected val c: LazyJavaResolverContext) : MemberS
             }
         }
 
-        return result.toReadOnlyList()
+        return result.toList()
     }
 
     protected abstract fun computeClassNames(kindFilter: DescriptorKindFilter, nameFilter: ((Name) -> Boolean)?): Set<Name>
@@ -345,7 +344,7 @@ abstract class LazyJavaScope(protected val c: LazyJavaResolverContext) : MemberS
     override fun toString() = "Lazy scope for $ownerDescriptor"
 
     override fun printScopeStructure(p: Printer) {
-        p.println(javaClass.simpleName, " {")
+        p.println(this::class.java.simpleName, " {")
         p.pushIndent()
 
         p.println("containingDeclaration: $ownerDescriptor")

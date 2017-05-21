@@ -148,6 +148,7 @@ public header fun <@kotlin.internal.OnlyInputTypes T> Iterable<T>.indexOf(elemen
 /**
  * Returns first index of [element], or -1 if the list does not contain element.
  */
+@Suppress("EXTENSION_SHADOWED_BY_MEMBER") // false warning, extension takes precedence in some cases
 public header fun <@kotlin.internal.OnlyInputTypes T> List<T>.indexOf(element: T): Int
 
 /**
@@ -202,6 +203,7 @@ public header fun <@kotlin.internal.OnlyInputTypes T> Iterable<T>.lastIndexOf(el
 /**
  * Returns last index of [element], or -1 if the list does not contain element.
  */
+@Suppress("EXTENSION_SHADOWED_BY_MEMBER") // false warning, extension takes precedence in some cases
 public header fun <@kotlin.internal.OnlyInputTypes T> List<T>.lastIndexOf(element: T): Int
 
 /**
@@ -590,6 +592,8 @@ public header inline fun <T, K, V, M : MutableMap<in K, MutableList<V>>> Iterabl
 /**
  * Creates a [Grouping] source from a collection to be used later with one of group-and-fold operations
  * using the specified [keySelector] function to extract a key from each element.
+ * 
+ * @sample samples.collections.Collections.Transformations.groupingByEachCount
  */
 @SinceKotlin("1.1")
 public header inline fun <T, K> Iterable<T>.groupingBy(crossinline keySelector: (T) -> K): Grouping<T, K>
@@ -598,7 +602,6 @@ public header inline fun <T, K> Iterable<T>.groupingBy(crossinline keySelector: 
  * Returns a list containing the results of applying the given [transform] function
  * to each element in the original collection.
  */
-@Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
 public header inline fun <T, R> Iterable<T>.map(transform: (T) -> R): List<R>
 
 /**
@@ -607,7 +610,6 @@ public header inline fun <T, R> Iterable<T>.map(transform: (T) -> R): List<R>
  * @param [transform] function that takes the index of an element and the element itself
  * and returns the result of the transform applied to the element.
  */
-@Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
 public header inline fun <T, R> Iterable<T>.mapIndexed(transform: (index: Int, T) -> R): List<R>
 
 /**
@@ -1039,6 +1041,8 @@ public header inline fun <T> Iterable<T>.asIterable(): Iterable<T>
 
 /**
  * Creates a [Sequence] instance that wraps the original collection returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromCollection
  */
 public header fun <T> Iterable<T>.asSequence(): Sequence<T>
 

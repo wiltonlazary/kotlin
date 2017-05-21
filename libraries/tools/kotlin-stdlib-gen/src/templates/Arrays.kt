@@ -58,7 +58,10 @@ fun arrays(): List<GenericFunction> {
         returns("Boolean")
         body(Platform.JVM) { "return java.util.Arrays.equals(this, other)" }
 
-        annotations(Platform.JS, """@library("arrayEquals")""")
+        annotations(Platform.JS, """
+            @library("arrayEquals")
+            @Suppress("UNUSED_PARAMETER")
+        """)
         body(Platform.JS) { "definedExternally" }
 
     }
@@ -79,7 +82,10 @@ fun arrays(): List<GenericFunction> {
         }
         returns("Boolean")
         body(Platform.JVM) { "return java.util.Arrays.deepEquals(this, other)" }
-        annotations(Platform.JS, """@library("arrayDeepEquals")""")
+        annotations(Platform.JS, """
+            @library("arrayDeepEquals")
+            @Suppress("UNUSED_PARAMETER")
+        """)
         body(Platform.JS) { "definedExternally" }
     }
 
@@ -87,7 +93,13 @@ fun arrays(): List<GenericFunction> {
         only(ArraysOfObjects, ArraysOfPrimitives)
         since("1.1")
         inline(Platform.JVM, Inline.Only)
-        doc { "Returns a string representation of the contents of the specified array as if it is [List]." }
+        doc {
+            """
+            Returns a string representation of the contents of the specified array as if it is [List].
+
+            @sample samples.collections.Arrays.ContentOperations.contentToString
+            """
+        }
         returns("String")
         body(Platform.JVM) { "return java.util.Arrays.toString(this)" }
         annotations(Platform.JS, """@library("arrayToString")""")
@@ -105,6 +117,8 @@ fun arrays(): List<GenericFunction> {
 
             If any of arrays contains itself on any nesting level that reference
             is rendered as `"[...]"` to prevent recursion.
+
+            @sample samples.collections.Arrays.ContentOperations.contentDeepToString
             """
         }
         returns("String")

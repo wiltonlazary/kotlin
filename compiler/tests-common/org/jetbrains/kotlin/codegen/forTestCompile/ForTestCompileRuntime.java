@@ -28,8 +28,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ForTestCompileRuntime {
-    private static volatile SoftReference<ClassLoader> reflectJarClassLoader = new SoftReference<ClassLoader>(null);
-    private static volatile SoftReference<ClassLoader> runtimeJarClassLoader = new SoftReference<ClassLoader>(null);
+    private static volatile SoftReference<ClassLoader> reflectJarClassLoader = new SoftReference<>(null);
+    private static volatile SoftReference<ClassLoader> runtimeJarClassLoader = new SoftReference<>(null);
 
     @NotNull
     public static File runtimeJarForTests() {
@@ -56,11 +56,26 @@ public class ForTestCompileRuntime {
         return assertExists(new File("dist/kotlinc/lib/kotlin-script-runtime.jar"));
     }
 
+    @NotNull
+    public static File runtimeSourcesJarForTests() {
+        return assertExists(new File("dist/kotlinc/lib/kotlin-runtime-sources.jar"));
+    }
+
+    @NotNull
+    public static File stdlibCommonForTests() {
+        return assertExists(new File("dist/common/kotlin-stdlib-common.jar"));
+    }
+
+    @NotNull
+    public static File stdlibJsForTests() {
+        return assertExists(new File("dist/kotlinc/lib/kotlin-stdlib-js.jar"));
+    }
+
     // TODO: Do not use these classes, remove them after stdlib tests are merged in the same build as the compiler
     @NotNull
     @Deprecated
     public static File[] runtimeClassesForTests() {
-        return new File[] { assertExists(new File("dist/builtins")), assertExists(new File("dist/classes/builtins")), assertExists(new File("dist/classes/stdlib")) };
+        return new File[] { assertExists(new File("dist/builtins")), assertExists(new File("libraries/stdlib/build/classes/builtins")), assertExists(new File("libraries/stdlib/build/classes/main")) };
     }
 
     @NotNull
@@ -76,7 +91,7 @@ public class ForTestCompileRuntime {
         ClassLoader loader = reflectJarClassLoader.get();
         if (loader == null) {
             loader = createClassLoader(runtimeJarForTests(), reflectJarForTests(), scriptRuntimeJarForTests(), kotlinTestJarForTests());
-            reflectJarClassLoader = new SoftReference<ClassLoader>(loader);
+            reflectJarClassLoader = new SoftReference<>(loader);
         }
         return loader;
     }
@@ -86,7 +101,7 @@ public class ForTestCompileRuntime {
         ClassLoader loader = runtimeJarClassLoader.get();
         if (loader == null) {
             loader = createClassLoader(runtimeJarForTests(), scriptRuntimeJarForTests());
-            runtimeJarClassLoader = new SoftReference<ClassLoader>(loader);
+            runtimeJarClassLoader = new SoftReference<>(loader);
         }
         return loader;
     }
@@ -94,7 +109,7 @@ public class ForTestCompileRuntime {
     @NotNull
     private static ClassLoader createClassLoader(@NotNull File... files) {
         try {
-            List<URL> urls = new ArrayList<URL>(2);
+            List<URL> urls = new ArrayList<>(2);
             for (File file : files) {
                 urls.add(file.toURI().toURL());
             }

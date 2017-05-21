@@ -23,17 +23,14 @@ import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtAnnotationEntry
-import org.jetbrains.kotlin.resolve.AnnotationResolver
-import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.BindingTrace
-import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.constants.ConstantValue
 import org.jetbrains.kotlin.resolve.lazy.ForceResolveUtil
 import org.jetbrains.kotlin.resolve.lazy.LazyEntity
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.resolve.source.toSourceElement
 import org.jetbrains.kotlin.storage.StorageManager
-import org.jetbrains.kotlin.types.TypeSubstitutor
+import org.jetbrains.kotlin.types.isError
 
 abstract class LazyAnnotationsContext(
         val annotationResolver: AnnotationResolver,
@@ -144,7 +141,7 @@ class LazyAnnotationDescriptor(
 
     private fun computeValueArguments(): Map<ValueParameterDescriptor, ConstantValue<*>> {
         val resolutionResults = c.annotationResolver.resolveAnnotationCall(annotationEntry, scope, c.trace)
-        AnnotationResolver.checkAnnotationType(annotationEntry, c.trace, resolutionResults)
+        AnnotationResolverImpl.checkAnnotationType(annotationEntry, c.trace, resolutionResults)
 
         if (!resolutionResults.isSingleResult) return mapOf()
 
@@ -175,7 +172,6 @@ class LazyAnnotationDescriptor(
         override fun getName() = Name.special("< file descriptor for annotation resolution >")
 
         private fun error(): Nothing = error("This method should not be called")
-        override fun substitute(substitutor: TypeSubstitutor): DeclarationDescriptor? = error()
         override fun <R : Any?, D : Any?> accept(visitor: DeclarationDescriptorVisitor<R, D>?, data: D): R = error()
         override fun acceptVoid(visitor: DeclarationDescriptorVisitor<Void, Void>?) = error()
 

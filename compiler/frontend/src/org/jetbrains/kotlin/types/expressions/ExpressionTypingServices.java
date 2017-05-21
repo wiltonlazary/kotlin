@@ -99,24 +99,19 @@ public class ExpressionTypingServices {
     @NotNull
     public KotlinTypeInfo getTypeInfo(
             @NotNull LexicalScope scope,
-            @NotNull final KtExpression expression,
+            @NotNull KtExpression expression,
             @NotNull KotlinType expectedType,
             @NotNull DataFlowInfo dataFlowInfo,
             @NotNull BindingTrace trace,
             boolean isStatement,
-            @NotNull final KtExpression contextExpression,
+            @NotNull KtExpression contextExpression,
             @NotNull ContextDependency contextDependency
     ) {
         ExpressionTypingContext context = ExpressionTypingContext.newContext(
                 trace, scope, dataFlowInfo, expectedType, contextDependency, statementFilter
         );
         if (contextExpression != expression) {
-            context = context.replaceExpressionContextProvider(new Function1<KtExpression, KtExpression>() {
-                @Override
-                public KtExpression invoke(KtExpression arg) {
-                    return arg == expression ? contextExpression : null;
-                }
-            });
+            context = context.replaceExpressionContextProvider(arg -> arg == expression ? contextExpression : null);
         }
         return expressionTypingFacade.getTypeInfo(expression, context, isStatement);
     }

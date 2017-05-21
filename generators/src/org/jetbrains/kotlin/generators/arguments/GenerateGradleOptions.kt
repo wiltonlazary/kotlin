@@ -16,7 +16,6 @@
 
 package org.jetbrains.kotlin.generators.arguments
 
-import com.sampullara.cli.Argument
 import org.jetbrains.kotlin.cli.common.arguments.*
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.utils.Printer
@@ -24,13 +23,13 @@ import java.io.File
 import java.io.PrintStream
 import kotlin.reflect.KAnnotatedElement
 import kotlin.reflect.KProperty1
-import kotlin.reflect.declaredMemberProperties
+import kotlin.reflect.full.declaredMemberProperties
 
 // Additional properties that should be included in interface
 @Suppress("unused")
 interface AdditionalGradleProperties {
     @GradleOption(EmptyList::class)
-    @Argument(description = "A list of additional compiler arguments")
+    @Argument(value = "", description = "A list of additional compiler arguments")
     var freeCompilerArgs: List<String>
 
     object EmptyList : DefaultValues("emptyList()")

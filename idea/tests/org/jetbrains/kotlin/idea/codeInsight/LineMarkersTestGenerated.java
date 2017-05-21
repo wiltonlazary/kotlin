@@ -182,6 +182,12 @@ public class LineMarkersTestGenerated extends AbstractLineMarkersTest {
             doTest(fileName);
         }
 
+        @TestMetadata("SealedClass.kt")
+        public void testSealedClass() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/lineMarker/overrideImplement/SealedClass.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("ToStringInTrait.kt")
         public void testToStringInTrait() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/lineMarker/overrideImplement/ToStringInTrait.kt");
@@ -275,6 +281,12 @@ public class LineMarkersTestGenerated extends AbstractLineMarkersTest {
             doTest(fileName);
         }
 
+        @TestMetadata("propertyAccessors.kt")
+        public void testPropertyAccessors() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/lineMarker/recursiveCall/propertyAccessors.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("severalCallsInOneLine.kt")
         public void testSeveralCallsInOneLine() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/lineMarker/recursiveCall/severalCallsInOneLine.kt");
@@ -332,6 +344,12 @@ public class LineMarkersTestGenerated extends AbstractLineMarkersTest {
         @TestMetadata("suspendCall.kt")
         public void testSuspendCall() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/lineMarker/suspendCall/suspendCall.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("suspendIteration.kt")
+        public void testSuspendIteration() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/codeInsight/lineMarker/suspendCall/suspendIteration.kt");
             doTest(fileName);
         }
     }

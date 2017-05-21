@@ -17,6 +17,7 @@
     <property name="compiler.version.java.bk" value="${version_substitute_dir}/KotlinCompilerVersion.java.bk"/>
     <property name="compiler.version.java.versioned" value="${compiler.version.java}.versioned"/>
     <property name="compiler.version.number" value="${build.number}"/>
+    <property name="compiler.ant.fork.jvmargs" value="-Xmx1024m"/>
 
     <property name="plugin.zip" value="${artifact.output.path}/kotlin-plugin-${build.number}.zip"/>
 
@@ -150,8 +151,8 @@
 
         <print-file-size-statistic path="${kotlin-home}/lib" file-name="kotlin-stdlib-js.jar"/>
         <print-file-size-statistic path="${js.stdlib.output.dir}" file-name="kotlin.js"/>
-        <print-file-size-statistic path="${js.stdlib.output.dir}" file-name="${compiled.stdlib.meta.js}"/>
-        <print-file-size-statistic path="${js.stdlib.output.dir}" file-name="${compiled.stdlib.js}"/>
+        <print-file-size-statistic path="${js.stdlib.output.dir}" file-name="kotlin-test.js"/>
+        <print-file-size-statistic path="${basedir}/libraries/stdlib/js/build/classes/main" file-name="kotlin.meta.js"/>
     </target>
 
     <target name="post_build" depends="zipArtifacts, revertTemplateFiles, printStatistics, remove_internal_artifacts, dont_remove_internal_artifacts"/>

@@ -18,7 +18,6 @@ package org.jetbrains.kotlin.js.translate.utils;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
-import org.jetbrains.kotlin.descriptors.CallableDescriptor;
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor;
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor;
@@ -30,11 +29,10 @@ import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.expression.LocalFunctionCollector;
 import org.jetbrains.kotlin.js.translate.general.AbstractTranslator;
 import org.jetbrains.kotlin.js.translate.general.Translation;
-import org.jetbrains.kotlin.js.translate.utils.mutator.Mutator;
+import org.jetbrains.kotlin.js.translate.reference.ReferenceTranslator;
 import org.jetbrains.kotlin.psi.KtDeclarationWithBody;
 import org.jetbrains.kotlin.psi.KtExpression;
 import org.jetbrains.kotlin.types.KotlinType;
-import org.jetbrains.kotlin.types.TypeUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -53,13 +51,13 @@ public final class FunctionBodyTranslator extends AbstractTranslator {
             @NotNull KtDeclarationWithBody declarationWithBody,
             @NotNull TranslationContext functionBodyContext
     ) {
-        Map<DeclarationDescriptor, JsExpression> aliases = new HashMap<DeclarationDescriptor, JsExpression>();
+        Map<DeclarationDescriptor, JsExpression> aliases = new HashMap<>();
         LocalFunctionCollector functionCollector = new LocalFunctionCollector(functionBodyContext.bindingContext());
         declarationWithBody.acceptChildren(functionCollector, null);
 
         for (FunctionDescriptor localFunction : functionCollector.getFunctions()) {
             String localIdent = localFunction.getName().isSpecial() ? "lambda" : localFunction.getName().asString();
-            JsName localName = functionBodyContext.scope().getParent().declareTemporaryName(NameSuggestion.sanitizeName(localIdent));
+            JsName localName = JsScope.declareTemporaryName(NameSuggestion.sanitizeName(localIdent));
             MetadataProperties.setDescriptor(localName, localFunction);
             JsExpression alias = JsAstUtils.pureFqn(localName, null);
             aliases.put(localFunction, alias);
@@ -77,11 +75,11 @@ public final class FunctionBodyTranslator extends AbstractTranslator {
             @NotNull TranslationContext functionBodyContext) {
         List<ValueParameterDescriptor> valueParameters = descriptor.getValueParameters();
 
-        List<JsStatement> result = new ArrayList<JsStatement>(valueParameters.size());
+        List<JsStatement> result = new ArrayList<>(valueParameters.size());
         for (ValueParameterDescriptor valueParameter : valueParameters) {
             if (!valueParameter.declaresDefaultValue()) continue;
 
-            JsNameRef jsNameRef = functionBodyContext.getNameForDescriptor(valueParameter).makeRef();
+            JsExpression jsNameRef = ReferenceTranslator.translateAsValueReference(valueParameter, functionBodyContext);
             KtExpression defaultArgument = getDefaultArgument(valueParameter);
             JsBlock defaultArgBlock = new JsBlock();
             JsExpression defaultValue = Translation.translateAsExpression(defaultArgument, functionBodyContext, defaultArgBlock);
@@ -136,24 +134,22 @@ public final class FunctionBodyTranslator extends AbstractTranslator {
 
     @NotNull
     private JsNode lastExpressionReturned(@NotNull JsNode body) {
-        return mutateLastExpression(body, new Mutator() {
-            @Override
-            @NotNull
-            public JsNode mutate(@NotNull JsNode node) {
-                if (!(node instanceof JsExpression)) {
-                    return node;
-                }
-
-                KotlinType bodyType = context().bindingContext().getType(declaration.getBodyExpression());
-                if (bodyType == null && KotlinBuiltIns.isCharOrNullableChar(descriptor.getReturnType()) ||
-                    bodyType != null && KotlinBuiltIns.isCharOrNullableChar(bodyType) && TranslationUtils.shouldBoxReturnValue(descriptor)) {
-                    node = JsAstUtils.charToBoxedChar((JsExpression) node);
-                }
-
-                JsReturn jsReturn = new JsReturn((JsExpression)node);
-                MetadataProperties.setReturnTarget(jsReturn, descriptor);
-                return jsReturn;
+        return mutateLastExpression(body, node -> {
+            if (!(node instanceof JsExpression)) {
+                return node;
             }
+
+            assert declaration.getBodyExpression() != null;
+            assert descriptor.getReturnType() != null;
+            KotlinType bodyType = context().bindingContext().getType(declaration.getBodyExpression());
+            if (bodyType == null && KotlinBuiltIns.isCharOrNullableChar(descriptor.getReturnType()) ||
+                bodyType != null && KotlinBuiltIns.isCharOrNullableChar(bodyType) && TranslationUtils.shouldBoxReturnValue(descriptor)) {
+                node = JsAstUtils.charToBoxedChar((JsExpression) node);
+            }
+
+            JsReturn jsReturn = new JsReturn((JsExpression)node);
+            MetadataProperties.setReturnTarget(jsReturn, descriptor);
+            return jsReturn;
         });
     }
 }

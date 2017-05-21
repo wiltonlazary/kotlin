@@ -197,7 +197,7 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDebuggerTestBase() {
         val session = myDebuggerSession.xDebugSession  as XDebugSessionImpl
         val watchesView = XWatchesViewImpl(session, false)
         Disposer.register(testRootDisposable, watchesView)
-        session.addSessionListener(XDebugViewSessionListener(watchesView), testRootDisposable)
+        session.addSessionListener(XDebugViewSessionListener(watchesView, session), testRootDisposable)
         return watchesView
     }
 
@@ -205,12 +205,12 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDebuggerTestBase() {
         val session = myDebuggerSession.xDebugSession as XDebugSessionImpl
         val variablesView = XVariablesView(session)
         Disposer.register(testRootDisposable, variablesView)
-        session.addSessionListener(XDebugViewSessionListener(variablesView), testRootDisposable)
+        session.addSessionListener(XDebugViewSessionListener(variablesView, session), testRootDisposable)
         return variablesView
     }
 
     private fun SuspendContextImpl.printFrame(variablesView: XVariablesView, watchesView: XWatchesViewImpl, config: PrinterConfig) {
-        val tree = variablesView.tree!!
+        val tree = variablesView.tree
         expandAll(
                 tree,
                 {
@@ -316,7 +316,9 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDebuggerTestBase() {
                 append(getPrefix(descriptor))
                 append(label)
                 if (config.shouldRenderSourcesPosition() && hasSourcePosition(descriptor)) {
-                    val sp = SourcePositionProvider.getSourcePosition(descriptor, myProject, debuggerContext)
+                    val sp = invokeInManagerThread {
+                        SourcePositionProvider.getSourcePosition(descriptor, myProject, debuggerContext)
+                    }
                     append(" (sp = ${render(sp)})")
                 }
 

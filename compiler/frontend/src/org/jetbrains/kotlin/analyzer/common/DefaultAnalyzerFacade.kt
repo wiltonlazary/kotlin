@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,14 +31,12 @@ import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PackagePartProvider
 import org.jetbrains.kotlin.descriptors.impl.CompositePackageFragmentProvider
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
-import org.jetbrains.kotlin.frontend.di.configureCommon
 import org.jetbrains.kotlin.frontend.di.configureModule
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.load.kotlin.MetadataFinderFactory
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.*
-import org.jetbrains.kotlin.resolve.lazy.FileScopeProviderImpl
 import org.jetbrains.kotlin.resolve.lazy.ResolveSession
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactoryService
@@ -49,11 +47,10 @@ import org.jetbrains.kotlin.serialization.deserialization.MetadataPackageFragmen
  * See [TargetPlatform.Default]
  */
 object DefaultAnalyzerFacade : AnalyzerFacade<PlatformAnalysisParameters>() {
-    private val compilerConfiguration = CompilerConfiguration().apply {
-        languageVersionSettings = LanguageVersionSettingsImpl(
-                LanguageVersion.LATEST, ApiVersion.LATEST, setOf(LanguageFeature.MultiPlatformProjects)
-        )
-    }
+    private val languageVersionSettings = LanguageVersionSettingsImpl(
+            LanguageVersion.LATEST_STABLE, ApiVersion.LATEST_STABLE,
+            specificFeatures = mapOf(LanguageFeature.MultiPlatformProjects to LanguageFeature.State.ENABLED)
+    )
 
     private class SourceModuleInfo(
             override val name: Name,
@@ -63,7 +60,7 @@ object DefaultAnalyzerFacade : AnalyzerFacade<PlatformAnalysisParameters>() {
         override fun dependencies() = listOf(this)
 
         override fun dependencyOnBuiltIns(): ModuleInfo.DependencyOnBuiltIns =
-                if (dependOnOldBuiltIns) ModuleInfo.DependenciesOnBuiltIns.LAST else ModuleInfo.DependenciesOnBuiltIns.NONE
+                if (dependOnOldBuiltIns) ModuleInfo.DependencyOnBuiltIns.LAST else ModuleInfo.DependencyOnBuiltIns.NONE
     }
 
     fun analyzeFiles(
@@ -75,7 +72,7 @@ object DefaultAnalyzerFacade : AnalyzerFacade<PlatformAnalysisParameters>() {
         val project = files.firstOrNull()?.project ?: throw AssertionError("No files to analyze")
         val resolver = setupResolverForProject(
                 "sources for metadata serializer",
-                ProjectContext(project), listOf(moduleInfo),
+                ProjectContext(project), listOf(moduleInfo), { DefaultAnalyzerFacade },
                 { ModuleContent(files, GlobalSearchScope.allScope(project)) },
                 object : PlatformAnalysisParameters {},
                 packagePartProviderFactory = packagePartProviderFactory,
@@ -104,7 +101,8 @@ object DefaultAnalyzerFacade : AnalyzerFacade<PlatformAnalysisParameters>() {
         val project = moduleContext.project
         val declarationProviderFactory = DeclarationProviderFactoryService.createDeclarationProviderFactory(
                 project, moduleContext.storageManager, syntheticFiles,
-                if (moduleInfo.isLibrary) GlobalSearchScope.EMPTY_SCOPE else moduleContentScope
+                if (moduleInfo.isLibrary) GlobalSearchScope.EMPTY_SCOPE else moduleContentScope,
+                moduleInfo
         )
 
         val trace = CodeAnalyzerInitializer.getInstance(project).createTrace()
@@ -128,14 +126,14 @@ object DefaultAnalyzerFacade : AnalyzerFacade<PlatformAnalysisParameters>() {
             targetEnvironment: TargetEnvironment,
             packagePartProvider: PackagePartProvider
     ): StorageComponentContainer = createContainer("ResolveCommonCode", targetPlatform) {
-        configureModule(moduleContext, targetPlatform, bindingTrace)
+        configureModule(moduleContext, targetPlatform, TargetPlatformVersion.NoVersion, bindingTrace)
 
         useInstance(moduleContentScope)
         useInstance(LookupTracker.DO_NOTHING)
         useImpl<ResolveSession>()
         useImpl<LazyTopDownAnalyzer>()
-        useImpl<FileScopeProviderImpl>()
-        configureCommon(compilerConfiguration)
+        useInstance(languageVersionSettings)
+        useImpl<AnnotationResolverImpl>()
         useImpl<CompilerDeserializationConfiguration>()
         useInstance(packagePartProvider)
         useInstance(declarationProviderFactory)

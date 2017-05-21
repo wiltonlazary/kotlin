@@ -24,7 +24,6 @@ import org.jetbrains.kotlin.descriptors.impl.LocalVariableAccessorDescriptor;
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor;
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation;
 import org.jetbrains.kotlin.js.backend.ast.*;
-import org.jetbrains.kotlin.js.backend.ast.JsBinaryOperator;
 import org.jetbrains.kotlin.js.translate.context.Namer;
 import org.jetbrains.kotlin.js.translate.context.TemporaryConstVariable;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
@@ -38,7 +37,6 @@ import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.BindingContextUtils;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
-import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
 import org.jetbrains.kotlin.resolve.inline.InlineUtil;
 import org.jetbrains.kotlin.serialization.deserialization.FindClassInModuleKt;
@@ -64,7 +62,7 @@ public final class TranslationUtils {
             @NotNull TranslationContext context) {
         JsExpression functionExpression = function;
         if (InlineUtil.isInline(descriptor)) {
-            InlineMetadata metadata = InlineMetadata.compose(function, descriptor);
+            InlineMetadata metadata = InlineMetadata.compose(function, descriptor, context.getConfig());
             functionExpression = metadata.getFunctionWithMetadata();
         }
 
@@ -81,7 +79,7 @@ public final class TranslationUtils {
     }
 
     @NotNull
-    public static String getAccessorFunctionName(@NotNull FunctionDescriptor descriptor) {
+    private static String getAccessorFunctionName(@NotNull FunctionDescriptor descriptor) {
         boolean isGetter = descriptor instanceof PropertyGetterDescriptor || descriptor instanceof LocalVariableAccessorDescriptor.Getter;
         return isGetter ? "get" : "set";
     }
@@ -202,9 +200,7 @@ public final class TranslationUtils {
             KotlinType propertyType = BindingContextUtils.getNotNull(context.bindingContext(), BindingContext.VARIABLE, declaration).getType();
             KotlinType initType = context.bindingContext().getType(initializer);
 
-            if (initType != null && KotlinBuiltIns.isCharOrNullableChar(initType) && !KotlinBuiltIns.isCharOrNullableChar(propertyType)) {
-                jsInitExpression = JsAstUtils.charToBoxedChar(jsInitExpression);
-            }
+            jsInitExpression = boxCastIfNeeded(jsInitExpression, initType, propertyType);
         }
         return jsInitExpression;
     }
@@ -225,12 +221,6 @@ public final class TranslationUtils {
         KtExpression left = expression.getLeft();
         assert left != null : "Binary expression should have a left expression: " + expression.getText();
         return Translation.translateAsExpression(left, context, block);
-    }
-
-    @NotNull
-    public static JsExpression translateRightExpression(@NotNull TranslationContext context,
-            @NotNull KtBinaryExpression expression) {
-        return translateRightExpression(context, expression, context.dynamicContext().jsBlock());
     }
 
     @NotNull
@@ -265,7 +255,7 @@ public final class TranslationUtils {
             @NotNull JsExpression receiver,
             @NotNull List<? extends JsExpression> arguments
     ) {
-        List<JsExpression> argumentList = new ArrayList<JsExpression>(1 + arguments.size());
+        List<JsExpression> argumentList = new ArrayList<>(1 + arguments.size());
         argumentList.add(receiver);
         argumentList.addAll(arguments);
         return argumentList;
@@ -350,19 +340,13 @@ public final class TranslationUtils {
     }
 
     @NotNull
-    public static JsExpression translateContinuationArgument(@NotNull TranslationContext context, @NotNull ResolvedCall<?> resolvedCall) {
-        CallableDescriptor continuationDescriptor =
-                context.bindingContext().get(BindingContext.ENCLOSING_SUSPEND_FUNCTION_FOR_SUSPEND_FUNCTION_CALL, resolvedCall.getCall());
-
-        if (continuationDescriptor == null) {
-            continuationDescriptor = getEnclosingContinuationParameter(context);
-        }
-
+    public static JsExpression translateContinuationArgument(@NotNull TranslationContext context) {
+        CallableDescriptor continuationDescriptor = getEnclosingContinuationParameter(context);
         return ReferenceTranslator.translateAsValueReference(continuationDescriptor, context);
     }
 
     @NotNull
-    public static VariableDescriptor getEnclosingContinuationParameter(@NotNull TranslationContext context) {
+    private static VariableDescriptor getEnclosingContinuationParameter(@NotNull TranslationContext context) {
         VariableDescriptor result = context.getContinuationParameterDescriptor();
         if (result == null) {
             assert context.getParent() != null;
@@ -395,13 +379,6 @@ public final class TranslationUtils {
                 .iterator().next();
     }
 
-    @NotNull
-    public static FunctionDescriptor getCoroutineResumeFunction(@NotNull TranslationContext context) {
-        return getCoroutineBaseClass(context).getUnsubstitutedMemberScope()
-                .getContributedFunctions(Name.identifier("resume"), NoLookupLocation.FROM_DESERIALIZATION)
-                .iterator().next();
-    }
-
     public static boolean isOverridableFunctionWithDefaultParameters(@NotNull FunctionDescriptor descriptor) {
         return DescriptorUtilsKt.hasOrInheritsParametersWithDefaultValue(descriptor) &&
                !(descriptor instanceof ConstructorDescriptor) &&
@@ -422,5 +399,15 @@ public final class TranslationUtils {
 
     public static boolean shouldBoxReturnValue(CallableDescriptor c) {
         return overridesReturnAny(c) || c instanceof CallableMemberDescriptor && ModalityKt.isOverridable((CallableMemberDescriptor)c);
+    }
+
+    @NotNull
+    public static JsExpression boxCastIfNeeded(@NotNull JsExpression e, @Nullable KotlinType castFrom, @Nullable KotlinType castTo) {
+        if (castFrom != null && KotlinBuiltIns.isCharOrNullableChar(castFrom) &&
+            castTo != null && !KotlinBuiltIns.isCharOrNullableChar(castTo)
+        ) {
+            return JsAstUtils.charToBoxedChar(e);
+        }
+        return e;
     }
 }

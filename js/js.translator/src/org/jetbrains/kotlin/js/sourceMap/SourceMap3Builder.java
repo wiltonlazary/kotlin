@@ -43,7 +43,7 @@ public class SourceMap3Builder implements SourceMapBuilder {
         }
     };
 
-    private final List<String> orderedSources = new ArrayList<String>();
+    private final List<String> orderedSources = new ArrayList<>();
 
     private int previousGeneratedColumn = -1;
     private int previousSourceIndex;
@@ -152,7 +152,7 @@ public class SourceMap3Builder implements SourceMapBuilder {
 
     @Override
     public void addLink() {
-        textOutput.print("\n//@ sourceMappingURL=");
+        textOutput.print("\n//# sourceMappingURL=");
         textOutput.print(generatedFile.getName());
         textOutput.print(".map\n");
     }

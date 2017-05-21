@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.android.inspection
 
+import com.android.resources.ResourceFolderType
 import com.android.resources.ResourceType
 import com.intellij.codeInsight.daemon.QuickFixActionRegistrar
 import com.intellij.codeInsight.quickfix.UnresolvedReferenceQuickFixProvider
@@ -24,7 +25,7 @@ import org.jetbrains.android.facet.AndroidFacet
 import org.jetbrains.android.inspections.CreateFileResourceQuickFix
 import org.jetbrains.android.inspections.CreateValueResourceQuickFix
 import org.jetbrains.android.util.AndroidResourceUtil
-import org.jetbrains.kotlin.android.KotlinAndroidResourceUtil
+import org.jetbrains.kotlin.android.getReferredResourceOrManifestField
 import org.jetbrains.kotlin.idea.references.KtSimpleNameReference
 
 
@@ -38,7 +39,7 @@ class KotlinAndroidResourceQuickFixProvider : UnresolvedReferenceQuickFixProvide
         manifest.`package`.value ?: return
         val contextFile = expression.containingFile ?: return
 
-        val info = KotlinAndroidResourceUtil.getReferredResourceOrManifestField(facet, expression, true)
+        val info = getReferredResourceOrManifestField(facet, expression, true)
         if (info == null || info.isFromManifest) {
             return
         }
@@ -49,7 +50,10 @@ class KotlinAndroidResourceQuickFixProvider : UnresolvedReferenceQuickFixProvide
             registrar.register(CreateValueResourceQuickFix(facet, resourceType, info.fieldName, contextFile, true))
         }
         if (AndroidResourceUtil.XML_FILE_RESOURCE_TYPES.contains(resourceType)) {
-            registrar.register(CreateFileResourceQuickFix(facet, resourceType, info.fieldName, contextFile, true))
+            val resourceFolderType = ResourceFolderType.getTypeByName(resourceType.getName());
+            if (resourceFolderType != null) {
+                registrar.register(CreateFileResourceQuickFix(facet, resourceFolderType, info.fieldName, contextFile, true))
+            }
         }
     }
 

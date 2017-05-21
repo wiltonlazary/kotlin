@@ -44,9 +44,9 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.inline.InlineUtil
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.TypeNullability
 import org.jetbrains.kotlin.types.typeUtil.nullability
-import org.jetbrains.kotlin.utils.addToStdlib.check
 import java.util.*
 
 tailrec fun <T : Any> LookupElement.putUserDataDeep(key: Key<T>, value: T?) {
@@ -283,7 +283,7 @@ fun breakOrContinueExpressionItems(position: KtElement, breakOrContinue: String)
                     result.add(createKeywordElement(breakOrContinue))
                 }
 
-                val label = (parent.getParent() as? KtLabeledExpression)?.getLabelNameAsName()
+                val label = (parent.parent as? KtLabeledExpression)?.getLabelNameAsName()
                 if (label != null) {
                     result.add(createKeywordElement(breakOrContinue, tail = label.labelNameToTail()))
                 }
@@ -392,7 +392,7 @@ fun LookupElement.decorateAsStaticMember(
             val psiDocumentManager = PsiDocumentManager.getInstance(context.project)
             val file = context.file as KtFile
 
-            val addMemberImport = file.importDirectives.any { !it.isAllUnder && it.importPath?.fqnPart()?.parent() == containerFqName }
+            val addMemberImport = file.importDirectives.any { !it.isAllUnder && it.importPath?.fqName?.parent() == containerFqName }
 
             if (addMemberImport) {
                 psiDocumentManager.commitAllDocuments()
@@ -413,9 +413,12 @@ fun ImportableFqNameClassifier.isImportableDescriptorImported(descriptor: Declar
 
 fun OffsetMap.tryGetOffset(key: OffsetKey): Int? {
     try {
-        return getOffset(key).check { it != -1 } // prior to IDEA 2016.3 getOffset() returned -1 if not found, now it throws exception
+        if (!containsOffset(key)) return null
+        return getOffset(key).takeIf { it != -1 } // prior to IDEA 2016.3 getOffset() returned -1 if not found, now it throws exception
     }
     catch(e: Exception) {
         return null
     }
 }
+
+var KtCodeFragment.extraCompletionFilter: ((LookupElement) -> Boolean)? by CopyableUserDataProperty(Key.create("EXTRA_COMPLETION_FILTER"))

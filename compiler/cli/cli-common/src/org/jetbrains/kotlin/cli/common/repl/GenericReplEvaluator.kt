@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.cli.common.repl
 
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.write
 
@@ -73,10 +74,14 @@ open class GenericReplEvaluator(val baseClasspath: Iterable<File>,
             val useScriptArgs = currentScriptArgs?.scriptArgs
             val useScriptArgsTypes = currentScriptArgs?.scriptArgsTypes?.map { it.java }
 
-            val constructorParams: Array<Class<*>> = (historyActor.effectiveHistory.map { it.klass.java } +
-                                                      (useScriptArgs?.mapIndexed { i, it -> useScriptArgsTypes?.getOrNull(i) ?: it?.javaClass ?: Any::class.java } ?: emptyList())
-                                                     ).toTypedArray()
-            val constructorArgs: Array<Any?> = (historyActor.effectiveHistory.map { it.instance } + useScriptArgs.orEmpty()).toTypedArray()
+            val hasHistory = historyActor.effectiveHistory.isNotEmpty()
+
+            val constructorParams: Array<Class<*>> = (if (hasHistory) arrayOf<Class<*>>(Array<Any>::class.java) else emptyArray<Class<*>>()) +
+                                                     (useScriptArgs?.mapIndexed { i, it -> useScriptArgsTypes?.getOrNull(i) ?: it?.javaClass ?: Any::class.java } ?: emptyList())
+
+            val constructorArgs: Array<out Any?> = if (hasHistory) arrayOf(historyActor.effectiveHistory.map { it.instance }.takeIf { it.isNotEmpty() }?.toTypedArray(),
+                                                                           *(useScriptArgs.orEmpty()))
+                                                   else useScriptArgs.orEmpty()
 
             // TODO: try/catch ?
             val scriptInstanceConstructor = scriptClass.getConstructor(*constructorParams)
@@ -88,14 +93,18 @@ open class GenericReplEvaluator(val baseClasspath: Iterable<File>,
                         if (invokeWrapper != null) invokeWrapper.invoke { scriptInstanceConstructor.newInstance(*constructorArgs) }
                         else scriptInstanceConstructor.newInstance(*constructorArgs)
                     }
+                    catch (e: InvocationTargetException) {
+                        // ignore everything in the stack trace until this constructor call
+                        return@eval ReplEvalResult.Error.Runtime(renderReplStackTrace(e.cause!!, startFromMethodName = "${scriptClass.name}.<init>"), e.targetException as? Exception)
+                    }
                     catch (e: Throwable) {
-                        historyActor.removePlaceholder(compileResult.lineId)
-
                         // ignore everything in the stack trace until this constructor call
                         return@eval ReplEvalResult.Error.Runtime(renderReplStackTrace(e.cause!!, startFromMethodName = "${scriptClass.name}.<init>"), e as? Exception)
                     }
+                    finally {
+                        historyActor.removePlaceholder(compileResult.lineId)
+                    }
 
-            historyActor.removePlaceholder(compileResult.lineId)
             historyActor.addFinal(compileResult.lineId, EvalClassWithInstanceAndLoader(scriptClass.kotlin, scriptInstance, classLoader, invokeWrapper))
 
             val resultField = scriptClass.getDeclaredField(SCRIPT_RESULT_FIELD_NAME).apply { isAccessible = true }

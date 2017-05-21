@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector
 import org.jetbrains.kotlin.kapt3.Kapt3ConfigurationKeys.ANNOTATION_PROCESSOR_CLASSPATH
 import org.jetbrains.kotlin.kapt3.Kapt3ConfigurationKeys.APT_OPTIONS
+import org.jetbrains.kotlin.kapt3.Kapt3ConfigurationKeys.JAVAC_CLI_OPTIONS
 import org.jetbrains.kotlin.cli.jvm.config.JavaSourceRoot
 import org.jetbrains.kotlin.cli.jvm.config.JvmContentRoot
 import org.jetbrains.kotlin.compiler.plugin.CliOption
@@ -37,8 +38,6 @@ import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.container.ComponentProvider
 import org.jetbrains.kotlin.context.ProjectContext
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages
-import org.jetbrains.kotlin.kapt3.diagnostic.DefaultErrorMessagesKapt3
 import org.jetbrains.kotlin.kapt3.util.KaptLogger
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.BindingTrace
@@ -67,11 +66,21 @@ object Kapt3ConfigurationKeys {
     val APT_OPTIONS: CompilerConfigurationKey<String> =
             CompilerConfigurationKey.create<String>("annotation processing options")
 
+    val JAVAC_CLI_OPTIONS: CompilerConfigurationKey<String> =
+            CompilerConfigurationKey.create<String>("javac CLI options")
+
+    val ANNOTATION_PROCESSORS: CompilerConfigurationKey<String> =
+            CompilerConfigurationKey.create<String>("annotation processor qualified names")
+
     val VERBOSE_MODE: CompilerConfigurationKey<String> =
             CompilerConfigurationKey.create<String>("verbose mode")
 
+    @Deprecated("Use APT_MODE instead.")
     val APT_ONLY: CompilerConfigurationKey<String> =
             CompilerConfigurationKey.create<String>("do only annotation processing")
+
+    val APT_MODE: CompilerConfigurationKey<String> =
+            CompilerConfigurationKey.create<String>("annotation processing mode")
 
     val USE_LIGHT_ANALYSIS: CompilerConfigurationKey<String> =
             CompilerConfigurationKey.create<String>("do not analyze declaration bodies if can")
@@ -104,11 +113,25 @@ class Kapt3CommandLineProcessor : CommandLineProcessor {
                 CliOption("apoptions", "options map", "Encoded annotation processor options",
                           required = false, allowMultipleOccurrences = false)
 
+        val JAVAC_CLI_OPTIONS_OPTION: CliOption =
+                CliOption("javacArguments", "javac CLI options map", "Encoded javac CLI options",
+                          required = false, allowMultipleOccurrences = false)
+
+        val ANNOTATION_PROCESSORS_OPTION: CliOption =
+                CliOption("processors", "<fqname,[fqname2,...]>", "Annotation processor qualified names",
+                          required = false, allowMultipleOccurrences = true)
+
         val VERBOSE_MODE_OPTION: CliOption =
                 CliOption("verbose", "true | false", "Enable verbose output", required = false)
 
+        @Deprecated("Use APT_MODE_OPTION instead.")
         val APT_ONLY_OPTION: CliOption =
                 CliOption("aptOnly", "true | false", "Run only annotation processing, do not compile Kotlin files", required = false)
+
+        val APT_MODE_OPTION: CliOption =
+                CliOption("aptMode", "apt | stubs | stubsAndApt | compile",
+                          "Annotation processing mode: only apt, only stub generation, both, or with the subsequent compilation",
+                          required = false)
 
         val USE_LIGHT_ANALYSIS_OPTION: CliOption =
                 CliOption("useLightAnalysis", "true | false", "Do not analyze declaration bodies if can", required = false)
@@ -120,20 +143,23 @@ class Kapt3CommandLineProcessor : CommandLineProcessor {
     override val pluginId: String = ANNOTATION_PROCESSING_COMPILER_PLUGIN_ID
 
     override val pluginOptions: Collection<CliOption> =
-            listOf(SOURCE_OUTPUT_DIR_OPTION, ANNOTATION_PROCESSOR_CLASSPATH_OPTION, APT_OPTIONS_OPTION,
-                   CLASS_OUTPUT_DIR_OPTION, VERBOSE_MODE_OPTION, STUBS_OUTPUT_DIR_OPTION, APT_ONLY_OPTION,
-                   USE_LIGHT_ANALYSIS_OPTION, CORRECT_ERROR_TYPES_OPTION)
+            listOf(SOURCE_OUTPUT_DIR_OPTION, ANNOTATION_PROCESSOR_CLASSPATH_OPTION, APT_OPTIONS_OPTION, JAVAC_CLI_OPTIONS_OPTION,
+                   CLASS_OUTPUT_DIR_OPTION, VERBOSE_MODE_OPTION, STUBS_OUTPUT_DIR_OPTION, APT_ONLY_OPTION, APT_MODE_OPTION,
+                   USE_LIGHT_ANALYSIS_OPTION, CORRECT_ERROR_TYPES_OPTION, ANNOTATION_PROCESSORS_OPTION, INCREMENTAL_DATA_OUTPUT_DIR_OPTION)
 
     override fun processOption(option: CliOption, value: String, configuration: CompilerConfiguration) {
         when (option) {
             ANNOTATION_PROCESSOR_CLASSPATH_OPTION -> configuration.appendList(ANNOTATION_PROCESSOR_CLASSPATH, value)
+            ANNOTATION_PROCESSORS_OPTION -> configuration.put(Kapt3ConfigurationKeys.ANNOTATION_PROCESSORS, value)
             APT_OPTIONS_OPTION -> configuration.put(Kapt3ConfigurationKeys.APT_OPTIONS, value)
+            JAVAC_CLI_OPTIONS_OPTION -> configuration.put(Kapt3ConfigurationKeys.JAVAC_CLI_OPTIONS, value)
             SOURCE_OUTPUT_DIR_OPTION -> configuration.put(Kapt3ConfigurationKeys.SOURCE_OUTPUT_DIR, value)
             CLASS_OUTPUT_DIR_OPTION -> configuration.put(Kapt3ConfigurationKeys.CLASS_OUTPUT_DIR, value)
             STUBS_OUTPUT_DIR_OPTION -> configuration.put(Kapt3ConfigurationKeys.STUBS_OUTPUT_DIR, value)
             INCREMENTAL_DATA_OUTPUT_DIR_OPTION -> configuration.put(Kapt3ConfigurationKeys.INCREMENTAL_DATA_OUTPUT_DIR, value)
             VERBOSE_MODE_OPTION -> configuration.put(Kapt3ConfigurationKeys.VERBOSE_MODE, value)
             APT_ONLY_OPTION -> configuration.put(Kapt3ConfigurationKeys.APT_ONLY, value)
+            APT_MODE_OPTION -> configuration.put(Kapt3ConfigurationKeys.APT_MODE, value)
             USE_LIGHT_ANALYSIS_OPTION -> configuration.put(Kapt3ConfigurationKeys.USE_LIGHT_ANALYSIS, value)
             CORRECT_ERROR_TYPES_OPTION -> configuration.put(Kapt3ConfigurationKeys.CORRECT_ERROR_TYPES, value)
             else -> throw CliOptionProcessingException("Unknown option: ${option.name}")
@@ -142,7 +168,11 @@ class Kapt3CommandLineProcessor : CommandLineProcessor {
 }
 
 class Kapt3ComponentRegistrar : ComponentRegistrar {
-    fun decodeAnnotationProcessingOptions(options: String): Map<String, String> {
+    private companion object {
+        private const val JAVAC_CONTEXT_CLASS = "com.sun.tools.javac.util.Context"
+    }
+
+    fun decodeOptions(options: String): Map<String, String> {
         val map = LinkedHashMap<String, String>()
 
         val decodedBytes = DatatypeConverter.parseBase64Binary(options)
@@ -161,21 +191,32 @@ class Kapt3ComponentRegistrar : ComponentRegistrar {
     }
 
     override fun registerProjectComponents(project: MockProject, configuration: CompilerConfiguration) {
-        val isAptOnly = configuration.get(Kapt3ConfigurationKeys.APT_ONLY) == "true"
+        val aptMode = AptMode.parse(configuration.get(Kapt3ConfigurationKeys.APT_MODE) ?:
+                                    configuration.get(Kapt3ConfigurationKeys.APT_ONLY))
+
         val isVerbose = configuration.get(Kapt3ConfigurationKeys.VERBOSE_MODE) == "true"
         val messageCollector = configuration.get(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY)
                                ?: PrintingMessageCollector(System.err, MessageRenderer.PLAIN_FULL_PATHS, isVerbose)
         val logger = KaptLogger(isVerbose, messageCollector)
+
+        try {
+            Class.forName(JAVAC_CONTEXT_CLASS)
+        } catch (e: ClassNotFoundException) {
+            logger.warn("'$JAVAC_CONTEXT_CLASS' class can't be found ('tools.jar' is absent in the plugin classpath). Kapt won't work.")
+            return
+        }
 
         val sourcesOutputDir = configuration.get(Kapt3ConfigurationKeys.SOURCE_OUTPUT_DIR)?.let(::File)
         val classFilesOutputDir = configuration.get(Kapt3ConfigurationKeys.CLASS_OUTPUT_DIR)?.let(::File)
         val stubsOutputDir = configuration.get(Kapt3ConfigurationKeys.STUBS_OUTPUT_DIR)?.let(::File)
         val incrementalDataOutputDir = configuration.get(Kapt3ConfigurationKeys.INCREMENTAL_DATA_OUTPUT_DIR)?.let(::File)
 
+        val annotationProcessors = configuration.get(Kapt3ConfigurationKeys.ANNOTATION_PROCESSORS) ?: ""
+
         val apClasspath = configuration.get(ANNOTATION_PROCESSOR_CLASSPATH)?.map(::File)
 
         if (sourcesOutputDir == null || classFilesOutputDir == null || apClasspath == null || stubsOutputDir == null) {
-            if (isAptOnly) {
+            if (aptMode != AptMode.WITH_COMPILATION) {
                 val nonExistentOptionName = when {
                     sourcesOutputDir == null -> "Sources output directory"
                     classFilesOutputDir == null -> "Classes output directory"
@@ -189,7 +230,8 @@ class Kapt3ComponentRegistrar : ComponentRegistrar {
             return
         }
 
-        val apOptions = configuration.get(APT_OPTIONS)?.let { decodeAnnotationProcessingOptions(it) } ?: emptyMap()
+        val apOptions = configuration.get(APT_OPTIONS)?.let { decodeOptions(it) } ?: emptyMap()
+        val javacCliOptions = configuration.get(JAVAC_CLI_OPTIONS)?.let { decodeOptions(it) } ?: emptyMap()
 
         sourcesOutputDir.mkdirs()
 
@@ -202,11 +244,9 @@ class Kapt3ComponentRegistrar : ComponentRegistrar {
         val useLightAnalysis = configuration.get(Kapt3ConfigurationKeys.USE_LIGHT_ANALYSIS) == "true"
         val correctErrorTypes = configuration.get(Kapt3ConfigurationKeys.CORRECT_ERROR_TYPES) == "true"
 
-        Extensions.getRootArea().getExtensionPoint(DefaultErrorMessages.Extension.EP_NAME).registerExtension(DefaultErrorMessagesKapt3())
-
         if (isVerbose) {
             logger.info("Kapt3 is enabled.")
-            logger.info("Do annotation processing only: $isAptOnly")
+            logger.info("Annotation processing mode: $aptMode")
             logger.info("Use light analysis: $useLightAnalysis")
             logger.info("Correct error types: $correctErrorTypes")
             logger.info("Source output directory: $sourcesOutputDir")
@@ -215,14 +255,15 @@ class Kapt3ComponentRegistrar : ComponentRegistrar {
             logger.info("Incremental data output directory: $incrementalDataOutputDir")
             logger.info("Compile classpath: " + compileClasspath.joinToString())
             logger.info("Annotation processing classpath: " + apClasspath.joinToString())
+            logger.info("Annotation processors: " + annotationProcessors)
             logger.info("Java source roots: " + javaSourceRoots.joinToString())
             logger.info("Options: $apOptions")
         }
 
         val kapt3AnalysisCompletedHandlerExtension = ClasspathBasedKapt3Extension(
                 compileClasspath, apClasspath, javaSourceRoots, sourcesOutputDir, classFilesOutputDir,
-                stubsOutputDir, incrementalDataOutputDir, apOptions,
-                isAptOnly, useLightAnalysis, correctErrorTypes, System.currentTimeMillis(), logger)
+                stubsOutputDir, incrementalDataOutputDir, apOptions, javacCliOptions, annotationProcessors,
+                aptMode, useLightAnalysis, correctErrorTypes, System.currentTimeMillis(), logger)
         AnalysisHandlerExtension.registerExtension(project, kapt3AnalysisCompletedHandlerExtension)
     }
 
@@ -248,6 +289,27 @@ class Kapt3ComponentRegistrar : ComponentRegistrar {
                 files: Collection<KtFile>
         ): AnalysisResult? {
             return AnalysisResult.Companion.success(bindingTrace.bindingContext, module, shouldGenerateCode = false)
+        }
+    }
+}
+
+enum class AptMode {
+    WITH_COMPILATION, STUBS_AND_APT, STUBS_ONLY, APT_ONLY;
+
+    val runAnnotationProcessing
+        get() = this != STUBS_ONLY
+
+    val generateStubs
+        get() = this != APT_ONLY
+
+    companion object {
+        // Supports both deprecated APT_ONLY and new APT_MODE options
+        fun parse(mode: String?): AptMode = when (mode) {
+            "true", "stubsAndApt" -> STUBS_AND_APT
+            "false", "compile" -> WITH_COMPILATION
+            "apt" -> APT_ONLY
+            "stubs" -> STUBS_ONLY
+            else -> WITH_COMPILATION
         }
     }
 }

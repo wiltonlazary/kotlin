@@ -24,9 +24,8 @@ import org.jetbrains.kotlin.idea.MainFunctionDetector
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.name.FqNameUnsafe
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.calls.tower.getTypeAliasConstructors
+
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
-import org.jetbrains.kotlin.utils.singletonOrEmptyList
 import java.util.*
 
 class OverloadResolver(
@@ -38,7 +37,7 @@ class OverloadResolver(
     fun checkOverloads(c: BodiesResolveContext) {
         val inClasses = findConstructorsInNestedClassesAndTypeAliases(c)
 
-        for ((key, value) in c.declaredClasses) {
+        for (value in c.declaredClasses.values) {
             checkOverloadsInClass(value, inClasses.get(value))
         }
         checkOverloadsInPackages(c)
@@ -69,7 +68,7 @@ class OverloadResolver(
         for (typeAlias in c.typeAliases.values) {
             val containingDeclaration = typeAlias.containingDeclaration
             if (containingDeclaration is ClassDescriptor) {
-                constructorsByOuterClass.putValues(containingDeclaration, typeAlias.getTypeAliasConstructors())
+                constructorsByOuterClass.putValues(containingDeclaration, typeAlias.constructors)
             }
         }
 
@@ -92,7 +91,7 @@ class OverloadResolver(
 
         collectModulePackageMembersWithSameName(
                 packageMembersByName,
-                c.functions.values + c.declaredClasses.values + c.typeAliases.values,
+                (c.functions.values as Collection<DeclarationDescriptor>) + c.declaredClasses.values + c.typeAliases.values,
                 overloadFilter
         ) {
             scope, name ->
@@ -105,7 +104,7 @@ class OverloadResolver(
                     else
                         functions
                 is TypeAliasDescriptor ->
-                    functions + classifier.getTypeAliasConstructors()
+                    functions + classifier.constructors
                 else ->
                     functions
             }
@@ -115,7 +114,7 @@ class OverloadResolver(
             scope, name ->
             val variables = scope.getContributedVariables(name, NoLookupLocation.WHEN_CHECK_DECLARATION_CONFLICTS)
             val classifier = scope.getContributedClassifier(name, NoLookupLocation.WHEN_CHECK_DECLARATION_CONFLICTS)
-            variables + classifier.singletonOrEmptyList()
+            variables + listOfNotNull(classifier)
         }
 
         return packageMembersByName
@@ -215,7 +214,7 @@ class OverloadResolver(
         val bySourceFile = members.groupBy { DescriptorUtils.getContainingSourceFile(it) }
 
         var hasGroupIncludingNonPrivateMembers = false
-        for ((sourceFile, membersInFile) in bySourceFile) {
+        for (membersInFile in bySourceFile.values) {
             // File member groups are interesting in redeclaration check if at least one file member is private.
             if (membersInFile.any { it.isPrivate() }) {
                 hasGroupIncludingNonPrivateMembers = true

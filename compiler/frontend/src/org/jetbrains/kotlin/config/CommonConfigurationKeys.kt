@@ -21,13 +21,13 @@ object CommonConfigurationKeys {
     val LANGUAGE_VERSION_SETTINGS = CompilerConfigurationKey<LanguageVersionSettings>("language version settings")
 
     @JvmField
-    val SKIP_METADATA_VERSION_CHECK = CompilerConfigurationKey<Boolean>("skip metadata version check")
-
-    @JvmField
     val DISABLE_INLINE = CompilerConfigurationKey<Boolean>("disable inline")
 
     @JvmField
     val MODULE_NAME = CompilerConfigurationKey<String>("module name")
+
+    @JvmField
+    val REPORT_OUTPUT_FILES = CompilerConfigurationKey<Boolean>("report output files")
 }
 
 var CompilerConfiguration.languageVersionSettings: LanguageVersionSettings

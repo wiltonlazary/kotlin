@@ -52,7 +52,6 @@ import org.jetbrains.kotlin.js.translate.utils.jsAstUtils.*
  * and precedes inline call (in JavaScript evaluation order).
  */
 internal class ExpressionDecomposer private constructor(
-        private val scope: JsScope,
         private val containsExtractable: Set<JsNode>,
         private val containsNodeWithSideEffect: Set<JsNode>
 ) : JsExpressionVisitor() {
@@ -60,16 +59,14 @@ internal class ExpressionDecomposer private constructor(
     private var additionalStatements: MutableList<JsStatement> = SmartList()
 
     companion object {
-        @JvmStatic fun preserveEvaluationOrder(
-                scope: JsScope, statement: JsStatement, canBeExtractedByInliner: (JsNode)->Boolean
-        ): List<JsStatement> {
+        @JvmStatic fun preserveEvaluationOrder(statement: JsStatement, canBeExtractedByInliner: (JsNode) -> Boolean): List<JsStatement> {
             val decomposer = with (statement) {
                 val extractable = match(canBeExtractedByInliner)
                 val containsExtractable = withParentsOfNodes(extractable)
                 val nodesWithSideEffect = match { it !is JsLiteral.JsValueLiteral }
                 val containsNodeWithSideEffect = withParentsOfNodes(nodesWithSideEffect)
 
-                ExpressionDecomposer(scope, containsExtractable, containsNodeWithSideEffect)
+                ExpressionDecomposer(containsExtractable, containsNodeWithSideEffect)
             }
 
             decomposer.accept(statement)
@@ -132,7 +129,7 @@ internal class ExpressionDecomposer private constructor(
             }
             else {
                 // See KT-12275
-                val guardName = scope.declareFreshName("guard\$${(loopLabel?.ident.orEmpty())}")
+                val guardName = JsScope.declareTemporaryName("guard\$${(loopLabel?.ident.orEmpty())}")
                 val label = JsLabel(guardName).apply { synthetic = true }
                 label.statement = JsBlock(bodyStatements)
                 addStatements(0, listOf(label))
@@ -365,7 +362,7 @@ internal class ExpressionDecomposer private constructor(
     }
 
     private inner class Temporary(val value: JsExpression? = null) {
-        val name: JsName = scope.declareTemporary()
+        val name: JsName = JsScope.declareTemporary()
 
         val variable: JsVars = newVar(name, value).apply {
             synthetic = true
@@ -399,7 +396,6 @@ internal open class JsExpressionVisitor() : JsVisitorWithContextImpl() {
     override fun visit(x: JsFunction, ctx: JsContext<JsNode>): Boolean = false
     override fun visit(x: JsObjectLiteral, ctx: JsContext<JsNode>): Boolean = false
     override fun visit(x: JsPropertyInitializer, ctx: JsContext<JsNode>): Boolean = false
-    override fun visit(x: JsProgramFragment, ctx: JsContext<JsNode>): Boolean = false
     override fun visit(x: JsProgram, ctx: JsContext<JsNode>): Boolean = false
     override fun visit(x: JsParameter, ctx: JsContext<JsNode>): Boolean = false
     override fun visit(x: JsCatch, ctx: JsContext<JsNode>): Boolean = false

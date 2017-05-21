@@ -54,10 +54,27 @@ class ConvertMemberToExtensionIntention : SelfTargetingRangeIntention<KtCallable
     //TODO: local class
 
     override fun applyTo(element: KtCallableDeclaration, editor: Editor?) {
+        val (extension, bodyToSelect) = createExtensionCallableAndPrepareBodyToSelect(element)
+
+        editor?.apply {
+            unblockDocument()
+
+            if (bodyToSelect != null) {
+                val range = bodyToSelect!!.textRange
+                moveCaret(range.startOffset, ScrollType.CENTER)
+                selectionModel.setSelection(range.startOffset, range.endOffset)
+            }
+            else {
+                moveCaret(extension.textOffset, ScrollType.CENTER)
+            }
+        }
+    }
+
+    private fun createExtensionCallableAndPrepareBodyToSelect(element: KtCallableDeclaration): Pair<KtCallableDeclaration, KtExpression?> {
         val descriptor = element.resolveToDescriptor()
         val containingClass = descriptor.containingDeclaration as ClassDescriptor
 
-        val file = element.getContainingKtFile()
+        val file = element.containingKtFile
         val project = file.project
         val outermostParent = KtPsiUtil.getOutermostParent(element, file, false)
 
@@ -66,7 +83,7 @@ class ConvertMemberToExtensionIntention : SelfTargetingRangeIntention<KtCallable
         for (ref in ReferencesSearch.search(element)) {
             when (ref) {
                 is KtReference -> {
-                    val refFile = ref.element.getContainingKtFile()
+                    val refFile = ref.element.containingKtFile
                     if (refFile != file) {
                         ktFilesToAddImports.add(refFile)
                     }
@@ -179,18 +196,7 @@ class ConvertMemberToExtensionIntention : SelfTargetingRangeIntention<KtCallable
             }
         }
 
-        editor?.apply {
-            unblockDocument()
-
-            if (bodyToSelect != null) {
-                val range = bodyToSelect!!.textRange
-                moveCaret(range.startOffset, ScrollType.CENTER)
-                selectionModel.setSelection(range.startOffset, range.endOffset)
-            }
-            else {
-                moveCaret(extension.textOffset, ScrollType.CENTER)
-            }
-        }
+        return extension to bodyToSelect
     }
 
     private fun newTypeParameterList(member: KtCallableDeclaration): KtTypeParameterList? {
@@ -200,5 +206,11 @@ class ConvertMemberToExtensionIntention : SelfTargetingRangeIntention<KtCallable
         val allTypeParameters = classParams + member.typeParameters
         val text = allTypeParameters.map { it.text }.joinToString(",", "<", ">")
         return KtPsiFactory(member).createDeclaration<KtFunction>("fun $text foo()").typeParameterList
+    }
+
+    companion object {
+        fun convert(element: KtCallableDeclaration): KtCallableDeclaration {
+            return ConvertMemberToExtensionIntention().createExtensionCallableAndPrepareBodyToSelect(element).first
+        }
     }
 }

@@ -48,6 +48,7 @@ import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodParameterSignature
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue;
 import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.org.objectweb.asm.Label;
+import org.jetbrains.org.objectweb.asm.Opcodes;
 import org.jetbrains.org.objectweb.asm.Type;
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter;
 
@@ -64,12 +65,9 @@ public abstract class StackValue {
     private static final String NULLABLE_LONG_TYPE_NAME = "java/lang/Long";
 
     public static final StackValue.Local LOCAL_0 = local(0, OBJECT_TYPE);
-    private static final StackValue UNIT = operation(UNIT_TYPE, new Function1<InstructionAdapter, Unit>() {
-        @Override
-        public Unit invoke(InstructionAdapter v) {
-            v.visitFieldInsn(GETSTATIC, UNIT_TYPE.getInternalName(), JvmAbi.INSTANCE_FIELD, UNIT_TYPE.getDescriptor());
-            return null;
-        }
+    private static final StackValue UNIT = operation(UNIT_TYPE, v -> {
+        v.visitFieldInsn(GETSTATIC, UNIT_TYPE.getInternalName(), JvmAbi.INSTANCE_FIELD, UNIT_TYPE.getDescriptor());
+        return null;
     });
 
     @NotNull
@@ -181,6 +179,35 @@ public abstract class StackValue {
         else {
             return new Constant(value, type);
         }
+    }
+
+    public static StackValue createDefaulValue(@NotNull Type type) {
+        if (type.getSort() == Type.OBJECT || type.getSort() == Type.ARRAY) {
+            return constant(null, type);
+        }
+        else {
+            return createDefaultPrimitiveValue(type);
+        }
+    }
+
+    private static StackValue createDefaultPrimitiveValue(@NotNull Type type) {
+        assert Type.BOOLEAN <= type.getSort() && type.getSort() <= Type.DOUBLE :
+                "'createDefaultPrimitiveValue' method should be called only for primitive types, but " + type;
+        Object value = 0;
+        if (type.getSort() == Type.BOOLEAN) {
+            value = Boolean.FALSE;
+        }
+        else if (type.getSort() == Type.FLOAT) {
+            value = new Float(0.0);
+        }
+        else if (type.getSort() == Type.DOUBLE) {
+            value = new Double(0.0);
+        }
+        else if (type.getSort() == Type.LONG) {
+            value = new Long(0);
+        }
+
+        return constant(value, type);
     }
 
     @NotNull
@@ -301,31 +328,9 @@ public abstract class StackValue {
         coerce(boxedType, toType,  v);
     }
 
-    private static void unbox(Type type, InstructionAdapter v) {
-        if (type == Type.INT_TYPE) {
-            v.invokevirtual("java/lang/Number", "intValue", "()I", false);
-        }
-        else if (type == Type.BOOLEAN_TYPE) {
-            v.invokevirtual("java/lang/Boolean", "booleanValue", "()Z", false);
-        }
-        else if (type == Type.CHAR_TYPE) {
-            v.invokevirtual("java/lang/Character", "charValue", "()C", false);
-        }
-        else if (type == Type.SHORT_TYPE) {
-            v.invokevirtual("java/lang/Number", "shortValue", "()S", false);
-        }
-        else if (type == Type.LONG_TYPE) {
-            v.invokevirtual("java/lang/Number", "longValue", "()J", false);
-        }
-        else if (type == Type.BYTE_TYPE) {
-            v.invokevirtual("java/lang/Number", "byteValue", "()B", false);
-        }
-        else if (type == Type.FLOAT_TYPE) {
-            v.invokevirtual("java/lang/Number", "floatValue", "()F", false);
-        }
-        else if (type == Type.DOUBLE_TYPE) {
-            v.invokevirtual("java/lang/Number", "doubleValue", "()D", false);
-        }
+    private static void unbox(Type methodOwner, Type type, InstructionAdapter v) {
+        assert isPrimitive(type) : "Unboxing should be performed to primitive type, but " + type.getClassName();
+        v.invokevirtual(methodOwner.getInternalName(), type.getClassName() + "Value", "()" + type.getDescriptor(), false);
     }
 
     protected void coerceTo(@NotNull Type toType, @NotNull InstructionAdapter v) {
@@ -376,20 +381,29 @@ public abstract class StackValue {
             }
         }
         else if (fromType.getSort() == Type.OBJECT) {
+            //toType is primitive here
             Type unboxedType = unboxPrimitiveTypeOrNull(fromType);
             if (unboxedType != null) {
-                unbox(unboxedType, v);
+                unbox(fromType, unboxedType, v);
                 coerce(unboxedType, toType, v);
             }
-            else {
-                Type numberType = getType(Number.class);
-                if (toType.getSort() == Type.BOOLEAN || (toType.getSort() == Type.CHAR && !numberType.equals(fromType))) {
-                    coerce(fromType, boxType(toType), v);
+            else if (toType.getSort() == Type.BOOLEAN) {
+                coerce(fromType, BOOLEAN_WRAPPER_TYPE, v);
+                unbox(BOOLEAN_WRAPPER_TYPE, Type.BOOLEAN_TYPE, v);
+            }
+            else if (toType.getSort() == Type.CHAR) {
+                if (fromType.equals(NUMBER_TYPE)) {
+                    unbox(NUMBER_TYPE, Type.INT_TYPE, v);
+                    v.visitInsn(Opcodes.I2C);
                 }
                 else {
-                    coerce(fromType, numberType, v);
+                    coerce(fromType, CHARACTER_WRAPPER_TYPE, v);
+                    unbox(CHARACTER_WRAPPER_TYPE, Type.CHAR_TYPE, v);
                 }
-                unbox(toType, v);
+            }
+            else {
+                coerce(fromType, NUMBER_TYPE, v);
+                unbox(NUMBER_TYPE, toType, v);
             }
         }
         else {
@@ -756,9 +770,9 @@ public abstract class StackValue {
         }
     }
 
-    private static class Constant extends StackValue {
+    public static class Constant extends StackValue {
         @Nullable
-        private final Object value;
+        public final Object value;
 
         public Constant(@Nullable Object value, Type type) {
             super(type, false);
@@ -1073,8 +1087,7 @@ public abstract class StackValue {
             Type lastParameterType = ArraysKt.last(setter.getParameterTypes());
             coerce(topOfStackType, lastParameterType, v);
 
-            getCallGenerator().afterParameterPut(lastParameterType, StackValue.onStack(lastParameterType),
-                                                 CollectionsKt.getLastIndex(setter.getValueParameterTypes()));
+            getCallGenerator().putValueIfNeeded(lastParameterType, StackValue.onStack(lastParameterType));
 
             //Convention setter couldn't have default parameters, just getter can have it at last positions
             //We should remove default parameters of getter from stack*/
@@ -1371,9 +1384,7 @@ public abstract class StackValue {
             default:
                 PrimitiveType primitiveType = AsmUtil.asmPrimitiveTypeToLangPrimitiveType(type);
                 if (primitiveType == null) throw new UnsupportedOperationException();
-
-                String typeName = primitiveType.getTypeName().getIdentifier();
-                return Type.getObjectType(REF_TYPE_PREFIX + typeName + "Ref");
+                return sharedTypeForPrimitive(primitiveType);
         }
     }
 

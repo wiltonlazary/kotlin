@@ -105,7 +105,7 @@ class WhileConditionFolding(val body: JsBlock) {
                 // therefore for single `break` we should return `false`.
                 is JsBreak -> {
                     val target = statement.label?.name
-                    if (label == null || label == target) JsLiteral.FALSE else null
+                    if (label == target) JsLiteral.FALSE else null
                 }
 
                 // Code like this
@@ -135,7 +135,7 @@ class WhileConditionFolding(val body: JsBlock) {
                 // applying this rule repeatedly we get while (A && (B || C)), which is correct
 
                 is JsIf -> {
-                    val then = statement.thenStatement!!
+                    val then = statement.thenStatement
                     if (statement.elseStatement == null) {
                         val nextCondition = extractCondition(then, label)
                         val result: JsExpression? = when (nextCondition) {

@@ -18,8 +18,6 @@ package org.jetbrains.kotlin.codegen;
 
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
-import com.intellij.util.Function;
-import com.intellij.util.containers.ContainerUtil;
 import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -44,12 +42,12 @@ import static org.jetbrains.kotlin.codegen.JvmCodegenUtil.getMappingFileName;
 public class ClassFileFactory implements OutputFileCollection {
     private final GenerationState state;
     private final ClassBuilderFactory builderFactory;
-    private final Map<String, OutAndSourceFileList> generators = new LinkedHashMap<String, OutAndSourceFileList>();
+    private final Map<String, OutAndSourceFileList> generators = new LinkedHashMap<>();
 
     private boolean isDone = false;
 
-    private final Set<File> packagePartSourceFiles = new HashSet<File>();
-    private final Map<String, PackageParts> partsGroupedByPackage = new LinkedHashMap<String, PackageParts>();
+    private final Set<File> packagePartSourceFiles = new HashSet<>();
+    private final Map<String, PackageParts> partsGroupedByPackage = new LinkedHashMap<>();
 
     public ClassFileFactory(@NotNull GenerationState state, @NotNull ClassBuilderFactory builderFactory) {
         this.state = state;
@@ -82,7 +80,7 @@ public class ClassFileFactory implements OutputFileCollection {
         return answer;
     }
 
-    void done() {
+    public void done() {
         if (!isDone) {
             isDone = true;
             writeModuleMappings();
@@ -94,7 +92,7 @@ public class ClassFileFactory implements OutputFileCollection {
     }
 
     private void writeModuleMappings() {
-        final JvmPackageTable.PackageTable.Builder builder = JvmPackageTable.PackageTable.newBuilder();
+        JvmPackageTable.PackageTable.Builder builder = JvmPackageTable.PackageTable.newBuilder();
         String outputFilePath = getMappingFileName(state.getModuleName());
 
         for (PackageParts part : ClassFileUtilsKt.addCompiledPartsAndSort(partsGroupedByPackage.values(), state)) {
@@ -130,12 +128,7 @@ public class ClassFileFactory implements OutputFileCollection {
 
     @NotNull
     public List<OutputFile> getCurrentOutput() {
-        return ContainerUtil.map(generators.keySet(), new Function<String, OutputFile>() {
-            @Override
-            public OutputFile fun(String relativeClassFilePath) {
-                return new OutputClassFile(relativeClassFilePath);
-            }
-        });
+        return CollectionsKt.map(generators.keySet(), OutputClassFile::new);
     }
 
     @Override
@@ -160,7 +153,7 @@ public class ClassFileFactory implements OutputFileCollection {
     @NotNull
     @TestOnly
     public Map<String, String> createTextForEachFile() {
-        Map<String, String> answer = new LinkedHashMap<String, String>();
+        Map<String, String> answer = new LinkedHashMap<>();
         for (OutputFile file : asList()) {
             answer.put(file.getRelativePath(), file.asText());
         }
@@ -182,17 +175,10 @@ public class ClassFileFactory implements OutputFileCollection {
     }
 
     private PackagePartRegistry buildNewPackagePartRegistry(@NotNull FqName packageFqName) {
-        final String packageFqNameAsString = packageFqName.asString();
-        return new PackagePartRegistry() {
-            @Override
-            public void addPart(@NotNull String partShortName, @Nullable String facadeShortName) {
-                PackageParts packageParts = partsGroupedByPackage.get(packageFqNameAsString);
-                if (packageParts == null) {
-                    packageParts = new PackageParts(packageFqNameAsString);
-                    partsGroupedByPackage.put(packageFqNameAsString, packageParts);
-                }
-                packageParts.addPart(partShortName, facadeShortName);
-            }
+        String packageFqNameAsString = packageFqName.asString();
+        return (partShortName, facadeShortName) -> {
+            PackageParts packageParts = partsGroupedByPackage.computeIfAbsent(packageFqNameAsString, PackageParts::new);
+            packageParts.addPart(partShortName, facadeShortName);
         };
     }
 
@@ -202,7 +188,7 @@ public class ClassFileFactory implements OutputFileCollection {
 
     @NotNull
     private static List<File> toIoFilesIgnoringNonPhysical(@NotNull Collection<? extends PsiFile> psiFiles) {
-        List<File> result = new ArrayList<File>(psiFiles.size());
+        List<File> result = new ArrayList<>(psiFiles.size());
         for (PsiFile psiFile : psiFiles) {
             VirtualFile virtualFile = psiFile.getVirtualFile();
             // We ignore non-physical files here, because this code is needed to tell the make what inputs affect which outputs

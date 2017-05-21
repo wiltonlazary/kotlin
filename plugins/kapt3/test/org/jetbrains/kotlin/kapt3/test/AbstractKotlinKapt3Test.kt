@@ -23,9 +23,11 @@ import com.sun.tools.javac.util.Log
 import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector
 import org.jetbrains.kotlin.codegen.CodegenTestCase
-import org.jetbrains.kotlin.codegen.CodegenTestUtil
-import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
-import org.jetbrains.kotlin.kapt3.*
+import org.jetbrains.kotlin.codegen.GenerationUtils
+import org.jetbrains.kotlin.codegen.state.GenerationState
+import org.jetbrains.kotlin.kapt3.Kapt3BuilderFactory
+import org.jetbrains.kotlin.kapt3.KaptContext
+import org.jetbrains.kotlin.kapt3.doAnnotationProcessing
 import org.jetbrains.kotlin.kapt3.stubs.ClassFileToSourceStubConverter
 import org.jetbrains.kotlin.kapt3.util.KaptLogger
 import org.jetbrains.kotlin.resolve.jvm.extensions.AnalysisHandlerExtension
@@ -34,9 +36,9 @@ import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.util.trimTrailingWhitespacesAndAddNewlineAtEOF
 import org.jetbrains.kotlin.utils.PathUtil
-import com.sun.tools.javac.util.List as JavacList
 import java.io.File
 import java.nio.file.Files
+import com.sun.tools.javac.util.List as JavacList
 
 abstract class AbstractKotlinKapt3Test : CodegenTestCase() {
     companion object {
@@ -56,54 +58,51 @@ abstract class AbstractKotlinKapt3Test : CodegenTestCase() {
 
         val txtFile = File(wholeFile.parentFile, wholeFile.nameWithoutExtension + ".txt")
         val classBuilderFactory = Kapt3BuilderFactory()
-        val factory = CodegenTestUtil.generateFiles(myEnvironment, myFiles, classBuilderFactory)
-        val typeMapper = factory.generationState.typeMapper
+        val generationState = GenerationUtils.compileFiles(myFiles.psiFiles, myEnvironment, classBuilderFactory)
 
         val logger = KaptLogger(isVerbose = true, messageCollector = messageCollector)
-        val kaptContext = KaptContext(logger, factory.generationState.bindingContext, classBuilderFactory.compiledClasses,
-                                      classBuilderFactory.origins, processorOptions = emptyMap())
+        val kaptContext = KaptContext(logger, generationState.bindingContext, classBuilderFactory.compiledClasses,
+                                      classBuilderFactory.origins, generationState, processorOptions = emptyMap())
         try {
-            check(kaptContext, typeMapper, txtFile, wholeFile)
+            check(kaptContext, txtFile, wholeFile)
         } finally {
             kaptContext.close()
         }
     }
 
     protected fun convert(
-            kaptRunner: KaptContext,
-            typeMapper: KotlinTypeMapper,
+            kaptContext: KaptContext<GenerationState>,
             generateNonExistentClass: Boolean,
             correctErrorTypes: Boolean
     ): JavacList<JCCompilationUnit> {
-        val converter = ClassFileToSourceStubConverter(kaptRunner, typeMapper, generateNonExistentClass, correctErrorTypes)
+        val converter = ClassFileToSourceStubConverter(kaptContext, generateNonExistentClass, correctErrorTypes)
         return converter.convert()
     }
 
     protected abstract fun check(
-            kaptRunner: KaptContext,
-            typeMapper: KotlinTypeMapper,
+            kaptContext: KaptContext<GenerationState>,
             txtFile: File,
             wholeFile: File)
 }
 
 abstract class AbstractClassFileToSourceStubConverterTest : AbstractKotlinKapt3Test() {
-    override fun check(kaptRunner: KaptContext, typeMapper: KotlinTypeMapper, txtFile: File, wholeFile: File) {
+    override fun check(kaptContext: KaptContext<GenerationState>, txtFile: File, wholeFile: File) {
         fun isOptionSet(name: String) = wholeFile.useLines { lines -> lines.any { it.trim() == "// $name" } }
 
         val generateNonExistentClass = isOptionSet("NON_EXISTENT_CLASS")
         val correctErrorTypes = isOptionSet("CORRECT_ERROR_TYPES")
         val validate = !isOptionSet("NO_VALIDATION")
 
-        val javaFiles = convert(kaptRunner, typeMapper, generateNonExistentClass, correctErrorTypes)
+        val javaFiles = convert(kaptContext, generateNonExistentClass, correctErrorTypes)
 
-        kaptRunner.javaLog.interceptorData.files = javaFiles.map { it.sourceFile to it }.toMap()
-        if (validate) kaptRunner.compiler.enterTrees(javaFiles)
+        kaptContext.javaLog.interceptorData.files = javaFiles.map { it.sourceFile to it }.toMap()
+        if (validate) kaptContext.compiler.enterTrees(javaFiles)
 
         val actualRaw = javaFiles.sortedBy { it.sourceFile.name }.joinToString (FILE_SEPARATOR)
         val actual = StringUtil.convertLineSeparators(actualRaw.trim({ it <= ' ' })).trimTrailingWhitespacesAndAddNewlineAtEOF()
 
-        if (kaptRunner.compiler.shouldStop(CompileStates.CompileState.ENTER)) {
-            Log.instance(kaptRunner.context).flush()
+        if (kaptContext.compiler.shouldStop(CompileStates.CompileState.ENTER)) {
+            Log.instance(kaptContext.context).flush()
             error("There were errors during analysis. See errors above. Stubs:\n\n$actual")
         }
         KotlinTestUtils.assertEqualsToFile(txtFile, actual)
@@ -111,13 +110,13 @@ abstract class AbstractClassFileToSourceStubConverterTest : AbstractKotlinKapt3T
 }
 
 abstract class AbstractKotlinKaptContextTest : AbstractKotlinKapt3Test() {
-    override fun check(kaptRunner: KaptContext, typeMapper: KotlinTypeMapper, txtFile: File, wholeFile: File) {
-        val compilationUnits = convert(kaptRunner, typeMapper, generateNonExistentClass = false, correctErrorTypes = true)
+    override fun check(kaptContext: KaptContext<GenerationState>, txtFile: File, wholeFile: File) {
+        val compilationUnits = convert(kaptContext, generateNonExistentClass = false, correctErrorTypes = true)
         val sourceOutputDir = Files.createTempDirectory("kaptRunner").toFile()
         try {
-            kaptRunner.doAnnotationProcessing(emptyList(), listOf(JavaKaptContextTest.simpleProcessor()),
-                                              compileClasspath = PathUtil.getJdkClassesRoots() + PathUtil.getKotlinPathsForIdeaPlugin().runtimePath,
-                                              annotationProcessingClasspath = emptyList(),
+            kaptContext.doAnnotationProcessing(emptyList(), listOf(JavaKaptContextTest.simpleProcessor()),
+                                              compileClasspath = PathUtil.getJdkClassesRootsFromCurrentJre() + PathUtil.getKotlinPathsForIdeaPlugin().stdlibPath,
+                                              annotationProcessingClasspath = emptyList(), annotationProcessors = "",
                                               sourcesOutputDir = sourceOutputDir, classesOutputDir = sourceOutputDir,
                                               additionalSources = compilationUnits, withJdk = true)
 

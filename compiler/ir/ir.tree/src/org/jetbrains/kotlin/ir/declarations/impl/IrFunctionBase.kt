@@ -16,37 +16,46 @@
 
 package org.jetbrains.kotlin.ir.declarations.impl
 
-import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.declarations.IrTypeParameter
+import org.jetbrains.kotlin.ir.declarations.IrValueParameter
 import org.jetbrains.kotlin.ir.expressions.IrBody
+import org.jetbrains.kotlin.ir.util.transform
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
-import java.util.*
+import org.jetbrains.kotlin.utils.SmartList
 
 abstract class IrFunctionBase(
         startOffset: Int,
         endOffset: Int,
         origin: IrDeclarationOrigin
-) : IrGeneralFunctionBase(startOffset, endOffset, origin), IrFunction {
-    private val defaults = LinkedHashMap<ValueParameterDescriptor, IrBody>()
+) : IrDeclarationBase(startOffset, endOffset, origin), IrFunction {
+    override val typeParameters: MutableList<IrTypeParameter> = SmartList()
 
-    override fun getDefault(parameter: ValueParameterDescriptor): IrBody? =
-            defaults[parameter]
+    override var dispatchReceiverParameter: IrValueParameter? = null
+    override var extensionReceiverParameter: IrValueParameter? = null
+    override val valueParameters: MutableList<IrValueParameter> = ArrayList()
 
-    override fun putDefault(parameter: ValueParameterDescriptor, expressionBody: IrBody) {
-        defaults[parameter] = expressionBody
-    }
+    final override var body: IrBody? = null
 
     override fun <D> acceptChildren(visitor: IrElementVisitor<Unit, D>, data: D) {
-        defaults.values.forEach { it.accept(visitor, data) }
+        typeParameters.forEach { it.accept(visitor, data) }
+
+        dispatchReceiverParameter?.accept(visitor, data)
+        extensionReceiverParameter?.accept(visitor, data)
+        valueParameters.forEach { it.accept(visitor, data) }
+
         body?.accept(visitor, data)
     }
 
     override fun <D> transformChildren(transformer: IrElementTransformer<D>, data: D) {
-        for ((valueParameter, defaultValue) in defaults) {
-            putDefault(valueParameter, defaultValue.transform(transformer, data))
-        }
+        typeParameters.transform { it.transform(transformer, data) }
+
+        dispatchReceiverParameter = dispatchReceiverParameter?.transform(transformer, data)
+        extensionReceiverParameter = extensionReceiverParameter?.transform(transformer, data)
+        valueParameters.transform { it.transform(transformer, data) }
+
         body = body?.transform(transformer, data)
     }
 }

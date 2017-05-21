@@ -16,29 +16,31 @@
 
 package org.jetbrains.kotlin.psi2ir
 
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
+import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtPsiUtil
 import org.jetbrains.kotlin.psi.KtSecondaryConstructor
+import org.jetbrains.kotlin.psi.psiUtil.endOffset
+import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ArgumentMatch
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
-import org.jetbrains.kotlin.types.typeUtil.builtIns
-import org.jetbrains.kotlin.types.upperIfFlexible
+import org.jetbrains.kotlin.types.TypeUtils
 import java.lang.Exception
 
 fun KotlinType.containsNull() =
-        KotlinTypeChecker.DEFAULT.isSubtypeOf(builtIns.nullableNothingType, this.upperIfFlexible())
+        TypeUtils.isNullableType(this)
 
 fun KtElement.deparenthesize(): KtElement =
         if (this is KtExpression) KtPsiUtil.safeDeparenthesize(this) else this
@@ -78,3 +80,8 @@ fun MemberScope.findSingleFunction(name: Name): FunctionDescriptor =
 
 fun KotlinBuiltIns.findSingleFunction(name: Name): FunctionDescriptor =
         builtInsPackageScope.findSingleFunction(name)
+
+val PsiElement?.startOffsetOrUndefined get() = this?.startOffset ?: UNDEFINED_OFFSET
+val PsiElement?.endOffsetOrUndefined get() = this?.endOffset ?: UNDEFINED_OFFSET
+
+

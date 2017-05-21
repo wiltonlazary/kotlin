@@ -47,6 +47,7 @@ public class SpecialFiles {
         excludedFiles.add("arrayOfKClasses.kt");
         excludedFiles.add("enumKClassAnnotation.kt");
         excludedFiles.add("primitivesAndArrays.kt");
+        excludedFiles.add("getDelegateWithoutReflection.kt");
 
         // Reflection is used to check full class name
         excludedFiles.add("native");

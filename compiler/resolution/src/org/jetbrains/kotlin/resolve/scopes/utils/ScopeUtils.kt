@@ -58,7 +58,7 @@ fun HierarchicalScope.collectDescriptorsFiltered(
 }
 
 
-@Deprecated("Use getOwnProperties instead") fun LexicalScope.findLocalVariable(name: Name): VariableDescriptor? {
+@Deprecated("Use getContributedProperties instead") fun LexicalScope.findLocalVariable(name: Name): VariableDescriptor? {
     return findFirstFromMeAndParent {
         when {
             it is LexicalScopeWrapper -> it.delegate.findLocalVariable(name)
@@ -116,10 +116,10 @@ private class MemberScopeToImportingScopeAdapter(override val parent: ImportingS
 
     override fun hashCode() = memberScope.hashCode()
 
-    override fun toString() = "${javaClass.simpleName} for $memberScope"
+    override fun toString() = "${this::class.java.simpleName} for $memberScope"
 
     override fun printStructure(p: Printer) {
-        p.println(javaClass.simpleName)
+        p.println(this::class.java.simpleName)
         p.pushIndent()
 
         memberScope.printScopeStructure(p.withholdIndentOnce())

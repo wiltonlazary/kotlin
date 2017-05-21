@@ -17,16 +17,10 @@
 package org.jetbrains.kotlin.codegen;
 
 import kotlin.collections.CollectionsKt;
-import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.analyzer.AnalysisResult;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime;
-import org.jetbrains.kotlin.codegen.state.GenerationState;
-import org.jetbrains.kotlin.config.CompilerConfiguration;
-import org.jetbrains.kotlin.resolve.AnalyzingUtils;
-import org.jetbrains.kotlin.resolve.lazy.JvmResolveUtil;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
 import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
 import org.jetbrains.kotlin.utils.StringsKt;
@@ -46,35 +40,7 @@ public class CodegenTestUtil {
 
     @NotNull
     public static ClassFileFactory generateFiles(@NotNull KotlinCoreEnvironment environment, @NotNull CodegenTestFiles files) {
-        return generateFiles(environment, files, ClassBuilderFactories.TEST);
-    }
-    
-    @NotNull
-    public static ClassFileFactory generateFiles(
-            @NotNull KotlinCoreEnvironment environment, 
-            @NotNull CodegenTestFiles files,
-            @NotNull ClassBuilderFactory classBuilderFactory) {
-        AnalysisResult analysisResult = JvmResolveUtil.analyzeAndCheckForErrors(files.getPsiFiles(), environment);
-        analysisResult.throwIfError();
-        AnalyzingUtils.throwExceptionOnErrors(analysisResult.getBindingContext());
-        CompilerConfiguration configuration = environment.getConfiguration();
-        GenerationState state = new GenerationState(
-                environment.getProject(),
-                classBuilderFactory,
-                analysisResult.getModuleDescriptor(),
-                analysisResult.getBindingContext(),
-                files.getPsiFiles(),
-                configuration
-        );
-
-        if (analysisResult.getShouldGenerateCode()) {
-            KotlinCodegenFacade.compileCorrectFiles(state, CompilationErrorHandler.THROW_EXCEPTION);
-        }
-
-        // For JVM-specific errors
-        AnalyzingUtils.throwExceptionOnErrors(state.getCollectedExtraJvmDiagnostics());
-
-        return state.getFactory();
+        return GenerationUtils.compileFiles(files.getPsiFiles(), environment).getFactory();
     }
 
     public static void assertThrows(@NotNull Method foo, @NotNull Class<? extends Throwable> exceptionClass,
@@ -115,26 +81,19 @@ public class CodegenTestUtil {
     ) {
         try {
             File javaClassesTempDirectory = KotlinTestUtils.tmpDir("java-classes");
-            List<String> classpath = new ArrayList<String>();
+            List<String> classpath = new ArrayList<>();
             classpath.add(ForTestCompileRuntime.runtimeJarForTests().getPath());
             classpath.add(ForTestCompileRuntime.reflectJarForTests().getPath());
             classpath.add(KotlinTestUtils.getAnnotationsJar().getPath());
             classpath.addAll(additionalClasspath);
 
-            List<String> options = new ArrayList<String>(Arrays.asList(
+            List<String> options = new ArrayList<>(Arrays.asList(
                     "-classpath", StringsKt.join(classpath, File.pathSeparator),
                     "-d", javaClassesTempDirectory.getPath()
             ));
             options.addAll(additionalOptions);
 
-            List<File> fileList = CollectionsKt.map(fileNames, new Function1<String, File>() {
-                @Override
-                public File invoke(String input) {
-                    return new File(input);
-                }
-            });
-
-            KotlinTestUtils.compileJavaFiles(fileList, options);
+            KotlinTestUtils.compileJavaFiles(CollectionsKt.map(fileNames, File::new), options);
 
             return javaClassesTempDirectory;
         }

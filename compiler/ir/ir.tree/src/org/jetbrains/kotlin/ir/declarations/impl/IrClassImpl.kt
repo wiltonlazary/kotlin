@@ -17,20 +17,24 @@
 package org.jetbrains.kotlin.ir.declarations.impl
 
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.ir.declarations.IrClass
-import org.jetbrains.kotlin.ir.declarations.IrDeclaration
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationContainer
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
+import org.jetbrains.kotlin.ir.symbols.impl.IrClassSymbolImpl
+import org.jetbrains.kotlin.ir.util.transform
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
-import java.util.*
+import org.jetbrains.kotlin.utils.SmartList
+import kotlin.collections.ArrayList
 
 class IrClassImpl(
         startOffset: Int,
         endOffset: Int,
         origin: IrDeclarationOrigin,
-        override val descriptor: ClassDescriptor
+        override val symbol: IrClassSymbol
 ) : IrDeclarationBase(startOffset, endOffset, origin), IrClass {
+    constructor(startOffset: Int, endOffset: Int, origin: IrDeclarationOrigin, descriptor: ClassDescriptor) :
+            this(startOffset, endOffset, origin, IrClassSymbolImpl(descriptor))
+
     constructor(
             startOffset: Int, endOffset: Int, origin: IrDeclarationOrigin, descriptor: ClassDescriptor,
             members: List<IrDeclaration>
@@ -38,26 +42,30 @@ class IrClassImpl(
         addAll(members)
     }
 
+    init {
+        symbol.bind(this)
+    }
+
+    override val descriptor: ClassDescriptor get() = symbol.descriptor
+
+    override var thisReceiver: IrValueParameter? = null
+
     override val declarations: MutableList<IrDeclaration> = ArrayList()
 
-    fun addMember(member: IrDeclaration) {
-        declarations.add(member)
-    }
-
-    fun addAll(members: List<IrDeclaration>) {
-        declarations.addAll(members)
-    }
+    override val typeParameters: MutableList<IrTypeParameter> = SmartList()
 
     override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R =
             visitor.visitClass(this, data)
 
     override fun <D> acceptChildren(visitor: IrElementVisitor<Unit, D>, data: D) {
+        thisReceiver?.accept(visitor, data)
+        typeParameters.forEach { it.accept(visitor, data) }
         declarations.forEach { it.accept(visitor, data) }
     }
 
     override fun <D> transformChildren(transformer: IrElementTransformer<D>, data: D) {
-        declarations.forEachIndexed { i, irDeclaration ->
-            declarations[i] = irDeclaration.transform(transformer, data) as IrDeclaration
-        }
+        thisReceiver = thisReceiver?.transform(transformer, data)
+        typeParameters.transform { it.transform(transformer, data) }
+        declarations.transform { it.transform(transformer, data) }
     }
 }

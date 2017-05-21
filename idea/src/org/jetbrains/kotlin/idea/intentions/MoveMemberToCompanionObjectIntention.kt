@@ -46,7 +46,6 @@ import org.jetbrains.kotlin.idea.refactoring.checkConflictsInteractively
 import org.jetbrains.kotlin.idea.refactoring.move.OuterInstanceReferenceUsageInfo
 import org.jetbrains.kotlin.idea.refactoring.move.collectOuterInstanceReferences
 import org.jetbrains.kotlin.idea.refactoring.move.moveDeclarations.*
-import org.jetbrains.kotlin.idea.refactoring.move.reportConflictIfAny
 import org.jetbrains.kotlin.idea.refactoring.move.traverseOuterInstanceReferences
 import org.jetbrains.kotlin.idea.references.KtSimpleNameReference
 import org.jetbrains.kotlin.idea.runSynchronouslyWithProgress
@@ -78,7 +77,7 @@ class MoveMemberToCompanionObjectIntention : SelfTargetingRangeIntention<KtNamed
         if ((element is KtNamedFunction || element is KtProperty) && element.hasModifier(KtTokens.ABSTRACT_KEYWORD)) return null
         if (element.hasModifier(KtTokens.OVERRIDE_KEYWORD)) return null
         val containingClass = element.containingClassOrObject as? KtClass ?: return null
-        if (containingClass.isLocal() || containingClass.isInner()) return null
+        if (containingClass.isLocal || containingClass.isInner()) return null
         return element.nameIdentifier?.textRange
     }
 
@@ -262,11 +261,12 @@ class MoveMemberToCompanionObjectIntention : SelfTargetingRangeIntention<KtNamed
                     return Mover.Default(originalElement, targetContainer).apply { movedClass = this as KtClassOrObject }
                 }
             }
-            val moveDescriptor = MoveDeclarationsDescriptor(listOf(element),
+            val moveDescriptor = MoveDeclarationsDescriptor(project,
+                                                            listOf(element),
                                                             KotlinMoveTargetForCompanion(containingClass),
                                                             MoveDeclarationsDelegate.NestedClass(null, outerInstanceName),
                                                             moveCallback = MoveCallback { runTemplateForInstanceParam(movedClass!!, nameSuggestions, editor) })
-            MoveKotlinDeclarationsProcessor(project, moveDescriptor, mover).run()
+            MoveKotlinDeclarationsProcessor(moveDescriptor, mover).run()
             return
         }
 
@@ -284,7 +284,7 @@ class MoveMemberToCompanionObjectIntention : SelfTargetingRangeIntention<KtNamed
         val outerInstanceUsages = SmartList<UsageInfo>()
         val conflicts = MultiMap<PsiElement, String>()
 
-        containingClass.getCompanionObjects().firstOrNull()?.let { companion ->
+        containingClass.companionObjects.firstOrNull()?.let { companion ->
             val companionDescriptor = companion.resolveToDescriptor() as ClassDescriptor
             val callableDescriptor = element.resolveToDescriptor() as CallableMemberDescriptor
             companionDescriptor.findCallableMemberBySignature(callableDescriptor)?.let {

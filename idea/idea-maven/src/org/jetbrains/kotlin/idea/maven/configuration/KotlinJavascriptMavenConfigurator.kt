@@ -26,7 +26,7 @@ import org.jetbrains.kotlin.resolve.TargetPlatform
 
 class KotlinJavascriptMavenConfigurator : KotlinMavenConfigurator(null, false, KotlinJavascriptMavenConfigurator.NAME, KotlinJavascriptMavenConfigurator.PRESENTABLE_TEXT) {
 
-    override fun getStdlibArtifactId(module: Module) = MAVEN_JS_STDLIB_ID
+    override fun getStdlibArtifactId(module: Module, version: String) = MAVEN_JS_STDLIB_ID
 
     override fun isKotlinModule(module: Module): Boolean {
         return hasKotlinJsRuntimeInScope(module)
@@ -44,8 +44,10 @@ class KotlinJavascriptMavenConfigurator : KotlinMavenConfigurator(null, false, K
     override val targetPlatform: TargetPlatform
         get() = JsPlatform
 
+    override fun getMinimumSupportedVersion() = "1.1.0"
+
     companion object {
         private val NAME = "js maven"
-        private val PRESENTABLE_TEXT = "JavaScript Maven"
+        private val PRESENTABLE_TEXT = "Maven (JavaScript)"
     }
 }

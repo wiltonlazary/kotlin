@@ -51,11 +51,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import static org.jetbrains.kotlin.test.testFramework.EdtTestUtil.runInEdtAndWait;
+
 // part of com.intellij.openapi.externalSystem.test.ExternalSystemTestCase
 public abstract class ExternalSystemTestCase extends UsefulTestCase {
   private File ourTempDir;
 
-  private IdeaProjectTestFixture myTestFixture;
+  protected IdeaProjectTestFixture myTestFixture;
 
   protected Project myProject;
 
@@ -75,7 +77,7 @@ public abstract class ExternalSystemTestCase extends UsefulTestCase {
     setUpFixtures();
     myProject = myTestFixture.getProject();
 
-    edt(new Runnable() {
+    invokeTestRunnable(new Runnable() {
       @Override
       public void run() {
         ApplicationManager.getApplication().runWriteAction(new Runnable() {
@@ -141,7 +143,7 @@ public abstract class ExternalSystemTestCase extends UsefulTestCase {
 
   protected abstract String getTestsTempDir();
 
-  private void setUpFixtures() throws Exception {
+  protected void setUpFixtures() throws Exception {
     myTestFixture = IdeaTestFixtureFactory.getFixtureFactory().createFixtureBuilder(getName()).getFixture();
     myTestFixture.setUp();
   }
@@ -176,7 +178,7 @@ public abstract class ExternalSystemTestCase extends UsefulTestCase {
     }
   }
 
-  private void tearDownFixtures() throws Exception {
+  protected void tearDownFixtures() throws Exception {
     myTestFixture.tearDown();
     myTestFixture = null;
   }
@@ -224,7 +226,7 @@ public abstract class ExternalSystemTestCase extends UsefulTestCase {
 
   @Override
   protected void invokeTestRunnable(@NotNull Runnable runnable) throws Exception {
-    runnable.run();
+    runInEdtAndWait(runnable);
   }
 
   protected static String getRoot() {

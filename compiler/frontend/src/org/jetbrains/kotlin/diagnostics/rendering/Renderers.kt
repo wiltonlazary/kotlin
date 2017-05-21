@@ -21,6 +21,7 @@ import com.google.common.collect.Sets
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.analyzer.ModuleInfo
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.cfg.WhenMissingCase
 import org.jetbrains.kotlin.cfg.hasUnknown
@@ -77,7 +78,7 @@ object Renderers {
 
     @JvmField val PLATFORM = Renderer<ModuleDescriptor> {
         val platform = it.getMultiTargetPlatform()
-        when (platform) {
+        " ${it.getCapability(ModuleInfo.Capability)?.displayedName ?: ""}" + when (platform) {
             MultiTargetPlatform.Common -> ""
             is MultiTargetPlatform.Specific -> " for " + platform.platform
             null -> ""
@@ -100,6 +101,7 @@ object Renderers {
             is PropertyGetterDescriptor -> "property getter "
             is PropertySetterDescriptor -> "property setter "
             is FunctionDescriptor -> "function "
+            is PropertyDescriptor -> "property "
             else -> throw AssertionError("Unexpected declaration kind: $it")
         }
         "$declarationKindWithSpace'${it.name.asString()}'"
@@ -120,7 +122,7 @@ object Renderers {
 
     @JvmField val RENDER_CLASS_OR_OBJECT = Renderer {
         classOrObject: KtClassOrObject ->
-        val name = if (classOrObject.getName() != null) " '" + classOrObject.getName() + "'" else ""
+        val name = if (classOrObject.name != null) " '" + classOrObject.name + "'" else ""
         if (classOrObject is KtClass) "Class" + name else "Object" + name
     }
 
@@ -358,7 +360,7 @@ object Renderers {
             override fun get(key: TypeConstructor): TypeProjection? {
                 val typeDescriptor = key.declarationDescriptor as? TypeParameterDescriptor ?: return null
                 if (typeDescriptor.containingDeclaration != descriptor.typeAliasDescriptor) return null
-                return inferredTypesForTypeParameters[typeDescriptor.index]?.let { TypeProjectionImpl(it) }
+                return inferredTypesForTypeParameters[typeDescriptor.index]?.let(::TypeProjectionImpl)
             }
         })
 

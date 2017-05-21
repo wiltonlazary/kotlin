@@ -1733,6 +1733,12 @@ public class JavaToKotlinConverterSingleFileTestGenerated extends AbstractJavaTo
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("j2k/testData/fileOrElement/doWhileStatement"), Pattern.compile("^(.+)\\.java$"), TargetBackend.ANY, true);
         }
 
+        @TestMetadata("whileWithAssignmentAsExpression.java")
+        public void testWhileWithAssignmentAsExpression() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/doWhileStatement/whileWithAssignmentAsExpression.java");
+            doTest(fileName);
+        }
+
         @TestMetadata("whileWithBlock.java")
         public void testWhileWithBlock() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/doWhileStatement/whileWithBlock.java");
@@ -2105,6 +2111,12 @@ public class JavaToKotlinConverterSingleFileTestGenerated extends AbstractJavaTo
         @TestMetadata("arrayIndicesReversed.java")
         public void testArrayIndicesReversed() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/for/arrayIndicesReversed.java");
+            doTest(fileName);
+        }
+
+        @TestMetadata("assignmentAsExpressionInBody.java")
+        public void testAssignmentAsExpressionInBody() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/for/assignmentAsExpressionInBody.java");
             doTest(fileName);
         }
 
@@ -2697,6 +2709,12 @@ public class JavaToKotlinConverterSingleFileTestGenerated extends AbstractJavaTo
     public static class IfStatement extends AbstractJavaToKotlinConverterSingleFileTest {
         public void testAllFilesPresentInIfStatement() throws Exception {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("j2k/testData/fileOrElement/ifStatement"), Pattern.compile("^(.+)\\.java$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("assignmentAsExpressionInIf.java")
+        public void testAssignmentAsExpressionInIf() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/ifStatement/assignmentAsExpressionInIf.java");
+            doTest(fileName);
         }
 
         @TestMetadata("elseIf.java")
@@ -4412,6 +4430,12 @@ public class JavaToKotlinConverterSingleFileTestGenerated extends AbstractJavaTo
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("j2k/testData/fileOrElement/strings"), Pattern.compile("^(.+)\\.java$"), TargetBackend.ANY, true);
         }
 
+        @TestMetadata("escapedBackslash.java")
+        public void testEscapedBackslash() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/strings/escapedBackslash.java");
+            doTest(fileName);
+        }
+
         @TestMetadata("escapedDollar.java")
         public void testEscapedDollar() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/strings/escapedDollar.java");
@@ -4511,6 +4535,30 @@ public class JavaToKotlinConverterSingleFileTestGenerated extends AbstractJavaTo
         @TestMetadata("kt-539.java")
         public void testKt_539() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/switch/kt-539.java");
+            doTest(fileName);
+        }
+
+        @TestMetadata("nestedIf.java")
+        public void testNestedIf() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/switch/nestedIf.java");
+            doTest(fileName);
+        }
+
+        @TestMetadata("nestedIfFallback.java")
+        public void testNestedIfFallback() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/switch/nestedIfFallback.java");
+            doTest(fileName);
+        }
+
+        @TestMetadata("nestedSwitch.java")
+        public void testNestedSwitch() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/switch/nestedSwitch.java");
+            doTest(fileName);
+        }
+
+        @TestMetadata("nestedSwitchFallback.java")
+        public void testNestedSwitchFallback() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/switch/nestedSwitchFallback.java");
             doTest(fileName);
         }
 
@@ -5016,6 +5064,12 @@ public class JavaToKotlinConverterSingleFileTestGenerated extends AbstractJavaTo
     public static class WhileStatement extends AbstractJavaToKotlinConverterSingleFileTest {
         public void testAllFilesPresentInWhileStatement() throws Exception {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("j2k/testData/fileOrElement/whileStatement"), Pattern.compile("^(.+)\\.java$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("whileWithAssignmentAsExpression.java")
+        public void testWhileWithAssignmentAsExpression() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("j2k/testData/fileOrElement/whileStatement/whileWithAssignmentAsExpression.java");
+            doTest(fileName);
         }
 
         @TestMetadata("whileWithBlock.java")

@@ -16,30 +16,37 @@
 
 package org.jetbrains.kotlin.android.quickfix;
 
+import com.intellij.codeInsight.ImportFilter;
 import com.intellij.facet.FacetManager;
 import com.intellij.facet.ModifiableFacetModel;
+import com.intellij.facet.impl.FacetUtil;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.extensions.Extensions;
 import org.jetbrains.android.facet.AndroidFacet;
 import org.jetbrains.kotlin.idea.quickfix.AbstractQuickFixMultiFileTest;
+import org.jetbrains.kotlin.idea.test.KotlinTestImportFilter;
 
 public abstract class AbstractAndroidQuickFixMultiFileTest extends AbstractQuickFixMultiFileTest {
 
     @Override
-    protected void setUp() throws Exception {
+    protected void setUp() {
         super.setUp();
         addAndroidFacet();
+        Extensions.getRootArea().getExtensionPoint(ImportFilter.EP_NAME).registerExtension(KotlinTestImportFilter.INSTANCE);
+    }
+
+    @Override
+    protected void tearDown() {
+        Extensions.getRootArea().getExtensionPoint(ImportFilter.EP_NAME).unregisterExtension(KotlinTestImportFilter.INSTANCE);
+        AndroidFacet facet = FacetManager.getInstance(myModule).getFacetByType(AndroidFacet.getFacetType().getId());
+        FacetUtil.deleteFacet(facet);
+        super.tearDown();
     }
 
     @Override
     protected void doTestWithExtraFile(String beforeFileName) throws Exception {
         addManifest();
         super.doTestWithExtraFile(beforeFileName);
-    }
-
-    @Override
-    protected void doTestWithoutExtraFile(String beforeFileName) throws Exception {
-        addManifest();
-        super.doTestWithoutExtraFile(beforeFileName);
     }
 
     private void addAndroidFacet() {
@@ -57,6 +64,6 @@ public abstract class AbstractAndroidQuickFixMultiFileTest extends AbstractQuick
     }
 
     private void addManifest() throws Exception {
-        configureByFile("idea/testData/android/AndroidManifest.xml");
+        myFixture.configureByFile("idea/testData/android/AndroidManifest.xml");
     }
 }

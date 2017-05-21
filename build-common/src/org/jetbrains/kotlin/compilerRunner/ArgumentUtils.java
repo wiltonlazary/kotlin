@@ -16,16 +16,17 @@
 
 package org.jetbrains.kotlin.compilerRunner;
 
-import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.Function;
-import com.intellij.util.containers.ComparatorUtil;
-import com.sampullara.cli.Argument;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.cli.common.arguments.Argument;
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments;
+import org.jetbrains.kotlin.cli.common.arguments.ParseCommandLineArgumentsKt;
+import org.jetbrains.kotlin.utils.StringsKt;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 public class ArgumentUtils {
     private ArgumentUtils() {}
@@ -33,7 +34,7 @@ public class ArgumentUtils {
     @NotNull
     public static List<String> convertArgumentsToStringList(@NotNull CommonCompilerArguments arguments)
             throws InstantiationException, IllegalAccessException {
-        List<String> result = new ArrayList<String>();
+        List<String> result = new ArrayList<>();
         convertArgumentsToStringList(arguments, arguments.getClass().newInstance(), arguments.getClass(), result);
         result.addAll(arguments.freeArgs);
         return result;
@@ -60,42 +61,31 @@ public class ArgumentUtils {
                 continue;
             }
 
-            if (ComparatorUtil.equalsNullable(value, defaultValue)) continue;
-
-            String name = getAlias(argument);
-            if (name == null) {
-                name = getName(argument, field);
-            }
+            if (Objects.equals(value, defaultValue)) continue;
 
             Class<?> fieldType = field.getType();
 
             if (fieldType.isArray()) {
                 Object[] values = (Object[]) value;
                 if (values.length == 0) continue;
-                //noinspection unchecked
-                value = StringUtil.join(values, Function.TO_STRING, argument.delimiter());
+                value = StringsKt.join(Arrays.asList(values), ",");
             }
 
-            result.add(argument.prefix() + name);
+            result.add(argument.value());
 
             if (fieldType == boolean.class || fieldType == Boolean.class) continue;
 
-            result.add(value.toString());
+            if (ParseCommandLineArgumentsKt.isAdvanced(argument)) {
+                result.set(result.size() - 1, argument.value() + "=" + value.toString());
+            }
+            else {
+                result.add(value.toString());
+            }
         }
 
         Class<?> superClazz = clazz.getSuperclass();
         if (superClazz != null) {
             convertArgumentsToStringList(arguments, defaultArguments, superClazz, result);
         }
-    }
-
-    private static String getAlias(Argument argument) {
-        String alias = argument.alias();
-        return alias.isEmpty() ? null : alias;
-    }
-
-    private static String getName(Argument argument, Field field) {
-        String name = argument.value();
-        return name.isEmpty() ? field.getName() : name;
     }
 }

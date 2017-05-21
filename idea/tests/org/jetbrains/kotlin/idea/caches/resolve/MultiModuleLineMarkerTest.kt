@@ -20,39 +20,20 @@ import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.config.TargetPlatformKind
 
 class MultiModuleLineMarkerTest : AbstractMultiModuleLineMarkerTest() {
+
     fun testFromCommonToJvmHeader() {
-        val header = module("header")
-        header.setPlatformKind(TargetPlatformKind.Common)
-
-        val jvm = module("jvm")
-        jvm.setPlatformKind(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
-        jvm.enableMultiPlatform()
-        jvm.addDependency(header)
-
-        checkHighlightingInAllFiles()
+        doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
     }
 
     fun testFromCommonToJvmImpl() {
-        val header = module("header")
-        header.setPlatformKind(TargetPlatformKind.Common)
-
-        val jvm = module("jvm")
-        jvm.setPlatformKind(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
-        jvm.enableMultiPlatform()
-        jvm.addDependency(header)
-
-        checkHighlightingInAllFiles()
+        doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
     }
 
     fun testFromClassToAlias() {
-        val header = module("header")
-        header.setPlatformKind(TargetPlatformKind.Common)
+        doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
+    }
 
-        val jvm = module("jvm")
-        jvm.setPlatformKind(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
-        jvm.enableMultiPlatform()
-        jvm.addDependency(header)
-
-        checkHighlightingInAllFiles()
+    fun testWithOverloads() {
+        doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
     }
 }

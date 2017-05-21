@@ -23,6 +23,7 @@ import com.intellij.ui.LayeredIcon
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
 import org.jetbrains.kotlin.idea.KotlinDescriptorIconProvider
+import org.jetbrains.kotlin.idea.KotlinIcons
 import org.jetbrains.kotlin.idea.completion.tryGetOffset
 import org.jetbrains.kotlin.idea.core.ArgumentPositionData
 import org.jetbrains.kotlin.idea.core.ExpectedInfo
@@ -82,14 +83,14 @@ class MultipleArgumentsItemProvider(
 
     private fun createParametersLookupElement(variables: List<VariableDescriptor>, tail: Tail): LookupElement {
         val compoundIcon = LayeredIcon(2)
-        val firstIcon = KotlinDescriptorIconProvider.getIcon(variables.first(), null, 0)
-        val lastIcon = KotlinDescriptorIconProvider.getIcon(variables.last(), null, 0)
+        val firstIcon = KotlinDescriptorIconProvider.getIcon(variables.first(), null, 0) ?: KotlinIcons.PARAMETER
+        val lastIcon = KotlinDescriptorIconProvider.getIcon(variables.last(), null, 0) ?: KotlinIcons.PARAMETER
         compoundIcon.setIcon(lastIcon, 0, 2 * firstIcon.iconWidth / 5, 0)
         compoundIcon.setIcon(firstIcon, 1, 0, 0)
 
         return LookupElementBuilder
                 .create(variables.map { it.name.render() }.joinToString(", ")) //TODO: use code formatting settings
-                .withInsertHandler { context, lookupElement ->
+                .withInsertHandler { context, _ ->
                     if (context.completionChar == Lookup.REPLACE_SELECT_CHAR) {
                         val offset = context.offsetMap.tryGetOffset(SmartCompletion.MULTIPLE_ARGUMENTS_REPLACEMENT_OFFSET)
                         if (offset != null) {

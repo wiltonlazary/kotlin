@@ -16,16 +16,13 @@
 
 package org.jetbrains.kotlin.daemon.client
 
-import net.rubygrapefruit.platform.Native
-import net.rubygrapefruit.platform.ProcessLauncher
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.daemon.common.*
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCompilationComponents
 import org.jetbrains.kotlin.progress.CompilationCanceledStatus
-import org.jetbrains.kotlin.utils.addToStdlib.check
 import java.io.File
+import java.io.IOException
 import java.io.OutputStream
 import java.io.PrintStream
 import java.net.SocketException
@@ -35,7 +32,6 @@ import java.rmi.UnmarshalException
 import java.rmi.server.UnicastRemoteObject
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
-import kotlin.comparisons.compareByDescending
 import kotlin.concurrent.thread
 
 class CompilationServices(
@@ -43,6 +39,7 @@ class CompilationServices(
         val compilationCanceledStatus: CompilationCanceledStatus? = null
 )
 
+data class CompileServiceSession(val compileService: CompileService, val sessionId: Int)
 
 object KotlinCompilerClient {
 
@@ -51,6 +48,23 @@ object KotlinCompilerClient {
 
     val verboseReporting = System.getProperty(COMPILE_DAEMON_VERBOSE_REPORT_PROPERTY) != null
 
+    val java9RestrictionsWorkaroundOptions =
+            if (System.getProperty("java.specification.version") == "9") listOf(
+                    "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+                    "--add-opens", "java.base/java.util=ALL-UNNAMED",
+                    "--add-opens", "java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+                    "--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED"
+            )
+            else emptyList()
+
+    fun getOrCreateClientFlagFile(daemonOptions: DaemonOptions): File =
+            // for jps property is passed from IDEA to JPS in KotlinBuildProcessParametersProvider
+            System.getProperty(COMPILE_DAEMON_CLIENT_ALIVE_PATH_PROPERTY)
+                ?.let(String::trimQuotes)
+                ?.takeUnless(String::isBlank)
+                ?.let(::File)
+                ?.takeIf(File::exists)
+                ?: makeAutodeletingFlagFile(baseDir = File(daemonOptions.runFilesPathOrDefault))
 
     fun connectToCompileService(compilerId: CompilerId,
                                 daemonJVMOptions: DaemonJVMOptions,
@@ -59,12 +73,7 @@ object KotlinCompilerClient {
                                 autostart: Boolean = true,
                                 checkId: Boolean = true
     ): CompileService? {
-        val flagFile = System.getProperty(COMPILE_DAEMON_CLIENT_ALIVE_PATH_PROPERTY)
-                     ?.let(String::trimQuotes)
-                     ?.check { !it.isBlank() }
-                     ?.let(::File)
-                     ?.check(File::exists)
-                     ?: makeAutodeletingFlagFile(baseDir = File(daemonOptions.runFilesPathOrDefault))
+        val flagFile = getOrCreateClientFlagFile(daemonOptions)
         return connectToCompileService(compilerId, flagFile, daemonJVMOptions, daemonOptions, reportingTargets, autostart)
     }
 
@@ -82,7 +91,7 @@ object KotlinCompilerClient {
                             reportingTargets,
                             autostart,
                             leaseSession = false,
-                            sessionAliveFlagFile = null)?.first
+                            sessionAliveFlagFile = null)?.compileService
 
 
     fun connectAndLease(compilerId: CompilerId,
@@ -93,19 +102,20 @@ object KotlinCompilerClient {
                         autostart: Boolean,
                         leaseSession: Boolean,
                         sessionAliveFlagFile: File? = null
-    ): Pair<CompileService, Int>? = connectLoop(reportingTargets) {
+    ): CompileServiceSession? = connectLoop(reportingTargets) {
+        ensureServerHostnameIsSetUp()
         val (service, newJVMOptions) = tryFindSuitableDaemonOrNewOpts(File(daemonOptions.runFilesPath), compilerId, daemonJVMOptions, { cat, msg -> reportingTargets.report(cat, msg) })
         if (service != null) {
             // the newJVMOptions could be checked here for additional parameters, if needed
             service.registerClient(clientAliveFlagFile.absolutePath)
             reportingTargets.report(DaemonReportCategory.DEBUG, "connected to the daemon")
-            if (!leaseSession) service to CompileService.NO_SESSION
+            if (!leaseSession) CompileServiceSession(service, CompileService.NO_SESSION)
             else {
                 val sessionId = service.leaseCompileSession(sessionAliveFlagFile?.absolutePath)
                 if (sessionId is CompileService.CallResult.Dying)
                     null
                 else
-                    service to sessionId.get()
+                    CompileServiceSession(service, sessionId.get())
             }
         } else {
             reportingTargets.report(DaemonReportCategory.DEBUG, "no suitable daemon found")
@@ -211,7 +221,7 @@ object KotlinCompilerClient {
             val unrecognized = it.trimQuotes().split(",").filterExtractProps(opts.mappers, "")
             if (unrecognized.any())
                 throw IllegalArgumentException(
-                        "Unrecognized client options passed via property ${COMPILE_DAEMON_OPTIONS_PROPERTY}: " + unrecognized.joinToString(" ") +
+                        "Unrecognized client options passed via property $COMPILE_DAEMON_OPTIONS_PROPERTY: " + unrecognized.joinToString(" ") +
                         "\nSupported options: " + opts.mappers.joinToString(", ", transform = { it.names.first() }))
         }
         return opts
@@ -331,17 +341,17 @@ object KotlinCompilerClient {
         messages?.add(DaemonReportMessage(category, "[$source] $message"))
         messageCollector?.let {
             when (category) {
-                DaemonReportCategory.DEBUG -> it.report(CompilerMessageSeverity.LOGGING, message, CompilerMessageLocation.NO_LOCATION)
-                DaemonReportCategory.INFO -> it.report(CompilerMessageSeverity.INFO, message, CompilerMessageLocation.NO_LOCATION)
-                DaemonReportCategory.EXCEPTION -> it.report(CompilerMessageSeverity.EXCEPTION, message, CompilerMessageLocation.NO_LOCATION)
+                DaemonReportCategory.DEBUG -> it.report(CompilerMessageSeverity.LOGGING, message)
+                DaemonReportCategory.INFO -> it.report(CompilerMessageSeverity.INFO, message)
+                DaemonReportCategory.EXCEPTION -> it.report(CompilerMessageSeverity.EXCEPTION, message)
             }
         }
         compilerServices?.let {
-                when (category) {
-                    DaemonReportCategory.DEBUG -> it.report(ReportCategory.DAEMON_MESSAGE, ReportSeverity.DEBUG, message, source)
-                    DaemonReportCategory.INFO -> it.report(ReportCategory.DAEMON_MESSAGE, ReportSeverity.INFO, message, source)
-                    DaemonReportCategory.EXCEPTION -> it.report(ReportCategory.EXCEPTION, ReportSeverity.ERROR, message, source)
-                }
+            when (category) {
+                DaemonReportCategory.DEBUG -> it.report(ReportCategory.DAEMON_MESSAGE, ReportSeverity.DEBUG, message, source)
+                DaemonReportCategory.INFO -> it.report(ReportCategory.DAEMON_MESSAGE, ReportSeverity.INFO, message, source)
+                DaemonReportCategory.EXCEPTION -> it.report(ReportCategory.EXCEPTION, ReportSeverity.ERROR, message, source)
+            }
         }
     }
 
@@ -368,15 +378,16 @@ object KotlinCompilerClient {
 
     private fun startDaemon(compilerId: CompilerId, daemonJVMOptions: DaemonJVMOptions, daemonOptions: DaemonOptions, reportingTargets: DaemonReportingTargets) {
         val javaExecutable = File(File(System.getProperty("java.home"), "bin"), "java")
+        val serverHostname = System.getProperty(JAVA_RMI_SERVER_HOSTNAME) ?: error("$JAVA_RMI_SERVER_HOSTNAME is not set!")
         val platformSpecificOptions = listOf(
                 // hide daemon window
                 "-Djava.awt.headless=true",
-                // prevent host name resolution
-                "-Djava.rmi.server.hostname=${LoopbackNetworkInterface.loopbackInetAddressName}")
+                "-D$JAVA_RMI_SERVER_HOSTNAME=$serverHostname")
         val args = listOf(
                    javaExecutable.absolutePath, "-cp", compilerId.compilerClasspath.joinToString(File.pathSeparator)) +
                    platformSpecificOptions +
                    daemonJVMOptions.mappers.flatMap { it.toArgs("-") } +
+                   java9RestrictionsWorkaroundOptions +
                    COMPILER_DAEMON_CLASS_FQN +
                    daemonOptions.mappers.flatMap { it.toArgs(COMPILE_DAEMON_CMDLINE_OPTIONS_PREFIX) } +
                    compilerId.mappers.flatMap { it.toArgs(COMPILE_DAEMON_CMDLINE_OPTIONS_PREFIX) }
@@ -384,8 +395,19 @@ object KotlinCompilerClient {
         val processBuilder = ProcessBuilder(args)
         processBuilder.redirectErrorStream(true)
         // assuming daemon process is deaf and (mostly) silent, so do not handle streams
-        val daemonLauncher = Native.get(ProcessLauncher::class.java)
-        val daemon = daemonLauncher.start(processBuilder)
+        val daemon =
+                try {
+                    launchWithNativePlatformLauncher(processBuilder)
+                }
+                catch (e: IOException) {
+                    reportingTargets.report(DaemonReportCategory.DEBUG, "Could not start daemon with native process launcher, falling back to ProcessBuilder#start (${e.cause})")
+                    null
+                }
+                catch (e: NoClassDefFoundError) {
+                    reportingTargets.report(DaemonReportCategory.DEBUG, "net.rubygrapefruit.platform library is not in the classpath, falling back to ProcessBuilder#start")
+                    null
+                }
+                ?: processBuilder.start()
 
         val isEchoRead = Semaphore(1)
         isEchoRead.acquire()
@@ -396,11 +418,13 @@ object KotlinCompilerClient {
                         daemon.inputStream
                                 .reader()
                                 .forEachLine {
+                                    reportingTargets.report(DaemonReportCategory.DEBUG, it, "daemon")
+
                                     if (it == COMPILE_DAEMON_IS_READY_MESSAGE) {
+                                        reportingTargets.report(DaemonReportCategory.DEBUG, "Received the message signalling that the daemon is ready")
                                         isEchoRead.release()
                                         return@forEachLine
                                     }
-                                    reportingTargets.report(DaemonReportCategory.DEBUG, it, "daemon")
                                 }
                     }
                     finally {
@@ -423,7 +447,7 @@ object KotlinCompilerClient {
             if (daemonOptions.runFilesPath.isNotEmpty()) {
                 val succeeded = isEchoRead.tryAcquire(daemonStartupTimeout, TimeUnit.MILLISECONDS)
                 if (!isProcessAlive(daemon))
-                    throw Exception("Daemon terminated unexpectedly")
+                    throw Exception("Daemon terminated unexpectedly with error code: ${daemon.exitValue()}")
                 if (!succeeded)
                     throw Exception("Unable to get response from daemon in $daemonStartupTimeout ms")
             }
@@ -437,6 +461,7 @@ object KotlinCompilerClient {
                 // TODO: find better method to stop the thread, but seems it will require asynchronous consuming of the stream
                 stdoutThread.stop()
             }
+            reportingTargets.out?.flush()
         }
     }
 }

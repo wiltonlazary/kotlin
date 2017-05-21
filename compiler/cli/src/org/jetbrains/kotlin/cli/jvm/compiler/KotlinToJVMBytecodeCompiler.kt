@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,10 @@ import org.jetbrains.kotlin.backend.common.output.SimpleOutputFileCollection
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.checkKotlinPackageUsage
-import org.jetbrains.kotlin.cli.common.messages.*
+import org.jetbrains.kotlin.cli.common.messages.AnalyzerWithCompilerReport
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.*
+import org.jetbrains.kotlin.cli.common.messages.MessageCollector
+import org.jetbrains.kotlin.cli.common.messages.OutputMessageUtil
 import org.jetbrains.kotlin.cli.common.output.outputUtils.writeAll
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
 import org.jetbrains.kotlin.cli.jvm.config.*
@@ -42,11 +45,13 @@ import org.jetbrains.kotlin.codegen.GeneratedClassLoader
 import org.jetbrains.kotlin.codegen.KotlinCodegenFacade
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.codegen.state.GenerationStateEventCallback
+import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.config.addKotlinSourceRoots
 import org.jetbrains.kotlin.fileClasses.JvmFileClassUtil
 import org.jetbrains.kotlin.idea.MainFunctionDetector
+import org.jetbrains.kotlin.javac.JavacWrapper
 import org.jetbrains.kotlin.load.kotlin.ModuleVisibilityManager
 import org.jetbrains.kotlin.modules.Module
 import org.jetbrains.kotlin.modules.TargetId
@@ -58,7 +63,7 @@ import org.jetbrains.kotlin.util.PerformanceCounter
 import org.jetbrains.kotlin.utils.KotlinPaths
 import org.jetbrains.kotlin.utils.PathUtil
 import org.jetbrains.kotlin.utils.newLinkedHashMapWithExpectedSize
-import org.jetbrains.kotlin.utils.tryConstructClassFromStringArgs
+import org.jetbrains.kotlin.script.tryConstructClassFromStringArgs
 import java.io.File
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
@@ -83,18 +88,21 @@ object KotlinToJVMBytecodeCompiler {
             outputFiles: OutputFileCollection,
             mainClass: FqName?
     ) {
+        val reportOutputFiles = configuration.getBoolean(CommonConfigurationKeys.REPORT_OUTPUT_FILES)
         val jarPath = configuration.get(JVMConfigurationKeys.OUTPUT_JAR)
         val messageCollector = configuration.get(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)
         if (jarPath != null) {
             val includeRuntime = configuration.get(JVMConfigurationKeys.INCLUDE_RUNTIME, false)
             CompileEnvironmentUtil.writeToJar(jarPath, includeRuntime, mainClass, outputFiles)
-            messageCollector.report(CompilerMessageSeverity.OUTPUT,
-                                    OutputMessageUtil.formatOutputMessage(outputFiles.asList().flatMap { it.sourceFiles }.distinct(), jarPath), CompilerMessageLocation.NO_LOCATION)
+            if (reportOutputFiles) {
+                val message = OutputMessageUtil.formatOutputMessage(outputFiles.asList().flatMap { it.sourceFiles }.distinct(), jarPath)
+                messageCollector.report(OUTPUT, message)
+            }
             return
         }
 
         val outputDir = configuration.get(JVMConfigurationKeys.OUTPUT_DIRECTORY) ?: File(".")
-        outputFiles.writeAll(outputDir, messageCollector)
+        outputFiles.writeAll(outputDir, messageCollector, reportOutputFiles)
     }
 
     private fun createOutputFilesFlushingCallbackIfPossible(configuration: CompilerConfiguration): GenerationStateEventCallback {
@@ -156,6 +164,22 @@ object KotlinToJVMBytecodeCompiler {
                 ProgressIndicatorAndCompilationCanceledStatus.checkCanceled()
                 writeOutput(state.configuration, state.factory, null)
             }
+
+            if (projectConfiguration.getBoolean(JVMConfigurationKeys.USE_JAVAC)) {
+                val singleModule = chunk.singleOrNull()
+                if (singleModule != null) {
+                    return JavacWrapper.getInstance(environment.project).use {
+                        it.compile(File(singleModule.getOutputDirectory()))
+                    }
+                }
+                else {
+                    projectConfiguration.getNotNull(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY).let {
+                        it.report(WARNING, "A chunk contains multiple modules (${chunk.joinToString { it.getModuleName() }}). -Xuse-javac option couldn't be used to compile java files")
+                    }
+                    JavacWrapper.getInstance(environment.project).close()
+                }
+            }
+
             return true
         }
         finally {
@@ -338,7 +362,7 @@ object KotlinToJVMBytecodeCompiler {
             override fun analyze(): AnalysisResult {
                 val project = environment.project
                 val moduleOutputs = environment.configuration.get(JVMConfigurationKeys.MODULES)?.mapNotNull { module ->
-                    environment.findLocalDirectory(module.getOutputDirectory())
+                    environment.findLocalFile(module.getOutputDirectory())
                 }.orEmpty()
                 val sourcesOnly = TopDownAnalyzerFacadeForJVM.newModuleSearchScope(project, environment.getSourceFiles())
                 // To support partial and incremental compilation, we add the scope which contains binaries from output directories
@@ -466,9 +490,7 @@ object KotlinToJVMBytecodeCompiler {
         }
 
         if (runtimeVersions.toSet().size > 1) {
-            messageCollector.report(CompilerMessageSeverity.ERROR,
-                                    "Conflicting versions of Kotlin runtime on classpath: " + runtimes.joinToString { it.path },
-                                    CompilerMessageLocation.NO_LOCATION)
+            messageCollector.report(ERROR, "Conflicting versions of Kotlin runtime on classpath: " + runtimes.joinToString { it.path })
         }
     }
 }

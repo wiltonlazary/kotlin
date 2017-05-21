@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.annotation.plugin.ide
 
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
 import org.jetbrains.kotlin.idea.facet.KotlinFacet
+import java.io.File
 
 internal class AnnotationBasedCompilerPluginSetup(val annotationFqNames: List<String>, val classpath: List<String>)
 
@@ -28,10 +29,10 @@ internal fun modifyCompilerArgumentsForPlugin(
         pluginName: String,
         annotationOptionName: String
 ) {
-    val compileInfo = facet.configuration.settings.compilerInfo
+    val facetSettings = facet.configuration.settings
 
     // investigate why copyBean() sometimes throws exceptions
-    val commonArguments = compileInfo.commonCompilerArguments ?: CommonCompilerArguments.DummyImpl()
+    val commonArguments = facetSettings.compilerArguments ?: CommonCompilerArguments.DummyImpl()
 
     /** See [CommonCompilerArguments.PLUGIN_OPTION_FORMAT] **/
     val annotationOptions = setup?.annotationFqNames?.map { "plugin:$compilerPluginId:$annotationOptionName=$it" } ?: emptyList()
@@ -40,7 +41,11 @@ internal fun modifyCompilerArgumentsForPlugin(
     val newPluginOptions = oldPluginOptions + annotationOptions
 
     val oldPluginClasspaths = (commonArguments.pluginClasspaths ?: emptyArray()).filterTo(mutableListOf()) {
-        !it.substringAfterLast('/', missingDelimiterValue = "").matches("(kotlin-)?(maven-)?$pluginName-.*\\.jar".toRegex())
+        val lastIndexOfFile = it.lastIndexOfAny(charArrayOf('/', File.separatorChar))
+        if (lastIndexOfFile < 0) {
+            return@filterTo true
+        }
+        !it.drop(lastIndexOfFile + 1).matches("(kotlin-)?(maven-)?$pluginName-.*\\.jar".toRegex())
     }
 
     val newPluginClasspaths = oldPluginClasspaths + (setup?.classpath ?: emptyList())
@@ -48,5 +53,5 @@ internal fun modifyCompilerArgumentsForPlugin(
     commonArguments.pluginOptions = newPluginOptions.toTypedArray()
     commonArguments.pluginClasspaths = newPluginClasspaths.toTypedArray()
 
-    compileInfo.commonCompilerArguments = commonArguments
+    facetSettings.compilerArguments = commonArguments
 }

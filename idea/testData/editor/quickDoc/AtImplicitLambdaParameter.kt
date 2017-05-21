@@ -1,6 +1,6 @@
 fun foo() {
     listOf(1).forEach {
-        println(it<caret>)
+        println(i<caret>t)
     }
 }
 

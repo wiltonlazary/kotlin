@@ -39,6 +39,9 @@ public class JVMConfigurationKeys {
     public static final CompilerConfigurationKey<Boolean> INCLUDE_RUNTIME =
             CompilerConfigurationKey.create("include runtime to the resulting .jar");
 
+    public static final CompilerConfigurationKey<File> JDK_HOME =
+            CompilerConfigurationKey.create("jdk home");
+
     public static final CompilerConfigurationKey<List<KotlinScriptDefinition>> SCRIPT_DEFINITIONS =
             CompilerConfigurationKey.create("script definitions");
 
@@ -107,4 +110,11 @@ public class JVMConfigurationKeys {
 
     public static final CompilerConfigurationKey<Boolean> IR =
             CompilerConfigurationKey.create("IR");
+
+    public static final CompilerConfigurationKey<Boolean> USE_FAST_CLASS_FILES_READING =
+            CompilerConfigurationKey.create("use fast class files reading implementation [experimental]");
+
+    public static final CompilerConfigurationKey<Boolean> USE_JAVAC =
+            CompilerConfigurationKey.create("use javac");
+
 }

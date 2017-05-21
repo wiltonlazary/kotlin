@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,10 +23,8 @@ import org.jetbrains.kotlin.platform.JavaToKotlinClassMap
 import org.jetbrains.kotlin.resolve.PlatformConfigurator
 import org.jetbrains.kotlin.resolve.calls.checkers.ReifiedTypeParameterSubstitutionChecker
 import org.jetbrains.kotlin.resolve.checkers.HeaderImplDeclarationChecker
-import org.jetbrains.kotlin.resolve.checkers.MissingDependencyClassChecker
 import org.jetbrains.kotlin.resolve.jvm.*
 import org.jetbrains.kotlin.resolve.jvm.checkers.*
-import org.jetbrains.kotlin.synthetic.JavaSyntheticConstructorsProvider
 import org.jetbrains.kotlin.synthetic.JavaSyntheticScopes
 import org.jetbrains.kotlin.types.DynamicTypesSettings
 
@@ -44,12 +42,11 @@ object JvmPlatformConfigurator : PlatformConfigurator(
                 TypeParameterBoundIsNotArrayChecker(),
                 JvmSyntheticApplicabilityChecker(),
                 StrictfpApplicabilityChecker(),
-                HeaderImplDeclarationChecker()
+                HeaderImplDeclarationChecker
         ),
 
         additionalCallCheckers = listOf(
                 JavaAnnotationCallChecker(),
-                InterfaceDefaultMethodCallChecker(),
                 JavaClassOnCompanionChecker(),
                 ProtectedInSuperClassCompanionCallChecker(),
                 UnsupportedSyntheticCallableReferenceChecker(),
@@ -77,7 +74,7 @@ object JvmPlatformConfigurator : PlatformConfigurator(
 
         overloadFilter = JvmOverloadFilter,
 
-        platformToKotlinClassMap = JavaToKotlinClassMap.INSTANCE,
+        platformToKotlinClassMap = JavaToKotlinClassMap,
 
         delegationFilter = JvmDelegationFilter,
 
@@ -86,7 +83,8 @@ object JvmPlatformConfigurator : PlatformConfigurator(
     override fun configureModuleComponents(container: StorageComponentContainer) {
         container.useImpl<JvmReflectionAPICallChecker>()
         container.useImpl<JavaSyntheticScopes>()
-        container.useInstance(JavaSyntheticConstructorsProvider)
+        container.useImpl<InterfaceDefaultMethodCallChecker>()
+        container.useImpl<InlinePlatformCompatibilityChecker>()
         container.useInstance(JvmTypeSpecificityComparator)
     }
 }

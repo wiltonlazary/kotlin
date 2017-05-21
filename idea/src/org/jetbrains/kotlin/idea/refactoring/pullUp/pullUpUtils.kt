@@ -36,6 +36,7 @@ import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.types.TypeSubstitutor
 import org.jetbrains.kotlin.types.Variance
+import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.isUnit
 
 fun KtProperty.mustBeAbstractInInterface() =
@@ -68,7 +69,7 @@ fun addMemberToTarget(targetMember: KtNamedDeclaration, targetClass: KtClassOrOb
         return parameterList.addParameterBefore(targetMember, anchor)
     }
 
-    val anchor = targetClass.declarations.filterIsInstance(targetMember.javaClass).lastOrNull()
+    val anchor = targetClass.declarations.filterIsInstance(targetMember::class.java).lastOrNull()
     val movedMember = when {
         anchor == null && targetMember is KtProperty -> targetClass.addDeclarationBefore(targetMember, null)
         else -> targetClass.addDeclarationAfter(targetMember, anchor)
@@ -113,7 +114,7 @@ fun KtClassOrObject.getSuperTypeEntryByDescriptor(
         descriptor: ClassDescriptor,
         context: BindingContext
 ): KtSuperTypeListEntry? {
-    return getSuperTypeListEntries().firstOrNull {
+    return superTypeListEntries.firstOrNull {
         val referencedType = context[BindingContext.TYPE, it.typeReference]
         referencedType?.constructor?.declarationDescriptor == descriptor
     }

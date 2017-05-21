@@ -53,10 +53,10 @@ import org.jetbrains.kotlin.idea.refactoring.changeSignature.*
 import org.jetbrains.kotlin.idea.refactoring.changeSignature.KotlinMethodDescriptor.Kind
 import org.jetbrains.kotlin.idea.refactoring.validateElement
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.parents
 import org.jetbrains.kotlin.psi.psiUtil.parentsWithSelf
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.types.isError
 import java.awt.BorderLayout
 import java.awt.Font
 import java.awt.Toolkit
@@ -163,7 +163,7 @@ class KotlinChangeSignatureDialog(
     override fun getTableEditor(table: JTable, item: ParameterTableModelItemBase<KotlinParameterInfo>): JBTableRowEditor? {
         return object : JBTableRowEditor() {
             private val components = ArrayList<JComponent>()
-            private val nameEditor = EditorTextField(item.parameter.name, getProject(), getFileType())
+            private val nameEditor = EditorTextField(item.parameter.name, project, fileType)
 
             private fun updateNameEditor() {
                 nameEditor.isEnabled = item.parameter != parametersTableModel.receiver
@@ -183,8 +183,8 @@ class KotlinChangeSignatureDialog(
                     val columnFinal = column
 
                     if (KotlinCallableParameterTableModel.isTypeColumn(columnInfo)) {
-                        val document = PsiDocumentManager.getInstance(getProject()).getDocument(item.typeCodeFragment)
-                        editor = EditorTextField(document, getProject(), getFileType())
+                        val document = PsiDocumentManager.getInstance(project).getDocument(item.typeCodeFragment)
+                        editor = EditorTextField(document, project, fileType)
                         component = editor
                     }
                     else if (KotlinCallableParameterTableModel.isNameColumn(columnInfo)) {
@@ -193,8 +193,8 @@ class KotlinChangeSignatureDialog(
                         updateNameEditor()
                     }
                     else if (KotlinCallableParameterTableModel.isDefaultValueColumn(columnInfo) && isDefaultColumnEnabled()) {
-                        val document = PsiDocumentManager.getInstance(getProject()).getDocument(item.defaultValueCodeFragment)
-                        editor = EditorTextField(document, getProject(), getFileType())
+                        val document = PsiDocumentManager.getInstance(project).getDocument(item.defaultValueCodeFragment)
+                        editor = EditorTextField(document, project, fileType)
                         component = editor
                     }
                     else if (KotlinPrimaryConstructorParameterTableModel.isValVarColumn(columnInfo)) {
@@ -407,7 +407,7 @@ class KotlinChangeSignatureDialog(
             }
         }
 
-        private fun getTypeCodeFragmentContext(startFrom: PsiElement): KtElement {
+        fun getTypeCodeFragmentContext(startFrom: PsiElement): KtElement {
             return startFrom.parentsWithSelf.mapNotNull {
                 when {
                     it is KtNamedFunction -> it.bodyExpression ?: it.valueParameterList
@@ -440,13 +440,13 @@ class KotlinChangeSignatureDialog(
             return KotlinChangeSignatureProcessor(project, changeInfo, commandName)
         }
 
-        private fun PsiCodeFragment?.getTypeInfo(isCovariant: Boolean, forPreview: Boolean): KotlinTypeInfo {
+        fun PsiCodeFragment?.getTypeInfo(isCovariant: Boolean, forPreview: Boolean): KotlinTypeInfo {
             if (this !is KtTypeCodeFragment) return KotlinTypeInfo(isCovariant)
 
             val typeRef = getContentElement()
             val type = typeRef?.analyze(BodyResolveMode.PARTIAL)?.get(BindingContext.TYPE, typeRef)
             return when {
-                type != null && !type.isError -> KotlinTypeInfo(isCovariant, type, if (forPreview) typeRef?.text else null)
+                type != null && !type.isError -> KotlinTypeInfo(isCovariant, type, if (forPreview) typeRef.text else null)
                 typeRef != null -> KotlinTypeInfo(isCovariant, null, typeRef.text)
                 else -> KotlinTypeInfo(isCovariant)
             }

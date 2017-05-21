@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,13 @@
 
 package org.jetbrains.kotlin.resolve.calls.tower
 
-import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.CallableDescriptor
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.DeclarationDescriptorWithVisibility
 import org.jetbrains.kotlin.incremental.components.LookupLocation
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
-import org.jetbrains.kotlin.resolve.scopes.SyntheticConstructorsProvider
 import org.jetbrains.kotlin.resolve.scopes.SyntheticScopes
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValueWithSmartCastInfo
 import org.jetbrains.kotlin.types.KotlinType
@@ -35,29 +36,27 @@ interface ImplicitScopeTower {
 
     val syntheticScopes: SyntheticScopes
 
-    val syntheticConstructorsProvider: SyntheticConstructorsProvider
-
     val location: LookupLocation
 
     val isDebuggerContext: Boolean
 }
 
 interface ScopeTowerLevel {
-    fun getVariables(name: Name, extensionReceiver: ReceiverValueWithSmartCastInfo?): Collection<CandidateWithBoundDispatchReceiver<VariableDescriptor>>
+    fun getVariables(name: Name, extensionReceiver: ReceiverValueWithSmartCastInfo?): Collection<CandidateWithBoundDispatchReceiver>
 
-    fun getObjects(name: Name, extensionReceiver: ReceiverValueWithSmartCastInfo?): Collection<CandidateWithBoundDispatchReceiver<VariableDescriptor>>
+    fun getObjects(name: Name, extensionReceiver: ReceiverValueWithSmartCastInfo?): Collection<CandidateWithBoundDispatchReceiver>
 
-    fun getFunctions(name: Name, extensionReceiver: ReceiverValueWithSmartCastInfo?): Collection<CandidateWithBoundDispatchReceiver<FunctionDescriptor>>
+    fun getFunctions(name: Name, extensionReceiver: ReceiverValueWithSmartCastInfo?): Collection<CandidateWithBoundDispatchReceiver>
 }
 
-interface CandidateWithBoundDispatchReceiver<out D : CallableDescriptor> {
-    val descriptor: D
+interface CandidateWithBoundDispatchReceiver {
+    val descriptor: CallableDescriptor
 
     val diagnostics: List<ResolutionDiagnostic>
 
     val dispatchReceiver: ReceiverValueWithSmartCastInfo?
 
-    fun copy(newDescriptor: @UnsafeVariance D): CandidateWithBoundDispatchReceiver<D>
+    fun copy(newDescriptor: CallableDescriptor): CandidateWithBoundDispatchReceiver
 }
 
 data class ResolutionCandidateStatus(val diagnostics: List<ResolutionDiagnostic>) {

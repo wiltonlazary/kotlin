@@ -45,7 +45,7 @@ public class SingleAbstractMethodUtils {
 
     @NotNull
     public static List<CallableMemberDescriptor> getAbstractMembers(@NotNull KotlinType type) {
-        List<CallableMemberDescriptor> abstractMembers = new ArrayList<CallableMemberDescriptor>();
+        List<CallableMemberDescriptor> abstractMembers = new ArrayList<>();
         for (DeclarationDescriptor member : DescriptorUtils.getAllDescriptors(type.getMemberScope())) {
             if (member instanceof CallableMemberDescriptor && ((CallableMemberDescriptor) member).getModality() == Modality.ABSTRACT) {
                 abstractMembers.add((CallableMemberDescriptor) member);
@@ -104,8 +104,8 @@ public class SingleAbstractMethodUtils {
         KotlinType returnType = function.getReturnType();
         assert returnType != null : "function is not initialized: " + function;
         List<ValueParameterDescriptor> valueParameters = function.getValueParameters();
-        List<KotlinType> parameterTypes = new ArrayList<KotlinType>(valueParameters.size());
-        List<Name> parameterNames = new ArrayList<Name>(valueParameters.size());
+        List<KotlinType> parameterTypes = new ArrayList<>(valueParameters.size());
+        List<Name> parameterNames = new ArrayList<>(valueParameters.size());
 
         int startIndex = 0;
         KotlinType receiverType = null;
@@ -128,10 +128,8 @@ public class SingleAbstractMethodUtils {
     }
 
     @Nullable
-    public static FunctionDescriptor getSingleAbstractMethodOrNull(@NotNull ClassDescriptor klass) {
-        if (klass.getKind() != ClassKind.INTERFACE) {
-            return null;
-        }
+    public static FunctionDescriptor getSingleAbstractMethodOrNull(@NotNull JavaClassDescriptor klass) {
+        if (klass.isDefinitelyNotSamInterface()) return null;
 
         if (DescriptorUtilsKt.getFqNameSafe(klass).asString().equals("android.databinding.DataBindingComponent")) {
             return null;
@@ -229,8 +227,8 @@ public class SingleAbstractMethodUtils {
     }
 
     @NotNull
-    public static SamAdapterDescriptor<JavaMethodDescriptor> createSamAdapterFunction(@NotNull final JavaMethodDescriptor original) {
-        final SamAdapterFunctionDescriptor result = new SamAdapterFunctionDescriptor(original);
+    public static SamAdapterDescriptor<JavaMethodDescriptor> createSamAdapterFunction(@NotNull JavaMethodDescriptor original) {
+        SamAdapterFunctionDescriptor result = new SamAdapterFunctionDescriptor(original);
         return initSamAdapter(original, result, new FunctionInitializer() {
             @Override
             public void initialize(
@@ -252,8 +250,8 @@ public class SingleAbstractMethodUtils {
     }
 
     @NotNull
-    public static SamAdapterDescriptor<JavaClassConstructorDescriptor> createSamAdapterConstructor(@NotNull final JavaClassConstructorDescriptor original) {
-        final SamAdapterClassConstructorDescriptor result = new SamAdapterClassConstructorDescriptor(original);
+    public static SamAdapterDescriptor<JavaClassConstructorDescriptor> createSamAdapterConstructor(@NotNull JavaClassConstructorDescriptor original) {
+        SamAdapterClassConstructorDescriptor result = new SamAdapterClassConstructorDescriptor(original);
         return initSamAdapter(original, result, new FunctionInitializer() {
             @Override
             public void initialize(
@@ -297,7 +295,7 @@ public class SingleAbstractMethodUtils {
             @NotNull TypeSubstitutor substitutor
     ) {
         List<ValueParameterDescriptor> originalValueParameters = original.getValueParameters();
-        List<ValueParameterDescriptor> valueParameters = new ArrayList<ValueParameterDescriptor>(originalValueParameters.size());
+        List<ValueParameterDescriptor> valueParameters = new ArrayList<>(originalValueParameters.size());
         for (ValueParameterDescriptor originalParam : originalValueParameters) {
             KotlinType originalType = originalParam.getType();
             KotlinType functionType = getFunctionTypeForSamType(originalType);
@@ -343,7 +341,7 @@ public class SingleAbstractMethodUtils {
             funTypeParameter.setInitialized();
         }
 
-        List<TypeParameterDescriptor> typeParameters = new ArrayList<TypeParameterDescriptor>(traitToFunTypeParameters.values());
+        List<TypeParameterDescriptor> typeParameters = new ArrayList<>(traitToFunTypeParameters.values());
         return new TypeParameters(typeParameters, typeParametersSubstitutor);
     }
 

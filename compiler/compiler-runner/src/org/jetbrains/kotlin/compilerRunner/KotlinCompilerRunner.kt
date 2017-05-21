@@ -18,18 +18,14 @@ package org.jetbrains.kotlin.compilerRunner
 
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.ERROR
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.messages.MessageCollectorUtil
-import org.jetbrains.kotlin.daemon.client.CompilationServices
+import org.jetbrains.kotlin.daemon.client.CompileServiceSession
 import org.jetbrains.kotlin.daemon.client.DaemonReportMessage
 import org.jetbrains.kotlin.daemon.client.DaemonReportingTargets
 import org.jetbrains.kotlin.daemon.client.KotlinCompilerClient
 import org.jetbrains.kotlin.daemon.common.*
-import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCompilationComponents
-import org.jetbrains.kotlin.progress.CompilationCanceledStatus
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -42,6 +38,8 @@ interface KotlinLogger {
     fun warn(msg: String)
     fun info(msg: String)
     fun debug(msg: String)
+
+    val isDebugEnabled: Boolean
 }
 
 abstract class KotlinCompilerRunner<in Env : CompilerEnvironment> {
@@ -52,36 +50,50 @@ abstract class KotlinCompilerRunner<in Env : CompilerEnvironment> {
 
     protected abstract val log: KotlinLogger
 
-    class DaemonConnection(val daemon: CompileService?, val sessionId: Int = CompileService.NO_SESSION)
-
-    protected abstract fun getDaemonConnection(environment: Env): DaemonConnection
+    protected abstract fun getDaemonConnection(environment: Env): CompileServiceSession?
 
     @Synchronized
-    protected fun newDaemonConnection(compilerId: CompilerId, flagFile: File, environment: Env, daemonOptions: DaemonOptions = configureDaemonOptions()): DaemonConnection {
+    protected fun newDaemonConnection(
+            compilerId: CompilerId,
+            clientAliveFlagFile: File,
+            sessionAliveFlagFile: File,
+            environment: Env,
+            daemonOptions: DaemonOptions = configureDaemonOptions()
+    ): CompileServiceSession? {
         val daemonJVMOptions = configureDaemonJVMOptions(inheritMemoryLimits = true, inheritAdditionalProperties = true)
 
         val daemonReportMessages = ArrayList<DaemonReportMessage>()
+        val daemonReportingTargets = DaemonReportingTargets(messages = daemonReportMessages)
 
         val profiler = if (daemonOptions.reportPerf) WallAndThreadAndMemoryTotalProfiler(withGC = false) else DummyProfiler()
 
         val connection = profiler.withMeasure(null) {
-            val daemon = KotlinCompilerClient.connectToCompileService(compilerId, daemonJVMOptions, daemonOptions, DaemonReportingTargets(null, daemonReportMessages), true, true)
-            DaemonConnection(daemon, daemon?.leaseCompileSession(flagFile.absolutePath)?.get() ?: CompileService.NO_SESSION)
+            KotlinCompilerClient.connectAndLease(compilerId,
+                                                 clientAliveFlagFile,
+                                                 daemonJVMOptions,
+                                                 daemonOptions,
+                                                 daemonReportingTargets,
+                                                 autostart = true,
+                                                 leaseSession = true,
+                                                 sessionAliveFlagFile = sessionAliveFlagFile)
         }
 
-        for (msg in daemonReportMessages) {
-            environment.messageCollector.report(CompilerMessageSeverity.INFO,
-                                    (if (msg.category == DaemonReportCategory.EXCEPTION && connection.daemon == null) "Falling  back to compilation without daemon due to error: " else "") + msg.message,
-                                                CompilerMessageLocation.NO_LOCATION)
+        if (connection == null || log.isDebugEnabled) {
+            for (message in daemonReportMessages) {
+                val severity = when(message.category) {
+                    DaemonReportCategory.DEBUG -> CompilerMessageSeverity.INFO
+                    DaemonReportCategory.INFO -> CompilerMessageSeverity.INFO
+                    DaemonReportCategory.EXCEPTION -> CompilerMessageSeverity.EXCEPTION
+                }
+                environment.messageCollector.report(severity, message.message)
+            }
         }
 
         fun reportTotalAndThreadPerf(message: String, daemonOptions: DaemonOptions, messageCollector: MessageCollector, profiler: Profiler) {
             if (daemonOptions.reportPerf) {
                 fun Long.ms() = TimeUnit.NANOSECONDS.toMillis(this)
                 val counters = profiler.getTotalCounters()
-                messageCollector.report(CompilerMessageSeverity.INFO,
-                                        "PERF: $message ${counters.time.ms()} ms, thread ${counters.threadTime.ms()}",
-                                        CompilerMessageLocation.NO_LOCATION)
+                messageCollector.report(CompilerMessageSeverity.INFO, "PERF: $message ${counters.time.ms()} ms, thread ${counters.threadTime.ms()}")
             }
         }
 
@@ -103,7 +115,7 @@ abstract class KotlinCompilerRunner<in Env : CompilerEnvironment> {
     }
 
     protected fun reportInternalCompilerError(messageCollector: MessageCollector): ExitCode {
-        messageCollector.report(ERROR, "Compiler terminated with internal error", CompilerMessageLocation.NO_LOCATION)
+        messageCollector.report(CompilerMessageSeverity.ERROR, "Compiler terminated with internal error")
         return ExitCode.INTERNAL_ERROR
     }
 
@@ -134,37 +146,6 @@ abstract class KotlinCompilerRunner<in Env : CompilerEnvironment> {
             compilerArgs: CommonCompilerArguments,
             environment: Env
     ): ExitCode?
-
-    protected fun <T> withDaemon(environment: Env, retryOnConnectionError: Boolean, fn: (CompileService, sessionId: Int)->T): T? {
-        fun retryOrFalse(e: Exception): T? {
-            if (retryOnConnectionError) {
-                log.debug("retrying once on daemon connection error: ${e.message}")
-                return withDaemon(environment, retryOnConnectionError = false, fn = fn)
-            }
-            log.info("daemon connection error: ${e.message}")
-            return null
-        }
-
-        log.debug("Try to connect to daemon")
-        val connection = getDaemonConnection(environment)
-
-        if (connection.daemon != null) {
-            log.info("Connected to daemon")
-
-            try {
-                return fn(connection.daemon, connection.sessionId)
-            }
-            catch (e: java.rmi.ConnectException) {
-                return retryOrFalse(e)
-            }
-            catch (e: java.rmi.UnmarshalException) {
-                return retryOrFalse(e)
-            }
-        }
-
-        log.info("Daemon not found")
-        return null
-    }
 
     protected fun exitCodeFromProcessExitCode(code: Int): ExitCode {
         val exitCode = ExitCode.values().find { it.code == code }

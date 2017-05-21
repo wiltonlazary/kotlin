@@ -47,7 +47,7 @@
     <orderEntry type="module" module-name="js.serializer" />
     <orderEntry type="module" module-name="daemon-client" />
     <orderEntry type="module" module-name="idea-repl" scope="TEST" />
-    <orderEntry type="module" module-name="idea-live-templates" exported="" scope="RUNTIME" />
+    <orderEntry type="module" module-name="idea-live-templates" exported="" />
     <orderEntry type="module" module-name="tests-common" scope="TEST" />
     <orderEntry type="library" scope="TEST" name="kotlin-test" level="project" />
     <orderEntry type="module" module-name="lint-idea" scope="PROVIDED" />
@@ -59,8 +59,12 @@
     <orderEntry type="module" module-name="allopen-ide" scope="TEST" />
     <orderEntry type="module" module-name="noarg-ide" scope="TEST" />
     <orderEntry type="module" module-name="sam-with-receiver-ide" scope="TEST" />
+    <orderEntry type="module" module-name="kapt3" scope="TEST" />
     <orderEntry type="module" module-name="descriptors" />
     <orderEntry type="module" module-name="kotlin-gradle-tooling" />
     <orderEntry type="module" module-name="build-common" />
+    <orderEntry type="library" name="kotlinx-coroutines-core" level="project" />
+    <orderEntry type="module" module-name="frontend.script" />
+    <orderEntry type="module" module-name="idea-maven" />
   </component>
 </module>

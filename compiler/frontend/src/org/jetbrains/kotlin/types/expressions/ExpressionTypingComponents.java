@@ -18,7 +18,6 @@ package org.jetbrains.kotlin.types.expressions;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
-import org.jetbrains.kotlin.config.CompilerConfiguration;
 import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.context.GlobalContext;
 import org.jetbrains.kotlin.incremental.components.LookupTracker;
@@ -29,6 +28,7 @@ import org.jetbrains.kotlin.resolve.calls.CallResolver;
 import org.jetbrains.kotlin.resolve.calls.checkers.CallChecker;
 import org.jetbrains.kotlin.resolve.calls.checkers.RttiExpressionChecker;
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator;
+import org.jetbrains.kotlin.types.WrappedTypeFactory;
 
 import javax.inject.Inject;
 
@@ -61,7 +61,7 @@ public class ExpressionTypingComponents {
     /*package*/ OverloadChecker overloadChecker;
     /*package*/ LanguageVersionSettings languageVersionSettings;
     /*package*/ Iterable<RttiExpressionChecker> rttiExpressionCheckers;
-    /*package*/ CompilerConfiguration compilerConfiguration;
+    /*package*/ WrappedTypeFactory wrappedTypeFactory;
 
     @Inject
     public void setGlobalContext(@NotNull GlobalContext globalContext) {
@@ -204,7 +204,7 @@ public class ExpressionTypingComponents {
     }
 
     @Inject
-    public void setCompilerConfiguration(CompilerConfiguration compilerConfiguration) {
-        this.compilerConfiguration = compilerConfiguration;
+    public void setWrappedTypeFactory(WrappedTypeFactory wrappedTypeFactory) {
+        this.wrappedTypeFactory = wrappedTypeFactory;
     }
 }

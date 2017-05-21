@@ -37,6 +37,13 @@ import org.jetbrains.kotlin.psi.psiUtil.getStartOffsetIn
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import kotlin.reflect.KClass
 
+// This class was originally created to make possible switching inspection off and using intention instead.
+// Since IDEA 2017.1, it's possible to have inspection severity "No highlighting, only fix"
+// thus making the original purpose useless.
+// The class will probably not be deleted in the close future,
+// but do not use them in your new code.
+@Suppress("DEPRECATION")
+@Deprecated("Please do not use for new inspections. Use AbstractKotlinInspection as base class for them")
 abstract class IntentionBasedInspection<TElement : PsiElement>(
         val intentionInfos: List<IntentionBasedInspection.IntentionData<TElement>>,
         protected open val problemText: String?
@@ -57,13 +64,13 @@ abstract class IntentionBasedInspection<TElement : PsiElement>(
             intention: KClass<out SelfTargetingRangeIntention<TElement>>,
             additionalChecker: (TElement) -> Boolean,
             problemText: String? = null
-    ) : this(listOf(IntentionData(intention, { element, inspection -> additionalChecker(element) } )), problemText)
+    ) : this(listOf(IntentionData(intention, { element, _ -> additionalChecker(element) } )), problemText)
 
 
 
     data class IntentionData<TElement : PsiElement>(
             val intention: KClass<out SelfTargetingRangeIntention<TElement>>,
-            val additionalChecker: (TElement, IntentionBasedInspection<TElement>) -> Boolean = { element, inspection -> true }
+            val additionalChecker: (TElement, IntentionBasedInspection<TElement>) -> Boolean = { _, _ -> true }
     )
 
     open fun additionalFixes(element: TElement): List<LocalQuickFix>? = null
@@ -78,7 +85,7 @@ abstract class IntentionBasedInspection<TElement : PsiElement>(
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean, session: LocalInspectionToolSession): PsiElementVisitor {
 
         val intentionsAndCheckers = intentionInfos.map {
-            val instance = it.intention.constructors.single().call()
+            val instance = it.intention.constructors.single { it.parameters.isEmpty() } .call()
             instance.inspection = this
             instance to it.additionalChecker
         }
@@ -117,15 +124,15 @@ abstract class IntentionBasedInspection<TElement : PsiElement>(
                     additionalFixes(targetElement)?.let { allFixes.addAll(it) }
                     if (!allFixes.isEmpty()) {
                         holder.registerProblem(targetElement, problemText ?: allFixes.first().name,
-                                               problemHighlightType, range, *allFixes.toTypedArray())
+                                               problemHighlightType(targetElement), range, *allFixes.toTypedArray())
                     }
                 }
             }
         }
     }
 
-    protected open val problemHighlightType: ProblemHighlightType
-        get() = ProblemHighlightType.GENERIC_ERROR_OR_WARNING
+    protected open fun problemHighlightType(element: TElement): ProblemHighlightType =
+            ProblemHighlightType.GENERIC_ERROR_OR_WARNING
 
     private fun createQuickFix(
             intention: SelfTargetingRangeIntention<TElement>,
@@ -140,8 +147,8 @@ abstract class IntentionBasedInspection<TElement : PsiElement>(
     }
 
     /* we implement IntentionAction to provide isAvailable which will be used to hide outdated items and make sure we never call 'invoke' for such item */
-    private open inner class IntentionBasedQuickFix(
-            private val intention: SelfTargetingRangeIntention<TElement>,
+    internal open inner class IntentionBasedQuickFix(
+            val intention: SelfTargetingRangeIntention<TElement>,
             private val additionalChecker: (TElement, IntentionBasedInspection<TElement>) -> Boolean,
             targetElement: TElement
     ) : LocalQuickFixOnPsiElement(targetElement), IntentionAction {
@@ -153,7 +160,7 @@ abstract class IntentionBasedInspection<TElement : PsiElement>(
 
         override fun getText(): String = text
 
-        override fun startInWriteAction() = true
+        override fun startInWriteAction() = intention.startInWriteAction()
 
         override fun isAvailable(project: Project, editor: Editor?, file: PsiFile?) = isAvailable()
 

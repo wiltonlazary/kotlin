@@ -33,7 +33,7 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.getQualifiedExpressionForReceiverOrThis
 import org.jetbrains.kotlin.psi.psiUtil.parentsWithSelf
-import org.jetbrains.kotlin.resolve.bindingContextUtil.isUsedAsStatement
+import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.types.KotlinType
@@ -107,16 +107,29 @@ internal object KtPostfixTemplatePsiInfo : PostfixTemplatePsiInfo() {
 }
 
 internal fun createExpressionSelector(
-        // Do not suggest expressions like 'val a = 1'/'for ...'
         checkCanBeUsedAsValue: Boolean = true,
         statementsOnly: Boolean = false,
         typePredicate: ((KotlinType) -> Boolean)? = null
-): PostfixTemplateExpressionSelector = KtExpressionPostfixTemplateSelector(statementsOnly, checkCanBeUsedAsValue, typePredicate)
+): PostfixTemplateExpressionSelector {
+    val predicate: ((KtExpression, BindingContext) -> Boolean)? =
+            if (typePredicate != null) { expression, bindingContext ->
+                    expression.getType(bindingContext)?.let(typePredicate) ?: false
+            }
+            else null
+    return createExpressionSelectorWithComplexFilter(checkCanBeUsedAsValue, statementsOnly, predicate)
+}
+
+internal fun createExpressionSelectorWithComplexFilter(
+        // Do not suggest expressions like 'val a = 1'/'for ...'
+        checkCanBeUsedAsValue: Boolean = true,
+        statementsOnly: Boolean = false,
+        predicate: ((KtExpression, BindingContext) -> Boolean)? = null
+): PostfixTemplateExpressionSelector = KtExpressionPostfixTemplateSelector(checkCanBeUsedAsValue, statementsOnly, predicate)
 
 private class KtExpressionPostfixTemplateSelector(
-        private val statementsOnly: Boolean,
         private val checkCanBeUsedAsValue: Boolean,
-        private val typePredicate: ((KotlinType) -> Boolean)?
+        private val statementsOnly: Boolean,
+        private val predicate: ((KtExpression, BindingContext) -> Boolean)?
 ) : PostfixTemplateExpressionSelector {
 
     private fun filterElement(element: PsiElement): Boolean {
@@ -131,12 +144,15 @@ private class KtExpressionPostfixTemplateSelector(
         val bindingContext by lazy { element.analyze(BodyResolveMode.PARTIAL) }
 
         if (statementsOnly) {
-            val elementToCheck = element.getQualifiedExpressionForReceiverOrThis()
-            if (elementToCheck.parent !is KtBlockExpression && !elementToCheck.isUsedAsStatement(bindingContext)) return false
+            // We use getQualifiedExpressionForReceiverOrThis because when postfix completion is run on some statement like:
+            // foo().try<caret>
+            // `element` points to `foo()` call, while we need to select the whole statement with `try` selector
+            // to check if it's in a statement position
+            if (!KtPsiUtil.isStatement(element.getQualifiedExpressionForReceiverOrThis())) return false
         }
         if (checkCanBeUsedAsValue && !element.canBeUsedAsValue()) return false
 
-        return typePredicate == null || element.getType(bindingContext)?.let { typePredicate.invoke(it) } ?: false
+        return predicate?.invoke(element, bindingContext) ?: true
     }
 
     private fun KtExpression.canBeUsedAsValue() =
@@ -152,7 +168,7 @@ private class KtExpressionPostfixTemplateSelector(
     override fun getExpressions(context: PsiElement, document: Document, offset: Int): List<PsiElement> {
         val originalFile = context.containingFile.originalFile
         val textRange = context.textRange
-        val originalElement = findElementOfClassAtRange(originalFile, textRange.startOffset, textRange.endOffset, context.javaClass)
+        val originalElement = findElementOfClassAtRange(originalFile, textRange.startOffset, textRange.endOffset, context::class.java)
                               ?: return emptyList()
 
         val expressions = originalElement.parentsWithSelf

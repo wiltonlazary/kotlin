@@ -16,12 +16,10 @@
 
 package org.jetbrains.kotlin.types;
 
-import com.google.common.base.Predicate;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import kotlin.Unit;
 import kotlin.collections.CollectionsKt;
-import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
@@ -32,7 +30,6 @@ import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
 import org.jetbrains.kotlin.descriptors.impl.TypeParameterDescriptorImpl;
-import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.psi.KtPsiFactoryKt;
 import org.jetbrains.kotlin.psi.KtTypeProjection;
@@ -70,12 +67,8 @@ public class TypeUnifierTest extends KotlinTestWithEnvironment {
         module = DslKt.getService(container, ModuleDescriptor.class);
 
         builtinsImportingScope = ScopeUtilsKt.chainImportingScopes(
-                CollectionsKt.map(KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAMES, new Function1<FqName, ImportingScope>() {
-                    @Override
-                    public ImportingScope invoke(FqName fqName) {
-                        return ScopeUtilsKt.memberScopeAsImportingScope(module.getPackage(fqName).getMemberScope());
-                    }
-                }), null);
+                CollectionsKt.map(KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAMES,
+                                  fqName -> ScopeUtilsKt.memberScopeAsImportingScope(module.getPackage(fqName).getMemberScope())), null);
         typeResolver = DslKt.getService(container, TypeResolver.class);
         x = createTypeVariable("X");
         y = createTypeVariable("Y");
@@ -181,16 +174,7 @@ public class TypeUnifierTest extends KotlinTestWithEnvironment {
     }
 
     private void doTest(String known, String withVariables, @NotNull Map<String, String> expected) {
-        TypeUnifier.UnificationResult map = TypeUnifier.unify(
-                makeType(known),
-                makeType(withVariables),
-                new Predicate<TypeConstructor>() {
-                    @Override
-                    public boolean apply(TypeConstructor tc) {
-                        return variables.contains(tc);
-                    }
-                }
-        );
+        TypeUnifier.UnificationResult map = TypeUnifier.unify(makeType(known), makeType(withVariables), variables::contains);
         assertEquals(expected, toStrings(map));
     }
 
@@ -212,13 +196,10 @@ public class TypeUnifierTest extends KotlinTestWithEnvironment {
         LexicalScope withX = new LexicalScopeImpl(
                 builtinsImportingScope, module,
                 false, null, LexicalScopeKind.SYNTHETIC, LocalRedeclarationChecker.DO_NOTHING.INSTANCE,
-                new Function1<LexicalScopeImpl.InitializeHandler, Unit>() {
-                    @Override
-                    public Unit invoke(LexicalScopeImpl.InitializeHandler handler) {
-                        handler.addClassifierDescriptor(x);
-                        handler.addClassifierDescriptor(y);
-                        return Unit.INSTANCE;
-                    }
+                handler -> {
+                    handler.addClassifierDescriptor(x);
+                    handler.addClassifierDescriptor(y);
+                    return Unit.INSTANCE;
                 }
         );
 

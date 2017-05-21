@@ -20,14 +20,14 @@ import com.google.common.collect.*
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
-import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.resolve.calls.smartcasts.Nullability.NOT_NULL
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeUtils
-import org.jetbrains.kotlin.types.typeUtil.*
-
+import org.jetbrains.kotlin.types.isError
+import org.jetbrains.kotlin.types.isFlexible
+import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
+import org.jetbrains.kotlin.utils.newLinkedHashSetWithExpectedSize
 import java.util.*
-
-import org.jetbrains.kotlin.resolve.calls.smartcasts.Nullability.NOT_NULL
 
 internal class DelegatingDataFlowInfo private constructor(
         private val parent: DataFlowInfo?,
@@ -121,13 +121,13 @@ internal class DelegatingDataFlowInfo private constructor(
             return types
         }
 
-        val enrichedTypes = Sets.newHashSetWithExpectedSize<KotlinType>(types.size + 1)
+        val enrichedTypes = newLinkedHashSetWithExpectedSize<KotlinType>(types.size + 1)
         val originalType = key.type
-        if (originalType.isMarkedNullable) {
-            enrichedTypes.add(TypeUtils.makeNotNullable(originalType))
-        }
         for (type in types) {
             enrichedTypes.add(TypeUtils.makeNotNullable(type))
+        }
+        if (originalType.isMarkedNullable) {
+            enrichedTypes.add(TypeUtils.makeNotNullable(originalType))
         }
 
         return enrichedTypes
@@ -146,7 +146,7 @@ internal class DelegatingDataFlowInfo private constructor(
      */
     override fun clearValueInfo(value: DataFlowValue, languageVersionSettings: LanguageVersionSettings): DataFlowInfo {
         val builder = Maps.newHashMap<DataFlowValue, Nullability>()
-        putNullability(builder, value, Nullability.UNKNOWN, languageVersionSettings)
+        putNullability(builder, value, value.immanentNullability, languageVersionSettings)
         return create(this, ImmutableMap.copyOf(builder), EMPTY_TYPE_INFO, value)
     }
 
@@ -170,7 +170,7 @@ internal class DelegatingDataFlowInfo private constructor(
     }
 
     override fun equate(
-            a: DataFlowValue, b: DataFlowValue, sameTypes: Boolean, languageVersionSettings: LanguageVersionSettings
+            a: DataFlowValue, b: DataFlowValue, identityEquals: Boolean, languageVersionSettings: LanguageVersionSettings
     ): DataFlowInfo {
         val builder = Maps.newHashMap<DataFlowValue, Nullability>()
         val nullabilityOfA = getStableNullability(a)
@@ -181,7 +181,7 @@ internal class DelegatingDataFlowInfo private constructor(
 
         // NB: == has no guarantees of type equality, see KT-11280 for the example
         val newTypeInfo = newTypeInfo()
-        if (sameTypes) {
+        if (identityEquals || !nullabilityOfA.canBeNonNull() || !nullabilityOfB.canBeNonNull()) {
             newTypeInfo.putAll(a, getStableTypes(b, false))
             newTypeInfo.putAll(b, getStableTypes(a, false))
             if (a.type != b.type) {

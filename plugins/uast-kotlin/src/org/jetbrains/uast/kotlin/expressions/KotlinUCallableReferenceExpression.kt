@@ -25,13 +25,13 @@ import org.jetbrains.uast.UExpression
 
 class KotlinUCallableReferenceExpression(
         override val psi: KtCallableReferenceExpression,
-        override val containingElement: UElement?
+        override val uastParent: UElement?
 ) : KotlinAbstractUExpression(), UCallableReferenceExpression, KotlinUElementWithType {
     override val qualifierExpression: UExpression?
         get() {
             if (qualifierType != null) return null
             val receiverExpression = psi.receiverExpression ?: return null
-            return KotlinConverter.convertExpression(receiverExpression, this)
+            return KotlinConverter.convertExpression(receiverExpression, { this })
         }
 
     override val qualifierType by lz {

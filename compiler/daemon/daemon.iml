@@ -15,5 +15,6 @@
     <orderEntry type="module" module-name="incremental-compilation-impl" />
     <orderEntry type="module" module-name="build-common" />
     <orderEntry type="module" module-name="descriptor.loader.java" />
+    <orderEntry type="module" module-name="frontend.script" />
   </component>
 </module>

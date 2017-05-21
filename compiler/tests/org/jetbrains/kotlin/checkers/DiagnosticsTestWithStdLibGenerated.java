@@ -328,6 +328,12 @@ public class DiagnosticsTestWithStdLibGenerated extends AbstractDiagnosticsTestW
                 doTest(fileName);
             }
 
+            @TestMetadata("nonConstValAsArgument.kt")
+            public void testNonConstValAsArgument() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/diagnostics/testsWithStdLib/annotations/annotationParameters/nonConstValAsArgument.kt");
+                doTest(fileName);
+            }
+
             @TestMetadata("orderWithValue.kt")
             public void testOrderWithValue() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/diagnostics/testsWithStdLib/annotations/annotationParameters/orderWithValue.kt");
@@ -1604,6 +1610,12 @@ public class DiagnosticsTestWithStdLibGenerated extends AbstractDiagnosticsTestW
         @TestMetadata("kt4711.kt")
         public void testKt4711() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/diagnostics/testsWithStdLib/resolve/kt4711.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("samAgainstFunctionalType.kt")
+        public void testSamAgainstFunctionalType() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/diagnostics/testsWithStdLib/resolve/samAgainstFunctionalType.kt");
             doTest(fileName);
         }
 

@@ -165,13 +165,7 @@ public abstract class KotlinDebuggerTestCase extends DescriptorTestCase {
 
             ourOutputRootField.set(null, LOCAL_CACHE_APP_DIR);
         }
-        catch (NoSuchFieldException e) {
-            throw ExceptionUtilsKt.rethrow(e);
-        }
-        catch (IllegalAccessException e) {
-            throw ExceptionUtilsKt.rethrow(e);
-        }
-        catch (IOException e) {
+        catch (NoSuchFieldException | IOException | IllegalAccessException e) {
             throw ExceptionUtilsKt.rethrow(e);
         }
     }
@@ -277,27 +271,6 @@ public abstract class KotlinDebuggerTestCase extends DescriptorTestCase {
         return result;
     }
 
-    private static class KotlinOutputChecker extends OutputChecker {
-
-        public KotlinOutputChecker(@NotNull String appPath, @NotNull String outputPath) {
-            super(appPath, outputPath);
-        }
-
-        @Override
-        protected String replaceAdditionalInOutput(String str) {
-            //noinspection ConstantConditions
-            try {
-                return super.replaceAdditionalInOutput(
-                        str.replace(ForTestCompileRuntime.runtimeJarForTests().getCanonicalPath(), "!KOTLIN_RUNTIME!")
-                           .replace(CUSTOM_LIBRARY_JAR.getCanonicalPath(), "!CUSTOM_LIBRARY!")
-                );
-            }
-            catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
     @Override
     protected JavaParameters createJavaParameters(String mainClass) {
         JavaParameters parameters = super.createJavaParameters(mainClass);
@@ -349,6 +322,10 @@ public abstract class KotlinDebuggerTestCase extends DescriptorTestCase {
 
     @Override
     protected void checkTestOutput() throws Exception {
+        if (KotlinTestUtils.isAllFilesPresentTest(getTestName(false))) {
+            return;
+        }
+
         try {
             super.checkTestOutput();
         }

@@ -163,7 +163,6 @@ open class LazyClassMemberScope(
             var componentIndex = 0
 
             for (parameter in constructor.valueParameters) {
-                if (parameter.type.isError) continue
                 if (!primaryConstructorParameters.get(parameter.index).hasValOrVar()) continue
 
                 val properties = getContributedVariables(parameter.name, location)
@@ -358,7 +357,7 @@ open class LazyClassMemberScope(
     private fun resolveSecondaryConstructors(): Collection<ClassConstructorDescriptor> {
         val classOrObject = declarationProvider.correspondingClassOrObject ?: return emptyList()
 
-        return classOrObject.getSecondaryConstructors().map { constructor ->
+        return classOrObject.secondaryConstructors.map { constructor ->
             val descriptor = c.functionDescriptorResolver.resolveSecondaryConstructorDescriptor(
                     thisDescriptor.scopeForConstructorHeaderResolution, thisDescriptor, constructor, trace
             )
@@ -368,7 +367,7 @@ open class LazyClassMemberScope(
     }
 
     protected fun setDeferredReturnType(descriptor: ClassConstructorDescriptorImpl) {
-        descriptor.returnType = DeferredType.create(c.storageManager, trace, { thisDescriptor.getDefaultType() })
+        descriptor.returnType = c.wrappedTypeFactory.createDeferredType(trace, { thisDescriptor.defaultType })
     }
 
     override fun recordLookup(name: Name, from: LookupLocation) {

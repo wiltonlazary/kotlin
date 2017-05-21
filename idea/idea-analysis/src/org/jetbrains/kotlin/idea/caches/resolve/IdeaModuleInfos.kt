@@ -32,11 +32,12 @@ import com.intellij.util.SmartList
 import org.jetbrains.kotlin.analyzer.ModuleInfo
 import org.jetbrains.kotlin.caches.resolve.LibraryModuleInfo
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.idea.framework.KotlinJavaScriptLibraryDetectionUtil
+import org.jetbrains.kotlin.idea.project.TargetPlatformDetector
+import org.jetbrains.kotlin.idea.stubindex.KotlinSourceFilterScope
 import org.jetbrains.kotlin.idea.util.isInSourceContentWithoutInjected
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.TargetPlatform
 import org.jetbrains.kotlin.resolve.jvm.GlobalSearchScopeWithModuleSources
-import org.jetbrains.kotlin.utils.emptyOrSingletonList
 import java.util.*
 
 interface IdeaModuleInfo : ModuleInfo {
@@ -45,7 +46,7 @@ interface IdeaModuleInfo : ModuleInfo {
     val moduleOrigin: ModuleOrigin
 
     override val capabilities: Map<ModuleDescriptor.Capability<*>, Any?>
-        get() = mapOf(OriginCapability to moduleOrigin)
+        get() = super.capabilities + mapOf(OriginCapability to moduleOrigin)
 
     override fun dependencies(): List<IdeaModuleInfo>
 }
@@ -64,11 +65,11 @@ private fun orderEntryToModuleInfo(project: Project, orderEntry: OrderEntry, pro
         }
         is LibraryOrderEntry -> {
             val library = orderEntry.library ?: return listOf()
-            emptyOrSingletonList(LibraryInfo(project, library))
+            listOfNotNull(LibraryInfo(project, library))
         }
         is JdkOrderEntry -> {
             val sdk = orderEntry.jdk ?: return listOf()
-            emptyOrSingletonList(SdkInfo(project, sdk))
+            listOfNotNull(SdkInfo(project, sdk))
         }
         else -> {
             throw IllegalStateException("Unexpected order entry $orderEntry")
@@ -97,8 +98,14 @@ private fun ideaModelDependencies(module: Module, productionOnly: Boolean): List
 
 interface ModuleSourceInfo : IdeaModuleInfo {
     val module: Module
+
+    override val displayedName get() = module.name
+
     override val moduleOrigin: ModuleOrigin
         get() = ModuleOrigin.MODULE
+
+    override val platform: TargetPlatform
+        get() = TargetPlatformDetector.getPlatform(module)
 }
 
 data class ModuleProductionSourceInfo(override val module: Module) : ModuleSourceInfo {
@@ -116,6 +123,8 @@ data class ModuleProductionSourceInfo(override val module: Module) : ModuleSourc
 //TODO: (module refactoring) do not create ModuleTestSourceInfo when there are no test roots for module
 data class ModuleTestSourceInfo(override val module: Module) : ModuleSourceInfo {
     override val name = Name.special("<test sources for module ${module.name}>")
+
+    override val displayedName get() = module.name + " (test)"
 
     override fun contentScope(): GlobalSearchScope = ModuleTestSourceScope(module)
 
@@ -177,7 +186,7 @@ private class ModuleTestSourceScope(module: Module) : ModuleSourceScope(module) 
     override fun toString() = "ModuleTestSourceScope($module)"
 }
 
-open class LibraryInfo(val project: Project, val library: Library) : IdeaModuleInfo, LibraryModuleInfo {
+class LibraryInfo(val project: Project, val library: Library) : IdeaModuleInfo, LibraryModuleInfo, BinaryModuleInfo {
     override val moduleOrigin: ModuleOrigin
         get() = ModuleOrigin.LIBRARY
 
@@ -192,7 +201,7 @@ open class LibraryInfo(val project: Project, val library: Library) : IdeaModuleI
         val result = LinkedHashSet<IdeaModuleInfo>()
         result.add(this)
 
-        val (libraries, sdks) = LibraryDependenciesCache(project).getLibrariesAndSdksUsedWith(library)
+        val (libraries, sdks) = LibraryDependenciesCache.getInstance(project).getLibrariesAndSdksUsedWith(library)
 
         sdks.mapTo(result) { SdkInfo(project, it) }
         libraries.filter { it is LibraryEx && !it.isDisposed }.mapTo(result) { LibraryInfo(project, it) }
@@ -200,7 +209,11 @@ open class LibraryInfo(val project: Project, val library: Library) : IdeaModuleI
         return result.toList()
     }
 
-    override fun isJsLibrary(): Boolean = KotlinJavaScriptLibraryDetectionUtil.isKotlinJavaScriptLibrary(library)
+    override val platform: TargetPlatform
+        get() = TargetPlatformDetector.getPlatform(library)
+
+    override val sourcesModuleInfo: SourceForBinaryModuleInfo
+        get() = LibrarySourceInfo(project, library)
 
     override fun getLibraryRoots(): Collection<String> =
             library.getFiles(OrderRootType.CLASSES).map(PathUtil::getLocalPath).filterNotNull()
@@ -215,24 +228,21 @@ open class LibraryInfo(val project: Project, val library: Library) : IdeaModuleI
     override fun hashCode(): Int = 43 * library.hashCode()
 }
 
-internal data class LibrarySourceInfo(val project: Project, val library: Library) : IdeaModuleInfo {
-    override val moduleOrigin: ModuleOrigin
-        get() = ModuleOrigin.OTHER
+data class LibrarySourceInfo(val project: Project, val library: Library) : IdeaModuleInfo, SourceForBinaryModuleInfo {
 
     override val name: Name = Name.special("<sources for library ${library.name}>")
 
-    override fun contentScope() = GlobalSearchScope.EMPTY_SCOPE
+    override fun sourceScope(): GlobalSearchScope = KotlinSourceFilterScope.librarySources(LibrarySourceScope(project, library), project)
 
     override val isLibrary: Boolean
         get() = true
 
-    override fun dependencies(): List<IdeaModuleInfo> {
-        return listOf(this) + LibraryInfo(project, library).dependencies()
-    }
-
     override fun modulesWhoseInternalsAreVisible(): Collection<ModuleInfo> {
         return listOf(LibraryInfo(project, library))
     }
+
+    override val binariesModuleInfo: BinaryModuleInfo
+        get() = LibraryInfo(project, library)
 
     override fun toString() = "LibrarySourceInfo(libraryName=${library.name})"
 }
@@ -264,11 +274,25 @@ internal object NotUnderContentRootModuleInfo : IdeaModuleInfo {
 private class LibraryWithoutSourceScope(project: Project, private val library: Library) :
         LibraryScopeBase(project, library.getFiles(OrderRootType.CLASSES), arrayOf<VirtualFile>()) {
 
+    override fun getFileRoot(file: VirtualFile): VirtualFile? = myIndex.getClassRootForFile(file)
+
     override fun equals(other: Any?) = other is LibraryWithoutSourceScope && library == other.library
 
     override fun hashCode() = library.hashCode()
 
     override fun toString() = "LibraryWithoutSourceScope($library)"
+}
+
+private class LibrarySourceScope(project: Project, private val library: Library) :
+        LibraryScopeBase(project, arrayOf<VirtualFile>(), library.getFiles(OrderRootType.SOURCES)) {
+
+    override fun getFileRoot(file: VirtualFile): VirtualFile? = myIndex.getSourceRootForFile(file)
+
+    override fun equals(other: Any?) = other is LibrarySourceScope && library == other.library
+
+    override fun hashCode() = library.hashCode()
+
+    override fun toString() = "LibrarySourceScope($library)"
 }
 
 //TODO: (module refactoring) android sdk has modified scope
@@ -290,4 +314,29 @@ enum class ModuleOrigin {
     MODULE,
     LIBRARY,
     OTHER
+}
+
+interface BinaryModuleInfo : IdeaModuleInfo {
+    val sourcesModuleInfo: SourceForBinaryModuleInfo?
+    fun binariesScope(): GlobalSearchScope {
+        val contentScope = contentScope()
+        return KotlinSourceFilterScope.libraryClassFiles(contentScope, contentScope.project!!)
+    }
+}
+
+interface SourceForBinaryModuleInfo : IdeaModuleInfo {
+    val binariesModuleInfo: BinaryModuleInfo
+    fun sourceScope(): GlobalSearchScope
+
+    // module infos for library source do not have contents in the following sense:
+    // we can not provide a collection of files that is supposed to be analyzed in IDE independently
+    //
+    // as of now each source file is analyzed separately and depends on corresponding binaries
+    // see KotlinCacheServiceImpl#createFacadeForSyntheticFiles
+    override fun contentScope(): GlobalSearchScope = GlobalSearchScope.EMPTY_SCOPE
+
+    override fun dependencies() = listOf(this) + binariesModuleInfo.dependencies()
+
+    override val moduleOrigin: ModuleOrigin
+        get() = ModuleOrigin.OTHER
 }

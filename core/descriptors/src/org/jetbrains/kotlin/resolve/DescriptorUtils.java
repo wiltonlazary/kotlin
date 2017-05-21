@@ -33,10 +33,7 @@ import org.jetbrains.kotlin.resolve.constants.ConstantValue;
 import org.jetbrains.kotlin.resolve.constants.StringValue;
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter;
 import org.jetbrains.kotlin.resolve.scopes.MemberScope;
-import org.jetbrains.kotlin.types.ErrorUtils;
-import org.jetbrains.kotlin.types.KotlinType;
-import org.jetbrains.kotlin.types.TypeConstructor;
-import org.jetbrains.kotlin.types.TypeUtils;
+import org.jetbrains.kotlin.types.*;
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker;
 
 import java.util.*;
@@ -449,7 +446,7 @@ public class DescriptorUtils {
     }
 
     public static boolean shouldRecordInitializerForProperty(@NotNull VariableDescriptor variable, @NotNull KotlinType type) {
-        if (variable.isVar() || type.isError()) return false;
+        if (variable.isVar() || KotlinTypeKt.isError(type)) return false;
 
         if (TypeUtils.acceptsNullable(type)) return true;
 
@@ -574,18 +571,6 @@ public class DescriptorUtils {
     @NotNull
     public static Collection<DeclarationDescriptor> getAllDescriptors(@NotNull MemberScope scope) {
         return scope.getContributedDescriptors(DescriptorKindFilter.ALL, MemberScope.Companion.getALL_NAME_FILTER());
-    }
-
-    public static boolean isEffectivelyExternal(@NotNull MemberDescriptor descriptor) {
-        if (descriptor.isExternal()) return true;
-
-        if (descriptor instanceof PropertyAccessorDescriptor) {
-            PropertyDescriptor variableDescriptor = ((PropertyAccessorDescriptor) descriptor).getCorrespondingProperty();
-            if (isEffectivelyExternal(variableDescriptor)) return true;
-        }
-
-        ClassDescriptor containingClass = getContainingClass(descriptor);
-        return containingClass != null && isEffectivelyExternal(containingClass);
     }
 
     @NotNull

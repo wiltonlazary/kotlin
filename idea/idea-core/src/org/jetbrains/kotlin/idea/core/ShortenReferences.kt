@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.idea.core
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
+import com.intellij.psi.SmartPsiElementPointer
 import com.intellij.psi.impl.source.PostprocessReformattingAspect
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.descriptors.*
@@ -33,6 +34,7 @@ import org.jetbrains.kotlin.idea.util.ShadowedDeclarationsFilter
 import org.jetbrains.kotlin.idea.util.getResolutionScope
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.createSmartPointer
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.getQualifiedExpressionForReceiver
 import org.jetbrains.kotlin.psi.psiUtil.parents
@@ -49,14 +51,15 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 import org.jetbrains.kotlin.resolve.scopes.utils.findClassifier
 import org.jetbrains.kotlin.resolve.scopes.utils.findPackage
 import org.jetbrains.kotlin.resolve.source.getPsi
-import org.jetbrains.kotlin.utils.singletonOrEmptyList
 import java.lang.IllegalStateException
 import java.util.*
 
 class ShortenReferences(val options: (KtElement) -> Options = { Options.DEFAULT }) {
     data class Options(
             val removeThisLabels: Boolean = false,
-            val removeThis: Boolean = false
+            val removeThis: Boolean = false,
+            // TODO: remove this option and all related stuff (RETAIN_COMPANION etc.) after KT-13934 fixed
+            val removeExplicitCompanion: Boolean = true
     ) {
         companion object {
             val DEFAULT = Options()
@@ -67,6 +70,8 @@ class ShortenReferences(val options: (KtElement) -> Options = { Options.DEFAULT 
     companion object {
         @JvmField
         val DEFAULT = ShortenReferences()
+
+        val RETAIN_COMPANION = ShortenReferences { Options(removeExplicitCompanion = false) }
 
         private fun DeclarationDescriptor.asString()
                 = DescriptorRenderer.FQ_NAMES_IN_TYPES.render(this)
@@ -152,6 +157,15 @@ class ShortenReferences(val options: (KtElement) -> Options = { Options.DEFAULT 
 
         val failedToImportDescriptors = LinkedHashSet<DeclarationDescriptor>()
 
+        val companionElementFilter = { element: PsiElement ->
+            if (element is KtElement && !options(element).removeExplicitCompanion) {
+                FilterResult.SKIP
+            }
+            else {
+                elementFilter(element)
+            }
+        }
+
         while (true) {
             // Processors order is important here so that enclosing elements are not shortened before their children are, e.g.
             // test.foo(this@A) -> foo(this)
@@ -159,7 +173,7 @@ class ShortenReferences(val options: (KtElement) -> Options = { Options.DEFAULT 
                     ShortenTypesProcessor(file, elementFilter, failedToImportDescriptors),
                     ShortenThisExpressionsProcessor(file, elementFilter, failedToImportDescriptors),
                     ShortenQualifiedExpressionsProcessor(file, elementFilter, failedToImportDescriptors),
-                    RemoveExplicitCompanionObjectReferenceProcessor(file, elementFilter, failedToImportDescriptors)
+                    RemoveExplicitCompanionObjectReferenceProcessor(file, companionElementFilter, failedToImportDescriptors)
             )
 
             // step 1: collect qualified elements to analyze (no resolve at this step)
@@ -248,7 +262,7 @@ class ShortenReferences(val options: (KtElement) -> Options = { Options.DEFAULT 
             protected val failedToImportDescriptors: Set<DeclarationDescriptor>
     ) {
         protected val resolutionFacade = file.getResolutionFacade()
-        private val elementsToShorten = ArrayList<TElement>()
+        private val elementsToShorten = ArrayList<SmartPsiElementPointer<TElement>>()
         private val descriptorsToImport = LinkedHashSet<DeclarationDescriptor>()
 
         abstract val collectElementsVisitor: CollectElementsVisitor<TElement>
@@ -265,7 +279,7 @@ class ShortenReferences(val options: (KtElement) -> Options = { Options.DEFAULT 
                 val toBeShortened: Boolean
                 when (result) {
                     is AnalyzeQualifiedElementResult.ShortenNow -> {
-                        elementsToShorten.add(element)
+                        elementsToShorten.add(element.createSmartPointer())
                         toBeShortened = true
                     }
 
@@ -312,7 +326,8 @@ class ShortenReferences(val options: (KtElement) -> Options = { Options.DEFAULT 
         protected abstract fun shortenElement(element: TElement): KtElement
 
         fun shortenElements(elementSetToUpdate: MutableSet<KtElement>) {
-            for (element in elementsToShorten) {
+            for (elementPointer in elementsToShorten) {
+                val element = elementPointer.element ?: continue
                 if (!element.isValid) continue
 
                 var newElement: KtElement? = null
@@ -371,7 +386,7 @@ class ShortenReferences(val options: (KtElement) -> Options = { Options.DEFAULT 
                 scope.findPackage(name)
 
             val canShortenNow = targetByName?.asString() == target.asString()
-            return if (canShortenNow) AnalyzeQualifiedElementResult.ShortenNow else AnalyzeQualifiedElementResult.ImportDescriptors(target.singletonOrEmptyList())
+            return if (canShortenNow) AnalyzeQualifiedElementResult.ShortenNow else AnalyzeQualifiedElementResult.ImportDescriptors(listOfNotNull(target))
         }
 
         override fun shortenElement(element: KtUserType): KtElement {
@@ -591,6 +606,10 @@ class ShortenReferences(val options: (KtElement) -> Options = { Options.DEFAULT 
         }
 
         override fun analyzeQualifiedElement(element: KtDotQualifiedExpression, bindingContext: BindingContext): AnalyzeQualifiedElementResult {
+            val parent = element.parent
+            // TODO: Delete this code when KT-13934 is fixed
+            if (parent is KtCallableReferenceExpression && parent.receiverExpression == element) return AnalyzeQualifiedElementResult.Skip
+
             val receiver = element.receiverExpression
 
             if (PsiTreeUtil.getParentOfType(
@@ -604,7 +623,7 @@ class ShortenReferences(val options: (KtElement) -> Options = { Options.DEFAULT 
 
             if (receiverTarget.companionObjectDescriptor != selectorTarget) return AnalyzeQualifiedElementResult.Skip
 
-            val selectorsSelector = (element.parent as? KtDotQualifiedExpression)?.selectorExpression
+            val selectorsSelector = (parent as? KtDotQualifiedExpression)?.selectorExpression
                                     ?: return AnalyzeQualifiedElementResult.ShortenNow
 
             val selectorsSelectorTarget = selectorsSelector.singleTarget(bindingContext) ?: return AnalyzeQualifiedElementResult.Skip

@@ -17,17 +17,13 @@
 package org.jetbrains.kotlin.idea.codeInliner
 
 import com.intellij.openapi.util.Key
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.core.replaced
 import org.jetbrains.kotlin.idea.intentions.ConvertToBlockBodyIntention
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.PsiChildRange
-import org.jetbrains.kotlin.psi.psiUtil.findDescendantOfType
-import org.jetbrains.kotlin.psi.psiUtil.parentsWithSelf
+import org.jetbrains.kotlin.psi.psiUtil.*
 import org.jetbrains.kotlin.resolve.bindingContextUtil.isUsedAsExpression
-import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
-import org.jetbrains.kotlin.utils.addToStdlib.singletonList
-import org.jetbrains.kotlin.utils.addToStdlib.singletonOrEmptyList
 import java.util.*
 
 internal abstract class ReplacementPerformer<TElement : KtElement>(
@@ -51,7 +47,7 @@ internal class AnnotationEntryReplacementPerformer(
         val dummyAnnotationEntry = createByPattern("@Dummy($0)", codeToInline.mainExpression!!) { psiFactory.createAnnotationEntry(it) }
         val replaced = elementToBeReplaced.replace(dummyAnnotationEntry)
 
-        codeToInline.performPostInsertionActions(replaced.singletonList())
+        codeToInline.performPostInsertionActions(listOf(replaced))
 
         var range = PsiChildRange.singleElement(replaced)
         range = postProcessing(range)
@@ -69,11 +65,40 @@ internal class ExpressionReplacementPerformer(
         expressionToBeReplaced: KtExpression
 ) : ReplacementPerformer<KtExpression>(codeToInline, expressionToBeReplaced) {
 
+    fun KtExpression.replacedWithStringTemplate(templateExpression: KtStringTemplateExpression): KtExpression? {
+        val parent = this.parent
+
+        return if (parent is KtStringTemplateEntryWithExpression
+                   // Do not mix raw and non-raw templates
+                   && parent.parent.firstChild.text == templateExpression.firstChild.text) {
+
+            val entriesToAdd = templateExpression.entries
+            val grandParentTemplateExpression = parent.parent as KtStringTemplateExpression
+            val result = if (entriesToAdd.isNotEmpty()) {
+                grandParentTemplateExpression.addRangeBefore(entriesToAdd.first(), entriesToAdd.last(), parent)
+                val lastNewEntry = parent.prevSibling
+                val nextElement = parent.nextSibling
+                if (lastNewEntry is KtSimpleNameStringTemplateEntry &&
+                    lastNewEntry.expression != null &&
+                    !canPlaceAfterSimpleNameEntry(nextElement)) {
+                    lastNewEntry.replace(KtPsiFactory(this).createBlockStringTemplateEntry(lastNewEntry.expression!!))
+                }
+                grandParentTemplateExpression
+            }
+            else null
+
+            parent.delete()
+            result
+        }
+        else {
+            replaced(templateExpression)
+        }
+    }
+
     override fun doIt(postProcessing: (PsiChildRange) -> PsiChildRange): KtExpression? {
         val insertedStatements = ArrayList<KtExpression>()
         for (statement in codeToInline.statementsBefore) {
-            // copy the statement if it can get invalidated by findOrCreateBlockToInsertStatement()
-            val statementToUse = if (statement.isPhysical) statement.copy() else statement
+            val statementToUse = statement.copy()
             val anchor = findOrCreateBlockToInsertStatement()
             val block = anchor.parent as KtBlockExpression
 
@@ -83,22 +108,26 @@ internal class ExpressionReplacementPerformer(
             insertedStatements.add(inserted)
         }
 
-        val replaced = if (codeToInline.mainExpression != null) {
-            elementToBeReplaced.replace(codeToInline.mainExpression!!)
-        }
-        else {
-            val bindingContext = elementToBeReplaced.analyze(BodyResolveMode.FULL)
-            val canDropElementToBeReplaced = !elementToBeReplaced.isUsedAsExpression(bindingContext)
-            if (canDropElementToBeReplaced) {
-                elementToBeReplaced.delete()
-                null
-            }
-            else {
-                elementToBeReplaced.replace(psiFactory.createExpression("Unit"))
+        val mainExpression = codeToInline.mainExpression
+        val replaced: PsiElement? = when (mainExpression) {
+            is KtStringTemplateExpression -> elementToBeReplaced.replacedWithStringTemplate(mainExpression)
+            is KtExpression -> elementToBeReplaced.replaced(mainExpression)
+            else -> {
+                // NB: Unit is never used as expression
+                val stub = elementToBeReplaced.replaced(psiFactory.createExpression("0"))
+                val bindingContext = stub.analyze()
+                val canDropElementToBeReplaced = !stub.isUsedAsExpression(bindingContext)
+                if (canDropElementToBeReplaced) {
+                    stub.delete()
+                    null
+                }
+                else {
+                    stub.replace(psiFactory.createExpression("Unit"))
+                }
             }
         }
 
-        codeToInline.performPostInsertionActions(insertedStatements + replaced.singletonOrEmptyList())
+        codeToInline.performPostInsertionActions(insertedStatements + listOfNotNull(replaced))
 
         var range = if (replaced != null) {
             if (insertedStatements.isEmpty()) {
@@ -153,8 +182,12 @@ internal class ExpressionReplacementPerformer(
             }
         }
 
-        //TODO
-        throw UnsupportedOperationException()
+        val runExpression = psiFactory.createExpressionByPattern("run { $0 }", elementToBeReplaced) as KtCallExpression
+        val runAfterReplacement = elementToBeReplaced.replaced(runExpression)
+        val block = runAfterReplacement.lambdaArguments[0].getLambdaExpression().bodyExpression!!
+        elementToBeReplaced = block.statements.single()
+        return elementToBeReplaced
+
     }
 
     private fun KtExpression.replaceWithBlock(): KtExpression {

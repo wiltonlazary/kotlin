@@ -40,11 +40,14 @@ class DeclarationBodyVisitor(
     val initializerStatements = mutableListOf<JsStatement>()
     val enumEntries = mutableListOf<ClassDescriptor>()
 
+    override val enumInitializerName: JsName?
+        get() = enumInitializer?.name
+
     override fun visitClassOrObject(classOrObject: KtClassOrObject, context: TranslationContext) {
         super.visitClassOrObject(classOrObject, context)
 
         if (classOrObject is KtObjectDeclaration) {
-            if (classOrObject.isCompanion()) {
+            if (classOrObject.isCompanion() && containingClass.kind != ClassKind.ENUM_CLASS) {
                 val descriptor = BindingUtils.getDescriptorForElement(context.bindingContext(), classOrObject) as ClassDescriptor
                 addInitializerStatement(JsInvocation(context.getNameForObjectInstance(descriptor).makeRef()).makeStmt())
             }
@@ -63,7 +66,7 @@ class DeclarationBodyVisitor(
         }
         else {
             val enumName = context.getInnerNameForDescriptor(descriptor)
-            val enumInstanceName = context.createGlobalName(enumName.ident + "_instance")
+            val enumInstanceName = JsScope.declareTemporaryName(enumName.ident + "_instance")
 
             assert(supertypes.size == 1) { "Simple Enum entry must have one supertype" }
             val jsEnumEntryCreation = ClassInitializerTranslator.generateEnumEntryInstanceCreation(context, enumEntry, enumEntryOrdinal)
@@ -96,7 +99,7 @@ class DeclarationBodyVisitor(
     override fun addFunction(descriptor: FunctionDescriptor, expression: JsExpression?) {
         if (!descriptor.hasOrInheritsParametersWithDefaultValue() || !descriptor.isOverridableOrOverrides) {
             if (expression != null) {
-                context.addFunctionToPrototype(containingClass, descriptor, expression)
+                context.addDeclarationStatement(context.addFunctionToPrototype(containingClass, descriptor, expression))
             }
         }
         else {
@@ -115,10 +118,10 @@ class DeclarationBodyVisitor(
                         .translateAndAliasParameters(descriptor, caller.parameters)
                         .innerBlock(caller.body)
 
-                val callbackName = caller.scope.declareTemporaryName("callback" + Namer.DEFAULT_PARAMETER_IMPLEMENTOR_SUFFIX)
+                val callbackName = JsScope.declareTemporaryName("callback" + Namer.DEFAULT_PARAMETER_IMPLEMENTOR_SUFFIX)
                 val callee = JsNameRef(bodyName, JsLiteral.THIS)
 
-                val defaultInvocation = JsInvocation(callee, java.util.ArrayList<JsExpression>())
+                val defaultInvocation = JsInvocation(callee, listOf<JsExpression>())
                 val callbackInvocation = JsInvocation(callbackName.makeRef())
                 val chosenInvocation = JsConditional(callbackName.makeRef(), callbackInvocation, defaultInvocation)
                 defaultInvocation.arguments += caller.parameters.map { it.name.makeRef() }
@@ -128,10 +131,15 @@ class DeclarationBodyVisitor(
                 caller.body.statements += FunctionBodyTranslator.setDefaultValueForArguments(descriptor, callerContext)
 
                 val returnType = descriptor.returnType!!
-                val statement = if (KotlinBuiltIns.isUnit(returnType)) chosenInvocation.makeStmt() else JsReturn(chosenInvocation)
+                val statement = if (KotlinBuiltIns.isUnit(returnType) && !descriptor.isSuspend) {
+                    chosenInvocation.makeStmt()
+                }
+                else {
+                    JsReturn(chosenInvocation)
+                }
                 caller.body.statements += statement
 
-                context.addFunctionToPrototype(containingClass, descriptor, caller)
+                context.addDeclarationStatement(context.addFunctionToPrototype(containingClass, descriptor, caller))
             }
         }
     }

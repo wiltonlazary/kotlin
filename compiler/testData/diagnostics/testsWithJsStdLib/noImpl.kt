@@ -1,4 +1,4 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER, -UNREACHABLE_CODE
+// !DIAGNOSTICS: -UNUSED_ANONYMOUS_PARAMETER -UNUSED_PARAMETER, -UNREACHABLE_CODE
 
 val prop: String = <!CALL_TO_DEFINED_EXTERNALLY_FROM_NON_EXTERNAL_DECLARATION!>definedExternally<!>
 
@@ -15,7 +15,7 @@ fun foo(x: Int, y: String = <!CALL_TO_DEFINED_EXTERNALLY_FROM_NON_EXTERNAL_DECLA
 
     listOf<String>()
             .map<String, String> { <!CALL_TO_DEFINED_EXTERNALLY_FROM_NON_EXTERNAL_DECLARATION!>definedExternally<!> }
-            .filter(fun(x: String): Boolean { <!CALL_TO_DEFINED_EXTERNALLY_FROM_NON_EXTERNAL_DECLARATION!>definedExternally<!> })
+            .filter(fun(<!NAME_SHADOWING!>x<!>: String): Boolean { <!CALL_TO_DEFINED_EXTERNALLY_FROM_NON_EXTERNAL_DECLARATION!>definedExternally<!> })
 
     <!CALL_TO_DEFINED_EXTERNALLY_FROM_NON_EXTERNAL_DECLARATION!>definedExternally<!>
 }

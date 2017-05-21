@@ -18,7 +18,10 @@ package org.jetbrains.kotlin.idea.liveTemplates.macro
 
 import com.intellij.codeInsight.lookup.LookupElement
 import com.intellij.codeInsight.lookup.LookupElementBuilder
-import com.intellij.codeInsight.template.*
+import com.intellij.codeInsight.template.Expression
+import com.intellij.codeInsight.template.ExpressionContext
+import com.intellij.codeInsight.template.Result
+import com.intellij.codeInsight.template.TextResult
 import com.intellij.psi.PsiDocumentManager
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
@@ -34,12 +37,12 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 
-class SuggestVariableNameMacro : Macro() {
+class SuggestVariableNameMacro : KotlinMacro() {
     override fun getName() = "kotlinSuggestVariableName"
     override fun getPresentableName() = "kotlinSuggestVariableName()"
 
     override fun calculateResult(params: Array<out Expression>, context: ExpressionContext): Result? {
-        return suggestNames(context).firstOrNull()?.let { TextResult(it) }
+        return suggestNames(context).firstOrNull()?.let(::TextResult)
     }
 
     override fun calculateLookupItems(params: Array<out Expression>, context: ExpressionContext): Array<out LookupElement>? {

@@ -32,7 +32,7 @@ public abstract class CompilerSmokeTestBase extends KotlinIntegrationTestBase {
     }
 
     protected int runCompiler(String logName, String... arguments) throws Exception {
-        Collection<String> javaArgs = new ArrayList<String>();
+        Collection<String> javaArgs = new ArrayList<>();
 
         javaArgs.add("-cp");
         javaArgs.add(StringsKt.join(Arrays.asList(
@@ -43,7 +43,6 @@ public abstract class CompilerSmokeTestBase extends KotlinIntegrationTestBase {
         javaArgs.add("org.jetbrains.kotlin.cli.jvm.K2JVMCompiler");
 
         Collections.addAll(javaArgs, arguments);
-        javaArgs.add("-Xskip-java-check");
 
         return run(logName, ArrayUtil.toStringArray(javaArgs));
     }

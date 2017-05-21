@@ -51,18 +51,16 @@ object JpsJsModuleUtils {
                 if (module.moduleType != JpsJavaModuleType.INSTANCE) return
 
                 if ((module != target.module || target.isTests) && module.sourceRoots.any { it.rootType == JavaSourceRootType.SOURCE}) {
-                    addTarget(module, JavaModuleBuildTargetType.PRODUCTION)
+                    addTarget(module, isTests = false)
                 }
 
                 if (module != target.module && target.isTests && module.sourceRoots.any { it.rootType == JavaSourceRootType.TEST_SOURCE}) {
-                    addTarget(module, JavaModuleBuildTargetType.TEST)
+                    addTarget(module, isTests = true)
                 }
             }
 
-            fun addTarget(module: JpsModule, targetType: JavaModuleBuildTargetType) {
-                val moduleBuildTarget = ModuleBuildTarget(module, targetType)
-                val outputDir = KotlinBuilderModuleScriptGenerator.getOutputDirSafe(moduleBuildTarget)
-                val metaInfoFile = getOutputMetaFile(outputDir, module.name)
+            fun addTarget(module: JpsModule, isTests: Boolean) {
+                val metaInfoFile = getOutputMetaFile(module, isTests)
                 if (metaInfoFile.exists()) {
                     result.add(metaInfoFile.absolutePath)
                 }
@@ -71,8 +69,19 @@ object JpsJsModuleUtils {
     }
 
     @JvmStatic
-    fun getOutputFile(outputDir: File, moduleName: String) = File(outputDir, moduleName + KotlinJavascriptMetadataUtils.JS_EXT)
+    fun getOutputMetaFile(module: JpsModule, isTests: Boolean): File {
+        val moduleBuildTarget = ModuleBuildTarget(module, if (isTests) JavaModuleBuildTargetType.TEST else JavaModuleBuildTargetType.PRODUCTION)
+        val outputDir = KotlinBuilderModuleScriptGenerator.getOutputDirSafe(moduleBuildTarget)
+        return getOutputMetaFile(outputDir, module.name, isTests)
+    }
 
     @JvmStatic
-    fun getOutputMetaFile(outputDir: File, moduleName: String) = File(outputDir, moduleName + KotlinJavascriptMetadataUtils.META_JS_SUFFIX)
+    fun getOutputFile(outputDir: File, moduleName: String, isTests: Boolean)
+            = File(outputDir, moduleName + suffix(isTests) + KotlinJavascriptMetadataUtils.JS_EXT)
+
+    @JvmStatic
+    fun getOutputMetaFile(outputDir: File, moduleName: String, isTests: Boolean)
+            = File(outputDir, moduleName + suffix(isTests) + KotlinJavascriptMetadataUtils.META_JS_SUFFIX)
+
+    private fun suffix(isTests: Boolean) = if (isTests) "_test" else ""
 }

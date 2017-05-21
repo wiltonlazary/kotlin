@@ -22,32 +22,28 @@ import org.jetbrains.kotlin.diagnostics.rendering.*;
 import org.jetbrains.kotlin.resolve.MemberComparator;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public class DefaultErrorMessagesJvm implements DefaultErrorMessages.Extension {
 
-    private static final DiagnosticParameterRenderer<ConflictingJvmDeclarationsData> CONFLICTING_JVM_DECLARATIONS_DATA = new DiagnosticParameterRenderer<ConflictingJvmDeclarationsData>() {
-        @NotNull
-        @Override
-        public String render(@NotNull ConflictingJvmDeclarationsData data, @NotNull RenderingContext context) {
-            List<DeclarationDescriptor> renderedDescriptors = new ArrayList<DeclarationDescriptor>();
-            for (JvmDeclarationOrigin origin : data.getSignatureOrigins()) {
-                DeclarationDescriptor descriptor = origin.getDescriptor();
-                if (descriptor != null) {
-                    renderedDescriptors.add(descriptor);
+    private static final DiagnosticParameterRenderer<ConflictingJvmDeclarationsData> CONFLICTING_JVM_DECLARATIONS_DATA =
+            (data, context) -> {
+                List<DeclarationDescriptor> renderedDescriptors = new ArrayList<>();
+                for (JvmDeclarationOrigin origin : data.getSignatureOrigins()) {
+                    DeclarationDescriptor descriptor = origin.getDescriptor();
+                    if (descriptor != null) {
+                        renderedDescriptors.add(descriptor);
+                    }
                 }
-            }
-            Collections.sort(renderedDescriptors, MemberComparator.INSTANCE);
-            RenderingContext.Impl renderingContext = new RenderingContext.Impl(renderedDescriptors);
+                renderedDescriptors.sort(MemberComparator.INSTANCE);
+                RenderingContext.Impl renderingContext = new RenderingContext.Impl(renderedDescriptors);
 
-            StringBuilder sb = new StringBuilder();
-            for (DeclarationDescriptor descriptor : renderedDescriptors) {
-                sb.append("    ").append(Renderers.COMPACT.render(descriptor, renderingContext)).append("\n");
-            }
-            return ("The following declarations have the same JVM signature (" + data.getSignature().getName() + data.getSignature().getDesc() + "):\n" + sb).trim();
-        }
-    };
+                StringBuilder sb = new StringBuilder();
+                for (DeclarationDescriptor descriptor : renderedDescriptors) {
+                    sb.append("    ").append(Renderers.COMPACT.render(descriptor, renderingContext)).append("\n");
+                }
+                return ("The following declarations have the same JVM signature (" + data.getSignature().getName() + data.getSignature().getDesc() + "):\n" + sb).trim();
+            };
 
     private static final DiagnosticFactoryToRendererMap MAP = new DiagnosticFactoryToRendererMap("JVM");
     static {
@@ -115,6 +111,8 @@ public class DefaultErrorMessagesJvm implements DefaultErrorMessages.Extension {
 
         MAP.put(ErrorsJvm.DEFAULT_METHOD_CALL_FROM_JAVA6_TARGET, "Super calls to Java default methods are deprecated in JVM target 1.6. Recompile with '-jvm-target 1.8'");
         MAP.put(ErrorsJvm.INTERFACE_STATIC_METHOD_CALL_FROM_JAVA6_TARGET, "Calls to static methods in Java interfaces are deprecated in JVM target 1.6. Recompile with '-jvm-target 1.8'");
+
+        MAP.put(ErrorsJvm.INLINE_FROM_HIGHER_PLATFORM, "Cannot inline bytecode built with {0} into bytecode that is being built with {1}. Please specify proper ''-jvm-target'' option", Renderers.TO_STRING, Renderers.TO_STRING);
     }
 
     @NotNull

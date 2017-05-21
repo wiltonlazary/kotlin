@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ import kotlin.Pair;
 import kotlin.Unit;
 import kotlin.collections.CollectionsKt;
 import kotlin.jvm.functions.Function2;
-import kotlin.jvm.functions.Function3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.BuiltInsPackageFragment;
@@ -192,6 +191,10 @@ public class KotlinTypeMapper {
             return asmTypeForAnonymousClass(bindingContext, (FunctionDescriptor) descriptor);
         }
 
+        if (descriptor instanceof ConstructorDescriptor) {
+            return mapClass(((ConstructorDescriptor) descriptor).getConstructedClass());
+        }
+
         DeclarationDescriptor container = descriptor.getContainingDeclaration();
         if (container instanceof PackageFragmentDescriptor) {
             String packageMemberOwner = internalNameForPackageMemberOwner((CallableMemberDescriptor) descriptor, publicFacade);
@@ -266,7 +269,7 @@ public class KotlinTypeMapper {
             return implClassId;
         }
 
-        @Nullable
+        @NotNull
         private static ContainingClassesInfo forPackageMember(
                 @NotNull FqName packageFqName,
                 @NotNull String facadeClassName,
@@ -460,18 +463,16 @@ public class KotlinTypeMapper {
     @NotNull
     public Type mapType(
             @NotNull KotlinType kotlinType,
-            @Nullable final JvmSignatureWriter signatureVisitor,
+            @Nullable JvmSignatureWriter signatureVisitor,
             @NotNull TypeMappingMode mode
     ) {
         return TypeSignatureMappingKt.mapType(
                 kotlinType, AsmTypeFactory.INSTANCE, mode, typeMappingConfiguration, signatureVisitor,
-                new Function3<KotlinType, Type, TypeMappingMode, Unit>() {
-                    @Override
-                    public Unit invoke(KotlinType kotlinType, Type type, TypeMappingMode mode) {
-                        writeGenericType(kotlinType, type, signatureVisitor, mode);
-                        return Unit.INSTANCE;
-                    }
-                });
+                (ktType, asmType, typeMappingMode) -> {
+                    writeGenericType(ktType, asmType, signatureVisitor, typeMappingMode);
+                    return Unit.INSTANCE;
+                }
+        );
     }
 
     @NotNull
@@ -529,26 +530,36 @@ public class KotlinTypeMapper {
 
         List<PossiblyInnerType> innerTypesAsList = possiblyInnerType.segments();
 
-        if (innerTypesAsList.size() == 1) {
+        int indexOfParameterizedType = CollectionsKt.indexOfFirst(innerTypesAsList, innerPart -> !innerPart.getArguments().isEmpty());
+        if (indexOfParameterizedType < 0 || innerTypesAsList.size() == 1) {
             signatureVisitor.writeClassBegin(asmType);
+            writeGenericArguments(signatureVisitor, possiblyInnerType, mode);
         }
         else {
-            ClassDescriptor outermostClass = innerTypesAsList.get(0).getClassDescriptor();
-            signatureVisitor.writeOuterClassBegin(asmType, mapType(outermostClass.getDefaultType()).getInternalName());
-        }
+            PossiblyInnerType outerType = innerTypesAsList.get(indexOfParameterizedType);
 
-        for (int i = 0; i < innerTypesAsList.size(); i++) {
-            PossiblyInnerType innerPart = innerTypesAsList.get(i);
-            if (i > 0) {
-                signatureVisitor.writeInnerClass(getJvmShortName(innerPart.getClassDescriptor()));
-            }
-            writeGenericArguments(signatureVisitor, innerPart, mode);
+            signatureVisitor.writeOuterClassBegin(asmType, mapType(outerType.getClassDescriptor()).getInternalName());
+            writeGenericArguments(signatureVisitor, outerType, mode);
+
+            writeInnerParts(innerTypesAsList, signatureVisitor, mode, indexOfParameterizedType + 1); // inner parts separated by `.`
         }
 
         signatureVisitor.writeClassEnd();
     }
 
-    @Nullable
+    private void writeInnerParts(
+            @NotNull List<PossiblyInnerType> innerTypesAsList,
+            @NotNull JvmSignatureWriter signatureVisitor,
+            @NotNull TypeMappingMode mode,
+            int index
+    ) {
+        for (PossiblyInnerType innerPart : innerTypesAsList.subList(index, innerTypesAsList.size())) {
+            signatureVisitor.writeInnerClass(getJvmShortName(innerPart.getClassDescriptor()));
+            writeGenericArguments(signatureVisitor, innerPart, mode);
+        }
+    }
+
+    @NotNull
     private static String getJvmShortName(@NotNull ClassDescriptor klass) {
         ClassId classId = JavaToKotlinClassMap.INSTANCE.mapKotlinToJava(DescriptorUtils.getFqName(klass));
         if (classId != null) {
@@ -702,15 +713,14 @@ public class KotlinTypeMapper {
 
     @NotNull
     public CallableMethod mapToCallableMethod(@NotNull FunctionDescriptor descriptor, boolean superCall) {
-        if (descriptor instanceof TypeAliasConstructorDescriptor) {
-            return mapToCallableMethod(((TypeAliasConstructorDescriptor) descriptor).getUnderlyingConstructorDescriptor(), superCall);
-        }
-
-        if (descriptor instanceof ClassConstructorDescriptor) {
-            JvmMethodSignature method = mapSignatureSkipGeneric(descriptor);
-            Type owner = mapClass(((ClassConstructorDescriptor) descriptor).getContainingDeclaration());
-            String defaultImplDesc = mapDefaultMethod(descriptor, OwnerKind.IMPLEMENTATION).getDescriptor();
-            return new CallableMethod(owner, owner, defaultImplDesc, method, INVOKESPECIAL, null, null, null, false);
+        if (descriptor instanceof ConstructorDescriptor) {
+            JvmMethodSignature method = mapSignatureSkipGeneric(descriptor.getOriginal());
+            Type owner = mapOwner(descriptor);
+            String defaultImplDesc = mapDefaultMethod(descriptor.getOriginal(), OwnerKind.IMPLEMENTATION).getDescriptor();
+            return new CallableMethod(
+                    owner, owner, defaultImplDesc, method, INVOKESPECIAL,
+                    null, null, null, false
+            );
         }
 
         if (descriptor instanceof LocalVariableAccessorDescriptor) {
@@ -777,7 +787,8 @@ public class KotlinTypeMapper {
                     isInterfaceMember = true;
                 }
                 else {
-                    boolean isPrivateFunInvocation = Visibilities.isPrivate(functionDescriptor.getVisibility());
+                    boolean isPrivateFunInvocation =
+                            Visibilities.isPrivate(functionDescriptor.getVisibility()) && !functionDescriptor.isSuspend();
                     invokeOpcode = superCall || isPrivateFunInvocation ? INVOKESPECIAL : INVOKEVIRTUAL;
                     isInterfaceMember = superCall && currentIsInterface;
                 }
@@ -958,8 +969,8 @@ public class KotlinTypeMapper {
 
         if (!(descriptor instanceof ConstructorDescriptor) &&
             descriptor.getVisibility() == Visibilities.INTERNAL &&
-            !descriptor.getAnnotations().hasAnnotation(KotlinBuiltIns.FQ_NAMES.publishedApi)) {
-            return name + "$" + NameUtils.sanitizeAsJavaIdentifier(moduleName);
+            !DescriptorUtilsKt.isPublishedApi(descriptor)) {
+            return InternalNameMapper.mangleInternalName(name, moduleName);
         }
 
         return name;
@@ -989,7 +1000,7 @@ public class KotlinTypeMapper {
 
     @NotNull
     public Method mapAsmMethod(@NotNull FunctionDescriptor descriptor) {
-        return mapSignature(descriptor, true).getAsmMethod();
+        return mapSignature(descriptor).getAsmMethod();
     }
 
     @NotNull
@@ -998,8 +1009,8 @@ public class KotlinTypeMapper {
     }
 
     @NotNull
-    private JvmMethodGenericSignature mapSignature(@NotNull FunctionDescriptor f, boolean skipGenericSignature) {
-        return mapSignature(f, OwnerKind.IMPLEMENTATION, skipGenericSignature);
+    private JvmMethodGenericSignature mapSignature(@NotNull FunctionDescriptor f) {
+        return mapSignature(f, OwnerKind.IMPLEMENTATION, true);
     }
 
     @NotNull
@@ -1027,31 +1038,28 @@ public class KotlinTypeMapper {
             }
         }
 
+        if (f instanceof TypeAliasConstructorDescriptor) {
+            return mapSignature(((TypeAliasConstructorDescriptor) f).getUnderlyingConstructorDescriptor(), kind, skipGenericSignature);
+        }
+
+        if (f instanceof FunctionImportedFromObject) {
+            return mapSignature(((FunctionImportedFromObject) f).getCallableFromObject(), kind, skipGenericSignature);
+        }
+
         if (CoroutineCodegenUtilKt.isSuspendFunctionNotSuspensionView(f)) {
             return mapSignature(CoroutineCodegenUtilKt.getOrCreateJvmSuspendFunctionView(f), kind, skipGenericSignature);
         }
 
-        if (f instanceof ConstructorDescriptor) {
-            return mapSignature(f, kind, f.getOriginal().getValueParameters(), skipGenericSignature);
-        }
-
-        return mapSignature(f, kind, f.getValueParameters(), skipGenericSignature);
+        return mapSignatureWithCustomParameters(f, kind, f.getValueParameters(), skipGenericSignature);
     }
 
     @NotNull
-    public JvmMethodGenericSignature mapSignature(
+    public JvmMethodGenericSignature mapSignatureWithCustomParameters(
             @NotNull FunctionDescriptor f,
             @NotNull OwnerKind kind,
             @NotNull List<ValueParameterDescriptor> valueParameters,
             boolean skipGenericSignature
     ) {
-        if (f instanceof FunctionImportedFromObject) {
-            return mapSignature(((FunctionImportedFromObject) f).getCallableFromObject(), kind, skipGenericSignature);
-        }
-        else if (f instanceof TypeAliasConstructorDescriptor) {
-            return mapSignature(((TypeAliasConstructorDescriptor) f).getUnderlyingConstructorDescriptor(), kind, valueParameters, skipGenericSignature);
-        }
-
         checkOwnerCompatibility(f);
 
         JvmSignatureWriter sw = skipGenericSignature || f instanceof AccessorForCallableDescriptor
@@ -1422,7 +1430,7 @@ public class KotlinTypeMapper {
         List<ResolvedValueArgument> valueArguments = superCall.getValueArgumentsByIndex();
         assert valueArguments != null : "Failed to arrange value arguments by index: " + superDescriptor;
 
-        List<JvmMethodParameterSignature> parameters = mapSignatureSkipGeneric(superDescriptor).getValueParameters();
+        List<JvmMethodParameterSignature> parameters = mapSignatureSkipGeneric(superDescriptor.getOriginal()).getValueParameters();
 
         int params = parameters.size();
         int args = valueArguments.size();
@@ -1470,8 +1478,8 @@ public class KotlinTypeMapper {
 
         sw.writeParametersStart();
 
-        for (ScriptDescriptor importedScript : importedScripts) {
-            writeParameter(sw, importedScript.getDefaultType(), /* callableDescriptor = */ null);
+        if (importedScripts.size() > 0) {
+            writeParameter(sw, DescriptorUtilsKt.getModule(script).getBuiltIns().getArray().getDefaultType(), null);
         }
 
         for (ValueParameterDescriptor valueParameter : script.getUnsubstitutedPrimaryConstructor().getValueParameters()) {
@@ -1503,5 +1511,34 @@ public class KotlinTypeMapper {
         }
 
         return null;
+    }
+
+    @NotNull
+    public String classInternalName(@NotNull ClassDescriptor classDescriptor) {
+        Type recordedType = typeMappingConfiguration.getPredefinedTypeForClass(classDescriptor);
+        if (recordedType != null) {
+            return recordedType.getInternalName();
+        }
+        return TypeSignatureMappingKt.computeInternalName(classDescriptor, typeMappingConfiguration);
+    }
+
+    public static class InternalNameMapper {
+        public static String mangleInternalName(@NotNull String name, @NotNull String moduleName) {
+            return name + "$" + NameUtils.sanitizeAsJavaIdentifier(moduleName);
+        }
+
+        public static boolean canBeMangledInternalName(@NotNull String name) {
+            return name.indexOf('$') != -1;
+        }
+
+        @Nullable
+        public static String internalNameWithoutModuleSuffix(@NotNull String name) {
+            int indexOfDollar = name.indexOf('$');
+            if (indexOfDollar == -1) {
+                return null;
+            }
+
+            return name.substring(0, indexOfDollar) + '$';
+        }
     }
 }

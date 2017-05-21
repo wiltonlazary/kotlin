@@ -20,7 +20,6 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.FileUtil;
 import kotlin.collections.CollectionsKt;
-import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.analyzer.AnalysisResult;
 import org.jetbrains.kotlin.cli.common.output.outputUtils.OutputUtilsKt;
@@ -30,6 +29,7 @@ import org.jetbrains.kotlin.codegen.GenerationUtils;
 import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
 import org.jetbrains.kotlin.config.CompilerConfiguration;
+import org.jetbrains.kotlin.config.JVMConfigurationKeys;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
 import org.jetbrains.kotlin.descriptors.PackageViewDescriptor;
 import org.jetbrains.kotlin.name.FqName;
@@ -71,12 +71,13 @@ public class LoadDescriptorUtil {
             @NotNull Disposable disposable,
             @NotNull TestJdkKind testJdkKind,
             @NotNull ConfigurationKind configurationKind,
-            boolean isBinaryRoot
+            boolean isBinaryRoot,
+            boolean useFastClassReading
     ) {
-        List<File> javaBinaryRoots = new ArrayList<File>();
+        List<File> javaBinaryRoots = new ArrayList<>();
         javaBinaryRoots.add(KotlinTestUtils.getAnnotationsJar());
 
-        List<File> javaSourceRoots = new ArrayList<File>();
+        List<File> javaSourceRoots = new ArrayList<>();
         javaSourceRoots.add(new File("compiler/testData/loadJava/include"));
         if (isBinaryRoot) {
             javaBinaryRoots.add(javaRoot);
@@ -86,6 +87,7 @@ public class LoadDescriptorUtil {
         }
         CompilerConfiguration configuration =
                 KotlinTestUtils.newConfiguration(configurationKind, testJdkKind, javaBinaryRoots, javaSourceRoots);
+        configuration.put(JVMConfigurationKeys.USE_FAST_CLASS_FILES_READING, useFastClassReading);
         KotlinCoreEnvironment environment =
                 KotlinCoreEnvironment.createForTests(disposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES);
 
@@ -106,16 +108,13 @@ public class LoadDescriptorUtil {
     }
 
     @NotNull
-    private static List<KtFile> createKtFiles(@NotNull List<File> kotlinFiles, @NotNull final KotlinCoreEnvironment environment) {
-        return CollectionsKt.map(kotlinFiles, new Function1<File, KtFile>() {
-            @Override
-            public KtFile invoke(File kotlinFile) {
-                try {
-                    return KotlinTestUtils.createFile(kotlinFile.getName(), FileUtil.loadFile(kotlinFile, true), environment.getProject());
-                }
-                catch (IOException e) {
-                    throw ExceptionUtilsKt.rethrow(e);
-                }
+    private static List<KtFile> createKtFiles(@NotNull List<File> kotlinFiles, @NotNull KotlinCoreEnvironment environment) {
+        return CollectionsKt.map(kotlinFiles, kotlinFile -> {
+            try {
+                return KotlinTestUtils.createFile(kotlinFile.getName(), FileUtil.loadFile(kotlinFile, true), environment.getProject());
+            }
+            catch (IOException e) {
+                throw ExceptionUtilsKt.rethrow(e);
             }
         });
     }

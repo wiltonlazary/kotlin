@@ -24,7 +24,7 @@ fun JsFunction.addStatement(stmt: JsStatement) {
 }
 
 fun JsFunction.addParameter(identifier: String, index: Int? = null): JsParameter {
-    val name = scope.declareTemporaryName(identifier)
+    val name = JsScope.declareTemporaryName(identifier)
     val parameter = JsParameter(name)
 
     if (index == null) {
@@ -76,7 +76,7 @@ fun JsExpression.toInvocationWith(
             // `A(a, b, c)` -> `A(a, b, c, $this)`
             return JsInvocation(qualifier, leadingExtraArgs + padArguments(arguments) + thisExpr)
         }
-        else -> throw IllegalStateException("Unexpected node type: " + javaClass)
+        else -> throw IllegalStateException("Unexpected node type: " + this::class.java)
     }
 }
 

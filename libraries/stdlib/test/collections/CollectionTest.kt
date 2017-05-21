@@ -295,7 +295,7 @@ class CollectionTest {
         }
 
         assertFailsWith<UnsupportedOperationException> {
-            arrayListOf<Int>().reduceIndexed { index, a, b -> a + b }
+            arrayListOf<Int>().reduceIndexed { index, a, b -> index + a + b }
         }
     }
 
@@ -315,7 +315,7 @@ class CollectionTest {
         }
 
         assertFailsWith<UnsupportedOperationException> {
-            arrayListOf<Int>().reduceRightIndexed { index, a, b -> a + b }
+            arrayListOf<Int>().reduceRightIndexed { index, a, b -> index + a + b }
         }
     }
 
@@ -579,6 +579,10 @@ class CollectionTest {
         assertEquals(coll, coll.takeLast(coll.size + 1))
 
         assertFails { coll.takeLast(-1) }
+
+        val collWithoutRandomAccess = object : List<String> by coll {}
+        assertEquals(listOf("abc"), collWithoutRandomAccess.takeLast(1))
+        assertEquals(listOf("bar", "abc"), collWithoutRandomAccess.takeLast(2))
     }
 
     @Test fun takeLastWhile() {
@@ -626,6 +630,7 @@ class CollectionTest {
 
         // lists throw an exception if out of range
         assertFails {
+            @Suppress("UNUSED_VARIABLE")
             val outOfBounds = list[2]
         }
 

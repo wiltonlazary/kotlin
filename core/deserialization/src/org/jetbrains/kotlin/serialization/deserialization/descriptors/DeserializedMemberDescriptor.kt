@@ -19,7 +19,6 @@ package org.jetbrains.kotlin.serialization.deserialization.descriptors
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.*
-import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.protobuf.MessageLite
 import org.jetbrains.kotlin.serialization.Flags
@@ -27,10 +26,8 @@ import org.jetbrains.kotlin.serialization.ProtoBuf
 import org.jetbrains.kotlin.serialization.deserialization.IncompatibleVersionErrorData
 import org.jetbrains.kotlin.serialization.deserialization.NameResolver
 import org.jetbrains.kotlin.serialization.deserialization.TypeTable
-import org.jetbrains.kotlin.types.SimpleType
-import org.jetbrains.kotlin.types.TypeSubstitutor
-import org.jetbrains.kotlin.types.Variance
-import org.jetbrains.kotlin.types.asSimpleType
+import org.jetbrains.kotlin.storage.StorageManager
+import org.jetbrains.kotlin.types.*
 
 interface DeserializedMemberDescriptor : MemberDescriptor {
     val proto: MessageLite
@@ -107,16 +104,16 @@ class DeserializedPropertyDescriptor(
         isConst: Boolean,
         isExternal: Boolean,
         isDelegated: Boolean,
+        isHeader: Boolean,
         override val proto: ProtoBuf.Property,
         override val nameResolver: NameResolver,
         override val typeTable: TypeTable,
         override val sinceKotlinInfoTable: SinceKotlinInfoTable,
         override val containerSource: DeserializedContainerSource?
-) : DeserializedCallableMemberDescriptor,
-        PropertyDescriptorImpl(containingDeclaration, original, annotations,
-                               modality, visibility, isVar, name, kind, SourceElement.NO_SOURCE, isLateInit, isConst, false, false,
-                               isExternal, isDelegated) {
-
+) : DeserializedCallableMemberDescriptor, PropertyDescriptorImpl(
+        containingDeclaration, original, annotations, modality, visibility, isVar, name, kind, SourceElement.NO_SOURCE,
+        isLateInit, isConst, isHeader, false, isExternal, isDelegated
+) {
     override fun createSubstitutedCopy(
             newOwner: DeclarationDescriptor,
             newModality: Modality,
@@ -126,8 +123,7 @@ class DeserializedPropertyDescriptor(
     ): PropertyDescriptorImpl {
         return DeserializedPropertyDescriptor(
                 newOwner, original, annotations, newModality, newVisibility, isVar, name, kind, isLateInit, isConst, isExternal,
-                @Suppress("DEPRECATION") isDelegated,
-                proto, nameResolver, typeTable, sinceKotlinInfoTable, containerSource
+                @Suppress("DEPRECATION") isDelegated, isHeader, proto, nameResolver, typeTable, sinceKotlinInfoTable, containerSource
         )
     }
 
@@ -173,6 +169,7 @@ class DeserializedClassConstructorDescriptor(
 }
 
 class DeserializedTypeAliasDescriptor(
+        override val storageManager: StorageManager,
         containingDeclaration: DeclarationDescriptor,
         annotations: Annotations,
         name: Name,
@@ -184,6 +181,7 @@ class DeserializedTypeAliasDescriptor(
         override val containerSource: DeserializedContainerSource?
 ) : AbstractTypeAliasDescriptor(containingDeclaration, annotations, name, SourceElement.NO_SOURCE, visibility),
         DeserializedMemberDescriptor {
+    override lateinit var constructors: Collection<TypeAliasConstructorDescriptor> private set
 
     override lateinit var underlyingType: SimpleType private set
     override lateinit var expandedType: SimpleType private set
@@ -200,6 +198,7 @@ class DeserializedTypeAliasDescriptor(
         this.expandedType = expandedType
         typeConstructorParameters = computeConstructorTypeParameters()
         defaultTypeImpl = computeDefaultType()
+        constructors = getTypeAliasConstructors()
     }
 
     override val classDescriptor: ClassDescriptor?
@@ -211,7 +210,16 @@ class DeserializedTypeAliasDescriptor(
     override fun substitute(substitutor: TypeSubstitutor): TypeAliasDescriptor {
         if (substitutor.isEmpty) return this
         val substituted = DeserializedTypeAliasDescriptor(
-                containingDeclaration, annotations, name, visibility, proto, nameResolver, typeTable, sinceKotlinInfoTable, containerSource
+                storageManager,
+                containingDeclaration,
+                annotations,
+                name,
+                visibility,
+                proto,
+                nameResolver,
+                typeTable,
+                sinceKotlinInfoTable,
+                containerSource
         )
         substituted.initialize(declaredTypeParameters,
                                substitutor.safeSubstitute(underlyingType, Variance.INVARIANT).asSimpleType(),

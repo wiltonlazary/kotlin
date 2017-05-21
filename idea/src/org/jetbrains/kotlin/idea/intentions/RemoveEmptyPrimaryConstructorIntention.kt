@@ -23,9 +23,11 @@ import org.jetbrains.kotlin.idea.inspections.IntentionBasedInspection
 import org.jetbrains.kotlin.psi.KtPrimaryConstructor
 import org.jetbrains.kotlin.psi.psiUtil.containingClass
 
-class RemoveEmptyPrimaryConstructorInspection : IntentionBasedInspection<KtPrimaryConstructor>(RemoveEmptyPrimaryConstructorIntention::class), CleanupLocalInspectionTool {
-    override val problemHighlightType: ProblemHighlightType
-        get() = ProblemHighlightType.LIKE_UNUSED_SYMBOL
+class RemoveEmptyPrimaryConstructorInspection : IntentionBasedInspection<KtPrimaryConstructor>(
+        RemoveEmptyPrimaryConstructorIntention::class
+), CleanupLocalInspectionTool {
+    override fun problemHighlightType(element: KtPrimaryConstructor): ProblemHighlightType =
+            ProblemHighlightType.LIKE_UNUSED_SYMBOL
 }
 
 class RemoveEmptyPrimaryConstructorIntention : SelfTargetingOffsetIndependentIntention<KtPrimaryConstructor>(KtPrimaryConstructor::class.java, "Remove empty primary constructor") {
@@ -36,7 +38,7 @@ class RemoveEmptyPrimaryConstructorIntention : SelfTargetingOffsetIndependentInt
         element.valueParameters.isNotEmpty() -> false
         element.annotations.isNotEmpty() -> false
         element.modifierList?.text?.isBlank() == false -> false
-        element.containingClass()?.getSecondaryConstructors()?.isNotEmpty() == true -> false
+        element.containingClass()?.secondaryConstructors?.isNotEmpty() == true -> false
         else -> true
     }
 }

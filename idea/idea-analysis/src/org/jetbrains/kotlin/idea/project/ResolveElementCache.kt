@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -117,7 +117,7 @@ class ResolveElementCache(
             = getElementsAdditionalResolve(function, null, BodyResolveMode.FULL)
 
     fun resolvePrimaryConstructorParametersDefaultValues(ktClass: KtClass): BindingContext {
-        return constructorAdditionalResolve(resolveSession, ktClass, ktClass.getContainingKtFile(), BindingTraceFilter.NO_DIAGNOSTICS).bindingContext
+        return constructorAdditionalResolve(resolveSession, ktClass, ktClass.containingKtFile, BindingTraceFilter.NO_DIAGNOSTICS).bindingContext
     }
 
     @Deprecated("Use getElementsAdditionalResolve")
@@ -278,7 +278,7 @@ class ResolveElementCache(
             assert(bodyResolveMode == BodyResolveMode.FULL)
         }
 
-        val file = resolveElement.getContainingKtFile()
+        val file = resolveElement.containingKtFile
 
         var statementFilterUsed = StatementFilter.NONE
 
@@ -403,10 +403,10 @@ class ResolveElementCache(
         else {
             val fileAnnotationList = ktAnnotationEntry.getParentOfType<KtFileAnnotationList>(true)
             if (fileAnnotationList != null) {
-                doResolveAnnotations(resolveSession.getFileAnnotations(fileAnnotationList.getContainingKtFile()))
+                doResolveAnnotations(resolveSession.getFileAnnotations(fileAnnotationList.containingKtFile))
             }
             if (modifierList != null && modifierList.parent is KtFile) {
-                doResolveAnnotations(resolveSession.getDanglingAnnotations(modifierList.getContainingKtFile()))
+                doResolveAnnotations(resolveSession.getDanglingAnnotations(modifierList.containingKtFile))
             }
         }
 
@@ -420,7 +420,7 @@ class ResolveElementCache(
     private fun getAnnotationsByDeclaration(resolveSession: ResolveSession, modifierList: KtModifierList, declaration: KtDeclaration): Annotations {
         var descriptor = resolveSession.resolveToDescriptor(declaration)
         if (declaration is KtClass) {
-            if (modifierList == declaration.getPrimaryConstructorModifierList()) {
+            if (modifierList == declaration.primaryConstructorModifierList) {
                 descriptor = (descriptor as ClassDescriptor).unsubstitutedPrimaryConstructor
                              ?: error("No constructor found: ${declaration.getText()}")
             }
@@ -524,7 +524,6 @@ class ResolveElementCache(
 
     private fun constructorAdditionalResolve(resolveSession: ResolveSession, klass: KtClassOrObject, file: KtFile, filter : BindingTraceFilter): BindingTrace {
         val trace = createDelegatingTrace(klass, filter)
-        val scope = resolveSession.declarationScopeProvider.getResolutionScopeForDeclaration(klass)
 
         val classDescriptor = resolveSession.resolveToDescriptor(klass) as ClassDescriptor
         val constructorDescriptor = classDescriptor.unsubstitutedPrimaryConstructor
@@ -532,8 +531,9 @@ class ResolveElementCache(
                                              "in from class '${klass.getElementTextWithContext()}'")
         ForceResolveUtil.forceResolveAllContents(constructorDescriptor)
 
-        val primaryConstructor = klass.getPrimaryConstructor()
+        val primaryConstructor = klass.primaryConstructor
         if (primaryConstructor != null) {
+            val scope = resolveSession.declarationScopeProvider.getResolutionScopeForDeclaration(primaryConstructor)
             val bodyResolver = createBodyResolver(resolveSession, trace, file, StatementFilter.NONE)
             bodyResolver.resolveConstructorParameterDefaultValues(DataFlowInfo.EMPTY, trace, primaryConstructor, constructorDescriptor, scope)
 
@@ -588,7 +588,8 @@ class ResolveElementCache(
                 trace,
                 targetPlatform,
                 statementFilter,
-                file.createCompilerConfiguration()
+                file.jvmTarget,
+                file.languageVersionSettings
         ).get<BodyResolver>()
     }
 

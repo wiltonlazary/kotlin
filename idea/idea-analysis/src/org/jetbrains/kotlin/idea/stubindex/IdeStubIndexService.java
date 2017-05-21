@@ -168,6 +168,8 @@ public class IdeStubIndexService extends StubIndexService {
                 IndexUtilsKt.indexTopLevelExtension(stub, sink);
             }
         }
+
+        IndexUtilsKt.indexInternals(stub, sink);
     }
 
     @Override
@@ -207,6 +209,16 @@ public class IdeStubIndexService extends StubIndexService {
                 sink.occurrence(KotlinTopLevelPropertyByPackageIndex.getInstance().getKey(), fqName.parent().asString());
                 IndexUtilsKt.indexTopLevelExtension(stub, sink);
             }
+        }
+
+        IndexUtilsKt.indexInternals(stub, sink);
+    }
+
+    @Override
+    public void indexParameter(@NotNull KotlinParameterStub stub, @NotNull IndexSink sink) {
+        String name = stub.getName();
+        if (name != null && stub.hasValOrVar()) {
+            sink.occurrence(KotlinPropertyShortNameIndex.getInstance().getKey(), name);
         }
     }
 

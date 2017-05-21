@@ -17,10 +17,7 @@
 package org.jetbrains.kotlin.resolve.calls.callUtil
 
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.descriptors.CallableDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.incremental.KotlinLookupLocation
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
@@ -33,6 +30,7 @@ import org.jetbrains.kotlin.resolve.calls.CallTransformer
 import org.jetbrains.kotlin.resolve.calls.context.ResolutionContext
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.utils.sure
 
 // resolved call
@@ -144,9 +142,9 @@ fun KtElement.getCall(context: BindingContext): Call? {
     if (element is KtCallElement && element.calleeExpression == null) return null
 
     val parent = element.parent
-    val reference: KtExpression? = when {
-        parent is KtInstanceExpressionWithLabel -> parent
-        parent is KtUserType -> parent.getParent()?.getParent() as? KtConstructorCalleeExpression
+    val reference: KtExpression? = when (parent) {
+        is KtInstanceExpressionWithLabel -> parent
+        is KtUserType -> parent.parent.parent as? KtConstructorCalleeExpression
         else -> element.getCalleeExpressionIfAny()
     }
     if (reference != null) {
@@ -208,6 +206,15 @@ fun KtExpression.getPropertyResolvedCallWithAssert(context: BindingContext): Res
     }
     @Suppress("UNCHECKED_CAST")
     return resolvedCall as ResolvedCall<out PropertyDescriptor>
+}
+
+fun KtExpression.getVariableResolvedCallWithAssert(context: BindingContext): ResolvedCall<out VariableDescriptor> {
+    val resolvedCall = getResolvedCallWithAssert(context)
+    assert(resolvedCall.resultingDescriptor is VariableDescriptor) {
+        "ResolvedCall for this expression must be ResolvedCall<? extends PropertyDescriptor>: ${this.getTextWithLocation()}"
+    }
+    @Suppress("UNCHECKED_CAST")
+    return resolvedCall as ResolvedCall<out VariableDescriptor>
 }
 
 fun KtExpression.getType(context: BindingContext): KotlinType? {

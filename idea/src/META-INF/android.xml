@@ -23,11 +23,41 @@
             <category>Kotlin Android</category>
         </intentionAction>
 
+        <intentionAction>
+            <className>org.jetbrains.kotlin.android.intention.AddActivityToManifest</className>
+            <category>Kotlin Android</category>
+        </intentionAction>
+
+        <intentionAction>
+            <className>org.jetbrains.kotlin.android.intention.AddServiceToManifest</className>
+            <category>Kotlin Android</category>
+        </intentionAction>
+
+        <intentionAction>
+            <className>org.jetbrains.kotlin.android.intention.AddBroadcastReceiverToManifest</className>
+            <category>Kotlin Android</category>
+        </intentionAction>
+        <intentionAction>
+            <className>org.jetbrains.kotlin.android.intention.ImplementParcelableAction</className>
+            <category>Kotlin Android</category>
+        </intentionAction>
+
+        <intentionAction>
+            <className>org.jetbrains.kotlin.android.intention.RemoveParcelableAction</className>
+            <category>Kotlin Android</category>
+        </intentionAction>
+
+        <intentionAction>
+            <className>org.jetbrains.kotlin.android.intention.RedoParcelableAction</className>
+            <category>Kotlin Android</category>
+        </intentionAction>
 
         <codeInsight.unresolvedReferenceQuickFixProvider
             implementation="org.jetbrains.kotlin.android.inspection.KotlinAndroidResourceQuickFixProvider"/>
 
         <lang.foldingBuilder language="kotlin" implementationClass="org.jetbrains.kotlin.android.folding.ResourceFoldingBuilder" />
+
+        <annotator language="kotlin" implementationClass="org.jetbrains.kotlin.android.AndroidResourceReferenceAnnotator" />
 
     </extensions>
 
@@ -42,6 +72,7 @@
 
         <quickFixContributor implementation="org.jetbrains.kotlin.android.quickfix.AndroidQuickFixRegistrar"/>
         <projectConfigurator implementation="org.jetbrains.kotlin.android.configure.KotlinAndroidGradleModuleConfigurator"/>
+        <platformGradleDetector implementation="org.jetbrains.kotlin.android.configure.PlatformAndroidGradleDetector"/>
     </extensions>
 
     <project-components>

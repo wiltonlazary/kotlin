@@ -27,7 +27,6 @@ import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
-import org.jetbrains.kotlin.idea.codeInsight.KotlinFileReferencesResolver
 import org.jetbrains.kotlin.idea.core.compareDescriptors
 import org.jetbrains.kotlin.idea.refactoring.introduce.ExtractableSubstringInfo
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractableSubstringInfo
@@ -196,10 +195,10 @@ data class ExtractionData(
 
         val newReferences = body.collectDescendantsOfType<KtSimpleNameExpression> { it.resolveResult != null }
 
+        val context = body.analyze()
+
         val referencesInfo = ArrayList<ResolvedReferenceInfo>()
-        val refToContextMap = KotlinFileReferencesResolver.resolve(body)
         for (newRef in newReferences) {
-            val context = refToContextMap[newRef] ?: continue
             val originalResolveResult = newRef.resolveResult ?: continue
 
             val smartCast: KotlinType?
@@ -244,7 +243,7 @@ data class ExtractionData(
                     val invokeDeclaration = getDeclaration(invokeDescriptor, context) ?: synthesizedInvokeDeclaration
                     val variableResolveResult = originalResolveResult.copy(resolvedCall = originalVariableCall!!,
                                                                            descriptor = originalVariableCall.resultingDescriptor)
-                    val functionResolveResult = originalResolveResult.copy(resolvedCall = originalFunctionCall!!,
+                    val functionResolveResult = originalResolveResult.copy(resolvedCall = originalFunctionCall,
                                                                            descriptor = originalFunctionCall.resultingDescriptor,
                                                                            declaration = invokeDeclaration)
                     referencesInfo.add(ResolvedReferenceInfo(newRef, variableResolveResult, smartCast, possibleTypes, shouldSkipPrimaryReceiver))
@@ -260,7 +259,7 @@ data class ExtractionData(
     }
 
     override fun dispose() {
-        expressions.forEach { unmarkReferencesInside(it) }
+        expressions.forEach(::unmarkReferencesInside)
     }
 }
 

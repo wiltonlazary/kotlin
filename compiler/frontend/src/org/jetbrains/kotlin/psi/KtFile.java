@@ -21,14 +21,13 @@ import com.intellij.lang.ASTNode;
 import com.intellij.lang.FileASTNode;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.fileTypes.FileType;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.stubs.StubElement;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.FileContentUtilCore;
 import com.intellij.util.IncorrectOperationException;
 import kotlin.collections.ArraysKt;
-import kotlin.jvm.functions.Function1;
+import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.KtNodeTypes;
@@ -39,7 +38,6 @@ import org.jetbrains.kotlin.parsing.KotlinParserDefinition;
 import org.jetbrains.kotlin.psi.stubs.KotlinFileStub;
 import org.jetbrains.kotlin.psi.stubs.elements.KtPlaceHolderStubElementType;
 import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementTypes;
-import org.jetbrains.kotlin.utils.CollectionsKt;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -48,6 +46,7 @@ import java.util.List;
 public class KtFile extends PsiFileBase implements KtDeclarationContainer, KtAnnotated, KtElement, PsiClassOwner, PsiNamedElement {
 
     private final boolean isCompiled;
+    private Boolean isScript = null;
 
     public KtFile(FileViewProvider viewProvider, boolean compiled) {
         super(viewProvider, KotlinLanguage.INSTANCE);
@@ -71,7 +70,7 @@ public class KtFile extends PsiFileBase implements KtDeclarationContainer, KtAnn
 
     @Override
     public String toString() {
-        return "JetFile: " + getName();
+        return "KtFile: " + getName();
     }
 
     @NotNull
@@ -110,7 +109,7 @@ public class KtFile extends PsiFileBase implements KtDeclarationContainer, KtAnn
     @NotNull
     public List<KtImportDirective> getImportDirectives() {
         KtImportList importList = getImportList();
-        return importList != null ? importList.getImports() : Collections.<KtImportDirective>emptyList();
+        return importList != null ? importList.getImports() : Collections.emptyList();
     }
 
     @Nullable
@@ -185,9 +184,22 @@ public class KtFile extends PsiFileBase implements KtDeclarationContainer, KtAnn
     @Override
     public void setPackageName(String packageName) { }
 
+    @Override
+    public void clearCaches() {
+        super.clearCaches();
+        isScript = null;
+    }
+
     @Nullable
     public KtScript getScript() {
-        return PsiTreeUtil.getChildOfType(this, KtScript.class);
+        if (isScript != null && !isScript) return null;
+
+        KtScript result = PsiTreeUtil.getChildOfType(this, KtScript.class);
+        if (isScript == null) {
+            isScript = result != null;
+        }
+
+        return result;
     }
 
     public boolean isScript() {
@@ -259,19 +271,12 @@ public class KtFile extends PsiFileBase implements KtDeclarationContainer, KtAnn
     public List<KtAnnotationEntry> getDanglingAnnotations() {
         KotlinFileStub stub = getStub();
         KtModifierList[] danglingModifierLists = stub == null
-                                                  ? findChildrenByClass(KtModifierList.class)
-                                                  : stub.getChildrenByType(
-                                                          KtStubElementTypes.MODIFIER_LIST,
-                                                          KtStubElementTypes.MODIFIER_LIST.getArrayFactory()
-                                                  );
-        return ArraysKt.flatMap(
-                danglingModifierLists,
-                new Function1<KtModifierList, Iterable<KtAnnotationEntry>>() {
-                    @Override
-                    public Iterable<KtAnnotationEntry> invoke(KtModifierList modifierList) {
-                        return modifierList.getAnnotationEntries();
-                    }
-                });
+                                                 ? findChildrenByClass(KtModifierList.class)
+                                                 : stub.getChildrenByType(
+                                                         KtStubElementTypes.MODIFIER_LIST,
+                                                         KtStubElementTypes.MODIFIER_LIST.getArrayFactory()
+                                                 );
+        return ArraysKt.flatMap(danglingModifierLists, KtModifierList::getAnnotationEntries);
     }
 
     @Override
@@ -279,7 +284,7 @@ public class KtFile extends PsiFileBase implements KtDeclarationContainer, KtAnn
         PsiElement result = super.setName(name);
         boolean willBeScript = name.endsWith(KotlinParserDefinition.STD_SCRIPT_EXT);
         if (isScript() != willBeScript) {
-            FileContentUtilCore.reparseFiles(CollectionsKt.<VirtualFile>singletonOrEmptyList(getVirtualFile()));
+            FileContentUtilCore.reparseFiles(CollectionsKt.listOfNotNull(getVirtualFile()));
         }
         return result;
     }

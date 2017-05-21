@@ -32,13 +32,16 @@ enum class JvmDeclarationOriginKind {
     OTHER,
     PACKAGE_PART,
     INTERFACE_DEFAULT_IMPL,
-    DELEGATION_TO_DEFAULT_IMPLS,
+    CLASS_MEMBER_DELEGATION_TO_DEFAULT_IMPL,
+    DEFAULT_IMPL_DELEGATION_TO_SUPERINTERFACE_DEFAULT_IMPL,
     DELEGATION,
     SAM_DELEGATION,
     BRIDGE,
     MULTIFILE_CLASS,
     MULTIFILE_CLASS_PART,
-    SYNTHETIC // this means that there's no proper descriptor for this jvm declaration
+    SYNTHETIC, // this means that there's no proper descriptor for this jvm declaration,
+    COLLECTION_STUB,
+    AUGMENTED_BUILTIN_API
 }
 
 class JvmDeclarationOrigin(
@@ -84,11 +87,13 @@ fun MultifileClassPart(file: KtFile, descriptor: PackageFragmentDescriptor): Jvm
         JvmDeclarationOrigin(MULTIFILE_CLASS_PART, file, descriptor)
 
 fun DefaultImpls(element: PsiElement?, descriptor: ClassDescriptor): JvmDeclarationOrigin = JvmDeclarationOrigin(INTERFACE_DEFAULT_IMPL, element, descriptor)
-fun DelegationToDefaultImpls(element: PsiElement?, descriptor: FunctionDescriptor): JvmDeclarationOrigin =
-        JvmDeclarationOrigin(DELEGATION_TO_DEFAULT_IMPLS, element, descriptor)
 
 fun Delegation(element: PsiElement?, descriptor: FunctionDescriptor): JvmDeclarationOrigin = JvmDeclarationOrigin(DELEGATION, element, descriptor)
 
 fun SamDelegation(descriptor: FunctionDescriptor): JvmDeclarationOrigin = JvmDeclarationOrigin(SAM_DELEGATION, null, descriptor)
 
 fun Synthetic(element: PsiElement?, descriptor: CallableMemberDescriptor): JvmDeclarationOrigin = JvmDeclarationOrigin(SYNTHETIC, element, descriptor)
+
+val CollectionStub = JvmDeclarationOrigin(COLLECTION_STUB, null, null)
+
+fun AugmentedBuiltInApi(descriptor: CallableDescriptor): JvmDeclarationOrigin = JvmDeclarationOrigin(AUGMENTED_BUILTIN_API, null, descriptor)

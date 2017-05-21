@@ -54,6 +54,13 @@ class DumpIrTreeVisitor(out: Appendable): IrElementVisitor<Unit, String> {
         element.dumpLabeledSubTree(data)
     }
 
+    override fun visitModuleFragment(declaration: IrModuleFragment, data: String) {
+        declaration.dumpLabeledElementWith(data) {
+            declaration.files.dumpElements()
+            declaration.externalPackageFragments.dumpElements()
+        }
+    }
+
     override fun visitFile(declaration: IrFile, data: String) {
         declaration.dumpLabeledElementWith(data) {
             if (declaration.fileAnnotations.isNotEmpty()) {
@@ -64,37 +71,60 @@ class DumpIrTreeVisitor(out: Appendable): IrElementVisitor<Unit, String> {
                     }
                 }
             }
-            declaration.declarations.forEach { it.accept(this, "") }
+            declaration.declarations.dumpElements()
+        }
+    }
+
+    override fun visitClass(declaration: IrClass, data: String) {
+        declaration.dumpLabeledElementWith(data) {
+            declaration.thisReceiver?.accept(this, "\$this")
+            declaration.typeParameters.dumpElements()
+            declaration.declarations.dumpElements()
         }
     }
 
     override fun visitFunction(declaration: IrFunction, data: String) {
-        visitFunctionWithParameters(declaration, data)
+        declaration.dumpLabeledElementWith(data) {
+            declaration.typeParameters.dumpElements()
+            declaration.dispatchReceiverParameter?.accept(this, "\$this")
+            declaration.extensionReceiverParameter?.accept(this, "\$receiver")
+            declaration.valueParameters.dumpElements()
+            declaration.body?.accept(this, "")
+        }
     }
 
     override fun visitConstructor(declaration: IrConstructor, data: String) {
-        visitFunctionWithParameters(declaration, data)
+        declaration.dumpLabeledElementWith(data) {
+            declaration.typeParameters.dumpElements()
+            declaration.dispatchReceiverParameter?.accept(this, "\$outer")
+            declaration.valueParameters.dumpElements()
+            declaration.body?.accept(this, "")
+        }
+    }
+
+    override fun visitProperty(declaration: IrProperty, data: String) {
+        declaration.dumpLabeledElementWith(data) {
+            declaration.typeParameters.dumpElements()
+            declaration.backingField?.accept(this, "")
+            declaration.getter?.accept(this, "")
+            declaration.setter?.accept(this, "")
+        }
+    }
+
+    private fun List<IrElement>.dumpElements() {
+        forEach { it.accept(this@DumpIrTreeVisitor, "") }
     }
 
     override fun visitErrorCallExpression(expression: IrErrorCallExpression, data: String) {
         expression.dumpLabeledElementWith(data) {
             expression.explicitReceiver?.accept(this, "receiver")
-            expression.arguments.forEach { it.accept(this, "") }
-        }
-    }
-
-    private fun visitFunctionWithParameters(declaration: IrFunction, data: String) {
-        declaration.dumpLabeledElementWith(data) {
-            declaration.descriptor.valueParameters.forEach { valueParameter ->
-                declaration.getDefault(valueParameter)?.accept(this, valueParameter.name.asString())
-            }
-            declaration.body?.accept(this, "")
+            expression.arguments.dumpElements()
         }
     }
 
     override fun visitEnumEntry(declaration: IrEnumEntry, data: String) {
         declaration.dumpLabeledElementWith(data) {
-            declaration.initializerExpression.accept(this, "init")
+            declaration.initializerExpression?.accept(this, "init")
             declaration.correspondingClass?.accept(this, "class")
         }
     }
@@ -102,7 +132,6 @@ class DumpIrTreeVisitor(out: Appendable): IrElementVisitor<Unit, String> {
     override fun visitMemberAccess(expression: IrMemberAccessExpression, data: String) {
         expression.dumpLabeledElementWith(data) {
             dumpTypeArguments(expression)
-
             expression.dispatchReceiver?.accept(this, "\$this")
             expression.extensionReceiver?.accept(this, "\$receiver")
             for (valueParameter in expression.descriptor.valueParameters) {
@@ -113,9 +142,11 @@ class DumpIrTreeVisitor(out: Appendable): IrElementVisitor<Unit, String> {
 
     private fun dumpTypeArguments(expression: IrMemberAccessExpression) {
         for (typeParameter in expression.descriptor.original.typeParameters) {
-            val typeArgument = expression.getTypeArgument(typeParameter) ?: continue
             val renderedParameter = DescriptorRenderer.ONLY_NAMES_WITH_SHORT_TYPES.render(typeParameter)
-            val renderedType = DescriptorRenderer.ONLY_NAMES_WITH_SHORT_TYPES.renderType(typeArgument)
+            val typeArgument = expression.getTypeArgument(typeParameter)
+            val renderedType = typeArgument?.let {
+                DescriptorRenderer.ONLY_NAMES_WITH_SHORT_TYPES.renderType(typeArgument)
+            } ?: "null"
             printer.println("$renderedParameter: $renderedType")
         }
     }
@@ -135,9 +166,7 @@ class DumpIrTreeVisitor(out: Appendable): IrElementVisitor<Unit, String> {
 
     override fun visitWhen(expression: IrWhen, data: String) {
         expression.dumpLabeledElementWith(data) {
-            expression.branches.forEach {
-                it.accept(this, "")
-            }
+            expression.branches.dumpElements()
         }
     }
 
@@ -165,9 +194,7 @@ class DumpIrTreeVisitor(out: Appendable): IrElementVisitor<Unit, String> {
     override fun visitTry(aTry: IrTry, data: String) {
         aTry.dumpLabeledElementWith(data) {
             aTry.tryResult.accept(this, "try")
-            for (aCatch in aTry.catches) {
-                aCatch.accept(this, "")
-            }
+            aTry.catches.dumpElements()
             aTry.finallyExpression?.accept(this, "finally")
         }
     }

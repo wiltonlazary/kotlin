@@ -25,14 +25,14 @@ import org.jetbrains.uast.*
 
 class KotlinUObjectLiteralExpression(
         override val psi: KtObjectLiteralExpression,
-        override val containingElement: UElement?
+        override val uastParent: UElement?
 ) : KotlinAbstractUExpression(), UObjectLiteralExpression, KotlinUElementWithType {
     override val declaration by lz { getLanguagePlugin().convert<UClass>(psi.objectDeclaration.toLightClass()!!, this) }
     
     override fun getExpressionType() = psi.objectDeclaration.toPsiType()
 
     private val superClassConstructorCall by lz {
-        psi.objectDeclaration.getSuperTypeListEntries().firstOrNull { it is KtSuperTypeCallEntry } as? KtSuperTypeCallEntry
+        psi.objectDeclaration.superTypeListEntries.firstOrNull { it is KtSuperTypeCallEntry } as? KtSuperTypeCallEntry
     }
     
     override val classReference: UReferenceExpression? by lz { superClassConstructorCall?.let { ObjectLiteralClassReference(it, this) } }
@@ -57,7 +57,7 @@ class KotlinUObjectLiteralExpression(
     
     private class ObjectLiteralClassReference(
             override val psi: KtSuperTypeCallEntry,
-            override val containingElement: UElement?
+            override val uastParent: UElement?
     ) : KotlinAbstractUElement(), USimpleNameReferenceExpression {
         override fun resolve() = (psi.resolveCallToDeclaration(this) as? PsiMethod)?.containingClass
 

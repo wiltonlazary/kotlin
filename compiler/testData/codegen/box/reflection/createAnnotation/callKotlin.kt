@@ -1,5 +1,5 @@
 // TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS
+// IGNORE_BACKEND: JS, NATIVE
 
 // WITH_REFLECT
 
@@ -32,7 +32,7 @@ fun box(): String {
     }
 
     val k = create<TwoNonDefaults>("OK", Int::class)
-    assertEquals(Int::class, k.klass as KClass<*> /* TODO: KT-9453 */)
+    assertEquals(Int::class, k.klass)
 
     return k.string
 }

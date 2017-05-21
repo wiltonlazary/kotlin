@@ -1,5 +1,5 @@
-// IS_APPLICABLE: false
+// IS_APPLICABLE: true
 
 val x = 1
-// Not supported yet
+
 val y = <caret>x::hashCode

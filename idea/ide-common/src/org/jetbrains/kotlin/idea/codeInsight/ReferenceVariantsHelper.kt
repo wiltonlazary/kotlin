@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,13 +37,13 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.isExtension
 import org.jetbrains.kotlin.resolve.isHiddenInResolution
 import org.jetbrains.kotlin.resolve.scopes.*
 import org.jetbrains.kotlin.resolve.scopes.receivers.ClassQualifier
+import org.jetbrains.kotlin.resolve.scopes.utils.collectAllFromMeAndParent
 import org.jetbrains.kotlin.resolve.scopes.utils.collectDescriptorsFiltered
 import org.jetbrains.kotlin.resolve.scopes.utils.memberScopeAsImportingScope
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.expressions.DoubleColonLHS
 import org.jetbrains.kotlin.types.typeUtil.isUnit
-import org.jetbrains.kotlin.utils.addToStdlib.check
 import java.util.*
 
 class ReferenceVariantsHelper(
@@ -96,7 +96,7 @@ class ReferenceVariantsHelper(
         return variants
     }
 
-    fun filterOutJavaGettersAndSetters(variants: Collection<DeclarationDescriptor>): Collection<DeclarationDescriptor> {
+    fun <TDescriptor: DeclarationDescriptor> filterOutJavaGettersAndSetters(variants: Collection<TDescriptor>): Collection<TDescriptor> {
         val accessorMethodsToRemove = HashSet<FunctionDescriptor>()
         val filteredVariants = variants.filter { it !is SyntheticJavaPropertyDescriptor || !it.suppressedByNotPropertyList(notProperties) }
 
@@ -182,10 +182,11 @@ class ReferenceVariantsHelper(
 
         val descriptors = LinkedHashSet<DeclarationDescriptor>()
 
+        val filterWithoutExtensions = kindFilter exclude DescriptorKindExclude.Extensions
         if (receiverExpression != null) {
             val qualifier = bindingContext[BindingContext.QUALIFIER, receiverExpression]
             if (qualifier != null) {
-                descriptors.addAll(qualifier.staticScope.getDescriptorsFiltered(kindFilter exclude DescriptorKindExclude.Extensions, nameFilter))
+                descriptors.addAll(qualifier.staticScope.collectStaticMembers(resolutionFacade, filterWithoutExtensions, nameFilter))
             }
 
             val explicitReceiverTypes = if (useReceiverType != null) {
@@ -203,7 +204,10 @@ class ReferenceVariantsHelper(
             descriptors.processAll(implicitReceiverTypes, implicitReceiverTypes, resolutionScope, callType, kindFilter, nameFilter)
 
             // add non-instance members
-            descriptors.addAll(resolutionScope.collectDescriptorsFiltered(kindFilter exclude DescriptorKindExclude.Extensions, nameFilter))
+            descriptors.addAll(resolutionScope.collectDescriptorsFiltered(filterWithoutExtensions, nameFilter))
+            descriptors.addAll(resolutionScope.collectAllFromMeAndParent { scope ->
+                scope.collectSyntheticStaticMembers(resolutionFacade, kindFilter, nameFilter)
+            })
         }
 
         if (callType == CallType.SUPER_MEMBERS) { // we need to unwrap fake overrides in case of "super." because ShadowedDeclarationsFilter does not work correctly
@@ -223,7 +227,7 @@ class ReferenceVariantsHelper(
     ): Collection<DeclarationDescriptor> {
         if (receiverExpression != null) {
             val qualifier = bindingContext[BindingContext.QUALIFIER, receiverExpression] ?: return emptyList()
-            return qualifier.staticScope.getDescriptorsFiltered(kindFilter, nameFilter)
+            return qualifier.staticScope.collectStaticMembers(resolutionFacade, kindFilter, nameFilter)
         }
         else {
             val scope = contextElement.getResolutionScope(bindingContext, resolutionFacade)
@@ -262,7 +266,7 @@ class ReferenceVariantsHelper(
                 explicitReceiverTypes
                         .map { (it.constructor.declarationDescriptor as? ClassDescriptor)?.staticScope }
                         .filterNotNull()
-                        .flatMapTo(descriptors) { scope -> scope.getDescriptorsFiltered(kindFilter, nameFilter) }
+                        .flatMapTo(descriptors) { it.collectStaticMembers(resolutionFacade, kindFilter, nameFilter) }
             }
         }
         else {
@@ -279,9 +283,9 @@ class ReferenceVariantsHelper(
     ): Collection<DeclarationDescriptor> {
         if (receiverExpression != null) {
             val qualifier = bindingContext[BindingContext.QUALIFIER, receiverExpression] ?: return emptyList()
-            val staticDescriptors = qualifier.staticScope.getDescriptorsFiltered(kindFilter, nameFilter)
+            val staticDescriptors = qualifier.staticScope.collectStaticMembers(resolutionFacade, kindFilter, nameFilter)
 
-            val objectDescriptor = (qualifier as? ClassQualifier)?.descriptor?.check { it.kind == ClassKind.OBJECT } ?: return staticDescriptors
+            val objectDescriptor = (qualifier as? ClassQualifier)?.descriptor?.takeIf { it.kind == ClassKind.OBJECT } ?: return staticDescriptors
 
             return staticDescriptors + objectDescriptor.defaultType.memberScope.getDescriptorsFiltered(kindFilter, nameFilter)
         }
@@ -394,4 +398,21 @@ class ReferenceVariantsHelper(
             }
         }
     }
+}
+
+private fun MemberScope.collectStaticMembers(
+        resolutionFacade: ResolutionFacade,
+        kindFilter: DescriptorKindFilter,
+        nameFilter: (Name) -> Boolean
+): Collection<DeclarationDescriptor> {
+    return getDescriptorsFiltered(kindFilter, nameFilter) + collectSyntheticStaticMembers(resolutionFacade, kindFilter, nameFilter)
+}
+
+fun ResolutionScope.collectSyntheticStaticMembers(
+        resolutionFacade: ResolutionFacade,
+        kindFilter: DescriptorKindFilter,
+        nameFilter: (Name) -> Boolean
+): List<FunctionDescriptor> {
+    val syntheticScopes = resolutionFacade.getFrontendService(SyntheticScopes::class.java)
+    return syntheticScopes.collectSyntheticStaticFunctions(this).filter { kindFilter.accepts(it) && nameFilter(it.name) }
 }

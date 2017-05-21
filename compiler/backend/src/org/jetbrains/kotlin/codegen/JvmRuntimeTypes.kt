@@ -85,7 +85,6 @@ class JvmRuntimeTypes(module: ModuleDescriptor) {
         if (descriptor.isSuspend) {
             return mutableListOf<KotlinType>().apply {
                 add(coroutineImplClass.defaultType)
-
                 if (descriptor.isSuspendLambda) {
                     add(functionType)
                 }

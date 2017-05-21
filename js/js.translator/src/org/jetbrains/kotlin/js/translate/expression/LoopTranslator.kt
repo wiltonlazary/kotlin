@@ -24,8 +24,9 @@ import org.jetbrains.kotlin.js.backend.ast.*
 import org.jetbrains.kotlin.js.translate.callTranslator.CallTranslator
 import org.jetbrains.kotlin.js.translate.context.TranslationContext
 import org.jetbrains.kotlin.js.translate.general.Translation
-import org.jetbrains.kotlin.js.translate.intrinsic.functions.factories.CompositeFIF
+import org.jetbrains.kotlin.js.translate.intrinsic.functions.factories.ArrayFIF
 import org.jetbrains.kotlin.js.translate.utils.BindingUtils.*
+import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils.*
 import org.jetbrains.kotlin.js.translate.utils.PsiUtils.getLoopRange
 import org.jetbrains.kotlin.js.translate.utils.TranslationUtils
@@ -36,7 +37,6 @@ import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtWhileExpressionBase
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
-import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
 fun createWhile(doWhile: Boolean, expression: KtWhileExpressionBase, context: TranslationContext): JsNode {
     val conditionExpression = expression.condition ?:
@@ -101,7 +101,7 @@ fun translateForExpression(expression: KtForExpression, context: TranslationCont
         context.getNameForElement(loopParameter)
     }
     else {
-        context.scope().declareTemporary()
+        JsScope.declareTemporary()
     }
 
     fun translateBody(itemValue: JsExpression?): JsStatement? {
@@ -117,11 +117,15 @@ fun translateForExpression(expression: KtForExpression, context: TranslationCont
                     newVar(parameterName, itemValue)
                 }
                 else {
+                    val innerBlockContext = context.innerBlock(block)
+                    if (itemValue != null) {
+                        innerBlockContext.addStatementToCurrentBlock(JsAstUtils.newVar(parameterName, itemValue))
+                    }
                     DestructuringDeclarationTranslator.translate(
-                            destructuringParameter, parameterName, itemValue, context.innerBlock(block))
+                            destructuringParameter, JsAstUtils.pureFqn(parameterName, null), innerBlockContext)
                 }
             block.statements += currentVarInit
-            block.statements += if (realBody is JsBlock) realBody.statements else realBody.singletonOrEmptyList()
+            block.statements += if (realBody is JsBlock) realBody.statements else listOfNotNull(realBody)
 
             return block
         }
@@ -166,7 +170,7 @@ fun translateForExpression(expression: KtForExpression, context: TranslationCont
 
     fun translateForOverArray(): JsStatement {
         val rangeExpression = context.defineTemporary(Translation.translateAsExpression(loopRange, context))
-        val length = CompositeFIF.LENGTH_PROPERTY_INTRINSIC.apply(rangeExpression, listOf<JsExpression>(), context)
+        val length = ArrayFIF.LENGTH_PROPERTY_INTRINSIC.apply(rangeExpression, listOf<JsExpression>(), context)
         val end = context.defineTemporary(length)
         val index = context.declareTemporary(context.program().getNumberLiteral(0))
 

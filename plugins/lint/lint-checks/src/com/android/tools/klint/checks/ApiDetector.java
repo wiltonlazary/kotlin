@@ -27,11 +27,8 @@ import com.android.resources.ResourceType;
 import com.android.sdklib.AndroidVersion;
 import com.android.sdklib.BuildToolInfo;
 import com.android.sdklib.SdkVersionInfo;
-import com.android.sdklib.repositoryv2.AndroidSdkHandler;
-import com.android.tools.klint.client.api.IssueRegistry;
-import com.android.tools.klint.client.api.JavaEvaluator;
-import com.android.tools.klint.client.api.LintDriver;
-import com.android.tools.klint.client.api.UastLintUtils;
+import com.android.sdklib.repository.AndroidSdkHandler;
+import com.android.tools.klint.client.api.*;
 import com.android.tools.klint.detector.api.*;
 import com.android.tools.klint.detector.api.Detector.ClassScanner;
 import com.intellij.psi.*;
@@ -851,7 +848,7 @@ public class ApiDetector extends ResourceXmlDetector
 
         // It's okay to reference the constant as a case constant (since that
         // code path won't be taken) or in a condition of an if statement
-        UElement curr = node.getContainingElement();
+        UElement curr = node.getUastParent();
         while (curr != null) {
             if (curr instanceof USwitchClauseExpression) {
                 List<UExpression> caseValues = ((USwitchClauseExpression) curr).getCaseValues();
@@ -869,7 +866,7 @@ public class ApiDetector extends ResourceXmlDetector
             } else if (curr instanceof UMethod || curr instanceof UClass) {
                 break;
             }
-            curr = curr.getContainingElement();
+            curr = curr.getUastParent();
         }
 
         return false;
@@ -1536,7 +1533,7 @@ public class ApiDetector extends ResourceXmlDetector
                     return targetApi;
                 }
             }
-            scope = scope.getContainingElement();
+            scope = scope.getUastParent();
             if (scope instanceof PsiFile) {
                 break;
             }
@@ -1730,7 +1727,7 @@ public class ApiDetector extends ResourceXmlDetector
             int api,
             JavaContext context
     ) {
-        UElement current = element.getContainingElement();
+        UElement current = element.getUastParent();
         UElement prev = element;
         while (current != null) {
             if (current instanceof UIfExpression) {
@@ -1747,7 +1744,7 @@ public class ApiDetector extends ResourceXmlDetector
                 return false;
             }
             prev = current;
-            current = current.getContainingElement();
+            current = current.getUastParent();
         }
 
         return false;

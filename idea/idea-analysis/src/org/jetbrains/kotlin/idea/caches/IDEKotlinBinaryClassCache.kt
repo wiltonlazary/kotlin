@@ -20,6 +20,7 @@ import com.intellij.ide.highlighter.JavaClassFileType
 import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileWithId
 import org.jetbrains.kotlin.load.kotlin.KotlinBinaryClassCache
 import org.jetbrains.kotlin.load.kotlin.KotlinJvmBinaryClass
 import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
@@ -32,7 +33,7 @@ object IDEKotlinBinaryClassCache {
     /**
      * Checks if this file is a compiled Kotlin class file (not necessarily ABI-compatible with the current plugin)
      */
-    fun isKotlinJvmCompiledFile(file: VirtualFile): Boolean {
+    fun isKotlinJvmCompiledFile(file: VirtualFile, fileContent: ByteArray? = null): Boolean {
         if (file.extension != JavaClassFileType.INSTANCE!!.defaultExtension) {
             return false
         }
@@ -41,7 +42,7 @@ object IDEKotlinBinaryClassCache {
         if (cached != null) {
             return cached.isKotlinBinary
         }
-        return getKotlinBinaryClass(file) != null
+        return getKotlinBinaryClass(file, fileContent) != null
     }
 
     fun getKotlinBinaryClass(file: VirtualFile, fileContent: ByteArray? = null): KotlinJvmBinaryClass? {
@@ -53,7 +54,9 @@ object IDEKotlinBinaryClassCache {
         val kotlinBinaryClass = KotlinBinaryClassCache.getKotlinBinaryClass(file, fileContent)
 
         val isKotlinBinaryClass = kotlinBinaryClass != null
-        attributeService.writeBooleanAttribute(KOTLIN_IS_COMPILED_FILE_ATTRIBUTE, file, isKotlinBinaryClass)
+        if (file is VirtualFileWithId) {
+            attributeService.writeBooleanAttribute(KOTLIN_IS_COMPILED_FILE_ATTRIBUTE, file, isKotlinBinaryClass)
+        }
 
         if (isKotlinBinaryClass) {
             val headerInfo = createHeaderInfo(kotlinBinaryClass)
@@ -99,7 +102,10 @@ object IDEKotlinBinaryClassCache {
             return userData
         }
 
-        val isKotlinBinaryAttribute = attributeService.readBooleanAttribute(KOTLIN_IS_COMPILED_FILE_ATTRIBUTE, file)
+        val isKotlinBinaryAttribute = if (file is VirtualFileWithId)
+            attributeService.readBooleanAttribute(KOTLIN_IS_COMPILED_FILE_ATTRIBUTE, file)
+        else
+            null
 
         if (isKotlinBinaryAttribute != null) {
             val isKotlinBinary = isKotlinBinaryAttribute.value

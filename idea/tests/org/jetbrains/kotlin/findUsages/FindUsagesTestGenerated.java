@@ -778,6 +778,12 @@ public class FindUsagesTestGenerated extends AbstractFindUsagesTest {
                 doTest(fileName);
             }
 
+            @TestMetadata("labeledReturns.0.kt")
+            public void testLabeledReturns() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/findUsages/kotlin/findFunctionUsages/labeledReturns.0.kt");
+                doTest(fileName);
+            }
+
             @TestMetadata("localClassMember.0.kt")
             public void testLocalClassMember() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("idea/testData/findUsages/kotlin/findFunctionUsages/localClassMember.0.kt");
@@ -971,6 +977,18 @@ public class FindUsagesTestGenerated extends AbstractFindUsagesTest {
         public static class FindPrimaryConstructorUsages extends AbstractFindUsagesTest {
             public void testAllFilesPresentInFindPrimaryConstructorUsages() throws Exception {
                 KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/findUsages/kotlin/findPrimaryConstructorUsages"), Pattern.compile("^(.+)\\.0\\.kt$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("annotationEntry.0.kt")
+            public void testAnnotationEntry() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/findUsages/kotlin/findPrimaryConstructorUsages/annotationEntry.0.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("constructorCall.0.kt")
+            public void testConstructorCall() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/findUsages/kotlin/findPrimaryConstructorUsages/constructorCall.0.kt");
+                doTest(fileName);
             }
 
             @TestMetadata("jvmOverloaded.0.kt")
@@ -1187,6 +1205,12 @@ public class FindUsagesTestGenerated extends AbstractFindUsagesTest {
         public static class FindSecondaryConstructorUsages extends AbstractFindUsagesTest {
             public void testAllFilesPresentInFindSecondaryConstructorUsages() throws Exception {
                 KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/findUsages/kotlin/findSecondaryConstructorUsages"), Pattern.compile("^(.+)\\.0\\.kt$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("constructorCall.0.kt")
+            public void testConstructorCall() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/findUsages/kotlin/findSecondaryConstructorUsages/constructorCall.0.kt");
+                doTest(fileName);
             }
 
             @TestMetadata("defaultSecondaryConstructor.0.kt")
@@ -1615,6 +1639,18 @@ public class FindUsagesTestGenerated extends AbstractFindUsagesTest {
                 doTest(fileName);
             }
 
+            @TestMetadata("javaInvokeWithStaticImport.0.java")
+            public void testJavaInvokeWithStaticImport() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/findUsages/java/findJavaMethodUsages/javaInvokeWithStaticImport.0.java");
+                doTest(fileName);
+            }
+
+            @TestMetadata("JavaWithGroovyInvoke.0.java")
+            public void testJavaWithGroovyInvoke() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/findUsages/java/findJavaMethodUsages/JavaWithGroovyInvoke.0.java");
+                doTest(fileName);
+            }
+
             @TestMetadata("MismatchedAccessor.0.java")
             public void testMismatchedAccessor() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("idea/testData/findUsages/java/findJavaMethodUsages/MismatchedAccessor.0.java");
@@ -1630,6 +1666,12 @@ public class FindUsagesTestGenerated extends AbstractFindUsagesTest {
             @TestMetadata("SyntheticProperties.0.java")
             public void testSyntheticProperties() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("idea/testData/findUsages/java/findJavaMethodUsages/SyntheticProperties.0.java");
+                doTest(fileName);
+            }
+
+            @TestMetadata("UnaryNot.0.java")
+            public void testUnaryNot() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/testData/findUsages/java/findJavaMethodUsages/UnaryNot.0.java");
                 doTest(fileName);
             }
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package org.jetbrains.kotlin.scripts
 import com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.messages.*
-import org.jetbrains.kotlin.utils.tryConstructClassFromStringArgs
+import org.jetbrains.kotlin.script.tryConstructClassFromStringArgs
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler
@@ -43,6 +43,12 @@ import java.net.URL
 import java.net.URLClassLoader
 import java.util.concurrent.Future
 import kotlin.reflect.KClass
+import kotlin.script.dependencies.KotlinScriptExternalDependencies
+import kotlin.script.dependencies.ScriptContents
+import kotlin.script.dependencies.ScriptDependenciesResolver
+import kotlin.script.dependencies.asFuture
+import kotlin.script.templates.AcceptedAnnotations
+import kotlin.script.templates.ScriptTemplateDefinition
 import kotlin.script.templates.standard.ScriptTemplateWithArgs
 
 // TODO: the contetnts of this file should go into ScriptTest.kt and replace appropriate xml-based functionality,
@@ -278,7 +284,7 @@ class ScriptTemplateTest {
 
             try {
                 return if (runIsolated) KotlinToJVMBytecodeCompiler.compileScript(environment, paths)
-                else KotlinToJVMBytecodeCompiler.compileScript(environment, this.javaClass.classLoader)
+                else KotlinToJVMBytecodeCompiler.compileScript(environment, this::class.java.classLoader)
             }
             catch (e: CompilationException) {
                 messageCollector.report(CompilerMessageSeverity.EXCEPTION, OutputMessageUtil.renderException(e),
@@ -333,15 +339,15 @@ class TestKotlinScriptDependenciesResolver : TestKotlinScriptDummyDependenciesRe
         val cp = script.annotations.flatMap {
             when (it) {
                 is DependsOn -> if (it.path == "@{runtime}") listOf(kotlinPaths.runtimePath, kotlinPaths.scriptRuntimePath) else listOf(File(it.path))
-                is DependsOnTwo -> listOf(it.path1, it.path2).flatMap { it?.let {
+                is DependsOnTwo -> listOf(it.path1, it.path2).flatMap {
                     when {
                         it.isBlank() -> emptyList()
                         it == "@{runtime}" -> listOf(kotlinPaths.runtimePath, kotlinPaths.scriptRuntimePath)
                         else -> listOf(File(it))
                     }
-                }}
+                }
                 is InvalidScriptResolverAnnotation -> throw Exception("Invalid annotation ${it.name}", it.error)
-                else -> throw Exception("Unknown annotation ${it.javaClass}")
+                else -> throw Exception("Unknown annotation ${it::class.java}")
             }
         }
         return object : KotlinScriptExternalDependencies {

@@ -142,7 +142,7 @@ abstract class CompletionSession(
 
     // LookupElementsCollector instantiation is deferred because virtual call to createSorter uses data from derived classes
     protected val collector: LookupElementsCollector by lazy(LazyThreadSafetyMode.NONE) {
-        LookupElementsCollector(prefixMatcher, parameters, resultSet, createSorter())
+        LookupElementsCollector(prefixMatcher, parameters, resultSet, createSorter(), (file as? KtCodeFragment)?.extraCompletionFilter)
     }
 
     protected val searchScope: GlobalSearchScope = getResolveScope(parameters.originalFile as KtFile)
@@ -153,7 +153,8 @@ abstract class CompletionSession(
                                    searchScope,
                                    filter,
                                    filterOutPrivate = !mayIncludeInaccessible,
-                                   declarationTranslator = { toFromOriginalFileMapper.toSyntheticFile(it) })
+                                   declarationTranslator = { toFromOriginalFileMapper.toSyntheticFile(it) },
+                                   file = file)
     }
 
     private fun isVisibleDescriptor(descriptor: DeclarationDescriptor, completeNonAccessible: Boolean): Boolean {
@@ -169,7 +170,7 @@ abstract class CompletionSession(
             return completeNonAccessible && (!descriptor.isFromLibrary() || isDebuggerContext)
         }
 
-        if (descriptor.isExcludedFromAutoImport(project)) return false
+        if (descriptor.isExcludedFromAutoImport(project, file)) return false
 
         return true
     }

@@ -61,7 +61,7 @@ class FakeCallResolver(
 
             if (isSuccess) {
                 fakeTrace.commit(
-                        { slice, key ->
+                        { _, key ->
                             // excluding all entries related to fake expression
                             // convert all errors on this expression to ITERATOR_MISSING on callElement
                             key != fake
@@ -106,9 +106,9 @@ class FakeCallResolver(
             valueArguments: List<KtExpression>,
             name: Name,
             callElement: KtExpression,
-            onComplete: (KtSimpleNameExpression, Boolean) -> Unit = { x, y -> }
+            onComplete: (KtSimpleNameExpression, Boolean) -> Unit = { _, _ -> }
     ): Pair<Call, OverloadResolutionResults<FunctionDescriptor>> {
-        val fakeCalleeExpression = KtPsiFactory(project).createSimpleName(name.asString())
+        val fakeCalleeExpression = KtPsiFactory(project, markGenerated = false).createSimpleName(name.asString())
         val call = CallMaker.makeCallWithExpressions(
                 callElement, receiver, /* callOperationNode = */ null, fakeCalleeExpression, valueArguments
         )

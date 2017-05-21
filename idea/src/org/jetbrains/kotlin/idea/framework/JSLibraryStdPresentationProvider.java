@@ -17,15 +17,11 @@
 package org.jetbrains.kotlin.idea.framework;
 
 import com.intellij.framework.library.LibraryVersionProperties;
-import com.intellij.openapi.roots.OrderRootType;
-import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.roots.libraries.LibraryPresentationProvider;
-import com.intellij.openapi.roots.libraries.LibraryProperties;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.idea.KotlinIcons;
-import org.jetbrains.kotlin.utils.PathUtil;
 
 import javax.swing.*;
 import java.util.List;
@@ -41,29 +37,14 @@ public class JSLibraryStdPresentationProvider extends LibraryPresentationProvide
 
     @Nullable
     @Override
-    public Icon getIcon(@Nullable LibraryProperties properties) {
+    public Icon getIcon(@Nullable LibraryVersionProperties properties) {
         return KotlinIcons.SMALL_LOGO;
     }
 
     @Nullable
     @Override
     public LibraryVersionProperties detect(@NotNull List<VirtualFile> classesRoots) {
-        String version = JsLibraryStdDetectionUtil.getJsLibraryStdVersion(classesRoots);
+        String version = JsLibraryStdDetectionUtil.INSTANCE.getJsLibraryStdVersion(classesRoots);
         return version == null ? null : new LibraryVersionProperties(version);
-    }
-
-    /**
-     * Detect js standard library according to M5.1 rules.
-     */
-    public static boolean detectOld(@NotNull Library library) {
-        if (library.getFiles(OrderRootType.CLASSES).length == 0) {
-            for (VirtualFile file : library.getFiles(OrderRootType.SOURCES)) {
-                if (file.getName().equals(PathUtil.JS_LIB_JAR_NAME)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 }

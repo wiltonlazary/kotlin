@@ -28,7 +28,6 @@ import com.android.annotations.Nullable;
 import com.android.tools.klint.client.api.LintDriver;
 import com.android.tools.klint.detector.api.Location.SearchDirection;
 import com.android.tools.klint.detector.api.Location.SearchHints;
-import com.android.utils.AsmUtils;
 import com.google.common.annotations.Beta;
 import com.google.common.base.Splitter;
 
@@ -697,9 +696,14 @@ public class ClassContext extends Context {
             return fqcn;
         }
 
+        int index = fqcn.indexOf('<');
+        if(index != -1) {
+            fqcn = fqcn.substring(0, index);
+        }
+
         // If class name contains $, it's not an ambiguous inner class name.
         if (fqcn.indexOf('$') != -1) {
-            return AsmUtils.toInternalName(fqcn);
+            return fqcn.replace('.', '/');
         }
         // Let's assume that components that start with Caps are class names.
         StringBuilder sb = new StringBuilder(fqcn.length());

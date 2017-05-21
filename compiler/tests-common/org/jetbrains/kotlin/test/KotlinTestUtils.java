@@ -26,6 +26,7 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.ShutDownTracker;
+import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.CharsetToolkit;
@@ -35,8 +36,6 @@ import com.intellij.psi.impl.PsiFileFactoryImpl;
 import com.intellij.rt.execution.junit.FileComparisonFailure;
 import com.intellij.testFramework.LightVirtualFile;
 import com.intellij.testFramework.TestDataFile;
-import com.intellij.util.Function;
-import com.intellij.util.Processor;
 import com.intellij.util.containers.ContainerUtil;
 import junit.framework.TestCase;
 import kotlin.collections.CollectionsKt;
@@ -50,6 +49,10 @@ import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.kotlin.analyzer.AnalysisResult;
 import org.jetbrains.kotlin.builtins.DefaultBuiltIns;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
+import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys;
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation;
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity;
+import org.jetbrains.kotlin.cli.common.messages.MessageCollector;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt;
@@ -101,7 +104,7 @@ public class KotlinTestUtils {
     public static final String TEST_GENERATOR_NAME = "org.jetbrains.kotlin.generators.tests.TestsPackage";
     public static final String PLEASE_REGENERATE_TESTS = "Please regenerate tests (GenerateTests.kt)";
 
-    private static final List<File> filesToDelete = new ArrayList<File>();
+    private static final List<File> filesToDelete = new ArrayList<>();
 
     /**
      * Syntax:
@@ -115,7 +118,7 @@ public class KotlinTestUtils {
     private static final String MODULE_DELIMITER = ",\\s*";
 
     private static final Pattern FILE_OR_MODULE_PATTERN = Pattern.compile(
-            "(?://\\s*MODULE:\\s*([^()\\n]+)(?:\\(([^()]+(?:" + MODULE_DELIMITER + "[^()]+)*)\\))?\\s*)?" +
+            "(?://\\s*MODULE:\\s*([^()\\n]+)(?:\\(([^()]+(?:" + MODULE_DELIMITER + "[^()]+)*)\\))?\\s*(?:\\(([^()]+(?:" + MODULE_DELIMITER + "[^()]+)*)\\))?\\s*)?" +
             "//\\s*FILE:\\s*(.*)$", Pattern.MULTILINE);
     private static final Pattern DIRECTIVE_PATTERN = Pattern.compile("^//\\s*!([\\w_]+)(:\\s*(.*)$)?", Pattern.MULTILINE);
 
@@ -326,6 +329,11 @@ public class KotlinTestUtils {
     }
 
     @NotNull
+    public static KotlinCoreEnvironment createEnvironmentWithFullJdkAndIdeaAnnotations(Disposable disposable) {
+        return createEnvironmentWithJdkAndNullabilityAnnotationsFromIdea(disposable, ConfigurationKind.ALL, TestJdkKind.FULL_JDK);
+    }
+
+    @NotNull
     public static String getTestDataPathBase() {
         return getHomeDirectory() + "/compiler/testData";
     }
@@ -383,26 +391,18 @@ public class KotlinTestUtils {
 
     public static void deleteOnShutdown(File file) {
         if (filesToDelete.isEmpty()) {
-            ShutDownTracker.getInstance().registerShutdownTask(new Runnable() {
-                @Override
-                public void run() {
-                    ShutDownTracker.invokeAndWait(true, true, new Runnable() {
-                        @Override
-                        public void run() {
-                            for (File victim : filesToDelete) {
-                                FileUtil.delete(victim);
-                            }
-                        }
-                    });
+            ShutDownTracker.getInstance().registerShutdownTask(() -> ShutDownTracker.invokeAndWait(true, true, () -> {
+                for (File victim : filesToDelete) {
+                    FileUtil.delete(victim);
                 }
-            });
+            }));
         }
 
         filesToDelete.add(file);
     }
 
     @NotNull
-    public static KtFile createFile(@NotNull @NonNls final String name, @NotNull String text, @NotNull Project project) {
+    public static KtFile createFile(@NotNull @NonNls String name, @NotNull String text, @NotNull Project project) {
         String shortName = name.substring(name.lastIndexOf('/') + 1);
         shortName = shortName.substring(shortName.lastIndexOf('\\') + 1);
         LightVirtualFile virtualFile = new LightVirtualFile(shortName, KotlinLanguage.INSTANCE, text) {
@@ -437,6 +437,30 @@ public class KotlinTestUtils {
     public static CompilerConfiguration newConfiguration() {
         CompilerConfiguration configuration = new CompilerConfiguration();
         configuration.put(CommonConfigurationKeys.MODULE_NAME, TEST_MODULE_NAME);
+
+        configuration.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, new MessageCollector() {
+            @Override
+            public void clear() {
+            }
+
+            @Override
+            public void report(
+                    @NotNull CompilerMessageSeverity severity, @NotNull String message, @Nullable CompilerMessageLocation location
+            ) {
+                if (severity == CompilerMessageSeverity.ERROR) {
+                    String prefix = location == null
+                                  ? ""
+                                  : "(" + location.getPath() + ":" + location.getLine() + ":" + location.getColumn() + ") ";
+                    throw new AssertionError(prefix + message);
+                }
+            }
+
+            @Override
+            public boolean hasErrors() {
+                return false;
+            }
+        });
+
         return configuration;
     }
 
@@ -446,7 +470,7 @@ public class KotlinTestUtils {
             @NotNull TestJdkKind jdkKind,
             @NotNull File... extraClasspath
     ) {
-        return newConfiguration(configurationKind, jdkKind, Arrays.asList(extraClasspath), Collections.<File>emptyList());
+        return newConfiguration(configurationKind, jdkKind, Arrays.asList(extraClasspath), Collections.emptyList());
     }
 
     @NotNull
@@ -467,8 +491,22 @@ public class KotlinTestUtils {
         else if (jdkKind == TestJdkKind.ANDROID_API) {
             JvmContentRootsKt.addJvmClasspathRoot(configuration, findAndroidApiJar());
         }
+        else if (jdkKind == TestJdkKind.FULL_JDK_6) {
+            String jdk6 = System.getenv("JDK_16");
+            assert jdk6 != null : "Environment variable JDK_16 is not set";
+            JvmContentRootsKt.addJvmClasspathRoots(configuration, PathUtil.getJdkClassesRootsFromJre(getJreHome(jdk6)));
+        }
+        else if (jdkKind == TestJdkKind.FULL_JDK_9) {
+            String jdk9 = System.getenv("JDK_9");
+            if (jdk9 != null) {
+                configuration.put(JVMConfigurationKeys.JDK_HOME, new File(getJreHome(jdk9)));
+            }
+            else {
+                System.err.println("Environment variable JDK_9 is not set, the test will be skipped");
+            }
+        }
         else {
-            JvmContentRootsKt.addJvmClasspathRoots(configuration, PathUtil.getJdkClassesRoots());
+            JvmContentRootsKt.addJvmClasspathRoots(configuration, PathUtil.getJdkClassesRootsFromCurrentJre());
         }
 
         if (configurationKind.getWithRuntime()) {
@@ -489,10 +527,16 @@ public class KotlinTestUtils {
         return configuration;
     }
 
+    @NotNull
+    private static String getJreHome(@NotNull String jdkHome) {
+        File jre = new File(jdkHome, "jre");
+        return jre.isDirectory() ? jre.getPath() : jdkHome;
+    }
+
     public static void resolveAllKotlinFiles(KotlinCoreEnvironment environment) throws IOException {
         List<ContentRoot> paths = environment.getConfiguration().get(JVMConfigurationKeys.CONTENT_ROOTS);
         if (paths == null) return;
-        List<KtFile> ktFiles = new ArrayList<KtFile>();
+        List<KtFile> ktFiles = new ArrayList<>();
         for (ContentRoot root : paths) {
             if (!(root instanceof KotlinSourceRoot)) continue;
 
@@ -521,12 +565,7 @@ public class KotlinTestUtils {
     }
 
     public static void assertEqualsToFile(@NotNull File expectedFile, @NotNull String actual) {
-        assertEqualsToFile(expectedFile, actual, new Function1<String, String>() {
-            @Override
-            public String invoke(String s) {
-                return s;
-            }
-        });
+        assertEqualsToFile(expectedFile, actual, s -> s);
     }
 
     public static void assertEqualsToFile(@NotNull File expectedFile, @NotNull String actual, @NotNull Function1<String, String> sanitizer) {
@@ -551,7 +590,7 @@ public class KotlinTestUtils {
         }
     }
 
-    public static void compileKotlinWithJava(
+    public static boolean compileKotlinWithJava(
             @NotNull List<File> javaFiles,
             @NotNull List<File> ktFiles,
             @NotNull File outDir,
@@ -559,24 +598,24 @@ public class KotlinTestUtils {
             @Nullable File javaErrorFile
     ) throws IOException {
         if (!ktFiles.isEmpty()) {
-            KotlinCoreEnvironment environment = createEnvironmentWithMockJdkAndIdeaAnnotations(disposable);
+            KotlinCoreEnvironment environment = createEnvironmentWithFullJdkAndIdeaAnnotations(disposable);
             LoadDescriptorUtil.compileKotlinToDirAndGetModule(ktFiles, outDir, environment);
         }
         else {
             boolean mkdirs = outDir.mkdirs();
             assert mkdirs : "Not created: " + outDir;
         }
-        if (!javaFiles.isEmpty()) {
-            compileJavaFiles(javaFiles, Arrays.asList(
-                    "-classpath", outDir.getPath() + File.pathSeparator + ForTestCompileRuntime.runtimeJarForTests(),
-                    "-d", outDir.getPath()
-            ), javaErrorFile);
-        }
+        if (javaFiles.isEmpty()) return true;
+
+        return compileJavaFiles(javaFiles, Arrays.asList(
+                "-classpath", outDir.getPath() + File.pathSeparator + ForTestCompileRuntime.runtimeJarForTests(),
+                "-d", outDir.getPath()
+        ), javaErrorFile);
     }
 
     public interface TestFileFactory<M, F> {
         F createFile(@Nullable M module, @NotNull String fileName, @NotNull String text, @NotNull Map<String, String> directives);
-        M createModule(@NotNull String name, @NotNull List<String> dependencies);
+        M createModule(@NotNull String name, @NotNull List<String> dependencies, @NotNull List<String> friends);
     }
 
     public static abstract class TestFileFactoryNoModules<F> implements TestFileFactory<Void, F> {
@@ -594,7 +633,7 @@ public class KotlinTestUtils {
         public abstract F create(@NotNull String fileName, @NotNull String text, @NotNull Map<String, String> directives);
 
         @Override
-        public Void createModule(@NotNull String name, @NotNull List<String> dependencies) {
+        public Void createModule(@NotNull String name, @NotNull List<String> dependencies, @NotNull List<String> friends) {
             return null;
         }
     }
@@ -617,12 +656,13 @@ public class KotlinTestUtils {
             while (true) {
                 String moduleName = matcher.group(1);
                 String moduleDependencies = matcher.group(2);
+                String moduleFriends = matcher.group(3);
                 if (moduleName != null) {
                     hasModules = true;
-                    module = factory.createModule(moduleName, parseDependencies(moduleDependencies));
+                    module = factory.createModule(moduleName, parseModuleList(moduleDependencies), parseModuleList(moduleFriends));
                 }
 
-                String fileName = matcher.group(3);
+                String fileName = matcher.group(4);
                 int start = processedChars;
 
                 boolean nextFileExists = matcher.find();
@@ -647,9 +687,10 @@ public class KotlinTestUtils {
         }
 
         if (isDirectiveDefined(expectedText, "WITH_COROUTINES")) {
-            M supportModule = hasModules ? factory.createModule("support", Collections.<String>emptyList()) : null;
+            M supportModule = hasModules ? factory.createModule("support", Collections.emptyList(), Collections.emptyList()) : null;
             testFiles.add(factory.createFile(supportModule,
                                              "CoroutineUtil.kt",
+                                             "package helpers\n" +
                                              "import kotlin.coroutines.experimental.*\n" +
                                              "fun <T> handleResultContinuation(x: (T) -> Unit): Continuation<T> = object: Continuation<T> {\n" +
                                              "    override val context = EmptyCoroutineContext\n" +
@@ -681,7 +722,7 @@ public class KotlinTestUtils {
         return testFiles;
     }
 
-    private static List<String> parseDependencies(@Nullable String dependencies) {
+    private static List<String> parseModuleList(@Nullable String dependencies) {
         if (dependencies == null) return Collections.emptyList();
         return StringsKt.split(dependencies, Pattern.compile(MODULE_DELIMITER), 0);
     }
@@ -729,7 +770,7 @@ public class KotlinTestUtils {
     }
 
     public static String getLastCommentedLines(@NotNull Document document) {
-        List<CharSequence> resultLines = new ArrayList<CharSequence>();
+        List<CharSequence> resultLines = new ArrayList<>();
         for (int i = document.getLineCount() - 1; i >= 0; i--) {
             int lineStart = document.getLineStartOffset(i);
             int lineEnd = document.getLineEndOffset(i);
@@ -801,15 +842,15 @@ public class KotlinTestUtils {
         return comments;
     }
 
-    public static void compileJavaFiles(@NotNull Collection<File> files, List<String> options) throws IOException {
-        compileJavaFiles(files, options, null);
+    public static boolean compileJavaFiles(@NotNull Collection<File> files, List<String> options) throws IOException {
+        return compileJavaFiles(files, options, null);
     }
 
-    public static void compileJavaFiles(@NotNull Collection<File> files, List<String> options, @Nullable File javaErrorFile) throws IOException {
+    private static boolean compileJavaFiles(@NotNull Collection<File> files, List<String> options, @Nullable File javaErrorFile) throws IOException {
         JavaCompiler javaCompiler = ToolProvider.getSystemJavaCompiler();
-        DiagnosticCollector<JavaFileObject> diagnosticCollector = new DiagnosticCollector<JavaFileObject>();
-        StandardJavaFileManager fileManager = javaCompiler.getStandardFileManager(diagnosticCollector, Locale.ENGLISH, Charset.forName("utf-8"));
-        try {
+        DiagnosticCollector<JavaFileObject> diagnosticCollector = new DiagnosticCollector<>();
+        try (StandardJavaFileManager fileManager =
+                     javaCompiler.getStandardFileManager(diagnosticCollector, Locale.ENGLISH, Charset.forName("utf-8"))) {
             Iterable<? extends JavaFileObject> javaFileObjectsFromFiles = fileManager.getJavaFileObjectsFromFiles(files);
 
             JavaCompiler.CompilationTask task = javaCompiler.getTask(
@@ -827,13 +868,12 @@ public class KotlinTestUtils {
             else {
                 assertEqualsToFile(javaErrorFile, errorsToString(diagnosticCollector, false));
             }
-        } finally {
-            fileManager.close();
+            return success;
         }
     }
 
     @NotNull
-    private static String errorsToString(@NotNull  DiagnosticCollector<JavaFileObject> diagnosticCollector, boolean humanReadable) {
+    private static String errorsToString(@NotNull DiagnosticCollector<JavaFileObject> diagnosticCollector, boolean humanReadable) {
         StringBuilder builder = new StringBuilder();
         for (javax.tools.Diagnostic<? extends JavaFileObject> diagnostic : diagnosticCollector.getDiagnostics()) {
             if (diagnostic.getKind() != javax.tools.Diagnostic.Kind.ERROR) continue;
@@ -842,7 +882,7 @@ public class KotlinTestUtils {
                 builder.append(diagnostic).append("\n");
             }
             else {
-                builder.append(diagnostic.getSource().getName()).append(":")
+                builder.append(new File(diagnostic.getSource().toUri()).getName()).append(":")
                         .append(diagnostic.getLineNumber()).append(":")
                         .append(diagnostic.getColumnNumber()).append(":")
                         .append(diagnostic.getCode()).append("\n");
@@ -906,29 +946,26 @@ public class KotlinTestUtils {
     public static void assertAllTestsPresentInSingleGeneratedClass(
             @NotNull Class<?> testCaseClass,
             @NotNull File testDataDir,
-            @NotNull final Pattern filenamePattern,
-            @NotNull final TargetBackend targetBackend
+            @NotNull Pattern filenamePattern,
+            @NotNull TargetBackend targetBackend
     ) {
-        final File rootFile = new File(getTestsRoot(testCaseClass));
+        File rootFile = new File(getTestsRoot(testCaseClass));
 
-        final Set<String> filePaths = collectPathsMetadata(testCaseClass);
+        Set<String> filePaths = collectPathsMetadata(testCaseClass);
 
-        FileUtil.processFilesRecursively(testDataDir, new Processor<File>() {
-            @Override
-            public boolean process(File file) {
-                if (file.isFile() && filenamePattern.matcher(file.getName()).matches() && isCompatibleTarget(targetBackend, file)) {
-                    assertFilePathPresent(file, rootFile, filePaths);
-                }
-
-                return true;
+        FileUtil.processFilesRecursively(testDataDir, file -> {
+            if (file.isFile() && filenamePattern.matcher(file.getName()).matches() && isCompatibleTarget(targetBackend, file)) {
+                assertFilePathPresent(file, rootFile, filePaths);
             }
+
+            return true;
         });
     }
 
     private static void assertFilePathPresent(File file, File rootFile, Set<String> filePaths) {
         String path = FileUtil.getRelativePath(rootFile, file);
         if (path != null) {
-            String relativePath = FileUtil.nameToCompare(path);
+            String relativePath = nameToCompare(path);
             if (!filePaths.contains(relativePath)) {
                 Assert.fail("Test data file missing from the generated test class: " + file + "\n" + PLEASE_REGENERATE_TESTS);
             }
@@ -936,13 +973,7 @@ public class KotlinTestUtils {
     }
 
     private static Set<String> collectPathsMetadata(Class<?> testCaseClass) {
-        return ContainerUtil.newHashSet(
-                ContainerUtil.map(collectMethodsMetadata(testCaseClass), new Function<String, String>() {
-                    @Override
-                    public String fun(String pathData) {
-                        return FileUtil.nameToCompare(pathData);
-                    }
-                }));
+        return ContainerUtil.newHashSet(ContainerUtil.map(collectMethodsMetadata(testCaseClass), KotlinTestUtils::nameToCompare));
     }
 
     @Nullable
@@ -1042,5 +1073,9 @@ public class KotlinTestUtils {
     public static boolean isAllFilesPresentTest(String testName) {
         //noinspection SpellCheckingInspection
         return testName.toLowerCase().startsWith("allfilespresentin");
+    }
+
+    public static String nameToCompare(@NotNull String name) {
+        return (SystemInfo.isFileSystemCaseSensitive ? name : name.toLowerCase()).replace('\\', '/');
     }
 }

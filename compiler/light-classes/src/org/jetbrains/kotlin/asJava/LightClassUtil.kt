@@ -34,7 +34,7 @@ object LightClassUtil {
 
     fun findClass(stub: StubElement<*>, predicate: (PsiClassStub<*>) -> Boolean): PsiClass? {
         if (stub is PsiClassStub<*> && predicate(stub)) {
-            return stub.getPsi()
+            return stub.psi
         }
 
         if (stub is PsiClassStub<*> || stub is PsiFileStub<*>) {
@@ -245,5 +245,13 @@ object LightClassUtil {
         }
 
         override fun iterator(): Iterator<PsiMethod> = allMethods.iterator()
+    }
+}
+
+fun KtNamedDeclaration.getAccessorLightMethods(): LightClassUtil.PropertyAccessorsPsiMethods {
+    return when (this) {
+        is KtProperty -> LightClassUtil.getLightClassPropertyMethods(this)
+        is KtParameter -> LightClassUtil.getLightClassPropertyMethods(this)
+        else -> throw IllegalStateException("Unexpected property type: ${this}")
     }
 }

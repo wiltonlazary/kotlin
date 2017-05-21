@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 package org.jetbrains.kotlin.psi;
 
-import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.intellij.lang.ASTNode;
 import com.intellij.psi.PsiComment;
@@ -47,6 +46,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 
 public class KtPsiUtil {
     private KtPsiUtil() {
@@ -108,8 +108,8 @@ public class KtPsiUtil {
 
     @NotNull
     public static Set<KtElement> findRootExpressions(@NotNull Collection<KtElement> unreachableElements) {
-        Set<KtElement> rootElements = new HashSet<KtElement>();
-        final Set<KtElement> shadowedElements = new HashSet<KtElement>();
+        Set<KtElement> rootElements = new HashSet<>();
+        Set<KtElement> shadowedElements = new HashSet<>();
         KtVisitorVoid shadowAllChildren = new KtVisitorVoid() {
             @Override
             public void visitKtElement(@NotNull KtElement element) {
@@ -541,6 +541,14 @@ public class KtPsiUtil {
                ((KtBinaryExpression) element).getOperationToken().equals(KtTokens.EQ);
     }
 
+    public static boolean isSafeCast(@NotNull KtBinaryExpressionWithTypeRHS expression) {
+        return expression.getOperationReference().getReferencedNameElementType() == KtTokens.AS_SAFE;
+    }
+
+    public static boolean isUnsafeCast(@NotNull KtBinaryExpressionWithTypeRHS expression) {
+        return expression.getOperationReference().getReferencedNameElementType() == KtTokens.AS_KEYWORD;
+    }
+
     public static boolean checkVariableDeclarationInBlock(@NotNull KtBlockExpression block, @NotNull String varName) {
         for (KtExpression element : block.getStatements()) {
             if (element instanceof KtVariableDeclaration) {
@@ -586,13 +594,6 @@ public class KtPsiUtil {
 
         return null;
     }
-
-    public static final Predicate<KtElement> ANY_JET_ELEMENT = new Predicate<KtElement>() {
-        @Override
-        public boolean apply(@Nullable KtElement input) {
-            return true;
-        }
-    };
 
     @NotNull
     public static String getText(@Nullable PsiElement element) {
@@ -644,17 +645,17 @@ public class KtPsiUtil {
     public static KtElement getOutermostDescendantElement(
             @Nullable PsiElement root,
             boolean first,
-            final @NotNull Predicate<KtElement> predicate
+            @NotNull Predicate<KtElement> predicate
     ) {
         if (!(root instanceof KtElement)) return null;
 
-        final List<KtElement> results = Lists.newArrayList();
+        List<KtElement> results = Lists.newArrayList();
 
         root.accept(
                 new KtVisitorVoid() {
                     @Override
                     public void visitKtElement(@NotNull KtElement element) {
-                        if (predicate.apply(element)) {
+                        if (predicate.test(element)) {
                             //noinspection unchecked
                             results.add(element);
                         }
@@ -680,7 +681,7 @@ public class KtPsiUtil {
     public static PsiElement skipSiblingsBackwardByPredicate(@Nullable PsiElement element, Predicate<PsiElement> elementsToSkip) {
         if (element == null) return null;
         for (PsiElement e = element.getPrevSibling(); e != null; e = e.getPrevSibling()) {
-            if (elementsToSkip.apply(e)) continue;
+            if (elementsToSkip.test(e)) continue;
             return e;
         }
         return null;
@@ -775,11 +776,14 @@ public class KtPsiUtil {
                     return (KtElement) parent;
                 }
             }
-            if (current instanceof KtBlockExpression || current instanceof KtParameter) {
+            if (current instanceof KtBlockExpression || current instanceof KtParameter || current instanceof KtValueArgument) {
                 return (KtElement) current;
             }
-            if (current instanceof KtValueArgument) {
-                return (KtElement) current;
+            if (current instanceof KtDelegatedSuperTypeEntry) {
+                PsiElement grandParent = current.getParent().getParent();
+                if (grandParent instanceof KtClassOrObject && !(grandParent.getParent() instanceof KtObjectLiteralExpression)) {
+                    return (KtElement) grandParent;
+                }
             }
 
             current = parent;
@@ -859,5 +863,15 @@ public class KtPsiUtil {
             }
         }
         return deparenthesizedExpression;
+    }
+
+    public static boolean isStatementContainer(@Nullable PsiElement container) {
+        return container instanceof KtBlockExpression ||
+               container instanceof KtContainerNodeForControlStructureBody ||
+               container instanceof KtWhenEntry;
+    }
+
+    public static boolean isStatement(@NotNull PsiElement element) {
+        return isStatementContainer(element.getParent());
     }
 }

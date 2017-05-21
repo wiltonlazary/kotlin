@@ -23,6 +23,7 @@ import com.sun.tools.javac.parser.Tokens
 import com.sun.tools.javac.tree.JCTree
 import com.sun.tools.javac.tree.JCTree.*
 import com.sun.tools.javac.tree.TreeMaker
+import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.kapt3.*
@@ -45,8 +46,7 @@ import javax.tools.JavaFileManager
 import com.sun.tools.javac.util.List as JavacList
 
 class ClassFileToSourceStubConverter(
-        val kaptContext: KaptContext,
-        val typeMapper: KotlinTypeMapper,
+        val kaptContext: KaptContext<GenerationState>,
         val generateNonExistentClass: Boolean,
         val correctErrorTypes: Boolean
 ) {
@@ -281,6 +281,11 @@ class ClassFileToSourceStubConverter(
             if (enumValuesData.any { it.innerClass == innerClass }) return@mapJList null
             if (innerClass.outerName != clazz.name) return@mapJList null
             val innerClassNode = kaptContext.compiledClasses.firstOrNull { it.name == innerClass.name } ?: return@mapJList null
+            if (checkIfInnerClassNameConflictsWithOuter(innerClassNode, clazz)) {
+                kaptContext.logger.warn(innerClassNode.name.replace('/', '.').replace('$', '.')
+                        + " will be ignored (name is clashing with the outer class name)")
+                return@mapJList null
+            }
             convertClass(innerClassNode, packageFqName, false)
         }
 
@@ -292,6 +297,38 @@ class ClassFileToSourceStubConverter(
                 genericType.interfaces,
                 enumValues + fields + methods + nestedClasses)
     }
+
+    private tailrec fun checkIfShouldBeIgnored(type: Type): Boolean {
+        if (type.sort == Type.ARRAY) {
+            return checkIfShouldBeIgnored(type.elementType)
+        }
+
+        if (type.sort != Type.OBJECT) return false
+
+        val internalName = type.internalName
+        val clazz = kaptContext.compiledClasses.firstOrNull { it.name == internalName } ?: return false
+        return checkIfInnerClassNameConflictsWithOuter(clazz)
+    }
+
+    private fun findContainingClassNode(clazz: ClassNode): ClassNode? {
+        val innerClassForOuter = clazz.innerClasses.firstOrNull { it.name == clazz.name } ?: return null
+        return kaptContext.compiledClasses.firstOrNull { it.name == innerClassForOuter.outerName }
+    }
+
+    // Java forbids outer and inner class names to be the same. Check if the names are different
+    private tailrec fun checkIfInnerClassNameConflictsWithOuter(
+            clazz: ClassNode,
+            outerClass: ClassNode? = findContainingClassNode(clazz)
+    ): Boolean {
+        if (outerClass == null) return false
+        if (clazz.simpleName == outerClass.simpleName) return true
+        // Try to find the containing class for outerClassNode (to check the whole tree recursively)
+        val containingClassForOuterClass = findContainingClassNode(outerClass) ?: return false
+        return checkIfInnerClassNameConflictsWithOuter(clazz, containingClassForOuterClass)
+    }
+
+    private val ClassNode.simpleName: String
+        get() = name.substringAfterLast(".").substringAfterLast("/")
 
     private fun getClassAccessFlags(clazz: ClassNode, descriptor: DeclarationDescriptor, isInner: Boolean, isNested: Boolean) = when {
         (descriptor.containingDeclaration as? ClassDescriptor)?.kind == ClassKind.INTERFACE -> {
@@ -315,13 +352,23 @@ class ClassFileToSourceStubConverter(
         }
     }
 
-    private fun convertField(field: FieldNode, packageFqName: String, explicitInitializer: JCExpression? = null): JCVariableDecl? {
+    private fun convertField(
+            field: FieldNode,
+            packageFqName: String,
+            explicitInitializer: JCExpression? = null
+    ): JCVariableDecl? {
         if (isSynthetic(field.access)) return null
-        val descriptor = kaptContext.origins[field]?.descriptor
+        // not needed anymore
+        val origin = kaptContext.origins[field]
+        val descriptor = origin?.descriptor
 
         val modifiers = convertModifiers(field.access, ElementKind.FIELD, packageFqName, field.visibleAnnotations, field.invisibleAnnotations)
         val name = getValidIdentifierName(field.name) ?: return null
         val type = Type.getType(field.desc)
+
+        if (checkIfShouldBeIgnored(type)) {
+            return null
+        }
 
         // Enum type must be an identifier (Javac requirement)
         val typeExpression = if (isEnum(field.access))
@@ -371,6 +418,11 @@ class ClassFileToSourceStubConverter(
         val jcReturnType = if (isConstructor) null else treeMaker.Type(asmReturnType)
 
         val parametersInfo = method.getParametersInfo(containingClass)
+
+        if (checkIfShouldBeIgnored(asmReturnType) || parametersInfo.any { checkIfShouldBeIgnored(it.type) }) {
+            return null
+        }
+
         @Suppress("NAME_SHADOWING")
         val parameters = mapJListIndexed(parametersInfo) { index, info ->
             val lastParameter = index == parametersInfo.lastIndex
@@ -411,7 +463,7 @@ class ClassFileToSourceStubConverter(
 
             val superClassConstructorCall = if (superClassConstructor != null) {
                 val args = mapJList(superClassConstructor.valueParameters) { param ->
-                    convertLiteralExpression(getDefaultValue(typeMapper.mapType(param.type)))
+                    convertLiteralExpression(getDefaultValue(kaptContext.generationState.typeMapper.mapType(param.type)))
                 }
                 val call = treeMaker.Apply(JavacList.nil(), treeMaker.SimpleName("super"), args)
                 JavacList.of<JCStatement>(treeMaker.Exec(call))
@@ -532,6 +584,8 @@ class ClassFileToSourceStubConverter(
 
     private fun getMostSuitableSuperTypeForAnonymousType(typeDescriptor: ClassDescriptor): JCExpression {
         val superClass = typeDescriptor.getSuperClassNotAny()
+        val typeMapper = kaptContext.generationState.typeMapper
+
         if (superClass != null) {
             return treeMaker.Type(typeMapper.mapType(superClass))
         } else {
@@ -632,7 +686,7 @@ class ClassFileToSourceStubConverter(
 
             is Type -> treeMaker.Select(treeMaker.Type(value), treeMaker.name("class"))
             is AnnotationNode -> convertAnnotation(value, packageFqName = null, filtered = false)!!
-            else -> throw IllegalArgumentException("Illegal literal expression value: $value (${value.javaClass.canonicalName})")
+            else -> throw IllegalArgumentException("Illegal literal expression value: $value (${value::class.java.canonicalName})")
         }
     }
 

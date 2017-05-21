@@ -27,9 +27,15 @@ import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2MetadataCompilerArguments
-import org.jetbrains.kotlin.cli.common.messages.*
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import org.jetbrains.kotlin.cli.common.messages.MessageCollector
+import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
+import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector
 import org.jetbrains.kotlin.cli.common.modules.ModuleXmlParser
-import org.jetbrains.kotlin.cli.common.repl.*
+import org.jetbrains.kotlin.cli.common.repl.ReplCheckResult
+import org.jetbrains.kotlin.cli.common.repl.ReplCodeLine
+import org.jetbrains.kotlin.cli.common.repl.ReplCompileResult
+import org.jetbrains.kotlin.cli.common.repl.ReplEvalResult
 import org.jetbrains.kotlin.cli.js.K2JSCompiler
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
@@ -47,7 +53,6 @@ import org.jetbrains.kotlin.incremental.*
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCompilationComponents
 import org.jetbrains.kotlin.modules.Module
 import org.jetbrains.kotlin.progress.CompilationCanceledStatus
-import org.jetbrains.kotlin.utils.addToStdlib.check
 import org.jetbrains.kotlin.utils.stackTraceStr
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
@@ -260,7 +265,7 @@ class CompileServiceImpl(
         CompileService.CallResult.Ok()
     }
 
-    override fun scheduleShutdown(graceful: Boolean): CompileService.CallResult<Boolean> = ifAlive(minAliveness = Aliveness.Alive) {
+    override fun scheduleShutdown(graceful: Boolean): CompileService.CallResult<Boolean> = ifAlive(minAliveness = Aliveness.LastSession, ignoreCompilerChanged = true) {
         when {
             !graceful -> {
                 shutdownWithDelay()
@@ -338,7 +343,7 @@ class CompileServiceImpl(
             }
         }
         catch (e: IllegalArgumentException) {
-            messageCollector.report(CompilerMessageSeverity.EXCEPTION, e.stackTraceStr, CompilerMessageLocation.NO_LOCATION)
+            messageCollector.report(CompilerMessageSeverity.EXCEPTION, e.stackTraceStr)
             return@ifAlive CompileService.CallResult.Error("Could not deserialize compiler arguments")
         }
 
@@ -352,7 +357,7 @@ class CompileServiceImpl(
                 }
             }
             CompilerMode.NON_INCREMENTAL_COMPILER -> {
-                doCompile(sessionId, daemonReporter, tracer = null) { eventManger, profiler ->
+                doCompile(sessionId, daemonReporter, tracer = null) { _, _ ->
                     execCompiler(targetPlatform, Services.EMPTY, k2PlatformArgs, messageCollector)
                 }
             }
@@ -366,7 +371,7 @@ class CompileServiceImpl(
                 val gradleIncrementalServicesFacade = servicesFacade as IncrementalCompilerServicesFacade
 
                 withIC {
-                    doCompile(sessionId, daemonReporter, tracer = null) { eventManger, profiler ->
+                    doCompile(sessionId, daemonReporter, tracer = null) { _, _ ->
                         execIncrementalCompiler(k2jvmArgs, gradleIncrementalArgs, gradleIncrementalServicesFacade, compilationResults!!,
                                                 messageCollector, daemonReporter)
                     }
@@ -647,7 +652,7 @@ class CompileServiceImpl(
 
         ifAlive {
 
-            val aliveWithOpts = walkDaemons(File(daemonOptions.runFilesPathOrDefault), compilerId, runFile, filter = { f, p -> p != port }, report = { _, msg -> log.info(msg) }).toList()
+            val aliveWithOpts = walkDaemons(File(daemonOptions.runFilesPathOrDefault), compilerId, runFile, filter = { _, p -> p != port }, report = { _, msg -> log.info(msg) }).toList()
             val comparator = compareByDescending<DaemonWithMetadata, DaemonJVMOptions>(DaemonJVMOptionsMemoryComparator(), { it.jvmOptions })
                     .thenBy(FileAgeComparator()) { it.runFile }
             aliveWithOpts.maxWith(comparator)?.let { bestDaemonWithMetadata ->
@@ -709,6 +714,7 @@ class CompileServiceImpl(
         UnicastRemoteObject.unexportObject(this, true)
         log.info("Shutdown complete")
         onShutdown()
+        log.handlers.forEach { it.flush() }
     }
 
     private fun shutdownWithDelay() {
@@ -745,7 +751,7 @@ class CompileServiceImpl(
                           operationsTracer: RemoteOperationsTracer?,
                           body: (PrintStream, EventManager, Profiler) -> ExitCode): CompileService.CallResult<Int> =
             ifAlive {
-                withValidClientOrSessionProxy(sessionId) { _ ->
+                withValidClientOrSessionProxy(sessionId) {
                     operationsTracer?.before("compile")
                     val rpcProfiler = if (daemonOptions.reportPerf) WallAndThreadTotalProfiler() else DummyProfiler()
                     val eventManger = EventManagerImpl()
@@ -775,7 +781,7 @@ class CompileServiceImpl(
                           tracer: RemoteOperationsTracer?,
                           body: (EventManager, Profiler) -> ExitCode): CompileService.CallResult<Int> =
             ifAlive {
-                withValidClientOrSessionProxy(sessionId) { _ ->
+                withValidClientOrSessionProxy(sessionId) {
                     tracer?.before("compile")
                     val rpcProfiler = if (daemonOptions.reportPerf) WallAndThreadTotalProfiler() else DummyProfiler()
                     val eventManger = EventManagerImpl()
@@ -907,8 +913,6 @@ class CompileServiceImpl(
     @JvmName("withValidRepl1")
     private inline fun<R> withValidRepl(sessionId: Int, body: KotlinJvmReplService.() -> CompileService.CallResult<R>): CompileService.CallResult<R> =
             withValidClientOrSessionProxy(sessionId) { session ->
-                (session?.data as? KotlinJvmReplService?)?.let {
-                    it.body()
-                } ?: CompileService.CallResult.Error("Not a REPL session $sessionId")
+                (session?.data as? KotlinJvmReplService?)?.body() ?: CompileService.CallResult.Error("Not a REPL session $sessionId")
             }
 }

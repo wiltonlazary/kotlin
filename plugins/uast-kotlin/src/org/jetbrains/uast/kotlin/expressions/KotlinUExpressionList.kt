@@ -24,11 +24,12 @@ import org.jetbrains.uast.UElement
 import org.jetbrains.uast.UExpression
 import org.jetbrains.uast.UExpressionList
 import org.jetbrains.uast.UastSpecialExpressionKind
+import org.jetbrains.uast.kotlin.kinds.KotlinSpecialExpressionKinds
 
 open class KotlinUExpressionList(
         override val psi: PsiElement?,
         override val kind: UastSpecialExpressionKind, // original element
-        override val containingElement: UElement?
+        override val uastParent: UElement?
 ) : KotlinAbstractUExpression(), UExpressionList, KotlinUElementWithType, KotlinEvaluatableUElement {
     override lateinit var expressions: List<UExpression>
         internal set
@@ -37,5 +38,12 @@ open class KotlinUExpressionList(
         val ktElement = psi as? KtExpression ?: return null
         val compileTimeConst = ktElement.analyze()[BindingContext.COMPILE_TIME_VALUE, ktElement]
         return compileTimeConst?.getValue(TypeUtils.NO_EXPECTED_TYPE)
+    }
+
+    companion object {
+        fun createClassBody(psi: PsiElement?, uastParent: UElement?): KotlinUExpressionList =
+                KotlinUExpressionList(psi, KotlinSpecialExpressionKinds.CLASS_BODY, uastParent).apply {
+                    expressions = emptyList()
+                }
     }
 }

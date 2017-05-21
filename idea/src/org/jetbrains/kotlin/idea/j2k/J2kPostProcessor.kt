@@ -16,15 +16,22 @@
 
 package org.jetbrains.kotlin.idea.j2k
 
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.editor.RangeMarker
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiRecursiveElementVisitor
 import com.intellij.psi.codeStyle.CodeStyleManager
+import kotlinx.coroutines.experimental.run
+import kotlinx.coroutines.experimental.runBlocking
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveImportReference
 import org.jetbrains.kotlin.idea.conversion.copy.range
+import org.jetbrains.kotlin.idea.core.util.EDT
 import org.jetbrains.kotlin.idea.util.ImportInsertHelper
+import org.jetbrains.kotlin.idea.util.application.runReadAction
+import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.j2k.PostProcessor
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtElement
@@ -35,8 +42,12 @@ import java.util.*
 
 class J2kPostProcessor(private val formatCode: Boolean) : PostProcessor {
     override fun insertImport(file: KtFile, fqName: FqName) {
-        val descriptors = file.resolveImportReference(fqName)
-        descriptors.firstOrNull()?.let { ImportInsertHelper.getInstance(file.project).importDescriptor(file, it) }
+        ApplicationManager.getApplication().invokeAndWait {
+            runWriteAction {
+                val descriptors = file.resolveImportReference(fqName)
+                descriptors.firstOrNull()?.let { ImportInsertHelper.getInstance(file.project).importDescriptor(file, it) }
+            }
+        }
     }
 
     private enum class RangeFilterResult {
@@ -45,38 +56,48 @@ class J2kPostProcessor(private val formatCode: Boolean) : PostProcessor {
         PROCESS
     }
 
-    override fun doAdditionalProcessing(file: KtFile, rangeMarker: RangeMarker?) {
-        var elementToActions = collectAvailableActions(file, rangeMarker)
+    override fun doAdditionalProcessing(file: KtFile, rangeMarker: RangeMarker?) =
+            runBlocking(EDT.ModalityStateElement(ModalityState.any())) {
+                do {
+                    var modificationStamp: Long? = file.modificationStamp
+                    val elementToActions = runReadAction {
+                        collectAvailableActions(file, rangeMarker)
+                    }
 
-        while (elementToActions.isNotEmpty()) {
-            var modificationStamp: Long? = file.modificationStamp
+                    run(EDT) {
+                        for ((element, action, _) in elementToActions) {
+                            if (element.isValid) {
+                                action()
+                            }
+                            else {
+                                modificationStamp = null
+                            }
+                        }
+                    }
 
-            for ((element, action, processing) in elementToActions) {
-                if (element.isValid) {
-                    action()
+                    if (modificationStamp == file.modificationStamp) break
                 }
-                else {
-                    modificationStamp = null
+                while (elementToActions.isNotEmpty())
+
+
+                if (formatCode) {
+                    run(EDT) {
+                        runWriteAction {
+                            val codeStyleManager = CodeStyleManager.getInstance(file.project)
+                            if (rangeMarker != null) {
+                                if (rangeMarker.isValid) {
+                                    codeStyleManager.reformatRange(file, rangeMarker.startOffset, rangeMarker.endOffset)
+                                }
+                            }
+                            else {
+                                codeStyleManager.reformat(file)
+                            }
+                            Unit
+                        }
+                    }
                 }
             }
 
-            if (modificationStamp == file.modificationStamp) break
-
-            elementToActions = collectAvailableActions(file, rangeMarker)
-        }
-
-        if (formatCode) {
-            val codeStyleManager = CodeStyleManager.getInstance(file.project)
-            if (rangeMarker != null) {
-                if (rangeMarker.isValid) {
-                    codeStyleManager.reformatRange(file, rangeMarker.startOffset, rangeMarker.endOffset)
-                }
-            }
-            else {
-                codeStyleManager.reformat(file)
-            }
-        }
-    }
 
     private data class ActionData(val element: KtElement, val action: () -> Unit, val priority: Int)
 

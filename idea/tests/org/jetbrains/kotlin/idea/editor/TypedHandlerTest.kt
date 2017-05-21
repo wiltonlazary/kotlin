@@ -384,12 +384,6 @@ class TypedHandlerTest : LightCodeInsightTestCase() {
             "        \"bar\").length()"
     )
 
-    fun testSplitStringByEnter_TripleQuotedString(): Unit = doCharTypeTest(
-            '\n',
-            "val l = \"\"\"foo<caret>bar\"\"\"",
-            "val l = \"\"\"foo\nbar\"\"\""
-    )
-
     fun testTypeLtInFunDeclaration() {
         doLtGtTest("fun <caret>")
     }
@@ -556,6 +550,89 @@ class TypedHandlerTest : LightCodeInsightTestCase() {
                 """
         )
     }
+
+    fun testIndentBeforeElseWithBlock() {
+        doCharTypeTest(
+                '\n',
+                """
+                |fun test(b: Boolean) {
+                |    if (b) {
+                |    }<caret>
+                |    else if (!b) {
+                |    }
+                |}
+                """,
+                """
+                |fun test(b: Boolean) {
+                |    if (b) {
+                |    }
+                |    <caret>
+                |    else if (!b) {
+                |    }
+                |}
+                """
+        )
+    }
+
+    fun testIndentBeforeElseWithoutBlock() {
+        doCharTypeTest(
+                '\n',
+                """
+                |fun test(b: Boolean) {
+                |    if (b)
+                |        foo()<caret>
+                |    else {
+                |    }
+                |}
+                """,
+                """
+                |fun test(b: Boolean) {
+                |    if (b)
+                |        foo()
+                |    <caret>
+                |    else {
+                |    }
+                |}
+                """
+        )
+    }
+
+    fun testIndentOnFinishedVariableEndAfterEquals() {
+        doCharTypeTest(
+                '\n',
+                """
+                |fun test() {
+                |    val a =<caret>
+                |    foo()
+                |}
+                """,
+                """
+                |fun test() {
+                |    val a =
+                |            <caret>
+                |    foo()
+                |}
+                """
+        )
+    }
+
+    fun testIndentNotFinishedVariableEndAfterEquals() {
+        doCharTypeTest(
+                '\n',
+                """
+                |fun test() {
+                |    val a =<caret>
+                |}
+                """,
+                """
+                |fun test() {
+                |    val a =
+                |            <caret>
+                |}
+                """
+        )
+    }
+
 
     fun testMoveThroughGT() {
         LightPlatformCodeInsightTestCase.configureFromFileText("a.kt", "val a: List<Set<Int<caret>>>")

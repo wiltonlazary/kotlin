@@ -25,17 +25,21 @@ import org.jetbrains.kotlin.psi2ir.isValueArgumentReorderingRequired
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.types.KotlinType
 
-class CallBuilder(val original: ResolvedCall<*>) {
-    val descriptor: CallableDescriptor = original.resultingDescriptor
-
+class CallBuilder(
+        val original: ResolvedCall<*>,
+        val descriptor: CallableDescriptor,
+        val isExtensionInvokeCall: Boolean = false
+) {
     var superQualifier: ClassDescriptor? = null
 
     lateinit var callReceiver: CallReceiver
 
+    private val parametersOffset = if (isExtensionInvokeCall) 1 else 0
+
     val irValueArgumentsByIndex = arrayOfNulls<IrExpression>(descriptor.valueParameters.size)
 
     fun getValueArgument(valueParameterDescriptor: ValueParameterDescriptor) =
-            irValueArgumentsByIndex[valueParameterDescriptor.index]
+            irValueArgumentsByIndex[valueParameterDescriptor.index + parametersOffset]
 }
 
 val CallBuilder.argumentsCount: Int get() =
@@ -75,7 +79,7 @@ fun CallBuilder.setExplicitReceiverValue(explicitReceiverValue: IntermediateValu
     val previousCallReceiver = callReceiver
     callReceiver = object : CallReceiver {
         override fun call(withDispatchAndExtensionReceivers: (IntermediateValue?, IntermediateValue?) -> IrExpression): IrExpression {
-            return previousCallReceiver.call { dispatchReceiverValue, extensionReceiverValue ->
+            return previousCallReceiver.call { dispatchReceiverValue, _ ->
                 val newDispatchReceiverValue = if (hasExtensionReceiver) dispatchReceiverValue else explicitReceiverValue
                 val newExtensionReceiverValue = if (hasExtensionReceiver) explicitReceiverValue else null
                 withDispatchAndExtensionReceivers(newDispatchReceiverValue, newExtensionReceiverValue)

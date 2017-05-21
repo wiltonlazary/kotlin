@@ -35,7 +35,10 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue;
 import org.jetbrains.org.objectweb.asm.Type;
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.jetbrains.kotlin.resolve.DescriptorUtils.isObject;
 
@@ -78,17 +81,17 @@ public class FunctionReferenceGenerationStrategy extends FunctionGenerationStrat
          */
 
         KtCallExpression fakeExpression = CodegenUtil.constructFakeFunctionCall(state.getProject(), referencedFunction);
-        final List<? extends ValueArgument> fakeArguments = fakeExpression.getValueArguments();
+        List<? extends ValueArgument> fakeArguments = fakeExpression.getValueArguments();
 
-        final ReceiverValue dispatchReceiver = computeAndSaveReceiver(signature, codegen, referencedFunction.getDispatchReceiverParameter());
-        final ReceiverValue extensionReceiver = computeAndSaveReceiver(signature, codegen, referencedFunction.getExtensionReceiverParameter());
+        ReceiverValue dispatchReceiver = computeAndSaveReceiver(signature, codegen, referencedFunction.getDispatchReceiverParameter());
+        ReceiverValue extensionReceiver = computeAndSaveReceiver(signature, codegen, referencedFunction.getExtensionReceiverParameter());
         computeAndSaveArguments(fakeArguments, codegen);
 
         ResolvedCall<CallableDescriptor> fakeResolvedCall = new DelegatingResolvedCall<CallableDescriptor>(resolvedCall) {
 
             private final Map<ValueParameterDescriptor, ResolvedValueArgument> argumentMap;
             {
-                argumentMap = new LinkedHashMap<ValueParameterDescriptor, ResolvedValueArgument>(fakeArguments.size());
+                argumentMap = new LinkedHashMap<>(fakeArguments.size());
                 int index = 0;
                 List<ValueParameterDescriptor> parameters = functionDescriptor.getValueParameters();
                 for (ValueArgument argument : fakeArguments) {
@@ -112,7 +115,7 @@ public class FunctionReferenceGenerationStrategy extends FunctionGenerationStrat
             @NotNull
             @Override
             public List<ResolvedValueArgument> getValueArgumentsByIndex() {
-                return new ArrayList<ResolvedValueArgument>(argumentMap.values());
+                return new ArrayList<>(argumentMap.values());
             }
 
             @NotNull
@@ -173,7 +176,7 @@ public class FunctionReferenceGenerationStrategy extends FunctionGenerationStrat
     ) {
         if (receiver == null) return null;
 
-        KtExpression receiverExpression = KtPsiFactoryKt.KtPsiFactory(state.getProject()).createExpression("callableReferenceFakeReceiver");
+        KtExpression receiverExpression = KtPsiFactoryKt.KtPsiFactory(state.getProject(), false).createExpression("callableReferenceFakeReceiver");
         codegen.tempVariables.put(receiverExpression, receiverParameterStackValue(signature, codegen));
         return ExpressionReceiver.Companion.create(receiverExpression, receiver.getType(), BindingContext.EMPTY);
     }

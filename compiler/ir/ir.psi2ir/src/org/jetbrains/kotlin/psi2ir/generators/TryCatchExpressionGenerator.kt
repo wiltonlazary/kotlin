@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.psi2ir.generators
 
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.impl.IrCatchImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrTryImpl
@@ -35,9 +36,18 @@ class TryCatchExpressionGenerator(statementGenerator: StatementGenerator) : Stat
             val ktCatchParameter = ktCatchClause.catchParameter!!
             val ktCatchBody = ktCatchClause.catchBody!!
             val catchParameterDescriptor = getOrFail(BindingContext.VALUE_PARAMETER, ktCatchParameter)
-            val irCatchResult = statementGenerator.generateExpression(ktCatchBody)
-            val irCatch = IrCatchImpl(ktCatchClause.startOffset, ktCatchClause.endOffset,
-                                      catchParameterDescriptor, irCatchResult)
+
+            val irCatch = IrCatchImpl(
+                    ktCatchClause.startOffset, ktCatchClause.endOffset,
+                    context.symbolTable.declareVariable(
+                            ktCatchParameter.startOffset, ktCatchParameter.endOffset,
+                            IrDeclarationOrigin.CATCH_PARAMETER,
+                            catchParameterDescriptor
+                    )
+            ).apply {
+                result = statementGenerator.generateExpression(ktCatchBody)
+            }
+
             irTryCatch.catches.add(irCatch)
         }
 

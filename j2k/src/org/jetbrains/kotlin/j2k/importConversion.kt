@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.asJava.classes.KtLightClass
 import org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade
 import org.jetbrains.kotlin.asJava.elements.KtLightDeclaration
 import org.jetbrains.kotlin.asJava.elements.KtLightMethod
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.j2k.ast.Import
@@ -32,7 +33,6 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.renderer.render
 import org.jetbrains.kotlin.resolve.annotations.hasJvmStaticAnnotation
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
-import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
 fun Converter.convertImportList(importList: PsiImportList): ImportList {
     val imports = importList.allImportStatements
@@ -50,7 +50,7 @@ fun Converter.convertImport(anImport: PsiImportStatementBase, dumpConversion: Bo
     }
     else {
         convertImport(fqName, reference, onDemand, anImport is PsiImportStaticStatement)
-                .map { Import(it) }
+                .map(::Import)
     }
     return convertedImports.map { it.assignPrototype(anImport) }
 }
@@ -60,7 +60,7 @@ private fun Converter.convertImport(fqName: FqName, ref: PsiJavaCodeReferenceEle
         if (annotationConverter.isImportNotRequired(fqName)) return emptyList()
 
 
-        val mapped = JavaToKotlinClassMap.INSTANCE.mapJavaToKotlin(fqName)
+        val mapped = JavaToKotlinClassMap.mapJavaToKotlin(fqName)
         mapped?.let {
             // If imported class has a kotlin analog, drop the import if it is not nested
             if (!it.isNestedClass) return emptyList()
@@ -134,7 +134,7 @@ private fun convertStaticExplicitImport(fqName: FqName, target: PsiElement?): Li
                 is KtClassBody -> {
                     val parentClass = originParent.parent as KtClassOrObject
                     if (parentClass is KtObjectDeclaration && parentClass.isCompanion()) {
-                        return parentClass.getFqName()?.child(nameToImport)?.render().singletonOrEmptyList()
+                        return listOfNotNull(parentClass.getFqName()?.child(nameToImport)?.render())
                     }
                 }
             }
@@ -161,10 +161,9 @@ private fun convertNonStaticImport(fqName: FqName, isOnDemand: Boolean, target: 
 private fun renderImportName(fqName: FqName, isOnDemand: Boolean)
         = if (isOnDemand) fqName.render() + ".*" else fqName.render()
 
-// TODO: use the correct LanguageVersionSettings instance here
-private val DEFAULT_IMPORTS_SET: Set<FqName> = JvmPlatform.getDefaultImports(LanguageVersionSettingsImpl.DEFAULT)
-        .filter { it.isAllUnder }
-        .map { it.fqnPart() }
-        .toSet()
+private val DEFAULT_IMPORTS_SET: Set<FqName> = JvmPlatform.getDefaultImports(
+        // TODO: use the correct LanguageVersionSettings instance here
+        LanguageVersionSettingsImpl.DEFAULT.supportsFeature(LanguageFeature.DefaultImportOfPackageKotlinComparisons)
+).filter { it.isAllUnder }.map { it.fqName }.toSet()
 
 private fun isImportedByDefault(c: KtLightClass) = c.qualifiedName?.let { FqName(it).parent() } in DEFAULT_IMPORTS_SET

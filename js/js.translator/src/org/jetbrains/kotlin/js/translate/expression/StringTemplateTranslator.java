@@ -93,7 +93,7 @@ public final class StringTemplateTranslator extends AbstractTranslator {
             }
 
             if (type == null || type.isMarkedNullable()) {
-                append(TopLevelFIF.TO_STRING.apply((JsExpression) null, new SmartList<JsExpression>(translatedExpression), context()));
+                append(TopLevelFIF.TO_STRING.apply((JsExpression) null, new SmartList<>(translatedExpression), context()));
             }
             else if (KotlinBuiltIns.isChar(type)) {
                 append(JsAstUtils.charToString(translatedExpression));
@@ -110,10 +110,10 @@ public final class StringTemplateTranslator extends AbstractTranslator {
             Name typeName = DescriptorUtilsKt.getNameIfStandardType(type);
             if (typeName != null) {
                 //TODO: this is a hacky optimization, should use some generic approach
-                if (NamePredicate.STRING.apply(typeName)) {
+                if (NamePredicate.STRING.test(typeName)) {
                     return false;
                 }
-                else if (NamePredicate.PRIMITIVE_NUMBERS.apply(typeName)) {
+                else if (NamePredicate.PRIMITIVE_NUMBERS.test(typeName)) {
                     return resultingExpression == null;
                 }
             }

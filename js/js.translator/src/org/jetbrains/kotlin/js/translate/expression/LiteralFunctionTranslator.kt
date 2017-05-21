@@ -27,6 +27,7 @@ import org.jetbrains.kotlin.js.translate.context.TranslationContext
 import org.jetbrains.kotlin.js.translate.context.getNameForCapturedDescriptor
 import org.jetbrains.kotlin.js.translate.context.hasCapturedExceptContaining
 import org.jetbrains.kotlin.js.translate.general.AbstractTranslator
+import org.jetbrains.kotlin.js.translate.reference.ReferenceTranslator
 import org.jetbrains.kotlin.js.translate.utils.BindingUtils.getFunctionDescriptor
 import org.jetbrains.kotlin.js.translate.utils.FunctionBodyTranslator.setDefaultValueForArguments
 import org.jetbrains.kotlin.js.translate.utils.FunctionBodyTranslator.translateFunctionBody
@@ -45,14 +46,8 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
 
         val lambda = invokingContext.getFunctionObject(descriptor)
 
-        val aliases = mutableMapOf<DeclarationDescriptor, JsExpression>()
-        if (descriptor.isCoroutineLambda) {
-            aliases.put(descriptor, JsAstUtils.stateMachineReceiver())
-        }
-
         val functionContext = invokingContext
                 .newFunctionBodyWithUsageTracker(lambda, descriptor)
-                .innerContextWithDescriptorsAliased(aliases)
                 .translateAndAliasParameters(descriptor, lambda.parameters)
 
         descriptor.valueParameters.forEach {
@@ -76,8 +71,7 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
             }
             lambdaCreator.name.staticRef = lambdaCreator
             lambdaCreator.fillCoroutineMetadata(invokingContext, descriptor)
-            return lambdaCreator.withCapturedParameters(descriptor, descriptor.wrapContextForCoroutineIfNecessary(functionContext),
-                                                        invokingContext)
+            return lambdaCreator.withCapturedParameters(descriptor, functionContext, invokingContext)
         }
 
         lambda.name = invokingContext.getInnerNameForDescriptor(descriptor)
@@ -99,7 +93,7 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
     fun JsFunction.fillCoroutineMetadata(context: TranslationContext, descriptor: FunctionDescriptor) {
         if (!descriptor.isSuspend) return
 
-        fillCoroutineMetadata(context, descriptor, hasController = descriptor.extensionReceiverParameter != null, isLambda = true)
+        fillCoroutineMetadata(context, descriptor, hasController = descriptor.extensionReceiverParameter != null)
     }
 
     fun ValueParameterDescriptorImpl.WithDestructuringDeclaration.translate(context: TranslationContext): JsVars {
@@ -107,17 +101,8 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
                 (DescriptorToSourceUtils.descriptorToDeclaration(this) as? KtParameter)?.destructuringDeclaration
                 ?: error("Destructuring declaration for descriptor $this not found")
 
-        val jsParameter = JsParameter(context.getNameForDescriptor(this))
-        return DestructuringDeclarationTranslator.translate(destructuringDeclaration, jsParameter.name, null, context)
-    }
-}
-
-private fun CallableMemberDescriptor.wrapContextForCoroutineIfNecessary(context: TranslationContext): TranslationContext {
-    return if (isCoroutineLambda) {
-        context.innerContextWithDescriptorsAliased(mapOf(this to JsAstUtils.stateMachineReceiver()))
-    }
-    else {
-        context
+        val parameterRef = ReferenceTranslator.translateAsValueReference(this, context)
+        return DestructuringDeclarationTranslator.translate(destructuringDeclaration, parameterRef, context)
     }
 }
 
@@ -225,10 +210,9 @@ private fun moveCapturedLocalInside(capturingFunction: JsFunction, capturedName:
 private fun moveCapturedLocalInside(capturingFunction: JsFunction, capturedName: JsName, localFunAlias: JsInvocation): CapturedArgsParams {
     val capturedArgs = localFunAlias.arguments
 
-    val scope = capturingFunction.getInnerFunction()?.scope!!
-    val freshNames = getTemporaryNamesInScope(scope, capturedArgs)
+    val freshNames = getTemporaryNamesInScope(capturedArgs)
 
-    val aliasCallArguments = freshNames.map { it.makeRef() }
+    val aliasCallArguments = freshNames.map(JsName::makeRef)
     val alias = JsInvocation(localFunAlias.qualifier, aliasCallArguments)
     declareAliasInsideFunction(capturingFunction, capturedName, alias)
 
@@ -241,7 +225,7 @@ private fun declareAliasInsideFunction(function: JsFunction, name: JsName, alias
     function.getInnerFunction()?.addDeclaration(name, alias)
 }
 
-private fun getTemporaryNamesInScope(scope: JsScope, suggested: List<JsExpression>): List<JsName> {
+private fun getTemporaryNamesInScope(suggested: List<JsExpression>): List<JsName> {
     val freshNames = arrayListOf<JsName>()
 
     for (suggestion in suggested) {
@@ -250,7 +234,7 @@ private fun getTemporaryNamesInScope(scope: JsScope, suggested: List<JsExpressio
         }
 
         val ident = suggestion.ident
-        val name = scope.declareTemporaryName(ident)
+        val name = JsScope.declareTemporaryName(ident)
         freshNames.add(name)
     }
 

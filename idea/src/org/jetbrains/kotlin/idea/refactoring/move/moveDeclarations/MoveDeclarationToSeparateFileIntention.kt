@@ -45,7 +45,7 @@ class MoveDeclarationToSeparateFileIntention :
         if (element.name == null) return null
         if (element.parent !is KtFile) return null
         if (element.hasModifier(KtTokens.PRIVATE_KEYWORD)) return null
-        if (element.getContainingKtFile().declarations.size == 1) return null
+        if (element.containingKtFile.declarations.size == 1) return null
 
         val keyword = when (element) {
             is KtClass -> element.getClassOrInterfaceKeyword()
@@ -64,7 +64,7 @@ class MoveDeclarationToSeparateFileIntention :
 
     override fun applyTo(element: KtClassOrObject, editor: Editor?) {
         if (editor == null) throw IllegalArgumentException("This intention requires an editor")
-        val file = element.getContainingKtFile()
+        val file = element.containingKtFile
         val project = file.project
         val originalOffset = editor.caretModel.offset - element.startOffset
         val directory = file.containingDirectory ?: return
@@ -93,13 +93,13 @@ class MoveDeclarationToSeparateFileIntention :
         val moveTarget = KotlinMoveTargetForDeferredFile(packageName, directory, null) {
             createKotlinFile(targetFileName, directory, packageName.asString())
         }
-        val moveOptions = MoveDeclarationsDescriptor(
+        val descriptor = MoveDeclarationsDescriptor(
+                project = project,
                 elementsToMove = listOf(element),
                 moveTarget = moveTarget,
                 delegate = MoveDeclarationsDelegate.TopLevel,
                 searchInCommentsAndStrings = false,
                 searchInNonCode = false,
-                updateInternalReferences = true,
                 moveCallback = MoveCallback {
                     val newFile = directory.findFile(targetFileName) as KtFile
                     val newDeclaration = newFile.declarations.first()
@@ -108,7 +108,7 @@ class MoveDeclarationToSeparateFileIntention :
                 }
         )
 
-        val move = { MoveKotlinDeclarationsProcessor(project, moveOptions).run() }
+        val move = { MoveKotlinDeclarationsProcessor(descriptor).run() }
         val optimizeImports = { OptimizeImportsProcessor(project, file).run() }
 
         move.runRefactoringWithPostprocessing(project, MoveKotlinDeclarationsProcessor.REFACTORING_ID, optimizeImports)

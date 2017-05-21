@@ -16,11 +16,23 @@
 
 package org.jetbrains.kotlin.idea.caches.resolve
 
+import com.intellij.openapi.module.Module
 import com.intellij.openapi.roots.DependencyScope
+import com.intellij.openapi.vfs.newvfs.impl.VfsRootAccess
+import org.jetbrains.kotlin.analyzer.ModuleInfo
+import org.jetbrains.kotlin.analyzer.ResolverForModuleComputationTracker
+import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime
 import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.config.TargetPlatformKind
+import org.jetbrains.kotlin.idea.completion.test.withServiceRegistered
+import org.jetbrains.kotlin.test.KotlinTestUtils
 
 class MultiModuleHighlightingTest : AbstractMultiModuleHighlightingTest() {
+    override fun setUp() {
+        super.setUp()
+        VfsRootAccess.allowRootAccess(KotlinTestUtils.getHomeDirectory())
+    }
+
     fun testVisibility() {
         val module1 = module("m1")
         val module2 = module("m2")
@@ -49,6 +61,40 @@ class MultiModuleHighlightingTest : AbstractMultiModuleHighlightingTest() {
         checkHighlightingInAllFiles()
     }
 
+    fun testLazyResolvers() {
+        val resolversComputed = mutableSetOf<Module>()
+
+        val resolversTracker = object : ResolverForModuleComputationTracker {
+            override fun onResolverComputed(moduleInfo: ModuleInfo) {
+                (moduleInfo as IdeaModuleInfo).let {
+                    if (it is ModuleSourceInfo) {
+                        val module = it.module
+                        resolversComputed.add(module)
+                    }
+                }
+            }
+        }
+
+        project.withServiceRegistered<ResolverForModuleComputationTracker, Unit>(resolversTracker) {
+            val module1 = module("m1")
+            val module2 = module("m2")
+            val module3 = module("m3")
+
+            module3.addDependency(module2)
+            module3.addDependency(module1)
+
+            assertTrue(module1 !in resolversComputed)
+            assertTrue(module2 !in resolversComputed)
+            assertTrue(module3 !in resolversComputed)
+
+            checkHighlightingInAllFiles { "m3" in it }
+
+            assertTrue(module1 in resolversComputed)
+            assertTrue(module2 !in resolversComputed)
+            assertTrue(module3 in resolversComputed)
+        }
+    }
+
     fun testTestRoot() {
         val module1 = module("m1", hasTestRoot = true)
         val module2 = module("m2", hasTestRoot = true)
@@ -61,80 +107,61 @@ class MultiModuleHighlightingTest : AbstractMultiModuleHighlightingTest() {
         checkHighlightingInAllFiles()
     }
 
-    fun testPlatformBasic() {
-        val header = module("header")
-        header.setPlatformKind(TargetPlatformKind.Common)
+    class MultiPlatform : AbstractMultiModuleHighlightingTest() {
+        override val testPath get() = super.testPath + "multiplatform/"
 
-        val jvm = module("jvm")
-        jvm.setPlatformKind(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
-        jvm.enableMultiPlatform()
-        jvm.addDependency(header)
+        fun testBasic() {
+            doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
+        }
 
-        checkHighlightingInAllFiles()
-    }
+        fun testHeaderClass() {
+            doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
+        }
 
-    fun testPlatformClass() {
-        val header = module("header")
-        header.setPlatformKind(TargetPlatformKind.Common)
+        fun testHeaderWithoutImplForBoth() {
+            doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6], TargetPlatformKind.JavaScript)
+        }
 
-        val jvm = module("jvm")
-        jvm.setPlatformKind(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
-        jvm.enableMultiPlatform()
-        jvm.addDependency(header)
+        fun testHeaderPartiallyImplemented() {
+            doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
+        }
 
-        checkHighlightingInAllFiles()
-    }
+        fun testHeaderFunctionProperty() {
+            doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
+        }
 
-    fun testPlatformNotImplementedForBoth() {
-        val header = module("header")
-        header.setPlatformKind(TargetPlatformKind.Common)
+        fun testSuppressHeaderWithoutImpl() {
+            doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
+        }
 
-        val jvm = module("jvm")
-        jvm.setPlatformKind(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
-        jvm.enableMultiPlatform()
-        jvm.addDependency(header)
+        fun testCatchHeaderExceptionInPlatformModule() {
+            doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6], withStdlibCommon = true)
+        }
 
-        val js = module("js")
-        js.setPlatformKind(TargetPlatformKind.JavaScript)
-        js.enableMultiPlatform()
-        js.addDependency(header)
+        fun testWithOverrides() {
+            doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
+        }
 
-        checkHighlightingInAllFiles()
-    }
+        fun testUseCorrectBuiltInsForCommonModule() {
+            doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_8], TargetPlatformKind.JavaScript,
+                                withStdlibCommon = true, useFullJdk = true, configureModule = { module, platform ->
+                if (platform == TargetPlatformKind.JavaScript) {
+                    module.addLibrary(ForTestCompileRuntime.stdlibJsForTests())
+                    module.addLibrary(ForTestCompileRuntime.stdlibCommonForTests())
+                }
+            })
+        }
 
-    fun testPlatformPartiallyImplemented() {
-        val header = module("header")
-        header.setPlatformKind(TargetPlatformKind.Common)
+        fun testHeaderClassImplTypealias() {
+            doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
+        }
 
-        val jvm = module("jvm")
-        jvm.setPlatformKind(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
-        jvm.enableMultiPlatform()
-        jvm.addDependency(header)
-
-        checkHighlightingInAllFiles()
-    }
-
-    fun testPlatformFunctionProperty() {
-        val header = module("header")
-        header.setPlatformKind(TargetPlatformKind.Common)
-
-        val jvm = module("jvm")
-        jvm.setPlatformKind(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
-        jvm.enableMultiPlatform()
-        jvm.addDependency(header)
-
-        checkHighlightingInAllFiles()
-    }
-
-    fun testPlatformSuppress() {
-        val header = module("header")
-        header.setPlatformKind(TargetPlatformKind.Common)
-
-        val jvm = module("jvm")
-        jvm.setPlatformKind(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6])
-        jvm.enableMultiPlatform()
-        jvm.addDependency(header)
-
-        checkHighlightingInAllFiles()
+        fun testHeaderFunUsesStdlibInSignature() {
+            doMultiPlatformTest(TargetPlatformKind.Jvm[JvmTarget.JVM_1_6], withStdlibCommon = true, configureModule = { module, platform ->
+                if (platform is TargetPlatformKind.Jvm) {
+                    module.addLibrary(ForTestCompileRuntime.runtimeJarForTests())
+                }
+            })
+        }
     }
 }

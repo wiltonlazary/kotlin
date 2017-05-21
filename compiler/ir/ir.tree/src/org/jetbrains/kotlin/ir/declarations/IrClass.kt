@@ -17,12 +17,25 @@
 package org.jetbrains.kotlin.ir.declarations
 
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.ValueDescriptor
+import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
+import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 
-interface IrClass : IrDeclaration, IrDeclarationContainer {
+interface IrClass : IrSymbolDeclaration<IrClassSymbol>, IrDeclarationContainer, IrTypeParametersContainer {
     override val declarationKind: IrDeclarationKind
         get() = IrDeclarationKind.CLASS
 
     override val descriptor: ClassDescriptor
+
+    var thisReceiver: IrValueParameter?
+}
+
+fun IrClass.addMember(member: IrDeclaration) {
+    declarations.add(member)
+}
+
+fun IrClass.addAll(members: List<IrDeclaration>) {
+    declarations.addAll(members)
 }
 
 fun IrClass.getInstanceInitializerMembers() =

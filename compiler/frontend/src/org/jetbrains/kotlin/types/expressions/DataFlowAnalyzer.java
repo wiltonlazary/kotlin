@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ import org.jetbrains.kotlin.resolve.calls.smartcasts.*;
 import org.jetbrains.kotlin.resolve.constants.*;
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator;
 import org.jetbrains.kotlin.types.KotlinType;
+import org.jetbrains.kotlin.types.KotlinTypeKt;
 import org.jetbrains.kotlin.types.TypeConstructor;
 import org.jetbrains.kotlin.types.TypeUtils;
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker;
@@ -119,12 +120,12 @@ public class DataFlowAnalyzer {
 
     @NotNull
     public DataFlowInfo extractDataFlowInfoFromCondition(
-            @Nullable final KtExpression condition,
-            final boolean conditionValue,
-            final ExpressionTypingContext context
+            @Nullable KtExpression condition,
+            boolean conditionValue,
+            ExpressionTypingContext context
     ) {
         if (condition == null) return context.dataFlowInfo;
-        final Ref<DataFlowInfo> result = new Ref<DataFlowInfo>(null);
+        Ref<DataFlowInfo> result = new Ref<>(null);
         condition.accept(new KtVisitorVoid() {
             @Override
             public void visitIsExpression(@NotNull KtIsExpression expression) {
@@ -178,10 +179,11 @@ public class DataFlowAnalyzer {
                     }
                     if (equals != null) {
                         if (equals == conditionValue) { // this means: equals && conditionValue || !equals && !conditionValue
-                            boolean byIdentity = operationToken == KtTokens.EQEQEQ || operationToken == KtTokens.EXCLEQEQEQ ||
-                                                 typeHasEqualsFromAny(lhsType, condition);
+                            boolean identityEquals = operationToken == KtTokens.EQEQEQ ||
+                                                     operationToken == KtTokens.EXCLEQEQEQ ||
+                                                     typeHasEqualsFromAny(lhsType, condition);
                             result.set(context.dataFlowInfo
-                                               .equate(leftValue, rightValue, byIdentity, languageVersionSettings)
+                                               .equate(leftValue, rightValue, identityEquals, languageVersionSettings)
                                                .and(expressionFlowInfo));
                         }
                         else {
@@ -325,7 +327,8 @@ public class DataFlowAnalyzer {
 
     @Nullable
     public KotlinType checkStatementType(@NotNull KtExpression expression, @NotNull ResolutionContext context) {
-        if (!noExpectedType(context.expectedType) && !KotlinBuiltIns.isUnit(context.expectedType) && !context.expectedType.isError()) {
+        if (!noExpectedType(context.expectedType) && !KotlinBuiltIns.isUnit(context.expectedType) &&
+            !KotlinTypeKt.isError(context.expectedType)) {
             context.trace.report(EXPECTED_TYPE_MISMATCH.on(expression, context.expectedType));
             return null;
         }
@@ -343,13 +346,21 @@ public class DataFlowAnalyzer {
     @NotNull
     public static Collection<KotlinType> getAllPossibleTypes(
             @NotNull KtExpression expression,
-            @NotNull DataFlowInfo dataFlowInfo,
             @NotNull KotlinType type,
             @NotNull ResolutionContext c
     ) {
         DataFlowValue dataFlowValue = DataFlowValueFactory.createDataFlowValue(expression, type, c);
+        return getAllPossibleTypes(type, c, dataFlowValue);
+    }
+
+    @NotNull
+    public static Collection<KotlinType> getAllPossibleTypes(
+            @NotNull KotlinType type,
+            @NotNull ResolutionContext c,
+            @NotNull DataFlowValue dataFlowValue
+    ) {
         Collection<KotlinType> possibleTypes = Sets.newHashSet(type);
-        possibleTypes.addAll(dataFlowInfo.getStableTypes(dataFlowValue));
+        possibleTypes.addAll(c.dataFlowInfo.getStableTypes(dataFlowValue));
         return possibleTypes;
     }
 

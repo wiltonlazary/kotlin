@@ -17,51 +17,26 @@ import java.util.Map;
  * A JavaScript program.
  */
 public final class JsProgram extends SourceInfoAwareJsNode {
-
-    private JsProgramFragment[] fragments;
-
-    private final TDoubleObjectHashMap<JsDoubleLiteral> doubleLiteralMap = new TDoubleObjectHashMap<JsDoubleLiteral>();
-    private final TIntObjectHashMap<JsIntLiteral> intLiteralMap = new TIntObjectHashMap<JsIntLiteral>();
+    private final JsGlobalBlock globalBlock = new JsGlobalBlock();
 
     private final JsRootScope rootScope;
-    private final Map<String, JsStringLiteral> stringLiteralMap = new THashMap<String, JsStringLiteral>();
     private final JsObjectScope topScope;
 
     public JsProgram() {
         rootScope = new JsRootScope(this);
         topScope = new JsObjectScope(rootScope, "Global");
-        setFragmentCount(1);
     }
 
-    public JsBlock getFragmentBlock(int fragment) {
-        if (fragment < 0 || fragment >= fragments.length) {
-            throw new IllegalArgumentException("Invalid fragment: " + fragment);
-        }
-        return fragments[fragment].getGlobalBlock();
-    }
-
-    public JsBlock getGlobalBlock() {
-        return getFragmentBlock(0);
+    public JsGlobalBlock getGlobalBlock() {
+        return globalBlock;
     }
 
     public JsNumberLiteral getNumberLiteral(double value) {
-        JsDoubleLiteral literal = doubleLiteralMap.get(value);
-        if (literal == null) {
-            literal = new JsDoubleLiteral(value);
-            doubleLiteralMap.put(value, literal);
-        }
-
-        return literal;
+        return new JsDoubleLiteral(value);
     }
 
     public JsNumberLiteral getNumberLiteral(int value) {
-        JsIntLiteral literal = intLiteralMap.get(value);
-        if (literal == null) {
-            literal = new JsIntLiteral(value);
-            intLiteralMap.put(value, literal);
-        }
-
-        return literal;
+        return new JsIntLiteral(value);
     }
 
     /**
@@ -86,19 +61,7 @@ public final class JsProgram extends SourceInfoAwareJsNode {
      */
     @NotNull
     public JsStringLiteral getStringLiteral(String value) {
-        JsStringLiteral literal = stringLiteralMap.get(value);
-        if (literal == null) {
-            literal = new JsStringLiteral(value);
-            stringLiteralMap.put(value, literal);
-        }
-        return literal;
-    }
-
-    public void setFragmentCount(int fragments) {
-        this.fragments = new JsProgramFragment[fragments];
-        for (int i = 0; i < fragments; i++) {
-            this.fragments[i] = new JsProgramFragment();
-        }
+        return new JsStringLiteral(value);
     }
 
     @Override
@@ -108,17 +71,13 @@ public final class JsProgram extends SourceInfoAwareJsNode {
 
     @Override
     public void acceptChildren(JsVisitor visitor) {
-        for (JsProgramFragment fragment : fragments) {
-            visitor.accept(fragment);
-        }
+        visitor.accept(globalBlock);
     }
 
     @Override
     public void traverse(JsVisitorWithContext v, JsContext ctx) {
         if (v.visit(this, ctx)) {
-            for (JsProgramFragment fragment : fragments) {
-                v.accept(fragment);
-            }
+            v.accept(globalBlock);
         }
         v.endVisit(this, ctx);
     }

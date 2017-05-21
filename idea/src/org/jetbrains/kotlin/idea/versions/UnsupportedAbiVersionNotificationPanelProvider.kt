@@ -47,10 +47,6 @@ import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.idea.KotlinPluginUpdater
 import org.jetbrains.kotlin.idea.KotlinPluginUtil
 import org.jetbrains.kotlin.idea.PluginUpdateStatus
-import org.jetbrains.kotlin.idea.framework.getJsStdLibJar
-import org.jetbrains.kotlin.idea.framework.getReflectJar
-import org.jetbrains.kotlin.idea.framework.getRuntimeJar
-import org.jetbrains.kotlin.idea.framework.getTestJar
 import org.jetbrains.kotlin.idea.project.TargetPlatformDetector
 import org.jetbrains.kotlin.js.resolve.JsPlatform
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
@@ -88,8 +84,8 @@ class UnsupportedAbiVersionNotificationPanelProvider(private val project: Projec
 
         val kotlinLibraries = findAllUsedLibraries(project).keySet()
         val badRuntimeLibraries = kotlinLibraries.filter { library ->
-            val runtimeJar = getLocalJar(getRuntimeJar(library))
-            val jsLibJar = getLocalJar(getJsStdLibJar(library))
+            val runtimeJar = getLocalJar(LibraryJarDescriptor.RUNTIME_JAR.findExistingJar(library))
+            val jsLibJar = getLocalJar(LibraryJarDescriptor.JS_STDLIB_JAR.findExistingJar(library))
             badRootFiles.contains(runtimeJar) || badRootFiles.contains(jsLibJar)
         }
 
@@ -122,7 +118,11 @@ class UnsupportedAbiVersionNotificationPanelProvider(private val project: Projec
             }
 
             val actionLabelText = MessageFormat.format("$updateAction {0,choice,0#|1#|1<all }Kotlin runtime librar{0,choice,0#|1#y|1<ies} ", badRuntimeLibraries.size)
-            answer.createActionLabel(actionLabelText) { updateLibraries(project, badRuntimeLibraries) }
+            answer.createActionLabel(actionLabelText) {
+                ApplicationManager.getApplication().invokeLater {
+                    updateLibraries(project, badRuntimeLibraries)
+                }
+            }
         }
         else if (badVersionedRoots.size == 1) {
             val badVersionedRoot = badVersionedRoots.first()
@@ -258,10 +258,9 @@ class UnsupportedAbiVersionNotificationPanelProvider(private val project: Projec
         }
 
         badRuntimeLibraries.forEach { library ->
-            addToBadRoots(getLocalJar(getRuntimeJar(library)))
-            addToBadRoots(getLocalJar(getJsStdLibJar(library)))
-            addToBadRoots(getLocalJar(getReflectJar(library)))
-            addToBadRoots(getLocalJar(getTestJar(library)))
+            for (descriptor in LibraryJarDescriptor.values()) {
+                addToBadRoots(getLocalJar(descriptor.findExistingJar(library)))
+            }
         }
 
         return badRootsInLibraries

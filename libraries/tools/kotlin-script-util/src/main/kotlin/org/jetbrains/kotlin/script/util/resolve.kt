@@ -16,16 +16,18 @@
 
 package org.jetbrains.kotlin.script.util
 
-import org.jetbrains.kotlin.script.*
+import org.jetbrains.kotlin.script.InvalidScriptResolverAnnotation
 import org.jetbrains.kotlin.script.util.resolvers.DirectResolver
 import org.jetbrains.kotlin.script.util.resolvers.FlatLibDirectoryResolver
 import org.jetbrains.kotlin.script.util.resolvers.MavenResolver
 import org.jetbrains.kotlin.script.util.resolvers.Resolver
-import org.jetbrains.kotlin.utils.addToStdlib.check
 import java.io.File
-import java.lang.Exception
-import java.lang.IllegalArgumentException
 import java.util.concurrent.Future
+import kotlin.script.dependencies.KotlinScriptExternalDependencies
+import kotlin.script.dependencies.ScriptContents
+import kotlin.script.dependencies.ScriptDependenciesResolver
+import kotlin.script.dependencies.asFuture
+import kotlin.script.templates.AcceptedAnnotations
 
 open class KotlinAnnotatedScriptDependenciesResolver(val baseClassPath: List<File>, resolvers: Iterable<Resolver>)
     : ScriptDependenciesResolver
@@ -53,7 +55,7 @@ open class KotlinAnnotatedScriptDependenciesResolver(val baseClassPath: List<Fil
         script.annotations.forEach { annotation ->
             when (annotation) {
                 is Repository -> FlatLibDirectoryResolver.tryCreate(annotation)?.apply { resolvers.add(this) }
-                        ?: resolvers.find { it is MavenResolver }?.check { (it as MavenResolver).tryAddRepo(annotation) }
+                        ?: resolvers.find { it is MavenResolver }?.takeIf { (it as MavenResolver).tryAddRepo(annotation) }
                         ?: throw IllegalArgumentException("Illegal argument for Repository annotation: $annotation")
                 is DependsOn -> {}
                 is InvalidScriptResolverAnnotation -> throw Exception("Invalid annotation ${annotation.name}", annotation.error)

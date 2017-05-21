@@ -3,8 +3,6 @@ package org.jetbrains.kotlin.gradle.plugin
 import com.android.build.gradle.BaseExtension
 import com.android.build.gradle.BasePlugin
 import com.android.build.gradle.api.AndroidSourceSet
-import com.android.build.gradle.internal.TaskContainerAdaptor
-import com.android.build.gradle.internal.TaskManager
 import com.android.build.gradle.internal.variant.BaseVariantData
 import com.android.build.gradle.internal.variant.BaseVariantOutputData
 import com.android.build.gradle.internal.variant.TestVariantData
@@ -13,6 +11,7 @@ import groovy.lang.Closure
 import org.gradle.api.InvalidUserDataException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.ProjectConfigurationException
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.logging.Logger
 import org.gradle.api.logging.Logging
@@ -21,7 +20,6 @@ import org.gradle.api.plugins.JavaPlugin
 import org.gradle.api.plugins.JavaPluginConvention
 import org.gradle.api.tasks.Delete
 import org.gradle.api.tasks.SourceSet
-import org.gradle.api.tasks.bundling.Zip
 import org.gradle.api.tasks.compile.AbstractCompile
 import org.gradle.api.tasks.compile.JavaCompile
 import org.jetbrains.kotlin.com.intellij.openapi.util.io.FileUtil
@@ -32,9 +30,8 @@ import org.jetbrains.kotlin.gradle.internal.Kapt3KotlinGradleSubplugin
 import org.jetbrains.kotlin.gradle.internal.Kapt3KotlinGradleSubplugin.Companion.getKaptClasssesDir
 import org.jetbrains.kotlin.gradle.internal.initKapt
 import org.jetbrains.kotlin.gradle.plugin.android.AndroidGradleWrapper
-import org.jetbrains.kotlin.gradle.plugin.android.KotlinJillTask
 import org.jetbrains.kotlin.gradle.tasks.*
-import org.jetbrains.kotlin.gradle.utils.getDeclaredFieldInHierarchy
+import org.jetbrains.kotlin.gradle.utils.ParsedGradleVersion
 import org.jetbrains.kotlin.incremental.configureMultiProjectIncrementalCompilation
 import org.jetbrains.kotlin.incremental.multiproject.ArtifactDifferenceRegistryProviderAndroidWrapper
 import java.io.File
@@ -277,6 +274,7 @@ internal abstract class AbstractKotlinPlugin(
         project.plugins.apply(JavaPlugin::class.java)
 
         configureSourceSetDefaults(project, javaBasePlugin, javaPluginConvention)
+        configureDefaultVersionsResolutionStrategy(project)
     }
 
     open protected fun configureSourceSetDefaults(
@@ -286,6 +284,17 @@ internal abstract class AbstractKotlinPlugin(
     ) {
         javaPluginConvention.sourceSets?.all { sourceSet ->
             buildSourceSetProcessor(project, javaBasePlugin, sourceSet, kotlinPluginVersion).run()
+        }
+    }
+
+    private fun configureDefaultVersionsResolutionStrategy(project: Project) {
+        project.configurations.all { configuration ->
+            configuration.resolutionStrategy.eachDependency { details ->
+                val requested = details.requested
+                if (requested.group == "org.jetbrains.kotlin" && requested.version.isEmpty()) {
+                    details.useVersion(kotlinPluginVersion)
+                }
+            }
         }
     }
 }
@@ -373,19 +382,6 @@ internal open class KotlinAndroidPlugin(
         }
     }
 
-    private fun forceCreateJavacTask(project: Project,
-                                     androidPlugin: BasePlugin,
-                                     variantData: BaseVariantData<*>): JavaCompile? {
-        val taskManager = androidPlugin::class.java.getDeclaredFieldInHierarchy("taskManager")
-                ?.let { it.isAccessible = true; it[androidPlugin] as TaskManager }
-        if (taskManager == null) {
-            log.kotlinDebug("TaskManager was not found, possibly, an incompatible Android Gradle plugin version is used.")
-            return null
-        }
-        val taskContainerAdaptor = TaskContainerAdaptor(project.tasks)
-        return taskManager.createJavacTask(taskContainerAdaptor, variantData.scope)?.get(taskContainerAdaptor)
-    }
-
     private fun getTestedVariantData(variantData: BaseVariantData<*>): BaseVariantData<*>? =
             ((variantData as? TestVariantData)?.testedVariantData as? BaseVariantData<*>)
 
@@ -401,6 +397,12 @@ internal open class KotlinAndroidPlugin(
         val subpluginEnvironment = loadSubplugins(project)
 
         for (variantData in variantDataList) {
+            if (AndroidGradleWrapper.isJackEnabled(variantData)) {
+                throw ProjectConfigurationException(
+                        "Kotlin Gradle plugin does not support the deprecated Jack toolchain.\n" +
+                        "Disable Jack or revert to Kotlin Gradle plugin version 1.1.1.", null)
+            }
+
             val variantDataName = variantData.name
             logger.kotlinDebug("Process variant [$variantDataName]")
 
@@ -408,8 +410,7 @@ internal open class KotlinAndroidPlugin(
             val isAndroidTestVariant = variantDataName.endsWith("androidTest", ignoreCase = true) &&
                                        testedVariantData != null
 
-            val javaTask = AndroidGradleWrapper.getJavaTask(variantData) ?:
-                           (if (isAndroidTestVariant) forceCreateJavacTask(project, androidPlugin, variantData) else null)
+            val javaTask = AndroidGradleWrapper.getJavaTask(variantData)
 
             if (javaTask == null) {
                 logger.info("KOTLIN: javaTask is missing for $variantDataName, so Kotlin files won't be compiled for it")
@@ -470,14 +471,16 @@ internal open class KotlinAndroidPlugin(
                         variantDataName, rootKotlinOptions, subpluginEnvironment, tasksProvider)
             }
 
-            configureSources(kotlinTask, variantData)
-            if (isAndroidTestVariant) {
-                configureSources(kotlinTask, testedVariantData!!)
+            for (task in listOfNotNull(kotlinTask, kotlinAfterJavaTask)) {
+                configureSources(task, variantData)
             }
 
-            if (kotlinAfterJavaTask != null) {
-                configureSources(kotlinAfterJavaTask, variantData)
+            if (isAndroidTestVariant) {
+                // Android Gradle plugin bypasses the Gradle finalizedBy for its tasks in some cases, and
+                // the Kotlin classes may not be copied for the tested variant. Make sure they are.
+                kotlinTask.dependsOn(syncOutputTaskName(testedVariantData!!.name))
             }
+
             appliedPlugins
                     .flatMap { it.getSubpluginKotlinTasks(project, kotlinTask) }
                     .forEach { configureSources(it, variantData) }
@@ -486,40 +489,19 @@ internal open class KotlinAndroidPlugin(
             createSyncOutputTask(project, kotlinTask, javaTask, kotlinAfterJavaTask, variantDataName)
 
             if ((kotlinAfterJavaTask ?: kotlinTask).incremental) {
-                val jarToAarMapping = AndroidGradleWrapper.getJarToAarMapping(variantData)
                 val artifactFile = project.tryGetSingleArtifact(variantData)
-                val artifactDifferenceRegistryProvider = ArtifactDifferenceRegistryProviderAndroidWrapper(kotlinGradleBuildServices.artifactDifferenceRegistryProvider, jarToAarMapping)
+                val artifactDifferenceRegistryProvider = ArtifactDifferenceRegistryProviderAndroidWrapper(
+                        kotlinGradleBuildServices.artifactDifferenceRegistryProvider,
+                        { AndroidGradleWrapper.getJarToAarMapping(variantData) }
+                )
                 configureMultiProjectIncrementalCompilation(project, kotlinTask, javaTask, kotlinAfterJavaTask,
                         artifactDifferenceRegistryProvider, artifactFile)
-            }
-
-            if (AndroidGradleWrapper.isJackEnabled(variantData)) {
-                val scope = variantData.scope
-                val kotlinDestinationDir = kotlinTask.destinationDir
-                val jarPath = File(kotlinDestinationDir.parent, kotlinDestinationDir.name + ".jar")
-                val zipTaskName = scope.getTaskName("zipKotlinClassesFor")
-                project.tasks.create(zipTaskName, Zip::class.java) { zipTask ->
-                    zipTask.from(kotlinDestinationDir)
-                    zipTask.destinationDir = File(jarPath.parent)
-                    zipTask.archiveName = jarPath.name
-                    zipTask.dependsOn(kotlinTask)
-                }
-
-                val kotlinJillTaskName = scope.getTaskName("transformKotlinClassesWithJillFor")
-                val jillOutputFilePath = File(jarPath.absolutePath + ".jill")
-                project.tasks.create(kotlinJillTaskName, KotlinJillTask::class.java) { jillTask ->
-                    jillTask.buildTools = variantData.scope.globalScope.androidBuilder.targetInfo.buildTools
-                    jillTask.inputJarFile = jarPath
-                    jillTask.outputJillFile = jillOutputFilePath
-                    jillTask.dependsOn(zipTaskName)
-                }
-
-                AndroidGradleWrapper.configureJackTask(variantData, jillOutputFilePath, kotlinJillTaskName)
             }
         }
     }
 
-    private fun configureSources(compileTask: AbstractCompile, variantData: BaseVariantData<out BaseVariantOutputData>) {
+    private fun configureSources(compileTask: AbstractCompile,
+                                 variantData: BaseVariantData<out BaseVariantOutputData>) {
         val logger = compileTask.project.logger
 
         for (provider in variantData.sourceProviders) {
@@ -551,18 +533,24 @@ internal open class KotlinAndroidPlugin(
 }
 
 private fun configureJavaTask(kotlinTask: KotlinCompile, javaTask: AbstractCompile, logger: Logger) {
-    // Since we cannot update classpath statically, java not able to detect changes in the classpath after kotlin compiler.
-    // Therefore this (probably inefficient since java cannot decide "uptodateness" by the list of changed class files, but told
-    // explicitly being out of date whenever any kotlin files are compiled
+    // Gradle Java IC in older Gradle versions (before 2.14) cannot check .class directories updates.
+    // To make it work, reset the up-to-date status of compileJava with this flag.
     kotlinTask.anyClassesCompiled = false
-
-    javaTask.outputs.upToDateWhen { task ->
-        val kotlinClassesCompiled = kotlinTask.anyClassesCompiled
-        if (kotlinClassesCompiled) {
-            logger.info("Marking $task out of date, because kotlin classes are changed")
+    val gradleSupportsJavaIcWithClassesDirs = ParsedGradleVersion.parse(javaTask.project.gradle.gradleVersion)
+                                                      ?.let { it >= ParsedGradleVersion(2, 14) } ?: false
+    if (!gradleSupportsJavaIcWithClassesDirs) {
+        javaTask.outputs.upToDateWhen { task ->
+            if (kotlinTask.anyClassesCompiled) {
+                logger.info("Marking $task out of date, because kotlin classes are changed")
+                false
+            } else true
         }
-        !kotlinClassesCompiled
     }
+
+    // Make Gradle check if the javaTask is up-to-date based on the Kotlin classes
+    javaTask.inputs.dir(kotlinTask.destinationDir)
+    // Also, use kapt1 annotations file for up-to-date check since annotation processing is done with javac
+    kotlinTask.kaptOptions.annotationsFile?.let { javaTask.inputs.file(it) }
 
     javaTask.dependsOn(kotlinTask.name)
     /*
@@ -576,6 +564,8 @@ private fun configureJavaTask(kotlinTask: KotlinCompile, javaTask: AbstractCompi
     javaTask.appendClasspathDynamically(kotlinTask.destinationDir!!)
 }
 
+private fun syncOutputTaskName(variantName: String) = "copy${variantName.capitalize()}KotlinClasses"
+
 private fun createSyncOutputTask(
         project: Project,
         kotlinTask: KotlinCompile,
@@ -587,7 +577,7 @@ private fun createSyncOutputTask(
     val kotlinCompile = kotlinAfterJavaTask ?: kotlinTask
     val kotlinDir = kotlinCompile.destinationDir
     val javaDir = javaTask.destinationDir
-    val taskName = "copy${variantName.capitalize()}KotlinClasses"
+    val taskName = syncOutputTaskName(variantName)
 
     val syncTask = project.tasks.create(taskName, SyncOutputTask::class.java)
     syncTask.kotlinOutputDir = kotlinDir

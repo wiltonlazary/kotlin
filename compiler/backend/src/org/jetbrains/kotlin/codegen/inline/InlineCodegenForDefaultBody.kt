@@ -87,15 +87,11 @@ class InlineCodegenForDefaultBody(
         transformedMethod.accept(MethodBodyVisitor(codegen.v))
     }
 
-    override fun afterParameterPut(type: Type, stackValue: StackValue?, parameterIndex: Int) {
-        throw UnsupportedOperationException("Shouldn't be called")
-    }
-
     override fun genValueAndPut(valueParameterDescriptor: ValueParameterDescriptor, argumentExpression: KtExpression, parameterType: Type, parameterIndex: Int) {
         throw UnsupportedOperationException("Shouldn't be called")
     }
 
-    override fun putValueIfNeeded(parameterType: Type, value: StackValue) {
+    override fun putValueIfNeeded(parameterType: Type, value: StackValue, kind: ValueKind, parameterIndex: Int) {
         //original method would be inlined directly into default impl body without any inline magic
         //so we no need to load variables on stack to further method call
     }

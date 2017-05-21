@@ -16,33 +16,37 @@
 
 package kotlin.test
 
+import kotlin.reflect.KClass
+
 /**
  * Comments out a block of test code until it is implemented while keeping a link to the code
  * to implement in your unit test output
  */
-fun todo(block: () -> Any) {
+impl fun todo(block: () -> Unit) {
     // println("TODO at " + (Exception() as java.lang.Throwable).getStackTrace()?.get(1) + " for " + block)
     println("TODO at " + block)
 }
 
-/** Asserts that a [block] fails with a specific exception of type [T] being thrown.
- *  Since inline method doesn't allow to trace where it was invoked, it is required to pass a [message] to distinguish this method call from others.
- */
-inline fun <reified T : Throwable> assertFailsWith(message: String? = null, noinline block: () -> Unit): T {
-    val exception = assertFails(message, block)
-    val messagePrefix = if (message == null) "" else "$message. "
 
-    assertTrue(exception is T, "${messagePrefix}An exception thrown is not of the expected type: $exception")
+/** Asserts that a [block] fails with a specific exception of type [exceptionClass] being thrown. */
+impl fun <T : Throwable> assertFailsWith(exceptionClass: KClass<T>, message: String?, block: () -> Unit): T {
+    val exception = assertFails(message, block)
+    @Suppress("INVISIBLE_MEMBER")
+    assertTrue(exceptionClass.isInstance(exception), messagePrefix(message) + "Expected an exception of $exceptionClass to be thrown, but was $exception")
+
+    @Suppress("UNCHECKED_CAST")
     return exception as T
 }
 
-var _asserter: Asserter = QUnitAsserter()
 
 /**
  * Provides the JS implementation of asserter using [QUnit](http://QUnitjs.com/)
  */
-internal impl fun lookupAsserter(): Asserter = _asserter
+internal impl fun lookupAsserter(): Asserter = qunitAsserter
 
+private val qunitAsserter = QUnitAsserter()
+
+// TODO: make object in 1.2
 class QUnitAsserter : Asserter {
 
     override fun assertTrue(lazyMessage: () -> String?, actual: Boolean) {

@@ -89,8 +89,8 @@ class StringPropMapper<C, out P : KMutableProperty1<C, String>>(dest: C,
                                                                 prop: P,
                                                                 names: List<String> = listOf(),
                                                                 fromString: ((String) -> String) = { it },
-                                                                toString: ((String) -> String?) = { it.toString() },
-                                                                skipIf: ((String) -> Boolean) = { it.isEmpty() },
+                                                                toString: ((String) -> String?) = { it },
+                                                                skipIf: ((String) -> Boolean) = String::isEmpty,
                                                                 mergeDelimiter: String? = null)
 : PropMapper<C, String, P>(dest = dest, prop = prop, names = if (names.any()) names else listOf(prop.name),
                            fromString = fromString, toString = toString, skipIf = skipIf, mergeDelimiter = mergeDelimiter)
@@ -212,13 +212,13 @@ data class DaemonOptions(
 ) : OptionsGroup {
 
     override val mappers: List<PropMapper<*, *, *>>
-        get() = listOf(PropMapper(this, DaemonOptions::runFilesPath, fromString = { it.trimQuotes() }),
-                       PropMapper(this, DaemonOptions::autoshutdownMemoryThreshold, fromString = { it.toLong() }, skipIf = { it == 0L }, mergeDelimiter = "="),
+        get() = listOf(PropMapper(this, DaemonOptions::runFilesPath, fromString = String::trimQuotes),
+                       PropMapper(this, DaemonOptions::autoshutdownMemoryThreshold, fromString = String::toLong, skipIf = { it == 0L }, mergeDelimiter = "="),
                 // TODO: implement "use default" value without specifying default, so if client and server uses different defaults, it should not lead to many params in the cmd line; use 0 for it and used different val for infinite
-                       PropMapper(this, DaemonOptions::autoshutdownIdleSeconds, fromString = { it.toInt() }, skipIf = { it == 0 }, mergeDelimiter = "="),
-                       PropMapper(this, DaemonOptions::autoshutdownUnusedSeconds, fromString = { it.toInt() }, skipIf = { it == COMPILE_DAEMON_DEFAULT_UNUSED_TIMEOUT_S }, mergeDelimiter = "="),
-                       PropMapper(this, DaemonOptions::shutdownDelayMilliseconds, fromString = { it.toLong() }, skipIf = { it == COMPILE_DAEMON_DEFAULT_SHUTDOWN_DELAY_MS }, mergeDelimiter = "="),
-                       PropMapper(this, DaemonOptions::forceShutdownTimeoutMilliseconds, fromString = { it.toLong() }, skipIf = { it == COMPILE_DAEMON_FORCE_SHUTDOWN_DEFAULT_TIMEOUT_MS }, mergeDelimiter = "="),
+                       PropMapper(this, DaemonOptions::autoshutdownIdleSeconds, fromString = String::toInt, skipIf = { it == 0 }, mergeDelimiter = "="),
+                       PropMapper(this, DaemonOptions::autoshutdownUnusedSeconds, fromString = String::toInt, skipIf = { it == COMPILE_DAEMON_DEFAULT_UNUSED_TIMEOUT_S }, mergeDelimiter = "="),
+                       PropMapper(this, DaemonOptions::shutdownDelayMilliseconds, fromString = String::toLong, skipIf = { it == COMPILE_DAEMON_DEFAULT_SHUTDOWN_DELAY_MS }, mergeDelimiter = "="),
+                       PropMapper(this, DaemonOptions::forceShutdownTimeoutMilliseconds, fromString = String::toLong, skipIf = { it == COMPILE_DAEMON_FORCE_SHUTDOWN_DEFAULT_TIMEOUT_MS }, mergeDelimiter = "="),
                        BoolPropMapper(this, DaemonOptions::verbose),
                        BoolPropMapper(this, DaemonOptions::reportPerf))
 }
@@ -277,8 +277,8 @@ fun configureDaemonJVMOptions(opts: DaemonJVMOptions,
 
     opts.jvmParams.addAll(additionalParams)
     if (inheritAdditionalProperties) {
-        System.getProperty(COMPILE_DAEMON_LOG_PATH_PROPERTY)?.let { opts.jvmParams.add("D${COMPILE_DAEMON_LOG_PATH_PROPERTY}=\"$it\"") }
-        System.getProperty(KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY)?.let { opts.jvmParams.add("D${KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY}") }
+        System.getProperty(COMPILE_DAEMON_LOG_PATH_PROPERTY)?.let { opts.jvmParams.add("D$COMPILE_DAEMON_LOG_PATH_PROPERTY=\"$it\"") }
+        System.getProperty(KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY)?.let { opts.jvmParams.add("D$KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY") }
     }
     return opts
 }
@@ -299,7 +299,7 @@ fun configureDaemonOptions(opts: DaemonOptions): DaemonOptions {
         val unrecognized = it.trimQuotes().split(",").filterExtractProps(opts.mappers, "")
         if (unrecognized.any())
             throw IllegalArgumentException(
-                    "Unrecognized daemon options passed via property ${COMPILE_DAEMON_OPTIONS_PROPERTY}: " + unrecognized.joinToString(" ") +
+                    "Unrecognized daemon options passed via property $COMPILE_DAEMON_OPTIONS_PROPERTY: " + unrecognized.joinToString(" ") +
                     "\nSupported options: " + opts.mappers.joinToString(", ", transform = { it.names.first() }))
     }
     System.getProperty(COMPILE_DAEMON_VERBOSE_REPORT_PROPERTY)?.let { opts.verbose = true }

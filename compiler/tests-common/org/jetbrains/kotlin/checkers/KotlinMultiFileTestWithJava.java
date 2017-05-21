@@ -46,10 +46,12 @@ public abstract class KotlinMultiFileTestWithJava<M, F> extends KotlinTestWithEn
     public class ModuleAndDependencies {
         final M module;
         final List<String> dependencies;
+        final List<String> friends;
 
-        ModuleAndDependencies(M module, List<String> dependencies) {
+        ModuleAndDependencies(M module, List<String> dependencies, List<String> friends) {
             this.module = module;
             this.dependencies = dependencies;
+            this.friends = friends;
         }
     }
 
@@ -93,7 +95,7 @@ public abstract class KotlinMultiFileTestWithJava<M, F> extends KotlinTestWithEn
     }
 
     @NotNull
-    protected List<String> getEnvironmentConfigFiles() {
+    protected EnvironmentConfigFiles getEnvironmentConfigFiles() {
         return EnvironmentConfigFiles.JVM_CONFIG_FILES;
     }
 
@@ -106,7 +108,7 @@ public abstract class KotlinMultiFileTestWithJava<M, F> extends KotlinTestWithEn
 
         String expectedText = KotlinTestUtils.doLoadFile(file);
 
-        final Map<String, ModuleAndDependencies> modules = new HashMap<String, ModuleAndDependencies>();
+        Map<String, ModuleAndDependencies> modules = new HashMap<>();
 
         List<F> testFiles =
                 KotlinTestUtils.createTestFiles(file.getName(), expectedText, new KotlinTestUtils.TestFileFactory<M, F>() {
@@ -129,9 +131,9 @@ public abstract class KotlinMultiFileTestWithJava<M, F> extends KotlinTestWithEn
                     }
 
                     @Override
-                    public M createModule(@NotNull String name, @NotNull List<String> dependencies) {
+                    public M createModule(@NotNull String name, @NotNull List<String> dependencies, @NotNull List<String> friends) {
                         M module = createTestModule(name);
-                        ModuleAndDependencies oldValue = modules.put(name, new ModuleAndDependencies(module, dependencies));
+                        ModuleAndDependencies oldValue = modules.put(name, new ModuleAndDependencies(module, dependencies, friends));
                         assert oldValue == null : "Module " + name + " declared more than once";
 
                         return module;

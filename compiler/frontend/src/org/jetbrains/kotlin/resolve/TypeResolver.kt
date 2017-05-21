@@ -51,7 +51,6 @@ import org.jetbrains.kotlin.resolve.scopes.utils.findFirstFromMeAndParent
 import org.jetbrains.kotlin.resolve.source.KotlinSourceElement
 import org.jetbrains.kotlin.resolve.source.toSourceElement
 import org.jetbrains.kotlin.storage.LockBasedStorageManager
-import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.Variance.*
 import org.jetbrains.kotlin.types.typeUtil.containsTypeAliasParameters
@@ -63,11 +62,11 @@ class TypeResolver(
         private val qualifiedExpressionResolver: QualifiedExpressionResolver,
         private val moduleDescriptor: ModuleDescriptor,
         private val typeTransformerForTests: TypeTransformerForTests,
-        private val storageManager: StorageManager,
         private val lazinessToken: TypeLazinessToken,
         private val dynamicTypesSettings: DynamicTypesSettings,
         private val dynamicCallableDescriptors: DynamicCallableDescriptors,
         private val identifierChecker: IdentifierChecker,
+        private val wrappedTypeFactory: WrappedTypeFactory,
         private val platformToKotlinClassMap: PlatformToKotlinClassMap,
         private val languageVersionSettings: LanguageVersionSettings
 ) {
@@ -101,11 +100,11 @@ class TypeResolver(
 
     private fun resolveType(c: TypeResolutionContext, typeReference: KtTypeReference): KotlinType {
         assert(!c.allowBareTypes) { "Use resolvePossiblyBareType() when bare types are allowed" }
-        return resolvePossiblyBareType(c, typeReference).getActualType()
+        return resolvePossiblyBareType(c, typeReference).actualType
     }
 
     fun resolvePossiblyBareType(c: TypeResolutionContext, typeReference: KtTypeReference): PossiblyBareType {
-        val cachedType = c.trace.getBindingContext().get(BindingContext.TYPE, typeReference)
+        val cachedType = c.trace.bindingContext.get(BindingContext.TYPE, typeReference)
         if (cachedType != null) return type(cachedType)
 
         val resolvedTypeSlice = if (c.abbreviated) BindingContext.ABBREVIATED_TYPE else BindingContext.TYPE
@@ -119,16 +118,16 @@ class TypeResolver(
         if (!c.allowBareTypes && !c.forceResolveLazyTypes && lazinessToken.isLazy()) {
             // Bare types can be allowed only inside expressions; lazy type resolution is only relevant for declarations
 
-            val lazyKotlinType = LazyWrappedType(storageManager) {
-                doResolvePossiblyBareType(c, typeReference).getActualType()
+            val lazyKotlinType = wrappedTypeFactory.createLazyWrappedType {
+                doResolvePossiblyBareType(c, typeReference).actualType
             }
             c.trace.record(resolvedTypeSlice, typeReference, lazyKotlinType)
             return type(lazyKotlinType)
         }
 
         val type = doResolvePossiblyBareType(c, typeReference)
-        if (!type.isBare()) {
-            c.trace.record(resolvedTypeSlice, typeReference, type.getActualType())
+        if (!type.isBare) {
+            c.trace.record(resolvedTypeSlice, typeReference, type.actualType)
         }
         return type
     }
@@ -223,7 +222,7 @@ class TypeResolver(
                     val arguments = resolveTypeProjections(
                             c, ErrorUtils.createErrorType("No type").constructor, qualifierResolutionResult.allProjections
                     )
-                    result = type(ErrorUtils.createErrorTypeWithArguments(type.getDebugText(), arguments))
+                    result = type(ErrorUtils.createUnresolvedType(type.getDebugText(), arguments))
                     return
                 }
 
@@ -281,7 +280,7 @@ class TypeResolver(
                     override fun getVisibility() = Visibilities.LOCAL
 
                     override fun substitute(substitutor: TypeSubstitutor): VariableDescriptor? {
-                        throw UnsupportedOperationException("Should not be called for descriptor of type $javaClass")
+                        throw UnsupportedOperationException("Should not be called for descriptor of type ${this::class.java}")
                     }
 
                     override fun isVar() = false
@@ -415,7 +414,7 @@ class TypeResolver(
             }
             is ClassDescriptor -> resolveTypeForClass(c, annotations, descriptor, element, qualifierResolutionResult)
             is TypeAliasDescriptor -> resolveTypeForTypeAlias(c, annotations, descriptor, element, qualifierResolutionResult)
-            else -> error("Unexpected classifier type: ${descriptor.javaClass}")
+            else -> error("Unexpected classifier type: ${descriptor::class.java}")
         }
     }
 
@@ -727,7 +726,7 @@ class TypeResolver(
                         Math.min(classifierChainLastIndex + 1, reversedQualifierParts.size),
                         reversedQualifierParts.size)
 
-        for ((name, expression, typeArguments) in nonClassQualifierParts) {
+        for ((_, _, typeArguments) in nonClassQualifierParts) {
             if (typeArguments != null) {
                 c.trace.report(TYPE_ARGUMENTS_NOT_ALLOWED.on(typeArguments, "here"))
                 return null
@@ -820,7 +819,7 @@ class TypeResolver(
                 }
             }
             else {
-                val type = resolveType(c.noBareTypes(), argumentElement.getTypeReference()!!)
+                val type = resolveType(c.noBareTypes(), argumentElement.typeReference!!)
                 val kind = resolveProjectionKind(projectionKind)
                 if (constructor.parameters.size > i) {
                     val parameterDescriptor = constructor.parameters[i]

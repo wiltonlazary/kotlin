@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,10 +24,17 @@ import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
+import org.jetbrains.kotlin.ir.symbols.impl.IrFieldSymbolImpl
+import org.jetbrains.kotlin.ir.symbols.impl.IrSimpleFunctionSymbolImpl
+import org.jetbrains.kotlin.ir.symbols.impl.IrVariableSymbolImpl
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.types.KotlinType
-import java.util.*
+import java.util.HashMap
 
+inline fun <reified T : IrElement> T.deepCopyOld() =
+        transform(DeepCopyIrTree(), null) as T
+
+@Deprecated("Creates unbound symbols")
 open class DeepCopyIrTree : IrElementTransformerVoid() {
     protected open fun mapDeclarationOrigin(declarationOrigin: IrDeclarationOrigin) = declarationOrigin
     protected open fun mapStatementOrigin(statementOrigin: IrStatementOrigin?) = statementOrigin
@@ -43,7 +50,6 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
     protected open fun mapLocalPropertyDeclaration(descriptor: VariableDescriptorWithAccessors) = descriptor
     protected open fun mapEnumEntryDeclaration(descriptor: ClassDescriptor) = descriptor
     protected open fun mapVariableDeclaration(descriptor: VariableDescriptor) = descriptor
-    protected open fun mapCatchParameterDeclaration(descriptor: VariableDescriptor) = mapVariableDeclaration(descriptor)
     protected open fun mapErrorDeclaration(descriptor: DeclarationDescriptor) = descriptor
 
     protected open fun mapSuperQualifier(qualifier: ClassDescriptor?) = qualifier
@@ -51,12 +57,14 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
     protected open fun mapValueReference(descriptor: ValueDescriptor) = descriptor
     protected open fun mapVariableReference(descriptor: VariableDescriptor) = descriptor
     protected open fun mapPropertyReference(descriptor: PropertyDescriptor) = descriptor
-    protected open fun mapCallee(descriptor: CallableDescriptor) = descriptor
+    protected open fun mapCallee(descriptor: FunctionDescriptor) = descriptor
     protected open fun mapDelegatedConstructorCallee(descriptor: ClassConstructorDescriptor) = descriptor
     protected open fun mapEnumConstructorCallee(descriptor: ClassConstructorDescriptor) = descriptor
-    protected open fun mapCallableReference(descriptor: CallableDescriptor) = descriptor
+    protected open fun mapLocalPropertyReference(descriptor: VariableDescriptorWithAccessors) = descriptor
     protected open fun mapClassifierReference(descriptor: ClassifierDescriptor) = descriptor
-    protected open fun mapReturnTarget(descriptor: CallableDescriptor) = mapCallee(descriptor)
+    protected open fun mapReturnTarget(descriptor: FunctionDescriptor) = mapCallee(descriptor)
+
+    private inline fun <reified T : IrElement> T.transform() = transform(this@DeepCopyIrTree, null) as T
 
     override fun visitElement(element: IrElement): IrElement =
             throw IllegalArgumentException("Unsupported element type: $element")
@@ -65,7 +73,7 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
             IrModuleFragmentImpl(
                     mapModuleDescriptor(declaration.descriptor),
                     declaration.irBuiltins,
-                    declaration.files.map { it.transform(this, null) }
+                    declaration.files.map { it.transform() }
             )
 
     override fun visitFile(declaration: IrFile): IrFile =
@@ -73,7 +81,7 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     mapFileEntry(declaration.fileEntry),
                     mapPackageFragmentDescriptor(declaration.packageFragmentDescriptor),
                     declaration.fileAnnotations.toMutableList(),
-                    declaration.declarations.map { it.transform(this, null) as IrDeclaration }
+                    declaration.declarations.map { it.transform() }
             )
 
     override fun visitDeclaration(declaration: IrDeclaration): IrStatement =
@@ -84,8 +92,14 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     declaration.startOffset, declaration.endOffset,
                     mapDeclarationOrigin(declaration.origin),
                     mapClassDeclaration(declaration.descriptor),
-                    declaration.declarations.map { it.transform(this, null) as IrDeclaration }
-            )
+                    declaration.declarations.map { it.transform() }
+            ).apply {
+                thisReceiver = declaration.thisReceiver?.withDescriptor(descriptor.thisAsReceiverParameter)
+                transformTypeParameters(declaration, descriptor.declaredTypeParameters)
+            }
+
+    private fun IrValueParameter.withDescriptor(newDescriptor: ParameterDescriptor) =
+            IrValueParameterImpl(startOffset, endOffset, origin, newDescriptor, defaultValue?.transform())
 
     override fun visitTypeAlias(declaration: IrTypeAlias): IrTypeAlias =
             IrTypeAliasImpl(
@@ -99,26 +113,68 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     declaration.startOffset, declaration.endOffset,
                     mapDeclarationOrigin(declaration.origin),
                     mapFunctionDeclaration(declaration.descriptor),
-                    declaration.body?.transform(this, null)
-            ).transformDefaults(declaration)
+                    declaration.body?.transform()
+            ).transformParameters(declaration)
 
     override fun visitConstructor(declaration: IrConstructor): IrConstructor =
             IrConstructorImpl(
                     declaration.startOffset, declaration.endOffset,
                     mapDeclarationOrigin(declaration.origin),
                     mapConstructorDeclaration(declaration.descriptor),
-                    declaration.body!!.transform(this, null)
-            ).transformDefaults(declaration)
+                    declaration.body!!.transform()
+            ).transformParameters(declaration)
 
-    private fun <T : IrFunction> T.transformDefaults(original: T): T {
-        for (originalValueParameter in original.descriptor.valueParameters) {
-            val valueParameter = descriptor.valueParameters[originalValueParameter.index]
-            original.getDefault(originalValueParameter)?.let { irDefaultParameterValue ->
-                putDefault(valueParameter, irDefaultParameterValue.transform(this@DeepCopyIrTree, null))
+    protected fun <T : IrTypeParametersContainer> T.transformTypeParameters(original: T, myTypeParameters: List<TypeParameterDescriptor>): T =
+            apply {
+                original.typeParameters.mapTo(typeParameters) { originalTypeParameter ->
+                    copyTypeParameter(originalTypeParameter, myTypeParameters[originalTypeParameter.descriptor.index])
+                }
             }
-        }
-        return this
-    }
+
+    protected fun <T : IrFunction> T.transformParameters(original: T): T =
+            apply {
+                transformTypeParameters(original, descriptor.typeParameters)
+                transformValueParameters(original)
+            }
+
+    protected fun <T : IrFunction> T.transformValueParameters(original: T) =
+            apply {
+                dispatchReceiverParameter = original.dispatchReceiverParameter?.let {
+                    copyValueParameter(it, descriptor.dispatchReceiverParameter ?: throw AssertionError("No dispatch receiver in $descriptor"))
+                }
+
+                extensionReceiverParameter = original.extensionReceiverParameter?.let {
+                    copyValueParameter(it, descriptor.extensionReceiverParameter ?: throw AssertionError("No extension receiver in $descriptor"))
+                }
+
+                original.valueParameters.mapIndexedTo(valueParameters) { i, originalValueParameter ->
+                    copyValueParameter(originalValueParameter, descriptor.valueParameters[i])
+                }
+            }
+
+    protected fun copyTypeParameter(
+            originalTypeParameter: IrTypeParameter,
+            newTypeParameterDescriptor: TypeParameterDescriptor
+    ): IrTypeParameterImpl =
+            IrTypeParameterImpl(
+                    originalTypeParameter.startOffset, originalTypeParameter.endOffset,
+                    mapDeclarationOrigin(originalTypeParameter.origin),
+                    newTypeParameterDescriptor
+            )
+
+    protected fun copyValueParameter(
+            originalValueParameter: IrValueParameter,
+            newParameterDescriptor: ParameterDescriptor
+    ): IrValueParameterImpl =
+            IrValueParameterImpl(
+                    originalValueParameter.startOffset, originalValueParameter.endOffset,
+                    mapDeclarationOrigin(originalValueParameter.origin),
+                    newParameterDescriptor,
+                    originalValueParameter.defaultValue?.transform()
+            )
+
+    // TODO visitTypeParameter
+    // TODO visitValueParameter
 
     override fun visitProperty(declaration: IrProperty): IrProperty =
             IrPropertyImpl(
@@ -126,9 +182,9 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     mapDeclarationOrigin(declaration.origin),
                     declaration.isDelegated,
                     mapPropertyDeclaration(declaration.descriptor),
-                    declaration.backingField?.transform(this, null) as? IrField,
-                    declaration.getter?.transform(this, null) as? IrFunction,
-                    declaration.setter?.transform(this, null) as? IrFunction
+                    declaration.backingField?.transform(),
+                    declaration.getter?.transform(),
+                    declaration.setter?.transform()
             )
 
     override fun visitField(declaration: IrField): IrField =
@@ -136,7 +192,7 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     declaration.startOffset, declaration.endOffset,
                     mapDeclarationOrigin(declaration.origin),
                     mapPropertyDeclaration(declaration.descriptor),
-                    declaration.initializer?.transform(this, null) as? IrExpressionBody
+                    declaration.initializer?.transform()
             )
 
     override fun visitLocalDelegatedProperty(declaration: IrLocalDelegatedProperty): IrLocalDelegatedProperty =
@@ -144,9 +200,9 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     declaration.startOffset, declaration.endOffset,
                     mapDeclarationOrigin(declaration.origin),
                     mapLocalPropertyDeclaration(declaration.descriptor),
-                    declaration.delegate.transform(this, null) as IrVariable,
-                    declaration.getter.transform(this, null) as IrFunction,
-                    declaration.setter?.transform(this, null) as IrFunction?
+                    declaration.delegate.transform(),
+                    declaration.getter.transform(),
+                    declaration.setter?.transform()
             )
 
     override fun visitEnumEntry(declaration: IrEnumEntry): IrEnumEntry =
@@ -154,8 +210,8 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     declaration.startOffset, declaration.endOffset,
                     mapDeclarationOrigin(declaration.origin),
                     mapEnumEntryDeclaration(declaration.descriptor),
-                    declaration.correspondingClass?.transform(this, null) as? IrClass,
-                    declaration.initializerExpression.transform(this, null)
+                    declaration.correspondingClass?.transform(),
+                    declaration.initializerExpression?.transform()
             )
 
     override fun visitAnonymousInitializer(declaration: IrAnonymousInitializer): IrAnonymousInitializer =
@@ -163,7 +219,7 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     declaration.startOffset, declaration.endOffset,
                     mapDeclarationOrigin(declaration.origin),
                     mapClassDeclaration(declaration.descriptor),
-                    declaration.body.transform(this, null) as IrBlockBody
+                    declaration.body.transform()
             )
 
     override fun visitVariable(declaration: IrVariable): IrVariable =
@@ -171,19 +227,19 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     declaration.startOffset, declaration.endOffset,
                     mapDeclarationOrigin(declaration.origin),
                     mapVariableDeclaration(declaration.descriptor),
-                    declaration.initializer?.transform(this, null) as? IrExpression
+                    declaration.initializer?.transform()
             )
 
     override fun visitBody(body: IrBody): IrBody =
             throw IllegalArgumentException("Unsupported body type: $body")
 
     override fun visitExpressionBody(body: IrExpressionBody): IrExpressionBody =
-            IrExpressionBodyImpl(body.expression.transform(this, null))
+            IrExpressionBodyImpl(body.expression.transform())
 
     override fun visitBlockBody(body: IrBlockBody): IrBlockBody =
             IrBlockBodyImpl(
                     body.startOffset, body.endOffset,
-                    body.statements.map { it.transform(this, null) }
+                    body.statements.map { it.transform() }
             )
 
     override fun visitSyntheticBody(body: IrSyntheticBody): IrSyntheticBody =
@@ -199,13 +255,13 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
             IrVarargImpl(
                     expression.startOffset, expression.endOffset,
                     expression.type, expression.varargElementType,
-                    expression.elements.map { it.transform(this, null) as IrVarargElement }
+                    expression.elements.map { it.transform() }
             )
 
     override fun visitSpreadElement(spread: IrSpreadElement): IrSpreadElement =
             IrSpreadElementImpl(
                     spread.startOffset, spread.endOffset,
-                    spread.expression.transform(this, null)
+                    spread.expression.transform()
             )
 
     override fun visitBlock(expression: IrBlock): IrBlock =
@@ -213,7 +269,7 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     expression.startOffset, expression.endOffset,
                     expression.type,
                     mapStatementOrigin(expression.origin),
-                    expression.statements.map { it.transform(this, null) }
+                    expression.statements.map { it.transform() }
             )
 
     override fun visitComposite(expression: IrComposite): IrComposite =
@@ -221,14 +277,14 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     expression.startOffset, expression.endOffset,
                     expression.type,
                     mapStatementOrigin(expression.origin),
-                    expression.statements.map { it.transform(this, null) }
+                    expression.statements.map { it.transform() }
             )
 
     override fun visitStringConcatenation(expression: IrStringConcatenation): IrStringConcatenation =
             IrStringConcatenationImpl(
                     expression.startOffset, expression.endOffset,
                     expression.type,
-                    expression.arguments.map { it.transform(this, null) }
+                    expression.arguments.map { it.transform() }
             )
 
     override fun visitGetObjectValue(expression: IrGetObjectValue): IrGetObjectValue =
@@ -256,7 +312,7 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
             IrSetVariableImpl(
                     expression.startOffset, expression.endOffset,
                     mapVariableReference(expression.descriptor),
-                    expression.value.transform(this, null),
+                    expression.value.transform(),
                     mapStatementOrigin(expression.origin)
             )
 
@@ -264,7 +320,7 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
             IrGetFieldImpl(
                     expression.startOffset, expression.endOffset,
                     mapPropertyReference(expression.descriptor),
-                    expression.receiver?.transform(this, null),
+                    expression.receiver?.transform(),
                     mapStatementOrigin(expression.origin),
                     mapSuperQualifier(expression.superQualifier)
             )
@@ -273,8 +329,8 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
             IrSetFieldImpl(
                     expression.startOffset, expression.endOffset,
                     mapPropertyReference(expression.descriptor),
-                    expression.receiver?.transform(this, null),
-                    expression.value.transform(this, null),
+                    expression.receiver?.transform(),
+                    expression.value.transform(),
                     mapStatementOrigin(expression.origin),
                     mapSuperQualifier(expression.superQualifier)
             )
@@ -290,43 +346,50 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                             mapCallee(expression.descriptor),
                             mapSuperQualifier(expression.superQualifier)
                     )
-                else ->
+                else -> {
+                    val newCallee = mapCallee(expression.descriptor)
                     IrCallImpl(
                             expression.startOffset, expression.endOffset,
                             expression.type,
-                            mapCallee(expression.descriptor),
-                            expression.getTypeArgumentsMap(),
+                            newCallee,
+                            expression.transformTypeArguments(newCallee),
                             mapStatementOrigin(expression.origin),
                             mapSuperQualifier(expression.superQualifier)
                     )
+                }
             }
 
     protected fun <T : IrMemberAccessExpression> T.transformValueArguments(original: IrMemberAccessExpression): T =
             apply {
-                dispatchReceiver = original.dispatchReceiver?.transform(this@DeepCopyIrTree, null)
-                extensionReceiver = original.extensionReceiver?.transform(this@DeepCopyIrTree, null)
+                dispatchReceiver = original.dispatchReceiver?.transform()
+                extensionReceiver = original.extensionReceiver?.transform()
                 mapValueParameters { valueParameter ->
-                    original.getValueArgument(valueParameter)?.transform(this@DeepCopyIrTree, null)
+                    original.getValueArgument(valueParameter)?.transform()
                 }
                 Unit
             }
 
-    protected fun IrMemberAccessExpression.getTypeArgumentsMap(): Map<TypeParameterDescriptor, KotlinType>? {
+    protected fun IrMemberAccessExpression.transformTypeArguments(newCallee: CallableDescriptor): Map<TypeParameterDescriptor, KotlinType>? {
         if (this is IrMemberAccessExpressionBase) return typeArguments
 
         val typeParameters = descriptor.original.typeParameters
         return if (typeParameters.isEmpty())
             null
         else
-            typeParameters.associateBy({ it }, { getTypeArgument(it)!! })
+            typeParameters.associateBy(
+                    { newCallee.typeParameters[it.index] },
+                    { getTypeArgument(it)!! }
+            )
     }
 
-    override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall): IrDelegatingConstructorCall =
-            IrDelegatingConstructorCallImpl(
-                    expression.startOffset, expression.endOffset,
-                    mapDelegatedConstructorCallee(expression.descriptor),
-                    expression.getTypeArgumentsMap()
-            ).transformValueArguments(expression)
+    override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall): IrDelegatingConstructorCall {
+        val newCallee = mapDelegatedConstructorCallee(expression.descriptor)
+        return IrDelegatingConstructorCallImpl(
+                expression.startOffset, expression.endOffset,
+                newCallee,
+                expression.transformTypeArguments(newCallee)
+        ).transformValueArguments(expression)
+    }
 
     override fun visitEnumConstructorCall(expression: IrEnumConstructorCall): IrEnumConstructorCall =
             IrEnumConstructorCallImpl(
@@ -338,17 +401,46 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
             IrGetClassImpl(
                     expression.startOffset, expression.endOffset,
                     expression.type,
-                    expression.argument.transform(this, null)
+                    expression.argument.transform()
             )
 
-    override fun visitCallableReference(expression: IrCallableReference): IrCallableReference =
-            IrCallableReferenceImpl(
-                    expression.startOffset, expression.endOffset,
-                    expression.type,
-                    mapCallableReference(expression.descriptor),
-                    expression.getTypeArgumentsMap(),
-                    mapStatementOrigin(expression.origin)
-            ).transformValueArguments(expression)
+    override fun visitFunctionReference(expression: IrFunctionReference): IrExpression {
+        val newCallee = mapCallee(expression.descriptor)
+        return IrFunctionReferenceImpl(
+                expression.startOffset, expression.endOffset,
+                expression.type,
+                newCallee.original,
+                expression.transformTypeArguments(newCallee),
+                mapStatementOrigin(expression.origin)
+        ).transformValueArguments(expression)
+    }
+
+    override fun visitPropertyReference(expression: IrPropertyReference): IrExpression {
+        val newProperty = mapPropertyReference(expression.descriptor)
+        val newFieldSymbol = if (newProperty.getter == null) IrFieldSymbolImpl(newProperty) else null
+        val newGetterSymbol = newProperty.getter?.let { IrSimpleFunctionSymbolImpl(it.original) }
+        val newSetterSymbol = newProperty.setter?.let { IrSimpleFunctionSymbolImpl(it.original) }
+        return IrPropertyReferenceImpl(
+                expression.startOffset, expression.endOffset, expression.type,
+                newProperty, newFieldSymbol, newGetterSymbol, newSetterSymbol,
+                expression.transformTypeArguments(newProperty),
+                mapStatementOrigin(expression.origin)
+        ).transformValueArguments(expression)
+    }
+
+    override fun visitLocalDelegatedPropertyReference(expression: IrLocalDelegatedPropertyReference): IrExpression {
+        val newLocalDelegatedProperty = mapLocalPropertyReference(expression.descriptor)
+        val newDelegateDescriptor = mapVariableReference(expression.delegate.descriptor)
+        val newDelegateSymbol = IrVariableSymbolImpl(newDelegateDescriptor)
+        val newGetterSymbol = newLocalDelegatedProperty.getter!!.let { IrSimpleFunctionSymbolImpl(it.original) }
+        val newSetterSymbol = newLocalDelegatedProperty.setter?.let { IrSimpleFunctionSymbolImpl(it.original) }
+        return IrLocalDelegatedPropertyReferenceImpl(
+                expression.startOffset, expression.endOffset, expression.type,
+                newLocalDelegatedProperty,
+                newDelegateSymbol, newGetterSymbol, newSetterSymbol,
+                mapStatementOrigin(expression.origin)
+        )
+    }
 
     override fun visitClassReference(expression: IrClassReference): IrClassReference =
             IrClassReferenceImpl(
@@ -369,7 +461,7 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     expression.type,
                     expression.operator,
                     expression.typeOperand,
-                    expression.argument.transform(this, null)
+                    expression.argument.transform()
             )
 
     override fun visitWhen(expression: IrWhen): IrWhen =
@@ -377,21 +469,21 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     expression.startOffset, expression.endOffset,
                     expression.type,
                     mapStatementOrigin(expression.origin),
-                    expression.branches.map { it.transform(this, null) }
+                    expression.branches.map { it.transform() }
             )
 
     override fun visitBranch(branch: IrBranch): IrBranch =
             IrBranchImpl(
                     branch.startOffset, branch.endOffset,
-                    branch.condition.transform(this, null),
-                    branch.result.transform(this, null)
+                    branch.condition.transform(),
+                    branch.result.transform()
             )
 
     override fun visitElseBranch(branch: IrElseBranch): IrElseBranch =
             IrElseBranchImpl(
                     branch.startOffset, branch.endOffset,
-                    branch.condition.transform(this, null),
-                    branch.result.transform(this, null)
+                    branch.condition.transform(),
+                    branch.result.transform()
             )
 
     private val transformedLoops = HashMap<IrLoop, IrLoop>()
@@ -406,8 +498,8 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
         val newLoop = IrWhileLoopImpl(loop.startOffset, loop.endOffset, loop.type, mapStatementOrigin(loop.origin))
         transformedLoops[loop] = newLoop
         newLoop.label = loop.label
-        newLoop.condition = loop.condition.transform(this, null)
-        newLoop.body = loop.body?.transform(this, null)
+        newLoop.condition = loop.condition.transform()
+        newLoop.body = loop.body?.transform()
         return newLoop
     }
 
@@ -415,8 +507,8 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
         val newLoop = IrDoWhileLoopImpl(loop.startOffset, loop.endOffset, loop.type, mapStatementOrigin(loop.origin))
         transformedLoops[loop] = newLoop
         newLoop.label = loop.label
-        newLoop.condition = loop.condition.transform(this, null)
-        newLoop.body = loop.body?.transform(this, null)
+        newLoop.condition = loop.condition.transform()
+        newLoop.body = loop.body?.transform()
         return newLoop
     }
 
@@ -438,16 +530,16 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
             IrTryImpl(
                     aTry.startOffset, aTry.endOffset,
                     aTry.type,
-                    aTry.tryResult.transform(this, null),
-                    aTry.catches.map { it.transform(this, null) },
-                    aTry.finallyExpression?.transform(this, null)
+                    aTry.tryResult.transform(),
+                    aTry.catches.map { it.transform() },
+                    aTry.finallyExpression?.transform()
             )
 
     override fun visitCatch(aCatch: IrCatch): IrCatch =
             IrCatchImpl(
                     aCatch.startOffset, aCatch.endOffset,
-                    mapCatchParameterDeclaration(aCatch.parameter),
-                    aCatch.result.transform(this, null)
+                    aCatch.catchParameter.transform(),
+                    aCatch.result.transform()
             )
 
     override fun visitReturn(expression: IrReturn): IrReturn =
@@ -455,14 +547,14 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     expression.startOffset, expression.endOffset,
                     expression.type,
                     mapReturnTarget(expression.returnTarget),
-                    expression.value.transform(this, null)
+                    expression.value.transform()
             )
 
     override fun visitThrow(expression: IrThrow): IrThrow =
             IrThrowImpl(
                     expression.startOffset, expression.endOffset,
                     expression.type,
-                    expression.value.transform(this, null)
+                    expression.value.transform()
             )
 
     override fun visitErrorDeclaration(declaration: IrErrorDeclaration): IrErrorDeclaration =
@@ -484,7 +576,7 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                     expression.type,
                     expression.description
             ).apply {
-                explicitReceiver = expression.explicitReceiver?.transform(this@DeepCopyIrTree, null)
-                expression.arguments.mapTo(arguments) { it.transform(this@DeepCopyIrTree, null) }
+                explicitReceiver = expression.explicitReceiver?.transform()
+                expression.arguments.mapTo(arguments) { it.transform() }
             }
 }

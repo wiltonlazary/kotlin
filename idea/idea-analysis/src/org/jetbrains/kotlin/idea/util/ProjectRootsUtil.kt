@@ -22,21 +22,30 @@ import com.intellij.injected.editor.VirtualFileWindow
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.FileIndex
 import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.util.Ref
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFileSystemItem
 import org.jetbrains.kotlin.idea.KotlinModuleFileType
 import org.jetbrains.kotlin.idea.caches.resolve.JsProjectDetector
 import org.jetbrains.kotlin.idea.core.script.KotlinScriptConfigurationManager
 import org.jetbrains.kotlin.idea.decompiler.builtIns.KotlinBuiltInFileType
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 
-private val classFileLike = listOf(JavaClassFileType.INSTANCE, KotlinBuiltInFileType, KotlinModuleFileType.INSTANCE)
+private val kotlinBinaries = listOf(JavaClassFileType.INSTANCE, KotlinBuiltInFileType, KotlinModuleFileType.INSTANCE)
+
+fun VirtualFile.isKotlinBinary(): Boolean = fileType in kotlinBinaries
 
 fun FileIndex.isInSourceContentWithoutInjected(file: VirtualFile): Boolean {
     return file !is VirtualFileWindow && isInSourceContent(file)
 }
+
+fun VirtualFile.getSourceRoot(project: Project): VirtualFile? = ProjectRootManager.getInstance(project).fileIndex.getSourceRootForFile(this)
+
+val PsiFileSystemItem.sourceRoot: VirtualFile?
+    get() = virtualFile?.getSourceRoot(project)
 
 object ProjectRootsUtil {
     @JvmStatic fun isInContent(project: Project, file: VirtualFile, includeProjectSource: Boolean,
@@ -51,15 +60,15 @@ object ProjectRootsUtil {
 
         // NOTE: the following is a workaround for cases when class files are under library source roots and source files are under class roots
         val canContainClassFiles = file.fileType == ArchiveFileType.INSTANCE || file.isDirectory
-        val isClassFile = file.fileType in classFileLike
+        val isBinary = file.isKotlinBinary()
 
         val scriptConfigurationManager = if (includeScriptDependencies) KotlinScriptConfigurationManager.getInstance(project) else null
 
-        if (includeLibraryClasses && (isClassFile || canContainClassFiles)) {
+        if (includeLibraryClasses && (isBinary || canContainClassFiles)) {
             if (fileIndex.isInLibraryClasses(file)) return true
             if (scriptConfigurationManager?.getAllScriptsClasspathScope()?.contains(file) == true) return true
         }
-        if (includeLibrarySource && !isClassFile) {
+        if (includeLibrarySource && !isBinary) {
             if (fileIndex.isInLibrarySource(file)) return true
             if (scriptConfigurationManager?.getAllLibrarySourcesScope()?.contains(file) == true) return true
         }

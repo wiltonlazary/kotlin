@@ -48,8 +48,7 @@ import org.jetbrains.kotlin.serialization.deserialization.NotFoundClasses
 import org.jetbrains.kotlin.storage.getValue
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.utils.addIfNotNull
-import org.jetbrains.kotlin.utils.addToStdlib.check
-import org.jetbrains.kotlin.utils.toReadOnlyList
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import java.util.*
 
 class LazyJavaClassDescriptor(
@@ -60,6 +59,11 @@ class LazyJavaClassDescriptor(
 ) : ClassDescriptorBase(outerContext.storageManager, containingDeclaration, jClass.name,
                         outerContext.components.sourceElementFactory.source(jClass),
                         /* isExternal = */ false), JavaClassDescriptor {
+
+    companion object {
+        @JvmStatic
+        private val PUBLIC_METHOD_NAMES_IN_OBJECT = setOf("equals", "hashCode", "getClass", "wait", "notify", "notifyAll", "toString")
+    }
 
     private val c: LazyJavaResolverContext = outerContext.child(this, jClass)
 
@@ -135,6 +139,25 @@ class LazyJavaClassDescriptor(
 
     override fun getFunctionTypeForSamInterface(): SimpleType? = c.components.samConversionResolver.resolveFunctionTypeIfSamInterface(this)
 
+    override fun isDefinitelyNotSamInterface(): Boolean {
+        if (kind != ClassKind.INTERFACE) return true
+
+        val candidates = jClass.methods.filter { it.isAbstract && it.typeParameters.isEmpty() }
+        // From the definition of function interfaces in the Java specification (pt. 9.8):
+        // "methods that are members of I that do not have the same signature as any public instance method of the class Object"
+        // It means that if an interface declares `int hashCode()` then the method won't be taken into account when
+        // checking if the interface is SAM.
+        // We make here a conservative check just filtering out methods by name.
+        // If we ignore a method with wrong signature (different from one in Object) it's not very bad,
+        // we'll just say that the interface MAY BE a SAM when it's not and then more detailed check will be applied.
+        if (candidates.count { it.name.identifier !in PUBLIC_METHOD_NAMES_IN_OBJECT } > 1) return true
+
+        // Check if any of the super-interfaces contain too many methods to be a SAM
+        return typeConstructor().supertypes.any {
+            it.constructor.declarationDescriptor.safeAs<LazyJavaClassDescriptor>()?.isDefinitelyNotSamInterface == true
+        }
+    }
+
     override fun getSealedSubclasses(): Collection<ClassDescriptor> = emptyList()
 
     override fun toString() = "Lazy Java class ${this.fqNameUnsafe}"
@@ -184,11 +207,11 @@ class LazyJavaClassDescriptor(
                 })
             }
 
-            return if (result.isNotEmpty()) result.toReadOnlyList() else listOf(c.module.builtIns.anyType)
+            return if (result.isNotEmpty()) result.toList() else listOf(c.module.builtIns.anyType)
         }
 
         private fun getPurelyImplementedSupertype(): KotlinType? {
-            val annotatedPurelyImplementedFqName = getPurelyImplementsFqNameFromAnnotation()?.check {
+            val annotatedPurelyImplementedFqName = getPurelyImplementsFqNameFromAnnotation()?.takeIf {
                 !it.isRoot && it.toUnsafe().startsWith(KotlinBuiltIns.BUILT_INS_PACKAGE_NAME)
             }
 
@@ -240,7 +263,7 @@ class LazyJavaClassDescriptor(
 
         override fun getDeclarationDescriptor() = this@LazyJavaClassDescriptor
 
-        override fun toString(): String = getName().asString()
+        override fun toString(): String = name.asString()
     }
 
     // Only needed when calculating built-ins member scope

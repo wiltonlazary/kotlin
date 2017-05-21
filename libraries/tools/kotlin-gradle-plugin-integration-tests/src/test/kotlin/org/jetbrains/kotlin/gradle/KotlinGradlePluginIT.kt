@@ -416,6 +416,42 @@ class KotlinGradleIT: BaseGradleIT() {
     }
 
     @Test
+    fun testChangeDestinationDir() {
+        val project = Project("kotlinProject", "3.3")
+        project.setupWorkingDir()
+
+        val fileToRemove = File(project.projectDir, "src/main/kotlin/removeMe.kt")
+        fileToRemove.writeText("val x = 1")
+        val classFilePath = "build/classes/main/RemoveMeKt.class"
+
+        project.build("build") {
+            assertSuccessful()
+            assertFileExists(classFilePath)
+        }
+
+        // Check that after the change the build succeeds and no stale classes remain in the java classes dir
+        File(project.projectDir, "build.gradle").modify {
+            "$it\n\ncompileKotlin.destinationDir = file(\"\${project.buildDir}/compileKotlin\")"
+        }
+        fileToRemove.delete()
+
+        project.build("build") {
+            assertSuccessful()
+            assertNoSuchFile(classFilePath)
+            // Check that the fallback to non-incremental copying was chosen
+            assertContains("Non-incremental copying files")
+        }
+
+        // Check that the classes are copied incrementally under normal conditions
+        fileToRemove.writeText("val x = 1")
+        project.build("build") {
+            assertSuccessful()
+            assertFileExists(classFilePath)
+            assertNotContains("Non-incremental copying files")
+        }
+    }
+
+    @Test
     fun testDowngradeTo106() {
         val project = Project("kotlinProject", GRADLE_VERSION)
         val options = defaultBuildOptions().copy(incremental = true, withDaemon = false)
@@ -425,6 +461,30 @@ class KotlinGradleIT: BaseGradleIT() {
         }
 
         project.build("clean", "assemble", options = options.copy(kotlinVersion = "1.0.6")) {
+            assertSuccessful()
+        }
+    }
+
+    @Test
+    fun testOmittedStdlibVersion() {
+        val project = Project("kotlinProject", "2.3")
+        project.setupWorkingDir()
+        File(project.projectDir, "build.gradle").modify {
+            it.replace("kotlin-stdlib:\$kotlin_version", "kotlin-stdlib").apply { check(!equals(it)) }
+        }
+
+        project.build("build") {
+            assertSuccessful()
+            assertContains(":compileKotlin", ":compileTestKotlin")
+        }
+    }
+
+    @Test
+    fun testCleanAfterIncrementalBuild() {
+        val project = Project("kotlinProject", "3.3")
+        val options = defaultBuildOptions().copy(incremental = true)
+
+        project.build("build", "clean", options = options) {
             assertSuccessful()
         }
     }

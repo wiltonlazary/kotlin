@@ -24,6 +24,7 @@ import com.intellij.openapi.roots.ModifiableRootModel
 import org.jetbrains.kotlin.idea.KotlinIcons
 import org.jetbrains.kotlin.idea.versions.MAVEN_JS_STDLIB_ID
 import org.jetbrains.kotlin.idea.versions.bundledRuntimeVersion
+import org.jetbrains.kotlin.idea.versions.getDefaultJvmTarget
 import org.jetbrains.plugins.gradle.frameworkSupport.BuildScriptDataBuilder
 import org.jetbrains.plugins.gradle.frameworkSupport.GradleFrameworkSupportProvider
 import javax.swing.Icon
@@ -43,25 +44,13 @@ abstract class GradleKotlinFrameworkSupportProvider(val frameworkTypeId: String,
                             modifiableModelsProvider: ModifiableModelsProvider,
                             buildScriptData: BuildScriptDataBuilder) {
         var kotlinVersion = bundledRuntimeVersion()
-
-        val additionalRepository: String? = when {
-            kotlinVersion == "@snapshot@" -> {
-                kotlinVersion = "1.1-SNAPSHOT"
-                KotlinWithGradleConfigurator.SNAPSHOT_REPOSITORY_SNIPPET
-            }
-            useEap11Repository(kotlinVersion) -> {
-                KotlinWithGradleConfigurator.EAP_11_REPOSITORY_SNIPPET
-            }
-            isEap(kotlinVersion) -> {
-                KotlinWithGradleConfigurator.EAP_REPOSITORY_SNIPPET
-            }
-            else -> {
-                null
-            }
+        val additionalRepository = getRepositoryForVersion(kotlinVersion)
+        if (isSnapshot(bundledRuntimeVersion())) {
+            kotlinVersion = "1.1-SNAPSHOT"
         }
 
         if (additionalRepository != null) {
-            val oneLineRepository = additionalRepository.replace('\n', ' ')
+            val oneLineRepository = additionalRepository.toRepositorySnippet().replace('\n', ' ')
             buildScriptData.addBuildscriptRepositoriesDefinition(oneLineRepository)
 
             buildScriptData.addRepositoriesDefinition("mavenCentral()")
@@ -88,7 +77,16 @@ class GradleKotlinJavaFrameworkSupportProvider : GradleKotlinFrameworkSupportPro
     override fun getPluginDefinition() = KotlinGradleModuleConfigurator.APPLY_KOTLIN
 
     override fun getRuntimeLibrary(rootModel: ModifiableRootModel) =
-            KotlinWithGradleConfigurator.getRuntimeLibraryForSdk(rootModel.sdk)
+            KotlinWithGradleConfigurator.getRuntimeLibraryForSdk(rootModel.sdk, bundledRuntimeVersion())
+
+    override fun addSupport(module: Module, rootModel: ModifiableRootModel, modifiableModelsProvider: ModifiableModelsProvider, buildScriptData: BuildScriptDataBuilder) {
+        super.addSupport(module, rootModel, modifiableModelsProvider, buildScriptData)
+        val jvmTarget = getDefaultJvmTarget(rootModel.sdk, bundledRuntimeVersion())
+        if (jvmTarget != null) {
+            buildScriptData.addOther("compileKotlin {\n    kotlinOptions.jvmTarget = \"1.8\"\n}\n\n")
+            buildScriptData.addOther("compileTestKotlin {\n    kotlinOptions.jvmTarget = \"1.8\"\n}\n")
+        }
+    }
 }
 
 class GradleKotlinJSFrameworkSupportProvider : GradleKotlinFrameworkSupportProvider("KOTLIN_JS", "Kotlin (JavaScript)") {

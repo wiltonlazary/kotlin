@@ -25,7 +25,6 @@ import org.jetbrains.kotlin.codegen.`when`.MappingsClassesForWhenByEnum
 import org.jetbrains.kotlin.codegen.binding.CodegenBinding
 import org.jetbrains.kotlin.codegen.context.CodegenContext
 import org.jetbrains.kotlin.codegen.context.RootContext
-import org.jetbrains.kotlin.codegen.coroutines.CoroutineTransformerClassBuilderFactory
 import org.jetbrains.kotlin.codegen.extensions.ClassBuilderInterceptorExtension
 import org.jetbrains.kotlin.codegen.inline.InlineCache
 import org.jetbrains.kotlin.codegen.intrinsics.IntrinsicMethods
@@ -44,8 +43,9 @@ import org.jetbrains.kotlin.psi.KtScript
 import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
+import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
+import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOriginKind.*
 import org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration
-import org.jetbrains.org.objectweb.asm.Opcodes
 import java.io.File
 
 class GenerationState @JvmOverloads constructor(
@@ -70,8 +70,9 @@ class GenerationState @JvmOverloads constructor(
     abstract class GenerateClassFilter {
         abstract fun shouldAnnotateClass(processingClassOrObject: KtClassOrObject): Boolean
         abstract fun shouldGenerateClass(processingClassOrObject: KtClassOrObject): Boolean
-        abstract fun shouldGeneratePackagePart(jetFile: KtFile): Boolean
+        abstract fun shouldGeneratePackagePart(ktFile: KtFile): Boolean
         abstract fun shouldGenerateScript(script: KtScript): Boolean
+        open fun shouldGenerateClassMembers(processingClassOrObject: KtClassOrObject) = shouldGenerateClass(processingClassOrObject)
 
         companion object {
             @JvmField val GENERATE_ALL: GenerateClassFilter = object : GenerateClassFilter() {
@@ -81,7 +82,7 @@ class GenerationState @JvmOverloads constructor(
 
                 override fun shouldGenerateScript(script: KtScript): Boolean = true
 
-                override fun shouldGeneratePackagePart(jetFile: KtFile): Boolean = true
+                override fun shouldGeneratePackagePart(ktFile: KtFile): Boolean = true
             }
         }
     }
@@ -92,7 +93,8 @@ class GenerationState @JvmOverloads constructor(
     val incrementalCacheForThisTarget: IncrementalCache?
     val packagesWithObsoleteParts: Set<FqName>
     val obsoleteMultifileClasses: List<FqName>
-    val deserializationConfiguration: DeserializationConfiguration = CompilerDeserializationConfiguration(configuration)
+    val deserializationConfiguration: DeserializationConfiguration =
+            CompilerDeserializationConfiguration(configuration.languageVersionSettings)
 
     init {
         val icComponents = configuration.get(JVMConfigurationKeys.INCREMENTAL_COMPILATION_COMPONENTS)
@@ -113,7 +115,7 @@ class GenerationState @JvmOverloads constructor(
         }
     }
 
-    val extraJvmDiagnosticsTrace: BindingTrace = DelegatingBindingTrace(bindingContext, "For extra diagnostics in ${this.javaClass}", false)
+    val extraJvmDiagnosticsTrace: BindingTrace = DelegatingBindingTrace(bindingContext, "For extra diagnostics in ${this::class.java}", false)
     private val interceptedBuilderFactory: ClassBuilderFactory
     private var used = false
 
@@ -123,7 +125,8 @@ class GenerationState @JvmOverloads constructor(
         extraJvmDiagnosticsTrace.bindingContext.diagnostics
     }
 
-    val isJvm8Target: Boolean = configuration.get(JVMConfigurationKeys.JVM_TARGET) == JvmTarget.JVM_1_8
+    val target = configuration.get(JVMConfigurationKeys.JVM_TARGET) ?: JvmTarget.DEFAULT
+    val isJvm8Target: Boolean = target == JvmTarget.JVM_1_8
     val isJvm8TargetWithDefaults: Boolean =  isJvm8Target && configuration.getBoolean(JVMConfigurationKeys.JVM8_TARGET_WITH_DEFAULTS)
     val generateDefaultImplsForJvm8: Boolean = configuration.getBoolean(JVMConfigurationKeys.INTERFACE_COMPATIBILITY)
 
@@ -162,7 +165,7 @@ class GenerationState @JvmOverloads constructor(
 
     val rootContext: CodegenContext<*> = RootContext(this)
 
-    val classFileVersion: Int = if (isJvm8Target) Opcodes.V1_8 else Opcodes.V1_6
+    val classFileVersion: Int = target.bytecodeVersion
 
     val generateParametersMetadata: Boolean = configuration.getBoolean(JVMConfigurationKeys.PARAMETERS_METADATA)
 
@@ -173,10 +176,11 @@ class GenerationState @JvmOverloads constructor(
         this.interceptedBuilderFactory = builderFactory
                 .wrapWith(
                     { OptimizationClassBuilderFactory(it, configuration.get(JVMConfigurationKeys.DISABLE_OPTIMIZATION, false)) },
-                    ::CoroutineTransformerClassBuilderFactory,
                     { BuilderFactoryForDuplicateSignatureDiagnostics(
-                            it, this.bindingContext, diagnostics, fileClassesProvider, this.moduleName
-                      ).apply { duplicateSignatureFactory = this } },
+                            it, this.bindingContext, diagnostics,
+                            fileClassesProvider, this.moduleName,
+                            shouldGenerate = { !shouldOnlyCollectSignatures(it) }
+                    ).apply { duplicateSignatureFactory = this } },
                     { BuilderFactoryForDuplicateClassNameDiagnostics(it, diagnostics) },
                     { configuration.get(JVMConfigurationKeys.DECLARATIONS_JSON_PATH)
                               ?.let { destination -> SignatureDumpingBuilderFactory(it, File(destination)) } ?: it }
@@ -207,7 +211,12 @@ class GenerationState @JvmOverloads constructor(
     fun destroy() {
         interceptedBuilderFactory.close()
     }
+
+    private fun shouldOnlyCollectSignatures(origin: JvmDeclarationOrigin)
+            = classBuilderMode == ClassBuilderMode.LIGHT_CLASSES && origin.originKind in doNotGenerateInLightClassMode
 }
+
+private val doNotGenerateInLightClassMode = setOf(CLASS_MEMBER_DELEGATION_TO_DEFAULT_IMPL, BRIDGE, COLLECTION_STUB, AUGMENTED_BUILTIN_API)
 
 private class LazyJvmDiagnostics(compute: () -> Diagnostics): Diagnostics {
     private val delegate by lazy(LazyThreadSafetyMode.SYNCHRONIZED, compute)

@@ -187,7 +187,7 @@ fun selectNewParameterContext(
             file = file,
             title = "Introduce parameter to declaration",
             elementKinds = listOf(CodeInsightUtils.ElementKind.EXPRESSION),
-            getContainers = { elements, parent ->
+            getContainers = { _, parent ->
                 val parents = parent.parents
                 val stopAt = (parent.parents.zip(parent.parents.drop(1)))
                         .firstOrNull { isObjectOrNonInnerClass(it.first) }
@@ -507,7 +507,7 @@ open class KotlinIntroduceLambdaParameterHandler(
                     is KtClass -> targetParent.getBody()
                     else -> null
                 } ?: throw AssertionError("Body element is not found: ${targetParent.getElementTextWithContext()}")
-        val extractionData = ExtractionData(targetParent.getContainingKtFile(),
+        val extractionData = ExtractionData(targetParent.containingKtFile,
                                             expression.toRange(),
                                             targetParent,
                                             duplicateContainer,

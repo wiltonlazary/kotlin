@@ -50,15 +50,17 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorFactory
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.OverridingUtil
+import org.jetbrains.kotlin.resolve.descriptorUtil.classId
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.serialization.deserialization.ErrorReporter
 import org.jetbrains.kotlin.storage.NotNullLazyValue
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
-import org.jetbrains.kotlin.utils.*
-import org.jetbrains.kotlin.utils.addToStdlib.check
+import org.jetbrains.kotlin.utils.SmartSet
+import org.jetbrains.kotlin.utils.addIfNotNull
 import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
+import org.jetbrains.kotlin.utils.ifEmpty
 import java.util.*
 
 class LazyJavaClassMemberScope(
@@ -87,8 +89,8 @@ class LazyJavaClassMemberScope(
         }
 
         enhanceSignatures(
-                result.ifEmpty { emptyOrSingletonList(createDefaultConstructor()) }
-        ).toReadOnlyList()
+                result.ifEmpty { listOfNotNull(createDefaultConstructor()) }
+        ).toList()
     }
 
     override fun JavaMethodDescriptor.isVisibleAsFunction(): Boolean {
@@ -192,8 +194,7 @@ class LazyJavaClassMemberScope(
         val overriddenBuiltinProperty = getter?.getOverriddenBuiltinWithDifferentJvmName()
         val specialGetterName = overriddenBuiltinProperty?.getBuiltinSpecialPropertyGetterName()
         if (specialGetterName != null
-                && !this@LazyJavaClassMemberScope.ownerDescriptor.hasRealKotlinSuperClassWithOverrideOf(
-                overriddenBuiltinProperty!!)
+            && !this@LazyJavaClassMemberScope.ownerDescriptor.hasRealKotlinSuperClassWithOverrideOf(overriddenBuiltinProperty)
         ) {
             return findGetterByName(specialGetterName, functions)
         }
@@ -209,7 +210,7 @@ class LazyJavaClassMemberScope(
             descriptor ->
             if (descriptor.valueParameters.size != 0) return@factory null
 
-            descriptor.check { KotlinTypeChecker.DEFAULT.isSubtypeOf(descriptor.returnType ?: return@check false, type) }
+            descriptor.takeIf { KotlinTypeChecker.DEFAULT.isSubtypeOf(descriptor.returnType ?: return@takeIf false, type) }
         }
     }
 
@@ -221,7 +222,7 @@ class LazyJavaClassMemberScope(
             if (descriptor.valueParameters.size != 1) return@factory null
 
             if (!KotlinBuiltIns.isUnit(descriptor.returnType ?: return@factory null)) return@factory null
-            descriptor.check { KotlinTypeChecker.DEFAULT.equalTypes(descriptor.valueParameters.single().type, type) }
+            descriptor.takeIf { KotlinTypeChecker.DEFAULT.equalTypes(descriptor.valueParameters.single().type, type) }
         }
     }
 
@@ -447,7 +448,7 @@ class LazyJavaClassMemberScope(
                     null
 
         assert(setterMethod?.let { it.modality == getterMethod.modality } ?: true) {
-            "Different accessors modalities when creating overrides for $overriddenProperty in ${ownerDescriptor}" +
+            "Different accessors modalities when creating overrides for $overriddenProperty in $ownerDescriptor" +
             "for getter is ${getterMethod.modality}, but for setter is ${setterMethod?.modality}"
         }
 
@@ -615,7 +616,7 @@ class LazyJavaClassMemberScope(
     }
 
     private val nestedClassIndex = c.storageManager.createLazyValue {
-        jClass.innerClasses.associateBy { c -> c.name }
+        jClass.innerClassNames.toSet()
     }
 
     private val enumEntryIndex = c.storageManager.createLazyValue {
@@ -624,8 +625,7 @@ class LazyJavaClassMemberScope(
 
     private val nestedClasses = c.storageManager.createMemoizedFunctionWithNullableValues {
         name: Name ->
-        val jNestedClass = nestedClassIndex()[name]
-        if (jNestedClass == null) {
+        if (name !in nestedClassIndex()) {
             val field = enumEntryIndex()[name]
             if (field != null) {
                 val enumMemberNames: NotNullLazyValue<Set<Name>> = c.storageManager.createLazyValue {
@@ -639,7 +639,9 @@ class LazyJavaClassMemberScope(
             else null
         }
         else {
-            LazyJavaClassDescriptor(c, ownerDescriptor, jNestedClass)
+            c.components.finder.findClass(ownerDescriptor.classId!!.createNestedClassId(name))?.let {
+                LazyJavaClassDescriptor(c, ownerDescriptor, it)
+            }
         }
     }
 
@@ -662,7 +664,7 @@ class LazyJavaClassMemberScope(
     }
 
     override fun computeClassNames(kindFilter: DescriptorKindFilter, nameFilter: ((Name) -> Boolean)?): Set<Name>
-            = nestedClassIndex().keys + enumEntryIndex().keys
+            = nestedClassIndex() + enumEntryIndex().keys
 
     override fun computePropertyNames(kindFilter: DescriptorKindFilter, nameFilter: ((Name) -> Boolean)?): Set<Name> {
         if (jClass.isAnnotationType) return getFunctionNames()

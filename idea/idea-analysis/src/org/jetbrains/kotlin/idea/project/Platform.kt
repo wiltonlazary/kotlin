@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,8 @@ import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectFileIndex
-import com.sampullara.cli.Argument
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.cli.common.arguments.Argument
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
 import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
@@ -40,20 +40,16 @@ val KtElement.builtIns: KotlinBuiltIns
     get() = getResolutionFacade().moduleDescriptor.builtIns
 
 private val multiPlatformProjectsArg: String by lazy {
-    "-" + CommonCompilerArguments::multiPlatform.annotations.filterIsInstance<Argument>().single().value
+    CommonCompilerArguments::multiPlatform.annotations.filterIsInstance<Argument>().single().value
 }
 
 fun Module.getAndCacheLanguageLevelByDependencies(): LanguageVersion {
-    val languageLevel = getLibraryLanguageLevel(
-            this,
-            null,
-            KotlinFacetSettingsProvider.getInstance(project).getSettings(this).versionInfo.targetPlatformKind
-    )
+    val facetSettings = KotlinFacetSettingsProvider.getInstance(project).getInitializedSettings(this)
+    val languageLevel = getLibraryLanguageLevel(this, null, facetSettings.targetPlatformKind)
 
     // Preserve inferred version in facet/project settings
-    val facetSettings = KotlinFacetSettingsProvider.getInstance(project).getSettings(this)
     if (facetSettings.useProjectSettings) {
-        with(KotlinCommonCompilerArgumentsHolder.getInstance(project).settings) {
+        KotlinCommonCompilerArgumentsHolder.getInstance(project).update {
             if (languageVersion == null) {
                 languageVersion = languageLevel.versionString
             }
@@ -63,7 +59,7 @@ fun Module.getAndCacheLanguageLevelByDependencies(): LanguageVersion {
         }
     }
     else {
-        with(facetSettings.versionInfo) {
+        with(facetSettings) {
             if (this.languageLevel == null) {
                 this.languageLevel = languageLevel
             }
@@ -81,7 +77,7 @@ fun Project.getLanguageVersionSettings(contextModule: Module? = null): LanguageV
     val languageVersion =
             LanguageVersion.fromVersionString(arguments.languageVersion)
             ?: contextModule?.getAndCacheLanguageLevelByDependencies()
-            ?: LanguageVersion.LATEST
+            ?: LanguageVersion.LATEST_STABLE
     val apiVersion = ApiVersion.createByLanguageVersion(LanguageVersion.fromVersionString(arguments.apiVersion) ?: languageVersion)
     val compilerSettings = KotlinCompilerSettings.getInstance(this).settings
     val extraLanguageFeatures = getExtraLanguageFeatures(
@@ -90,33 +86,34 @@ fun Project.getLanguageVersionSettings(contextModule: Module? = null): LanguageV
             compilerSettings,
             null
     )
-    return LanguageVersionSettingsImpl(
-            languageVersion,
-            apiVersion,
-            extraLanguageFeatures
-    )
+    return LanguageVersionSettingsImpl(languageVersion, apiVersion, extraLanguageFeatures).apply {
+        switchFlag(AnalysisFlags.skipMetadataVersionCheck, arguments.skipMetadataVersionCheck)
+    }
 }
 
 val Module.languageVersionSettings: LanguageVersionSettings
     get() {
-        val facetSettings = KotlinFacetSettingsProvider.getInstance(project).getSettings(this)
+        val facetSettingsProvider = KotlinFacetSettingsProvider.getInstance(project)
+        if (facetSettingsProvider.getSettings(this) == null) return project.getLanguageVersionSettings(this)
+        val facetSettings = facetSettingsProvider.getInitializedSettings(this)
         if (facetSettings.useProjectSettings) return project.getLanguageVersionSettings(this)
-        val versionInfo = facetSettings.versionInfo
-        val languageVersion = versionInfo.languageLevel ?: getAndCacheLanguageLevelByDependencies()
-        val apiVersion = versionInfo.apiLevel ?: languageVersion
+        val languageVersion = facetSettings.languageLevel ?: getAndCacheLanguageLevelByDependencies()
+        val apiVersion = facetSettings.apiLevel ?: languageVersion
 
         val extraLanguageFeatures = getExtraLanguageFeatures(
-                versionInfo.targetPlatformKind ?: TargetPlatformKind.Common,
-                facetSettings.compilerInfo.coroutineSupport,
-                facetSettings.compilerInfo.compilerSettings,
+                facetSettings.targetPlatformKind ?: TargetPlatformKind.Common,
+                facetSettings.coroutineSupport,
+                facetSettings.compilerSettings,
                 this
         )
 
-        return LanguageVersionSettingsImpl(languageVersion, ApiVersion.createByLanguageVersion(apiVersion), extraLanguageFeatures)
+        return LanguageVersionSettingsImpl(languageVersion, ApiVersion.createByLanguageVersion(apiVersion), extraLanguageFeatures).apply {
+            switchFlag(AnalysisFlags.skipMetadataVersionCheck, facetSettings.skipMetadataVersionCheck)
+        }
     }
 
 val Module.targetPlatform: TargetPlatformKind<*>?
-    get() = KotlinFacetSettingsProvider.getInstance(project).getSettings(this).versionInfo.targetPlatformKind
+    get() = KotlinFacetSettingsProvider.getInstance(project).getSettings(this)?.targetPlatformKind
 
 private val Module.implementsCommonModule: Boolean
     get() = targetPlatform != TargetPlatformKind.Common
@@ -124,35 +121,19 @@ private val Module.implementsCommonModule: Boolean
 
 private fun getExtraLanguageFeatures(
         targetPlatformKind: TargetPlatformKind<*>,
-        coroutineSupport: CoroutineSupport,
+        coroutineSupport: LanguageFeature.State,
         compilerSettings: CompilerSettings?,
         module: Module?
-): List<LanguageFeature> {
-    return mutableListOf<LanguageFeature>().apply {
-        when (coroutineSupport) {
-            CoroutineSupport.ENABLED -> add(LanguageFeature.DoNotWarnOnCoroutines)
-            CoroutineSupport.ENABLED_WITH_WARNING -> {}
-            CoroutineSupport.DISABLED -> add(LanguageFeature.ErrorOnCoroutines)
-        }
+): Map<LanguageFeature, LanguageFeature.State> {
+    return mutableMapOf<LanguageFeature, LanguageFeature.State>().apply {
+        put(LanguageFeature.Coroutines, coroutineSupport)
         if (targetPlatformKind == TargetPlatformKind.Common ||
             // TODO: this is a dirty hack, parse arguments correctly here
             compilerSettings?.additionalArguments?.contains(multiPlatformProjectsArg) == true ||
             (module != null && module.implementsCommonModule)) {
-            add(LanguageFeature.MultiPlatformProjects)
+            put(LanguageFeature.MultiPlatformProjects, LanguageFeature.State.ENABLED)
         }
     }
-}
-
-fun KtElement.createCompilerConfiguration(): CompilerConfiguration = CompilerConfiguration().apply {
-    languageVersionSettings = this@createCompilerConfiguration.languageVersionSettings
-
-    val module = ModuleUtilCore.findModuleForPsiElement(this@createCompilerConfiguration)
-    val platform = module?.targetPlatform?.version
-    if (platform is JvmTarget) {
-        put(JVMConfigurationKeys.JVM_TARGET, platform)
-    }
-
-    isReadOnly = true
 }
 
 val KtElement.languageVersionSettings: LanguageVersionSettings
@@ -161,4 +142,12 @@ val KtElement.languageVersionSettings: LanguageVersionSettings
             return LanguageVersionSettingsImpl.DEFAULT
         }
         return ModuleUtilCore.findModuleForPsiElement(this)?.languageVersionSettings ?: LanguageVersionSettingsImpl.DEFAULT
+    }
+
+val KtElement.jvmTarget: JvmTarget
+    get() {
+        if (ServiceManager.getService(containingKtFile.project, ProjectFileIndex::class.java) == null) {
+            return JvmTarget.DEFAULT
+        }
+        return ModuleUtilCore.findModuleForPsiElement(this)?.targetPlatform?.version as? JvmTarget ?: JvmTarget.DEFAULT
     }

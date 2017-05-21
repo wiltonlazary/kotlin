@@ -32,7 +32,6 @@ import org.jetbrains.kotlin.resolve.CompileTimeConstantUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils.isEnumClass
 import org.jetbrains.kotlin.resolve.DescriptorUtils.isEnumEntry
-import org.jetbrains.kotlin.resolve.bindingContextUtil.isUsedAsExpression
 import org.jetbrains.kotlin.resolve.constants.CompileTimeConstant
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
 import org.jetbrains.kotlin.types.KotlinType
@@ -263,11 +262,6 @@ object WhenChecker {
                                                 WhenOnSealedExhaustivenessChecker)
 
     @JvmStatic
-    fun getNecessaryCases(expression: KtWhenExpression, context: BindingContext) =
-            if (expression.isUsedAsExpression(context)) getMissingCases(expression, context)
-            else listOf()
-
-    @JvmStatic
     fun isWhenByEnum(expression: KtWhenExpression, context: BindingContext) =
             getClassDescriptorOfTypeIfEnum(whenSubjectType(expression, context)) != null
 
@@ -281,6 +275,11 @@ object WhenChecker {
     }
 
     @JvmStatic
+    fun getClassDescriptorOfTypeIfSealed(type: KotlinType?): ClassDescriptor?
+            = type?.let { TypeUtils.getClassDescriptor(it) }?.takeIf { DescriptorUtils.isSealedClass(it) }
+
+
+    @JvmStatic
     fun whenSubjectType(expression: KtWhenExpression, context: BindingContext) =
             expression.subjectExpression?.let { context.get(SMARTCAST, it)?.defaultType ?: context.getType(it) }
 
@@ -290,6 +289,13 @@ object WhenChecker {
             context: BindingContext,
             enumClassDescriptor: ClassDescriptor
     ) = WhenOnEnumExhaustivenessChecker.getMissingCases(expression, context, enumClassDescriptor, false)
+
+    @JvmStatic
+    fun getSealedMissingCases(
+            expression: KtWhenExpression,
+            context: BindingContext,
+            sealedClassDescriptor: ClassDescriptor
+    ) = WhenOnSealedExhaustivenessChecker.getMissingCases(expression, context, sealedClassDescriptor, false)
 
     fun getMissingCases(expression: KtWhenExpression, context: BindingContext): List<WhenMissingCase> {
         val type = whenSubjectType(expression, context) ?: return listOf(UnknownMissingCase)

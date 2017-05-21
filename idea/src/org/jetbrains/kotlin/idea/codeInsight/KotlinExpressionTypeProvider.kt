@@ -17,18 +17,24 @@
 package org.jetbrains.kotlin.idea.codeInsight
 
 import com.intellij.lang.ExpressionTypeProvider
+import com.intellij.openapi.editor.ex.util.EditorUtil
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.TextEditor
+import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
+import org.jetbrains.kotlin.descriptors.ClassifierDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.findModuleDescriptor
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getQualifiedExpressionForSelector
 import org.jetbrains.kotlin.psi.psiUtil.parentsWithSelf
+import org.jetbrains.kotlin.renderer.ClassifierNamePolicy
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.renderer.RenderingFormat
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValueFactory
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
@@ -36,11 +42,26 @@ import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 class KotlinExpressionTypeProvider : ExpressionTypeProvider<KtExpression>() {
     private val typeRenderer = DescriptorRenderer.COMPACT_WITH_SHORT_TYPES.withOptions {
         textFormat = RenderingFormat.HTML
+        classifierNamePolicy = object : ClassifierNamePolicy {
+            override fun renderClassifier(classifier: ClassifierDescriptor, renderer: DescriptorRenderer): String {
+                if (DescriptorUtils.isAnonymousObject(classifier)) {
+                    return "&lt;anonymous object&gt;"
+                }
+                return ClassifierNamePolicy.SHORT.renderClassifier(classifier, renderer)
+            }
+        }
     }
 
     override fun getExpressionsAt(elementAt: PsiElement): List<KtExpression> {
         val candidates = elementAt.parentsWithSelf.filterIsInstance<KtExpression>().filter { it.shouldShowType() }.toList()
-        return candidates.takeWhile { it.textRange.startOffset == candidates.first().textRange.startOffset }
+        val fileEditor = elementAt.containingFile?.virtualFile?.let { FileEditorManager.getInstance(elementAt.project).getSelectedEditor(it) }
+        val selectionTextRange = if (fileEditor is TextEditor) {
+            EditorUtil.getSelectionInAnyMode(fileEditor.editor)
+        } else {
+            TextRange.EMPTY_RANGE
+        }
+        val anchor = candidates.firstOrNull { selectionTextRange.isEmpty || it.textRange.contains(selectionTextRange) } ?: return emptyList()
+        return candidates.filter { it.textRange.startOffset == anchor.textRange.startOffset }
     }
 
     private fun KtExpression.shouldShowType() = when (this) {
@@ -53,6 +74,7 @@ class KotlinExpressionTypeProvider : ExpressionTypeProvider<KtExpression>() {
         is KtIfExpression, is KtWhenExpression, is KtTryExpression -> shouldShowStatementType()
         is KtLoopExpression -> false
         is KtConstantExpression -> false
+        is KtThisExpression -> false
         else -> getQualifiedExpressionForSelector() == null && parent !is KtCallableReferenceExpression && !isFunctionCallee()
     }
 

@@ -2021,6 +2021,33 @@ public class JvmBasicCompletionTestGenerated extends AbstractJvmBasicCompletionT
             }
         }
 
+        @TestMetadata("idea/idea-completion/testData/basic/common/operatorNames")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class OperatorNames extends AbstractJvmBasicCompletionTest {
+            public void testAllFilesPresentInOperatorNames() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/basic/common/operatorNames"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("NoOperatorNameForTopLevel.kt")
+            public void testNoOperatorNameForTopLevel() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/idea-completion/testData/basic/common/operatorNames/NoOperatorNameForTopLevel.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("OperatorNameForExtension.kt")
+            public void testOperatorNameForExtension() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/idea-completion/testData/basic/common/operatorNames/OperatorNameForExtension.kt");
+                doTest(fileName);
+            }
+
+            @TestMetadata("OperatorNameForMember.kt")
+            public void testOperatorNameForMember() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("idea/idea-completion/testData/basic/common/operatorNames/OperatorNameForMember.kt");
+                doTest(fileName);
+            }
+        }
+
         @TestMetadata("idea/idea-completion/testData/basic/common/override")
         @TestDataPath("$PROJECT_ROOT")
         @RunWith(JUnit3RunnerWithInners.class)
@@ -2786,6 +2813,12 @@ public class JvmBasicCompletionTestGenerated extends AbstractJvmBasicCompletionT
         @TestMetadata("AutoForceCompletion.kt")
         public void testAutoForceCompletion() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/idea-completion/testData/basic/java/AutoForceCompletion.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("CompletionForExcludedWhenInternalUse.kt")
+        public void testCompletionForExcludedWhenInternalUse() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/idea-completion/testData/basic/java/CompletionForExcludedWhenInternalUse.kt");
             doTest(fileName);
         }
 

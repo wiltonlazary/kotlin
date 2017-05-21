@@ -60,7 +60,7 @@ class JsDataClassGenerator extends DataClassMethodGenerator {
 
         assert function.getValueParameters().size() == constructorParameters.size();
 
-        List<JsExpression> constructorArguments = new ArrayList<JsExpression>(constructorParameters.size());
+        List<JsExpression> constructorArguments = new ArrayList<>(constructorParameters.size());
 
         for (int i = 0; i < constructorParameters.size(); i++) {
             KtParameter constructorParam = constructorParameters.get(i);
@@ -72,7 +72,7 @@ class JsDataClassGenerator extends DataClassMethodGenerator {
                     context.bindingContext(), BindingContext.VALUE_PARAMETER_AS_PROPERTY, parameterDescriptor);
 
             JsName fieldName = context.getNameForDescriptor(propertyDescriptor);
-            JsName paramName = context.getNameForDescriptor(parameterDescriptor);
+            JsName paramName = JsScope.declareTemporaryName(context.getNameForDescriptor(parameterDescriptor).getIdent());
 
             functionObj.getParameters().add(new JsParameter(paramName));
 
@@ -91,7 +91,8 @@ class JsDataClassGenerator extends DataClassMethodGenerator {
         }
 
         ClassDescriptor classDescriptor = (ClassDescriptor) function.getContainingDeclaration();
-        ClassConstructorDescriptor constructor = classDescriptor.getConstructors().iterator().next();
+        ClassConstructorDescriptor constructor = classDescriptor.getUnsubstitutedPrimaryConstructor();
+        assert constructor != null : "Data class should have primary constructor: " + classDescriptor;
 
         JsExpression constructorRef = context.getInnerReference(constructor);
 
@@ -191,7 +192,7 @@ class JsDataClassGenerator extends DataClassMethodGenerator {
     private JsFunction generateJsMethod(@NotNull FunctionDescriptor functionDescriptor) {
         JsFunction functionObject = context.createRootScopedFunction(functionDescriptor);
         ClassDescriptor containingClass = (ClassDescriptor) functionDescriptor.getContainingDeclaration();
-        UtilsKt.addFunctionToPrototype(context, containingClass, functionDescriptor, functionObject);
+        context.addDeclarationStatement(UtilsKt.addFunctionToPrototype(context, containingClass, functionDescriptor, functionObject));
         return functionObject;
     }
 }

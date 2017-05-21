@@ -202,7 +202,7 @@ abstract class AbstractAnnotationProcessingExtension(
     private fun KotlinProcessingEnvironment.doAnnotationProcessing(files: Collection<KtFile>): ProcessingResult {
         run initializeProcessors@ {
             processors().forEach { it.init(this) }
-            log { "Initialized processors: " + processors().joinToString { it.javaClass.name } }
+            log { "Initialized processors: " + processors().joinToString { it::class.java.name } }
         }
 
         val firstRoundAnnotations = RoundAnnotations(
@@ -334,17 +334,17 @@ abstract class AbstractAnnotationProcessingExtension(
             }
 
             if (applicableAnnotationNames.isEmpty()) {
-                log { "Skipping processor " + processor.javaClass.name + ": no relevant annotations" }
+                log { "Skipping processor " + processor::class.java.name + ": no relevant annotations" }
                 continue
             }
 
             val applicableAnnotations = applicableAnnotationNames
-                    .map { javaPsiFacade().findClass(it, projectScope())?.let { JeTypeElement(it) } }
+                    .map { javaPsiFacade().findClass(it, projectScope())?.let(::JeTypeElement) }
                     .filterNotNullTo(hashSetOf())
 
             log {
                 val annotationNames = applicableAnnotations.joinToString { it.qualifiedName.toString() }
-                "Processing with " + processor.javaClass.name + " (annotations: " + annotationNames + ")"
+                "Processing with " + processor::class.java.name + " (annotations: " + annotationNames + ")"
             }
 
             processor.process(applicableAnnotations, roundEnvironment)

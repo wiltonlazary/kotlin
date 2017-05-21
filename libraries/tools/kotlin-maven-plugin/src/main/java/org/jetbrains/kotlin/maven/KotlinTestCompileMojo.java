@@ -25,6 +25,8 @@ import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments;
+import org.jetbrains.kotlin.maven.kapt.AnnotationProcessingManager;
+import org.jetbrains.kotlin.maven.kapt.KaptTestJvmCompilerMojo;
 
 import java.util.List;
 
@@ -33,9 +35,14 @@ import java.util.List;
  *
  * @noinspection UnusedDeclaration
  */
+
+/** Note!
+ * Please change {@link KaptTestJvmCompilerMojo} as well as it was majorly copied from this file. */
+
 @Mojo(name = "test-compile",
         defaultPhase = LifecyclePhase.TEST_COMPILE,
-        requiresDependencyResolution = ResolutionScope.TEST
+        requiresDependencyResolution = ResolutionScope.TEST,
+        threadSafe = true
 )
 public class KotlinTestCompileMojo extends K2JVMCompileMojo {
     /**
@@ -84,7 +91,6 @@ public class KotlinTestCompileMojo extends K2JVMCompileMojo {
 
     @Override
     protected void configureSpecificCompilerArguments(@NotNull K2JVMCompilerArguments arguments) throws MojoExecutionException {
-        module = testModule;
         classpath = testClasspath;
         arguments.friendPaths = new String[] { output };
         output = testOutput;
@@ -94,5 +100,10 @@ public class KotlinTestCompileMojo extends K2JVMCompileMojo {
     @Override
     protected List<String> getRelatedSourceRoots(MavenProject project) {
         return project.getTestCompileSourceRoots();
+    }
+
+    @NotNull
+    protected String getSourceSetName() {
+        return AnnotationProcessingManager.TEST_SOURCE_SET_NAME;
     }
 }

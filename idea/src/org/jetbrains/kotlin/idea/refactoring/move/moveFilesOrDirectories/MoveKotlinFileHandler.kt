@@ -18,34 +18,40 @@ package org.jetbrains.kotlin.idea.refactoring.move.moveFilesOrDirectories
 
 import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.roots.JavaProjectRootsUtil
-import com.intellij.psi.*
+import com.intellij.openapi.util.Key
+import com.intellij.psi.PsiCompiledElement
+import com.intellij.psi.PsiDirectory
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
 import com.intellij.psi.impl.light.LightElement
 import com.intellij.refactoring.move.moveFilesOrDirectories.MoveFileHandler
 import com.intellij.refactoring.move.moveFilesOrDirectories.MoveFilesOrDirectoriesUtil
 import com.intellij.usageView.UsageInfo
 import org.jetbrains.kotlin.idea.KotlinLanguage
-import org.jetbrains.kotlin.idea.codeInsight.shorten.runWithElementsToShortenIsEmptyIgnored
 import org.jetbrains.kotlin.idea.core.getPackage
 import org.jetbrains.kotlin.idea.core.packageMatchesDirectory
 import org.jetbrains.kotlin.idea.core.quoteIfNeeded
 import org.jetbrains.kotlin.idea.refactoring.hasIdentifiersOnly
-import org.jetbrains.kotlin.idea.refactoring.move.*
+import org.jetbrains.kotlin.idea.refactoring.move.ContainerChangeInfo
+import org.jetbrains.kotlin.idea.refactoring.move.ContainerInfo
 import org.jetbrains.kotlin.idea.refactoring.move.moveDeclarations.*
+import org.jetbrains.kotlin.idea.refactoring.move.updatePackageDirective
 import org.jetbrains.kotlin.name.FqNameUnsafe
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
-import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
-import java.util.*
+import org.jetbrains.kotlin.psi.UserDataProperty
+
+internal var KtFile.allElementsToMove: List<PsiElement>? by UserDataProperty(Key.create("SCOPE_TO_MOVE"))
 
 class MoveKotlinFileHandler : MoveFileHandler() {
-    internal class InternalUsagesWrapper(file: KtFile, val usages: List<UsageInfo>) : UsageInfo(file)
+    internal class FileInfo(file: KtFile) : UsageInfo(file)
 
     // This is special 'PsiElement' whose purpose is to wrap MoveKotlinTopLevelDeclarationsProcessor
-    // so that it can be kept in the transition map
+    // so that it can be kept in the usage info list
     private class MoveContext(
-            psiManager: PsiManager,
+            val file: PsiFile,
             val declarationMoveProcessor: MoveKotlinDeclarationsProcessor
-    ): LightElement(psiManager, KotlinLanguage.INSTANCE) {
+    ): LightElement(file.manager, KotlinLanguage.INSTANCE) {
         override fun toString() = ""
     }
 
@@ -86,12 +92,13 @@ class MoveKotlinFileHandler : MoveFileHandler() {
         }
 
         val declarationMoveProcessor = MoveKotlinDeclarationsProcessor(
-                project,
                 MoveDeclarationsDescriptor(
+                        project = project,
                         elementsToMove = psiFile.declarations.filterIsInstance<KtNamedDeclaration>(),
                         moveTarget = moveTarget,
                         delegate = MoveDeclarationsDelegate.TopLevel,
-                        updateInternalReferences = false
+                        scanEntireFile = true,
+                        allElementsToMove = psiFile.allElementsToMove
                 ),
                 Mover.Idle
         )
@@ -103,12 +110,6 @@ class MoveKotlinFileHandler : MoveFileHandler() {
         return !JavaProjectRootsUtil.isOutsideJavaSourceRoot(element)
     }
 
-    internal fun findInternalUsages(file: KtFile, newParent: PsiDirectory): InternalUsagesWrapper {
-        val packageNameInfo = file.getPackageNameInfo(newParent, false)
-        val usages = packageNameInfo?.let { file.getInternalReferencesToUpdateOnPackageNameChange(it) } ?: emptyList()
-        return InternalUsagesWrapper(file, usages)
-    }
-
     override fun findUsages(
             psiFile: PsiFile,
             newParent: PsiDirectory?,
@@ -117,37 +118,37 @@ class MoveKotlinFileHandler : MoveFileHandler() {
     ): List<UsageInfo> {
         if (psiFile !is KtFile) return emptyList()
 
-        val usages = ArrayList<UsageInfo>()
+        val usages = arrayListOf<UsageInfo>(FileInfo(psiFile))
         initMoveProcessor(psiFile, newParent)?.let {
             usages += it.findUsages()
             usages += it.getConflictsAsUsages()
         }
-        newParent?.let { usages += findInternalUsages(psiFile, it) }
         return usages
     }
 
     override fun prepareMovedFile(file: PsiFile, moveDestination: PsiDirectory, oldToNewMap: MutableMap<PsiElement, PsiElement>) {
+        if (file !is KtFile) return
         val moveProcessor = initMoveProcessor(file, moveDestination) ?: return
-        val moveContext = MoveContext(file.manager, moveProcessor)
+        val moveContext = MoveContext(file, moveProcessor)
         oldToNewMap[moveContext] = moveContext
+        val packageNameInfo = file.getPackageNameInfo(moveDestination, true) ?: return
+        val newFqName = packageNameInfo.newContainer.fqName
+        if (newFqName != null) {
+            file.packageDirective?.fqName = newFqName.quoteIfNeeded()
+        }
     }
 
     override fun updateMovedFile(file: PsiFile) {
-        if (file !is KtFile) return
-        val newDirectory = file.parent ?: return
-        val packageNameInfo = file.getPackageNameInfo(newDirectory, true) ?: return
-        file.packageDirective?.fqName = packageNameInfo.newContainer.fqName!!.quoteIfNeeded()
+
     }
 
     override fun retargetUsages(usageInfos: List<UsageInfo>?, oldToNewMap: Map<PsiElement, PsiElement>) {
-        val moveContext = oldToNewMap.keys.firstIsInstanceOrNull<MoveContext>() ?: return
+        val currentFile = (usageInfos?.firstOrNull() as? FileInfo)?.element
+        val moveContext = oldToNewMap.keys.firstOrNull { it is MoveContext && it.file == currentFile} as? MoveContext ?: return
         retargetUsages(usageInfos, moveContext.declarationMoveProcessor)
     }
 
     fun retargetUsages(usageInfos: List<UsageInfo>?, moveDeclarationsProcessor: MoveKotlinDeclarationsProcessor) {
-        postProcessMoveUsages(usageInfos?.firstIsInstanceOrNull<InternalUsagesWrapper>()?.usages ?: emptyList())
-        moveDeclarationsProcessor.project.runWithElementsToShortenIsEmptyIgnored {
-            usageInfos?.let { moveDeclarationsProcessor.execute(it) }
-        }
+        usageInfos?.let { moveDeclarationsProcessor.doPerformRefactoring(it) }
     }
 }

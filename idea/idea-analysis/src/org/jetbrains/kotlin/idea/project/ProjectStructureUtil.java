@@ -67,8 +67,8 @@ public class ProjectStructureUtil {
 
     @Nullable
     private static TargetPlatform getPlatformConfiguredInFacet(@NotNull Module module) {
-        KotlinFacetSettings settings = KotlinFacetSettingsProvider.Companion.getInstance(module.getProject()).getSettings(module);
-        TargetPlatformKind<?> kind = settings.getVersionInfo().getTargetPlatformKind();
+        KotlinFacetSettings settings = KotlinFacetSettingsProvider.Companion.getInstance(module.getProject()).getInitializedSettings(module);
+        TargetPlatformKind<?> kind = settings.getTargetPlatformKind();
         if (kind instanceof TargetPlatformKind.Jvm) {
             return JvmPlatform.INSTANCE;
         }
@@ -90,7 +90,7 @@ public class ProjectStructureUtil {
                 ModuleRootManager.getInstance(module).orderEntries().librariesOnly().forEachLibrary(new Processor<Library>() {
                     @Override
                     public boolean process(Library library) {
-                        if (JsLibraryStdDetectionUtil.hasJsStdlibJar(library)) {
+                        if (JsLibraryStdDetectionUtil.INSTANCE.hasJsStdlibJar(library)) {
                             jsLibrary.set(library);
                             return false;
                         }

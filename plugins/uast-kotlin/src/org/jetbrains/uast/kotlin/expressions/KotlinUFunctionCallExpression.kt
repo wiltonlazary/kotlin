@@ -34,14 +34,14 @@ import org.jetbrains.uast.visitor.UastVisitor
 
 class KotlinUFunctionCallExpression(
         override val psi: KtCallExpression,
-        override val containingElement: UElement?,
-        private val _resolvedCall: ResolvedCall<*>? = null
+        override val uastParent: UElement?,
+        private val _resolvedCall: ResolvedCall<*>?
 ) : KotlinAbstractUExpression(), UCallExpression, KotlinUElementWithType {
     companion object {
         fun resolveSource(descriptor: DeclarationDescriptor, source: PsiElement?): PsiMethod? {
             if (descriptor is ConstructorDescriptor && descriptor.isPrimary
-                    && source is KtClassOrObject && source.getPrimaryConstructor() == null
-                    && source.getSecondaryConstructors().isEmpty()) {
+                    && source is KtClassOrObject && source.primaryConstructor == null
+                    && source.secondaryConstructors.isEmpty()) {
                 return source.toLightClass()?.constructors?.firstOrNull()
             }
 
@@ -52,6 +52,8 @@ class KotlinUFunctionCallExpression(
             }
         }
     }
+
+    constructor(psi: KtCallExpression, uastParent: UElement?): this(psi, uastParent, null)
 
     private val resolvedCall by lz {
         _resolvedCall ?: psi.getResolvedCall(psi.analyze())
@@ -96,8 +98,8 @@ class KotlinUFunctionCallExpression(
 
     override val receiver: UExpression?
         get() {
-            return if (containingElement is UQualifiedReferenceExpression && containingElement.selector == this)
-                containingElement.receiver
+            return if (uastParent is UQualifiedReferenceExpression && uastParent.selector == this)
+                uastParent.receiver
             else
                 null
         }

@@ -17,15 +17,23 @@
 package org.jetbrains.kotlin.idea.injection
 
 import com.intellij.codeInsight.AnnotationUtil
+import com.intellij.lang.injection.MultiHostInjector
+import com.intellij.lang.injection.MultiHostRegistrar
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.TextRange
-import com.intellij.psi.*
+import com.intellij.psi.PsiAnnotation
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiReference
+import com.intellij.psi.impl.source.tree.injected.InjectedLanguageUtil
 import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
 import org.intellij.plugins.intelliLang.Configuration
+import org.intellij.plugins.intelliLang.inject.InjectedLanguage
 import org.intellij.plugins.intelliLang.inject.InjectorUtils
+import org.intellij.plugins.intelliLang.inject.LanguageInjectionSupport
+import org.intellij.plugins.intelliLang.inject.TemporaryPlacesRegistry
 import org.intellij.plugins.intelliLang.inject.config.BaseInjection
 import org.intellij.plugins.intelliLang.inject.java.JavaLanguageInjectionSupport
 import org.intellij.plugins.intelliLang.util.AnnotationUtilEx
@@ -38,34 +46,79 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.annotations.argumentValue
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import java.util.*
+import kotlin.collections.ArrayList
 
-class KotlinLanguageInjector : LanguageInjector {
+class KotlinLanguageInjector(
+        val configuration: Configuration,
+        val project: Project,
+        val temporaryPlacesRegistry: TemporaryPlacesRegistry) : MultiHostInjector {
+    companion object {
+        private val STRING_LITERALS_REGEXP = "\"([^\"]*)\"".toRegex()
+    }
+
     val kotlinSupport: KotlinLanguageInjectionSupport? by lazy {
         ArrayList(InjectorUtils.getActiveInjectionSupports()).filterIsInstance(KotlinLanguageInjectionSupport::class.java).firstOrNull()
     }
 
-    override fun getLanguagesToInject(host: PsiLanguageInjectionHost, injectionPlacesRegistrar: InjectedLanguagePlaces) {
-        if (!host.isValidHost) return
-        val ktHost: KtElement = host as? KtElement ?: return
+    override fun getLanguagesToInject(registrar: MultiHostRegistrar, context: PsiElement) {
+        val ktHost: KtStringTemplateExpression = context as? KtStringTemplateExpression ?: return
+        if (!context.isValidHost) return
+
+        val support = kotlinSupport ?: return
 
         if (!ProjectRootsUtil.isInProjectOrLibSource(ktHost)) return
 
-        val injectionInfo = findInjectionInfo(host) ?: return
+        val containingFile = ktHost.containingFile
+        val tempInjectedLanguage: InjectedLanguage? = temporaryPlacesRegistry.getLanguageFor(ktHost, containingFile)
 
-        val language = InjectorUtils.getLanguageByString(injectionInfo.languageId) ?: return
-        injectionPlacesRegistrar.addPlace(language, TextRange.from(0, ktHost.textLength), injectionInfo.prefix, injectionInfo.suffix)
+        val baseInjection: BaseInjection = if (tempInjectedLanguage == null) {
+            val injectionInfo = findInjectionInfo(context) ?: return
+            injectionInfo.toBaseInjection(support)
+        }
+        else {
+            InjectorUtils.putInjectedFileUserData(registrar, LanguageInjectionSupport.TEMPORARY_INJECTED_LANGUAGE, tempInjectedLanguage)
+            BaseInjection(support.id).apply {
+                injectedLanguageId = tempInjectedLanguage.id
+                prefix = tempInjectedLanguage.prefix
+                suffix = tempInjectedLanguage.suffix
+            }
+        } ?: return
+
+        val language = InjectorUtils.getLanguageByString(baseInjection.injectedLanguageId) ?: return
+
+        if (ktHost.hasInterpolation()) {
+            val file = ktHost.containingKtFile
+            val parts = splitLiteralToInjectionParts(baseInjection, ktHost) ?: return
+
+            if (parts.ranges.isEmpty()) return
+
+            InjectorUtils.registerInjection(language, parts.ranges, file, registrar)
+            InjectorUtils.registerSupport(support, false, registrar)
+            InjectorUtils.putInjectedFileUserData(registrar, InjectedLanguageUtil.FRANKENSTEIN_INJECTION,
+                                                  if (parts.isUnparsable) java.lang.Boolean.TRUE else null)
+        }
+        else {
+            InjectorUtils.registerInjectionSimple(ktHost, baseInjection, support, registrar)
+        }
+    }
+
+    override fun elementsToInjectIn(): List<Class<out PsiElement>> {
+        return listOf(KtStringTemplateExpression::class.java)
     }
 
     private fun findInjectionInfo(place: KtElement, originalHost: Boolean = true): InjectionInfo? {
         return injectWithExplicitCodeInstruction(place)
-                ?: injectWithCall(place)
-                ?: injectWithReceiver(place)
-                ?: injectWithVariableUsage(place, originalHost)
+               ?: injectWithCall(place)
+               ?: injectWithReceiver(place)
+               ?: injectWithVariableUsage(place, originalHost)
     }
 
     private fun injectWithExplicitCodeInstruction(host: KtElement): InjectionInfo? {
         val support = kotlinSupport ?: return null
-        val languageId = support.findAnnotationInjectionLanguageId(host) ?: return null
+        val languageId =
+                support.findInjectionCommentLanguageId(host) ?:
+                support.findAnnotationInjectionLanguageId(host) ?:
+                return null
         return InjectionInfo(languageId, null, null)
     }
 
@@ -78,12 +131,21 @@ class KotlinLanguageInjector : LanguageInjector {
 
         if (isAnalyzeOff(qualifiedExpression.project)) return null
 
+        val kotlinInjections = Configuration.getInstance().getInjections(KOTLIN_SUPPORT_ID)
+
+        val calleeName = callee.text
+        val possibleNames = collectPossibleNames(kotlinInjections)
+
+        if (calleeName !in possibleNames) {
+            return null
+        }
+
         for (reference in callee.references) {
             ProgressManager.checkCanceled()
 
             val resolvedTo = reference.resolve()
             if (resolvedTo is KtFunction) {
-                val injectionInfo = findInjection(resolvedTo.receiverTypeReference, Configuration.getInstance().getInjections(KOTLIN_SUPPORT_ID))
+                val injectionInfo = findInjection(resolvedTo.receiverTypeReference, kotlinInjections)
                 if (injectionInfo != null) {
                     return injectionInfo
                 }
@@ -91,6 +153,21 @@ class KotlinLanguageInjector : LanguageInjector {
         }
 
         return null
+    }
+
+    private fun collectPossibleNames(injections: List<BaseInjection>): Set<String> {
+        val result = HashSet<String>()
+
+        for (injection in injections) {
+            val injectionPlaces = injection.injectionPlaces
+            for (place in injectionPlaces) {
+                val placeStr = place.toString()
+                val literals = STRING_LITERALS_REGEXP.findAll(placeStr).map { it.groupValues[1] }
+                result.addAll(literals)
+            }
+        }
+
+        return result
     }
 
     private fun injectWithVariableUsage(host: KtElement, originalHost: Boolean): InjectionInfo? {
@@ -197,7 +274,24 @@ class KotlinLanguageInjector : LanguageInjector {
         return Configuration.getProjectInstance(project).advancedConfiguration.dfaOption == Configuration.DfaOption.OFF
     }
 
-    private class InjectionInfo(val languageId: String?, val prefix: String?, val suffix: String?)
+    private class InjectionInfo(val languageId: String?, val prefix: String?, val suffix: String?) {
+        fun toBaseInjection(injectionSupport: KotlinLanguageInjectionSupport): BaseInjection? {
+            if (languageId == null) return null
+
+            val baseInjection = BaseInjection(injectionSupport.id)
+            baseInjection.injectedLanguageId = languageId
+
+            if (prefix != null) {
+                baseInjection.prefix = prefix
+            }
+
+            if (suffix != null) {
+                baseInjection.suffix = suffix
+            }
+
+            return baseInjection
+        }
+    }
 
     private fun processAnnotationInjectionInner(annotations: Array<PsiAnnotation>): InjectionInfo? {
         val id = AnnotationUtilEx.calcAnnotationValue(annotations, "value")

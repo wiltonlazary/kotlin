@@ -1,8 +1,9 @@
-<project name="Update Dependencies" default="update" xmlns:if="ant:if" xmlns:unless="ant:unless">
+<project xmlns:if="ant:if" xmlns:unless="ant:unless" name="Update Dependencies" default="update">
     <import file="common.xml" optional="false"/>
+    <import file="node_utils.xml" optional="false"/>
 
     <property name="automerge_dummy" value="This property is used to trick git merge. Do not delete empty lines around."/>
-    <property name="ideaVersion" value="162.2946"/>
+    <property name="ideaVersion" value="171-SNAPSHOT"/>
     <property name="idea.kotlin.branch" value="rc"/>
 
 
@@ -31,7 +32,9 @@
         <os family="windows"/>
     </condition>
 
-    <property name="uast.version" value="1.0.11"/>
+    <property name="uast.version" value="1.0.12"/>
+
+    <property name="kotlinx.coroutines.version" value="0.14.1"/>
 
     <property name="generators" value="${basedir}/generators"/>
 
@@ -42,13 +45,13 @@
 
     <property name="gradle.libs.repo" value="http://repo.gradle.org/gradle/libs-releases-local"/>
 
-    <property name="native-platform-lib-version" value="0.10"/>
+    <property name="native-platform-lib-version" value="0.14"/>
 
     <property file="${dependencies.info.file}" prefix="dependencies.info.prev"/>
 
     <target name="update" depends="fetch-third-party,fetch-annotations" description="Update dependencies">
         <execute_update_with_idea_maven_artifacts
-            base.url="https://www.jetbrains.com/intellij-repository/releases/com/jetbrains/intellij/idea"
+            base.url="https://www.jetbrains.com/intellij-repository/snapshots/com/jetbrains/intellij/idea"
             idea.maven.version="${ideaVersion}"/>
     </target>
 
@@ -60,7 +63,7 @@
 
     <target name="jb_update" depends="fetch-third-party,fetch-annotations" description="Update dependencies for JB local network">
         <execute_update_with_idea_maven_artifacts
-            base.url="http://jetbrains-com-mirror.labs.intellij.net/intellij-repository/releases/com/jetbrains/intellij/idea"
+            base.url="http://jetbrains-com-mirror.labs.intellij.net/intellij-repository/snapshots/com/jetbrains/intellij/idea"
             idea.maven.version="${ideaVersion}"/>
     </target>
 
@@ -155,8 +158,10 @@
         <get-lib suffix="-osx-i386"/>
         <get-lib suffix="-linux-amd64"/>
         <get-lib suffix="-linux-i386"/>
-        <get-lib suffix="-freebsd-amd64"/>
-        <get-lib suffix="-freebsd-i386"/>
+        <get-lib suffix="-freebsd-amd64-libcpp"/>
+        <get-lib suffix="-freebsd-amd64-libstdcpp"/>
+        <get-lib suffix="-freebsd-i386-libcpp"/>
+        <get-lib suffix="-freebsd-i386-libstdcpp"/>
 
         <jar destfile="${dependencies}/${common.name}-uberjar.jar">
             <zipfileset src="${download}/${common.name}.jar" includes="**" />
@@ -166,12 +171,14 @@
             <zipfileset src="${download}/${common.name}-osx-i386.jar" includes="**" />
             <zipfileset src="${download}/${common.name}-linux-amd64.jar" includes="**" />
             <zipfileset src="${download}/${common.name}-linux-i386.jar" includes="**" />
-            <zipfileset src="${download}/${common.name}-freebsd-amd64.jar" includes="**" />
-            <zipfileset src="${download}/${common.name}-freebsd-i386.jar" includes="**" />
+            <zipfileset src="${download}/${common.name}-freebsd-amd64-libcpp.jar" includes="**" />
+            <zipfileset src="${download}/${common.name}-freebsd-amd64-libstdcpp.jar" includes="**" />
+            <zipfileset src="${download}/${common.name}-freebsd-i386-libcpp.jar" includes="**" />
+            <zipfileset src="${download}/${common.name}-freebsd-i386-libstdcpp.jar" includes="**" />
         </jar>
     </target>
 
-    <target name="fetch-third-party" depends="make-dependency-dirs, make-native-platform-uberjar, fetch-idea-artifacts-for-compiler-tests">
+    <target name="fetch-third-party" depends="make-dependency-dirs, make-native-platform-uberjar">
         <antcall target="override-version"/>
 
         <!-- ProGuard -->
@@ -213,12 +220,12 @@
         <!-- jansi -->
         <get-maven-library prefix="org/fusesource/jansi" lib="jansi" version="1.11" target.jar.name.base="jansi"/>
 
-        <!-- Guava 17 sources-->
-        <get-maven-library prefix="com/google/guava" lib="guava" version="17.0" bin="false"/>
+        <!-- Guava 19 sources-->
+        <get-maven-library prefix="com/google/guava" lib="guava" version="19.0" bin="false"/>
 
         <!-- ASM -->
-        <get src="https://raw.github.com/JetBrains/intellij-community/162/lib/src/asm5-src.zip"
-             dest="${dependencies}/asm5-src.zip"/>
+        <get src="https://raw.github.com/JetBrains/intellij-community/171/lib/src/asm-src.zip"
+             dest="${dependencies}/asm-src.zip"/>
 
         <!-- Junit Sources -->
         <get-maven-library prefix="junit" lib="junit" version="4.12" bin="false"/>
@@ -227,11 +234,8 @@
         <!-- Android SDK platform -->
         <ant antfile="download_android_sdk.xml" target="download_android_sdk"/>
 
-        <!-- CLI Parser -->
-        <get-maven-library prefix="com/github/spullara/cli-parser" lib="cli-parser" version="1.1.2"/>
-
-        <!-- Rhino -->
-        <get-maven-library prefix="org/mozilla" lib="rhino" version="1.7.6"/>
+        <!-- Javaslang -->
+        <get-maven-library prefix="io/javaslang" lib="javaslang" version="2.0.6"/>
 
         <!-- Uast -->
         <property name="uast.server" value="http://dl.bintray.com/kotlin/uast"/>
@@ -239,18 +243,11 @@
         <get-maven-library prefix="org/jetbrains/uast" lib="uast-java" version="${uast.version}" target.jar.name.base="uast-java" server="${uast.server}"/>
         <get-maven-library prefix="org/jetbrains/uast" lib="uast-tests" version="${uast.version}" target.jar.name.base="uast-tests" server="${uast.server}"/>
 
-        <!-- Closure Compiler -->
-        <!-- A download url taken from http://code.google.com/p/closure-compiler/wiki/BinaryDownloads -->
-        <get src="http://dl.google.com/closure-compiler/compiler-20160315.zip"
-             dest="${dependencies}/download/closure-compiler.zip" usetimestamp="true"/>
 
-        <delete file="${dependencies}/closure-compiler.jar" failonerror="false"/>
-        <unzip src="${dependencies}/download/closure-compiler.zip" dest="${dependencies}">
-            <patternset>
-                <include name="compiler.jar"/>
-            </patternset>
-            <mapper type="merge" to="closure-compiler.jar"/>
-        </unzip>
+        <!-- kotlinx.coroutines -->
+        <get-maven-library prefix="org/jetbrains/kotlinx" lib="kotlinx-coroutines-core" version="${kotlinx.coroutines.version}"
+                           target.jar.name.base="kotlinx-coroutines-core" server="http://dl.bintray.com/kotlin/kotlinx/"/>
+
 
         <delete file="${dependencies}/android.jar" failonerror="false"/>
         <get src="http://dl-ssl.google.com/android/repository/android-19_r02.zip"
@@ -311,75 +308,18 @@
 
         <get-protobuf-and-rename-packages/>
 
-        <download-or-build-markdown-parser/>
+        <download_teamcity_artifact
+            teamcity.server.url="https://teamcity.jetbrains.com"
+            build.locator.request="${markdown.locator}"
+            artifact.path="markdown_jar/markdown.jar"
+            dest="${dependencies}/markdown.jar"
+            usetimestamp="true"
+            build.number.pattern="\d+\s-\sKotlin\s[\w-+\.]+"
+        />
+
+        <!-- node.js -->
+        <antcall target="download-nodejs-and-npm"/>
     </target>
-
-    <macrodef name="download-or-build-markdown-parser">
-        <sequential>
-            <download_teamcity_artifact
-                teamcity.server.url="https://teamcity.jetbrains.com"
-                build.locator.request="${markdown.locator}"
-                artifact.path="markdown_jar/markdown.jar"
-                dest="${dependencies}/markdown.jar"
-                usetimestamp="true"
-                build.number.pattern="\d+\s-\sKotlin\s[\w-+\.]+"
-            />
-
-            <!-- When ABI version changes, the second build should compile markdown-parser manually instead of using the old version -->
-
-            <exec executable="${dependencies}/bootstrap-compiler/Kotlin/kotlinc/bin/${kotlinc.executable.path}" failonerror="false"
-                  resultproperty="markdown.abi.incompatible">
-                <arg value="-cp"/>
-                <arg value="${dependencies}/bootstrap-compiler/Kotlin/kotlinc/lib/kotlin-compiler.jar"/>
-                <arg value="-script"/>
-                <arg value="${generators}/infrastructure/check-library-abi-version.kts"/>
-                <arg value="${dependencies}/markdown.jar"/>
-                <arg value="${dependencies}/bootstrap-compiler/Kotlin/kotlinc/lib/kotlin-runtime.jar"/>
-            </exec>
-
-            <local name="markdown.need.recompile" />
-            <condition property="markdown.need.recompile">
-                <not>
-                    <equals arg1="${markdown.abi.incompatible}" arg2="0"/>
-                </not>
-            </condition>
-
-            <sequential if:set="markdown.need.recompile">
-                <echo message="Recompiling intellij-markdown manually"/>
-                <length file="${dependencies}/markdown.jar" property="old.markdown.size"/>
-                <echo message="Size of the incompatible jar: ${old.markdown.size} bytes"/>
-                <local name="markdown.dir" />
-                <property name="markdown.dir" value="${dependencies}/intellij-markdown-forKotlin/" />
-
-                <get src="https://github.com/valich/intellij-markdown/archive/forKotlin.zip"
-                     dest="${dependencies}/download/markdown-sources.zip" usetimestamp="true"/>
-
-                <delete dir="${markdown.dir}" failonerror="false"/>
-                <unzip src="${dependencies}/download/markdown-sources.zip" dest="${dependencies}"/>
-                <exec executable="${dependencies}/bootstrap-compiler/Kotlin/kotlinc/bin/${kotlinc.executable.path}" failonerror="true">
-                    <arg value="${markdown.dir}/src"/>
-                    <arg value="-d"/>
-                    <arg value="${markdown.dir}/out"/>
-                </exec>
-
-                <javac srcdir="${markdown.dir}/src"
-                       destdir="${markdown.dir}/out" includeantruntime="false">
-                    <classpath>
-                        <path location="${dependencies}/bootstrap-compiler/Kotlin/kotlinc/lib/kotlin-runtime.jar"/>
-                    </classpath>
-                </javac>
-
-                <delete file="${dependencies}/markdown.jar" failonerror="false"/>
-                <jar jarfile="${dependencies}/markdown.jar">
-                    <fileset dir="${markdown.dir}/out" includes="**"/>
-                </jar>
-
-                <echo message="Compilation of intellij-markdown finished"/>
-                <length file="${dependencies}/markdown.jar" property="new.markdown.size"/>
-                <echo message="Size of the new jar: ${new.markdown.size} bytes"/>
-            </sequential>
-        </sequential>
-    </macrodef>
 
     <macrodef name="get-protobuf-and-rename-packages">
         <sequential>
@@ -440,14 +380,6 @@
                 source.jar="${dependencies}/download/protobuf-java-${protobuf.version}-sources.jar"
                 target.jar="${dependencies}/protobuf-${protobuf.version}-sources.jar"
             />
-
-            <!-- Build protobuf lite jar -->
-            <exec executable="${dependencies}/bootstrap-compiler/Kotlin/kotlinc/bin/${kotlinc.executable.path}" failonerror="true">
-                <arg value="-script"/>
-                <arg value="${generators}/infrastructure/build-protobuf-lite.kts"/>
-                <arg value="${dependencies}/protobuf-${protobuf.version}.jar"/>
-                <arg value="${dependencies}/protobuf-${protobuf.version}-lite.jar"/>
-            </exec>
         </sequential>
     </macrodef>
 
@@ -482,7 +414,11 @@
             <sequential unless:set="idea.already.downloaded">
                 <echo message="IDEA build id: ${execute.build.id}, previous build id: ${dependencies.info.prev.idea.build.id}"/>
 
-                <delete dir="${idea.dir}" unless:set="edition.matched"/>
+                <delete dir="${idea.dir}" unless:set="edition.matched">
+                    <exclude name="config-idea/**"/>
+                    <exclude name="system-idea/**"/>
+                </delete>
+
                 <download_and_update_idea idea.maven.version="@{idea.maven.version}" base.repository.url="@{base.url}"/>
 
                 <propertyfile file="${dependencies.info.file}">
@@ -593,7 +529,6 @@
         <attribute name="download.file.archive.jps-build-test"/>
 
         <attribute name="core" default="@{idea.dir}/core"/>
-        <attribute name="core-analysis" default="@{idea.dir}/core-analysis"/>
         <attribute name="jps" default="@{idea.dir}/jps"/>
         <attribute name="jps-test" default="@{jps}/test"/>
         <attribute name="sources" default="@{idea.dir}/sources"/>
@@ -646,19 +581,12 @@
 
                 <delete dir="@{idea.dir}/plugins/Kotlin"/>
 
-                <echo message="@{download.dir.intellij-core}/intellij-core-analysis.jar"/>
-
-                <mkdir dir="@{core-analysis}"/>
-                <copy file="@{download.dir.intellij-core}/intellij-core-analysis.jar"
-                      tofile="@{core-analysis}/intellij-core-analysis.jar"
-                      verbose="true"/>
-
                 <mkdir dir="@{core}"/>
                 <copy todir="@{core}" flatten="true" verbose="true">
                     <resources>
                         <file file="@{download.dir.intellij-core}/intellij-core.jar"/>
                         <file file="@{download.dir.intellij-core}/annotations.jar"/>
-                        <file file="@{download.dir.intellij-core}/guava-17.0.jar"/>
+                        <file file="@{download.dir.intellij-core}/guava-19.0.jar"/>
                         <file file="@{download.dir.intellij-core}/picocontainer.jar"/>
                         <file file="@{download.dir.intellij-core}/trove4j.jar"/>
 
@@ -684,6 +612,7 @@
                         <file file="@{download.dir.jps-standalone}/jgoodies-forms.jar"/>
                         <file file="@{download.dir.jps-standalone}/jna.jar"/>
                         <file file="@{download.dir.jps-standalone}/jps-builders.jar"/>
+                        <file file="@{download.dir.jps-standalone}/jps-builders-6.jar"/>
                         <file file="@{download.dir.jps-standalone}/jps-model.jar"/>
                         <file file="@{download.dir.jps-standalone}/log4j.jar"/>
                         <file file="@{download.dir.jps-standalone}/nanoxml-2.2.3.jar"/>
@@ -790,11 +719,9 @@
                 <mkdir dir="${core.dir}"/>
                 <get src="${content.base.url}/core/intellij-core.jar" dest="${core.dir}/intellij-core.jar"/>
                 <get src="${content.base.url}/core/annotations.jar" dest="${core.dir}/annotations.jar"/>
-                <get src="${content.base.url}/core/guava-17.0.jar" dest="${core.dir}/guava-17.0.jar"/>
+                <get src="${content.base.url}/core/guava-19.0.jar" dest="${core.dir}/guava-19.0.jar"/>
                 <get src="${content.base.url}/core/picocontainer.jar" dest="${core.dir}/picocontainer.jar"/>
                 <get src="${content.base.url}/core/trove4j.jar" dest="${core.dir}/trove4j.jar"/>
-
-                <get src="${content.base.url}/core/intellij-core-analysis.jar" dest="${core.dir}/intellij-core-analysis.jar"/>
 
                 <delete file="${idea.download.dir}/idea-sdk-sources.jar" failonerror="false"/>
                 <get src="${content.base.url}/sources.zip" dest="${idea.download.dir}/idea-sdk-sources.jar"/>
@@ -839,18 +766,6 @@
       - Fill the target with downloading correct annotations
     -->
     <target name="fetch-annotations"/>
-
-    <target name="fetch-idea-artifacts-for-compiler-tests">
-        <!-- For running compiler tests with Java 1.6 -->
-        <local name="idea.for.compiler.testing.dir"/>
-        <property name="idea.for.compiler.testing.dir" value="dependencies/download/idea-for-compiler-test"/>
-        <mkdir dir="${idea.for.compiler.testing.dir}"/>
-        <local name="idea.for.compiler.testing.base.url"/>
-        <property name="idea.for.compiler.testing.base.url"
-                  value="https://teamcity.jetbrains.com/guestAuth/repository/download/IntelliJIdeaCe_OpenapiJar/idea-15.0.5"/>
-        <get src="${idea.for.compiler.testing.base.url}/idea_rt.jar" dest="${idea.for.compiler.testing.dir}/idea_rt.jar" usetimestamp="true"/>
-        <get src="${idea.for.compiler.testing.base.url}/openapi.jar" dest="${idea.for.compiler.testing.dir}/openapi.jar" usetimestamp="true"/>
-    </target>
 
     <target name="get_android_studio">
         <condition property="android.os.tag" value="windows">

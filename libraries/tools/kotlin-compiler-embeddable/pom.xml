@@ -31,23 +31,14 @@
         </dependency>
         <dependency>
             <groupId>org.jetbrains.kotlin</groupId>
-            <artifactId>kotlin-reflect</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.jetbrains.kotlin</groupId>
-            <artifactId>kotlin-stdlib</artifactId>
+            <artifactId>native-platform</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.jetbrains.kotlin</groupId>
             <artifactId>kotlin-test-junit</artifactId>
             <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.jetbrains.kotlin</groupId>
-            <artifactId>native-platform</artifactId>
-            <version>${project.version}</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -67,46 +58,12 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-                <version>1.7</version>
-                <executions>
-                    <execution>
-                        <id>attach-artifacts</id>
-                        <phase>compile</phase>
-                        <goals>
-                            <goal>attach-artifact</goal>
-                        </goals>
-                        <configuration>
-                            <artifacts>
-                                <artifact>
-                                    <file>${kotlin-dist}/kotlin-compiler-javadoc.jar</file>
-                                    <type>jar</type>
-                                    <classifier>javadoc</classifier>
-                                </artifact>
-                            </artifacts>
-                        </configuration>
-                    </execution>
 
-                    <execution>
-                        <id>attach-empty-javadoc</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>attach-artifact</goal>
-                        </goals>
-                        <configuration>
-                            <skipAttach>true</skipAttach>
-                        </configuration>
-                    </execution>
-
-                </executions>
-            </plugin>
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>2.4.3</version>
+                <version>3.0.0</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -120,13 +77,10 @@
                             <createSourcesJar>true</createSourcesJar>
                             <filters>
                                 <filter>
-                                    <artifact>*:kotlin-reflect</artifact>
+                                    <artifact>*:kotlin-compiler</artifact>
                                     <excludes>
-                                        <exclude>META-INF/**</exclude>
-                                    </excludes>
-                                    <artifact>*:kotlin-stdlib</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/**</exclude>
+                                        <exclude>com/sun/jna/**</exclude>
+                                        <exclude>net/rubygrapefruit/**</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
@@ -138,10 +92,6 @@
                                 <relocation>
                                     <pattern>com.google</pattern>
                                     <shadedPattern>${kotlin.relocated.package}.com.google</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>com.sampullara</pattern>
-                                    <shadedPattern>${kotlin.relocated.package}.com.sampullara</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>org.apache</pattern>

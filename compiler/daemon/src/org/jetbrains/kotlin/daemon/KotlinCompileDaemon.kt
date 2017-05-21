@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.daemon
 
 import org.jetbrains.kotlin.cli.common.CLICompiler
+import org.jetbrains.kotlin.cli.common.environment.setIdeaIoUseFallback
 import org.jetbrains.kotlin.cli.js.K2JSCompiler
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
 import org.jetbrains.kotlin.cli.metadata.K2MetadataCompiler
@@ -66,7 +67,7 @@ object KotlinCompileDaemon {
                 "java.util.logging.FileHandler.limit     = ${if (fileIsGiven) 0 else (1 shl 20)}\n" + // if file is provided - disabled, else - 1Mb
                 "java.util.logging.FileHandler.count     = ${if (fileIsGiven) 1 else 3}\n" +
                 "java.util.logging.FileHandler.append    = $fileIsGiven\n" +
-                "java.util.logging.FileHandler.pattern   = ${if (fileIsGiven) logPath else (logPath + File.separator + "${COMPILE_DAEMON_DEFAULT_FILES_PREFIX}.$logTime.%u%g.log")}\n" +
+                "java.util.logging.FileHandler.pattern   = ${if (fileIsGiven) logPath else (logPath + File.separator + "$COMPILE_DAEMON_DEFAULT_FILES_PREFIX.$logTime.%u%g.log")}\n" +
                 "java.util.logging.SimpleFormatter.format = %1\$tF %1\$tT.%1\$tL [%3\$s] %4\$s: %5\$s%n\n"
 
         LogManager.getLogManager().readConfiguration(cfg.byteInputStream())
@@ -88,11 +89,13 @@ object KotlinCompileDaemon {
 
     @JvmStatic
     fun main(args: Array<String>) {
+        ensureServerHostnameIsSetUp()
 
         log.info("Kotlin compiler daemon version " + (loadVersionFromResource() ?: "<unknown>"))
         log.info("daemon JVM args: " + ManagementFactory.getRuntimeMXBean().inputArguments.joinToString(" "))
         log.info("daemon args: " + args.joinToString(" "))
-        log.info("daemon process name: " + ManagementFactory.getRuntimeMXBean().name)
+
+        setIdeaIoUseFallback()
 
         val compilerId = CompilerId()
         val daemonOptions = DaemonOptions()

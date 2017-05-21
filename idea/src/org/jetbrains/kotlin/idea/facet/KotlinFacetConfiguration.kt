@@ -20,11 +20,10 @@ import com.intellij.facet.FacetConfiguration
 import com.intellij.facet.ui.FacetEditorContext
 import com.intellij.facet.ui.FacetEditorTab
 import com.intellij.facet.ui.FacetValidatorsManager
-import com.intellij.util.xmlb.SkipDefaultsSerializationFilter
-import com.intellij.util.xmlb.XmlSerializer
-import org.jdom.DataConversionException
 import org.jdom.Element
 import org.jetbrains.kotlin.config.KotlinFacetSettings
+import org.jetbrains.kotlin.config.deserializeFacetSettings
+import org.jetbrains.kotlin.config.serializeFacetSettings
 
 class KotlinFacetConfiguration : FacetConfiguration {
     var settings = KotlinFacetSettings()
@@ -32,34 +31,12 @@ class KotlinFacetConfiguration : FacetConfiguration {
 
     @Suppress("OverridingDeprecatedMember")
     override fun readExternal(element: Element) {
-        val version =
-                try {
-                    element.getAttribute("version")?.intValue
-                }
-                catch(e: DataConversionException) {
-                    null
-                } ?: KotlinFacetSettings.DEFAULT_VERSION
-        // Reset facet configuration if versions don't match
-        if (version == KotlinFacetSettings.CURRENT_VERSION) {
-            XmlSerializer.deserializeInto(settings, element)
-        }
-        else {
-            settings = KotlinFacetSettings()
-        }
-
-        // Migration problem workaround for pre-1.1-beta releases (mainly 1.0.6) -> 1.1-rc+
-        // Problematic cases: 1.1-beta/1.1-beta2 -> 1.1-rc+ (useProjectSettings gets reset to false)
-        // This heuristic detects old enough configurations:
-        if (element.children.none { it.getAttribute("name").value == "useProjectSettings" }
-            && settings.compilerInfo.k2jvmCompilerArguments == null) {
-            settings.useProjectSettings = false
-        }
+        settings = deserializeFacetSettings(element)
     }
 
     @Suppress("OverridingDeprecatedMember")
     override fun writeExternal(element: Element) {
-        element.setAttribute("version", KotlinFacetSettings.CURRENT_VERSION.toString())
-        XmlSerializer.serializeInto(settings, element, SkipDefaultsSerializationFilter())
+        settings.serializeFacetSettings(element)
     }
 
     override fun createEditorTabs(
@@ -69,6 +46,9 @@ class KotlinFacetConfiguration : FacetConfiguration {
         settings.initializeIfNeeded(editorContext.module, editorContext.rootModel)
 
         val tabs = arrayListOf<FacetEditorTab>(KotlinFacetEditorGeneralTab(this, editorContext, validatorsManager))
+        if (KotlinFacetCompilerPluginsTab.parsePluginOptions(this).isNotEmpty()) {
+            tabs += KotlinFacetCompilerPluginsTab(this, validatorsManager)
+        }
         KotlinFacetConfigurationExtension.EP_NAME.extensions.flatMapTo(tabs) { it.createEditorTabs(editorContext, validatorsManager) }
         return tabs.toTypedArray()
     }

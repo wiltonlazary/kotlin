@@ -16,14 +16,12 @@
 
 package org.jetbrains.kotlin.android.quickfix
 
-import com.android.SdkConstants
 import com.intellij.codeInspection.InspectionProfileEntry
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.util.PathUtil
 import org.jetbrains.android.inspections.klint.AndroidLintInspectionBase
 import org.jetbrains.kotlin.android.KotlinAndroidTestCase
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
-import org.jetbrains.kotlin.test.KotlinTestUtils
 import java.io.File
 
 
@@ -58,13 +56,7 @@ abstract class AbstractAndroidLintQuickfixTest : KotlinAndroidTestCase() {
             myFixture.checkResultByFile(path + ".expected")
         }
         else {
-            assertNull("Intention should not be availabale", myFixture.availableIntentions.find { it.text == intentionText })
+            assertNull("Intention should not be available", myFixture.availableIntentions.find { it.text == intentionText })
         }
     }
-
-    override fun createManifest() {
-        myFixture.copyFileToProject("idea/testData/android/AndroidManifest.xml", SdkConstants.FN_ANDROID_MANIFEST_XML)
-    }
-
-    override fun getTestDataPath() = KotlinTestUtils.getHomeDirectory()
 }

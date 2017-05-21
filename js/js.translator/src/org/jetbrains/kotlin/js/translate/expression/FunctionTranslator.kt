@@ -22,13 +22,18 @@ import org.jetbrains.kotlin.descriptors.PropertyAccessorDescriptor
 import org.jetbrains.kotlin.js.backend.ast.JsExpression
 import org.jetbrains.kotlin.js.backend.ast.JsFunction
 import org.jetbrains.kotlin.js.backend.ast.JsParameter
+import org.jetbrains.kotlin.js.backend.ast.JsScope
+import org.jetbrains.kotlin.js.backend.ast.metadata.descriptor
 import org.jetbrains.kotlin.js.backend.ast.metadata.functionDescriptor
 import org.jetbrains.kotlin.js.backend.ast.metadata.hasDefaultValue
+import org.jetbrains.kotlin.js.config.JsConfig
 import org.jetbrains.kotlin.js.translate.context.Namer
 import org.jetbrains.kotlin.js.translate.context.TranslationContext
 import org.jetbrains.kotlin.js.translate.reference.CallExpressionTranslator.shouldBeInlined
 import org.jetbrains.kotlin.js.translate.utils.BindingUtils
 import org.jetbrains.kotlin.js.translate.utils.FunctionBodyTranslator.translateFunctionBody
+import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
+import org.jetbrains.kotlin.js.translate.utils.requiresStateMachineTransformation
 import org.jetbrains.kotlin.psi.KtDeclarationWithBody
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasDefaultValue
@@ -46,26 +51,35 @@ fun TranslationContext.translateAndAliasParameters(
             targetList += JsParameter(paramNameForType)
 
             val suggestedName = Namer.isInstanceSuggestedName(type)
-            val paramName = scope().declareTemporaryName(suggestedName)
+            val paramName = JsScope.declareTemporaryName(suggestedName)
             targetList += JsParameter(paramName)
             aliases[type] = paramName.makeRef()
         }
     }
 
     if (descriptor.requiresExtensionReceiverParameter) {
-        val receiverParameterName = scope().declareTemporaryName(Namer.getReceiverParameterName())
+        val receiverParameterName = JsScope.declareTemporaryName(Namer.getReceiverParameterName())
         aliases[descriptor.extensionReceiverParameter!!] = receiverParameterName.makeRef()
         targetList += JsParameter(receiverParameterName)
     }
 
     for (valueParameter in descriptor.valueParameters) {
-        targetList += JsParameter(getNameForDescriptor(valueParameter)).apply { hasDefaultValue = valueParameter.hasDefaultValue() }
+        val name = getNameForDescriptor(valueParameter)
+        val tmpName = JsScope.declareTemporaryName(name.ident).also { it.descriptor = valueParameter }
+        aliases[valueParameter] = JsAstUtils.pureFqn(tmpName, null)
+        targetList += JsParameter(tmpName).apply { hasDefaultValue = valueParameter.hasDefaultValue() }
     }
 
     val continuationDescriptor = continuationParameterDescriptor
     if (continuationDescriptor != null) {
         val jsParameter = JsParameter(getNameForDescriptor(continuationDescriptor))
         targetList += jsParameter
+        aliases[continuationDescriptor] = if (!descriptor.requiresStateMachineTransformation(this)) {
+            JsAstUtils.pureFqn(jsParameter.name, null)
+        }
+        else {
+            JsAstUtils.stateMachineReceiver()
+        }
     }
 
     return this.innerContextWithDescriptorsAliased(aliases)
@@ -87,9 +101,9 @@ fun TranslationContext.translateFunction(declaration: KtDeclarationWithBody, fun
     function.functionDescriptor = descriptor
 }
 
-fun TranslationContext.wrapWithInlineMetadata(function: JsFunction, descriptor: FunctionDescriptor): JsExpression {
+fun TranslationContext.wrapWithInlineMetadata(function: JsFunction, descriptor: FunctionDescriptor, config: JsConfig): JsExpression {
     return if (shouldBeInlined(descriptor, this) && descriptor.isEffectivelyPublicApi) {
-        val metadata = InlineMetadata.compose(function, descriptor)
+        val metadata = InlineMetadata.compose(function, descriptor, config)
         metadata.functionWithMetadata
     }
     else {

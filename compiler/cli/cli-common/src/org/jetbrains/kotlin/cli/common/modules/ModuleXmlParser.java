@@ -35,7 +35,6 @@ import javax.xml.parsers.SAXParserFactory;
 import java.io.*;
 import java.util.List;
 
-import static org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation.NO_LOCATION;
 import static org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.ERROR;
 
 public class ModuleXmlParser {
@@ -75,7 +74,7 @@ public class ModuleXmlParser {
     }
 
     private final MessageCollector messageCollector;
-    private final List<Module> modules = new SmartList<Module>();
+    private final List<Module> modules = new SmartList<>();
     private DefaultHandler currentState;
 
     private ModuleXmlParser(@NotNull MessageCollector messageCollector) {
@@ -99,14 +98,11 @@ public class ModuleXmlParser {
             });
             return new ModuleScriptData(modules);
         }
-        catch (ParserConfigurationException e) {
+        catch (ParserConfigurationException | IOException e) {
             MessageCollectorUtil.reportException(messageCollector, e);
         }
         catch (SAXException e) {
-            messageCollector.report(ERROR, OutputMessageUtil.renderException(e), NO_LOCATION);
-        }
-        catch (IOException e) {
-            MessageCollectorUtil.reportException(messageCollector, e);
+            messageCollector.report(ERROR, OutputMessageUtil.renderException(e), null);
         }
         return ModuleScriptData.EMPTY;
     }

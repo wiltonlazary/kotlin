@@ -47,7 +47,6 @@ import org.jetbrains.kotlin.incremental.CacheVersion
 import org.jetbrains.kotlin.incremental.LookupSymbol
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.incremental.testingUtils.*
-import org.jetbrains.kotlin.jps.disableJava6FileManager
 import org.jetbrains.kotlin.jps.incremental.JpsLookupStorageProvider
 import org.jetbrains.kotlin.jps.incremental.KotlinDataContainerTarget
 import org.jetbrains.kotlin.jps.incremental.getKotlinCache
@@ -64,10 +63,6 @@ abstract class AbstractIncrementalJpsTest(
         private val allowNoBuildLogFileInTestData: Boolean = false
 ) : BaseKotlinJpsBuildTestCase() {
     companion object {
-        init {
-            disableJava6FileManager()
-        }
-
         private val COMPILATION_FAILED = "COMPILATION FAILED"
 
         // change to "/tmp" or anything when default is too long (for easier debugging)
@@ -91,7 +86,7 @@ abstract class AbstractIncrementalJpsTest(
     private fun enableDebugLogging() {
         com.intellij.openapi.diagnostic.Logger.setFactory(TestLoggerFactory::class.java)
         TestLoggerFactory.dumpLogToStdout("")
-        TestLoggerFactory.enableDebugLogging(myTestRootDisposable, "#org")
+        TestLoggerFactory.enableDebugLogging(testRootDisposable, "#org")
 
         val console = ConsoleAppender()
         console.layout = PatternLayout("%d [%p|%c|%C{1}] %m%n")
@@ -141,7 +136,7 @@ abstract class AbstractIncrementalJpsTest(
     protected open fun checkLookups(@Suppress("UNUSED_PARAMETER") lookupTracker: LookupTracker, compiledFiles: Set<File>) {
     }
 
-    private fun build(scope: CompileScopeTestBuilder = CompileScopeTestBuilder.make().all(), checkLookups: Boolean = true): MakeResult {
+    private fun build(scope: CompileScopeTestBuilder = CompileScopeTestBuilder.make().allModules(), checkLookups: Boolean = true): MakeResult {
         val workDirPath = FileUtil.toSystemIndependentName(workDir.absolutePath)
         val logger = MyLogger(workDirPath)
         projectDescriptor = createProjectDescriptor(BuildLoggingManager(logger))
@@ -268,7 +263,7 @@ abstract class AbstractIncrementalJpsTest(
     protected open fun doTest(testDataPath: String) {
         testDataDir = File(testDataPath)
         workDir = FileUtilRt.createTempDirectory(TEMP_DIRECTORY_TO_USE, "jps-build", null)
-        Disposer.register(myTestRootDisposable, Disposable { FileUtilRt.delete(workDir) })
+        Disposer.register(testRootDisposable, Disposable { FileUtilRt.delete(workDir) })
 
         val moduleNames = configureModules()
         initialMake()

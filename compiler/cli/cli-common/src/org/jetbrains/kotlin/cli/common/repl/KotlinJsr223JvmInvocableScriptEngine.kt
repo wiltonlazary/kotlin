@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package org.jetbrains.kotlin.cli.common.repl
 
-import org.jetbrains.kotlin.utils.tryCreateCallableMapping
+import org.jetbrains.kotlin.script.tryCreateCallableMapping
 import java.lang.reflect.Proxy
 import javax.script.Invocable
 import javax.script.ScriptException
@@ -35,7 +35,7 @@ interface KotlinJsr223JvmInvocableScriptEngine : Invocable {
         val evalState = state.asState(GenericReplEvaluatorState::class.java)
         return evalState.history.map { it.item }.filter { it.instance != null }.reversed().ensureNotEmpty("no script ").let { history ->
             if (receiverInstance != null) {
-                val receiverKlass = receiverClass ?: receiverInstance.javaClass.kotlin
+                val receiverKlass = receiverClass ?: receiverInstance::class.java.kotlin
                 val receiverInHistory = history.find { it.instance == receiverInstance } ?:
                                         EvalClassWithInstanceAndLoader(receiverKlass, receiverInstance, receiverKlass.java.classLoader, history.first().invokeWrapper)
                 listOf(receiverInHistory) + history.filterNot { it == receiverInHistory }
@@ -54,7 +54,7 @@ interface KotlinJsr223JvmInvocableScriptEngine : Invocable {
     override fun invokeMethod(thiz: Any?, name: String?, vararg args: Any?): Any? {
         if (name == null) throw java.lang.NullPointerException("method name cannot be null")
         if (thiz == null) throw IllegalArgumentException("cannot invoke method on the null object")
-        return invokeImpl(prioritizedHistory(thiz.javaClass.kotlin, thiz), name, args)
+        return invokeImpl(prioritizedHistory(thiz::class.java.kotlin, thiz), name, args)
     }
 
     private fun invokeImpl(prioritizedCallOrder: List<EvalClassWithInstanceAndLoader>, name: String, args: Array<out Any?>): Any? {

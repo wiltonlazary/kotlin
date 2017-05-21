@@ -42,6 +42,7 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeConstructorSubstitution
+import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
 import org.jetbrains.kotlin.utils.addIfNotNull
 import java.util.*
@@ -122,7 +123,7 @@ object SuperClassNotInitialized : KotlinIntentionActionsFactory() {
                     val offset = newSpecifier.valueArgumentList!!.leftParenthesis!!.endOffset
                     editor.moveCaret(offset)
                     if (!ApplicationManager.getApplication().isUnitTestMode) {
-                        ShowParameterInfoHandler.invoke(project, editor, file, offset - 1, null)
+                        ShowParameterInfoHandler.invoke(project, editor, file, offset - 1, null, true)
                     }
                 }
             }
@@ -152,7 +153,7 @@ object SuperClassNotInitialized : KotlinIntentionActionsFactory() {
                 if (superParameters.any { it.type.isError }) return null
 
                 val argumentText = StringBuilder()
-                val oldParameters = classDeclaration.getPrimaryConstructorParameters()
+                val oldParameters = classDeclaration.primaryConstructorParameters
                 val parametersToAdd = ArrayList<KtParameter>()
                 for (parameter in superParameters) {
                     val nameRendered = parameter.name.render()

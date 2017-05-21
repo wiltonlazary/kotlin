@@ -50,7 +50,7 @@ class KtClassOrObjectTreeNode(project: Project?, ktClassOrObject: KtClassOrObjec
     private fun update(node: AbstractTreeNode<*>) {
         val project = project
         if (project != null) {
-            ProjectView.getInstance(project).currentProjectViewPane.treeBuilder.addSubtreeToUpdateByElement(node)
+            ProjectView.getInstance(project).currentProjectViewPane?.treeBuilder?.addSubtreeToUpdateByElement(node)
         }
     }
 
@@ -60,7 +60,7 @@ class KtClassOrObjectTreeNode(project: Project?, ktClassOrObject: KtClassOrObjec
             data.presentableText = classOrObject.name
 
             val parent = parent
-            if (KotlinIconProvider.getMainClass(classOrObject.getContainingKtFile()) != null) {
+            if (KotlinIconProvider.getMainClass(classOrObject.containingKtFile) != null) {
                 if (parent is KtFileTreeNode) {
                     update(parent.getParent())
                 }

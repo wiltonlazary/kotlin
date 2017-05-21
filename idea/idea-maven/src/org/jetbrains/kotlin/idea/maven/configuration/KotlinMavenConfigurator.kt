@@ -68,7 +68,7 @@ abstract class KotlinMavenConfigurator
 
     private fun checkKotlinPlugin(module: Module): ConfigureKotlinStatus {
         val psi = findModulePomFile(module) as? XmlFile ?: return ConfigureKotlinStatus.BROKEN
-        val pom = PomFile(psi)
+        val pom = PomFile.forFileOrNull(psi) ?: return ConfigureKotlinStatus.NON_APPLICABLE
 
         if (hasKotlinPlugin(pom)) {
             return ConfigureKotlinStatus.CONFIGURED
@@ -97,7 +97,7 @@ abstract class KotlinMavenConfigurator
     }
 
     override fun configure(project: Project, excludeModules: Collection<Module>) {
-        val dialog = ConfigureDialogWithModulesAndVersion(project, this, excludeModules)
+        val dialog = ConfigureDialogWithModulesAndVersion(project, this, excludeModules, getMinimumSupportedVersion())
 
         dialog.show()
         if (!dialog.isOK) return
@@ -118,11 +118,13 @@ abstract class KotlinMavenConfigurator
         }
     }
 
+    protected open fun getMinimumSupportedVersion() = "1.0.0"
+
     protected abstract fun isKotlinModule(module: Module): Boolean
     protected abstract fun isRelevantGoal(goalName: String): Boolean
 
     protected abstract fun createExecutions(pomFile: PomFile, kotlinPlugin: MavenDomPlugin, module: Module)
-    protected abstract fun getStdlibArtifactId(module: Module): String
+    protected abstract fun getStdlibArtifactId(module: Module, version: String): String
 
     fun changePomFile(
             module: Module,
@@ -137,10 +139,10 @@ abstract class KotlinMavenConfigurator
             return
         }
 
-        val pom = PomFile(file as XmlFile)
+        val pom = PomFile.forFileOrNull(file as XmlFile) ?: return
         pom.addProperty(KOTLIN_VERSION_PROPERTY, version)
 
-        pom.addDependency(MavenId(GROUP_ID, getStdlibArtifactId(module), "\${$KOTLIN_VERSION_PROPERTY}"), MavenArtifactScope.COMPILE, null, false, null)
+        pom.addDependency(MavenId(GROUP_ID, getStdlibArtifactId(module, version), "\${$KOTLIN_VERSION_PROPERTY}"), MavenArtifactScope.COMPILE, null, false, null)
         if (testArtifactId != null) {
             pom.addDependency(MavenId(GROUP_ID, testArtifactId, "\${$KOTLIN_VERSION_PROPERTY}"), MavenArtifactScope.TEST, null, false, null)
         }
@@ -149,25 +151,23 @@ abstract class KotlinMavenConfigurator
             pom.addDependency(MavenId("junit", "junit", "4.12"), MavenArtifactScope.TEST, null, false, null)
         }
 
-        if (isSnapshot(version)) {
-            pom.addLibraryRepository(SNAPSHOT_REPOSITORY)
-            pom.addPluginRepository(SNAPSHOT_REPOSITORY)
-        }
-        else if (useEap11Repository(version)) {
-            pom.addLibraryRepository(EAP_11_REPOSITORY)
-            pom.addPluginRepository(EAP_11_REPOSITORY)
-        }
-        else if (isEap(version)) {
-            pom.addLibraryRepository(EAP_REPOSITORY)
-            pom.addPluginRepository(EAP_REPOSITORY)
+        val repositoryDescription = getRepositoryForVersion(version)
+        if (repositoryDescription != null) {
+            pom.addLibraryRepository(repositoryDescription)
+            pom.addPluginRepository(repositoryDescription)
         }
 
         val plugin = pom.addPlugin(MavenId(GROUP_ID, MAVEN_PLUGIN_ID, "\${$KOTLIN_VERSION_PROPERTY}"))
         createExecutions(pom, plugin, module)
 
+        configurePlugin(pom, plugin, module, version)
+
         CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement<PsiFile>(file)
 
         collector.addMessage(virtualFile.path + " was modified")
+    }
+
+    protected open fun configurePlugin(pom: PomFile, plugin: MavenDomPlugin, module: Module, version: String) {
     }
 
     protected fun createExecution(
@@ -196,7 +196,7 @@ abstract class KotlinMavenConfigurator
             return !FileTypeIndex.getFiles(JavaFileType.INSTANCE, GlobalSearchScope.moduleScope(module)).isEmpty()
         }
 
-        private fun findModulePomFile(module: Module): PsiFile? {
+        fun findModulePomFile(module: Module): PsiFile? {
             val files = MavenProjectsManager.getInstance(module.project).projectsFiles
             for (file in files) {
                 val fileModule = ModuleUtilCore.findModuleForFile(file, module.project)

@@ -85,7 +85,7 @@ public class OperatorConventions {
             ImmutableSet.of(KtTokens.EQEQEQ, KtTokens.EXCLEQEQEQ);
 
     public static final ImmutableSet<KtSingleValueToken> IN_OPERATIONS =
-            ImmutableSet.<KtSingleValueToken>of(KtTokens.IN_KEYWORD, KtTokens.NOT_IN);
+            ImmutableSet.of(KtTokens.IN_KEYWORD, KtTokens.NOT_IN);
 
     public static final ImmutableBiMap<KtSingleValueToken, Name> ASSIGNMENT_OPERATIONS = ImmutableBiMap.<KtSingleValueToken, Name>builder()
             .put(KtTokens.MULTEQ, TIMES_ASSIGN)
@@ -139,6 +139,20 @@ public class OperatorConventions {
         if (COMPARISON_OPERATIONS.contains(token)) return COMPARE_TO;
         if (EQUALS_OPERATIONS.contains(token)) return EQUALS;
         if (IN_OPERATIONS.contains(token)) return CONTAINS;
+        return null;
+    }
+
+    @Nullable
+    public static KtToken getOperationSymbolForName(@NotNull Name name) {
+        if (!isConventionName(name)) return null;
+
+        KtToken token;
+        token = BINARY_OPERATION_NAMES.inverse().get(name);
+        if (token != null) return token;
+        token = UNARY_OPERATION_NAMES.inverse().get(name);
+        if (token != null) return token;
+        token = ASSIGNMENT_OPERATIONS.inverse().get(name);
+        if (token != null) return token;
         return null;
     }
 

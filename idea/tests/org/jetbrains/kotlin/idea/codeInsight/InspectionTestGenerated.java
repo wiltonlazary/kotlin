@@ -173,6 +173,12 @@ public class InspectionTestGenerated extends AbstractInspectionTest {
             doTest(fileName);
         }
 
+        @TestMetadata("copyWithoutNamedArguments/inspectionData/inspections.test")
+        public void testCopyWithoutNamedArguments_inspectionData_Inspections_test() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/inspections/copyWithoutNamedArguments/inspectionData/inspections.test");
+            doTest(fileName);
+        }
+
         @TestMetadata("dataClassPrivateConstructor/inspectionData/inspections.test")
         public void testDataClassPrivateConstructor_inspectionData_Inspections_test() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/inspections/dataClassPrivateConstructor/inspectionData/inspections.test");
@@ -224,6 +230,12 @@ public class InspectionTestGenerated extends AbstractInspectionTest {
         @TestMetadata("protectedInFinal/inspectionData/inspections.test")
         public void testProtectedInFinal_inspectionData_Inspections_test() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/inspections/protectedInFinal/inspectionData/inspections.test");
+            doTest(fileName);
+        }
+
+        @TestMetadata("recursivePropertyAccessor/inspectionData/inspections.test")
+        public void testRecursivePropertyAccessor_inspectionData_Inspections_test() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/inspections/recursivePropertyAccessor/inspectionData/inspections.test");
             doTest(fileName);
         }
 
@@ -308,6 +320,12 @@ public class InspectionTestGenerated extends AbstractInspectionTest {
         @TestMetadata("unusedImport/inspectionData/inspections.test")
         public void testUnusedImport_inspectionData_Inspections_test() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/inspections/unusedImport/inspectionData/inspections.test");
+            doTest(fileName);
+        }
+
+        @TestMetadata("unusedLambdaExpressionBody/inspectionData/inspections.test")
+        public void testUnusedLambdaExpressionBody_inspectionData_Inspections_test() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/inspections/unusedLambdaExpressionBody/inspectionData/inspections.test");
             doTest(fileName);
         }
 

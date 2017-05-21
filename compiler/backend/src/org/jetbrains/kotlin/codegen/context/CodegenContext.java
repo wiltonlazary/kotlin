@@ -16,7 +16,6 @@
 
 package org.jetbrains.kotlin.codegen.context;
 
-import kotlin.jvm.functions.Function0;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.ReadOnly;
@@ -38,7 +37,7 @@ import java.util.*;
 
 import static org.jetbrains.kotlin.codegen.AsmUtil.getVisibilityAccessFlag;
 import static org.jetbrains.kotlin.codegen.JvmCodegenUtil.isNonDefaultInterfaceMember;
-import static org.jetbrains.kotlin.descriptors.annotations.AnnotationUtilKt.isInlineOnlyOrReifiable;
+import static org.jetbrains.kotlin.descriptors.annotations.AnnotationUtilKt.isEffectivelyInlineOnly;
 import static org.jetbrains.org.objectweb.asm.Opcodes.ACC_PRIVATE;
 import static org.jetbrains.org.objectweb.asm.Opcodes.ACC_PROTECTED;
 
@@ -160,12 +159,7 @@ public abstract class CodegenContext<T extends DeclarationDescriptor> {
         this.closure = closure;
         this.thisDescriptor = thisDescriptor;
         this.enclosingLocalLookup = localLookup;
-        this.outerExpression = LockBasedStorageManager.NO_LOCKS.createNullableLazyValue(new Function0<StackValue.Field>() {
-            @Override
-            public StackValue.Field invoke() {
-                return computeOuterExpression();
-            }
-        });
+        this.outerExpression = LockBasedStorageManager.NO_LOCKS.createNullableLazyValue(this::computeOuterExpression);
 
         if (parentContext != null) {
             parentContext.addChild(this);
@@ -431,10 +425,10 @@ public abstract class CodegenContext<T extends DeclarationDescriptor> {
             boolean setterAccessorRequired
     ) {
         if (accessors == null) {
-            accessors = new LinkedHashMap<AccessorKey, AccessorForCallableDescriptor<?>>();
+            accessors = new LinkedHashMap<>();
         }
         if (propertyAccessorFactories == null) {
-            propertyAccessorFactories = new LinkedHashMap<AccessorKey, AccessorForPropertyDescriptorFactory>();
+            propertyAccessorFactories = new LinkedHashMap<>();
         }
 
         D descriptor = (D) possiblySubstitutedDescriptor.getOriginal();
@@ -646,7 +640,7 @@ public abstract class CodegenContext<T extends DeclarationDescriptor> {
             boolean withinInline,
             boolean isSuperCall
     ) {
-        if (isInlineOnlyOrReifiable(unwrappedDescriptor)) return false;
+        if (isEffectivelyInlineOnly(unwrappedDescriptor)) return false;
 
         return isSuperCall && withinInline ||
                (accessFlag & ACC_PRIVATE) != 0 ||
@@ -667,7 +661,7 @@ public abstract class CodegenContext<T extends DeclarationDescriptor> {
     private void addChild(@NotNull CodegenContext child) {
         if (shouldAddChild(child.contextDescriptor)) {
             if (childContexts == null) {
-                childContexts = new HashMap<DeclarationDescriptor, CodegenContext>();
+                childContexts = new HashMap<>();
             }
             DeclarationDescriptor childContextDescriptor = child.getContextDescriptor();
             childContexts.put(childContextDescriptor, child);

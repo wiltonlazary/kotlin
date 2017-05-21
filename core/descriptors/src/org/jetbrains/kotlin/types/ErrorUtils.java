@@ -43,19 +43,12 @@ import java.util.Set;
 
 import static java.util.Collections.emptySet;
 import static kotlin.collections.CollectionsKt.emptyList;
-import static kotlin.collections.CollectionsKt.joinToString;
 
 public class ErrorUtils {
-
     private static final ModuleDescriptor ERROR_MODULE;
+
     static {
         ERROR_MODULE = new ModuleDescriptor() {
-            @NotNull
-            @Override
-            public SourceKind getSourceKind() {
-                return SourceKind.NONE;
-            }
-
             @Nullable
             @Override
             public <T> T getCapability(@NotNull Capability<T> capability) {
@@ -105,13 +98,6 @@ public class ErrorUtils {
 
             @Override
             public void acceptVoid(DeclarationDescriptorVisitor<Void, Void> visitor) {
-
-            }
-
-            @NotNull
-            @Override
-            public ModuleDescriptor substitute(@NotNull TypeSubstitutor substitutor) {
-                return this;
             }
 
             @Override
@@ -309,7 +295,7 @@ public class ErrorUtils {
                                         Visibilities.INTERNAL);
             MemberScope memberScope = createErrorScope(getName().asString());
             errorConstructor.setReturnType(
-                    new ErrorTypeImpl(
+                    new ErrorType(
                             createErrorTypeConstructorWithCustomDebugName("<ERROR>", this),
                             memberScope
                     )
@@ -417,12 +403,18 @@ public class ErrorUtils {
 
     @NotNull
     public static SimpleType createErrorTypeWithCustomConstructor(@NotNull String debugName, @NotNull TypeConstructor typeConstructor) {
-        return new ErrorTypeImpl(typeConstructor, createErrorScope(debugName));
+        return new ErrorType(typeConstructor, createErrorScope(debugName));
     }
 
     @NotNull
     public static SimpleType createErrorTypeWithArguments(@NotNull String debugMessage, @NotNull List<TypeProjection> arguments) {
-        return new ErrorTypeImpl(createErrorTypeConstructor(debugMessage), createErrorScope(debugMessage), arguments, false);
+        return new ErrorType(createErrorTypeConstructor(debugMessage), createErrorScope(debugMessage), arguments, false);
+    }
+
+    @NotNull
+    public static SimpleType createUnresolvedType(@NotNull String presentableName, @NotNull List<TypeProjection> arguments) {
+        return new UnresolvedType(presentableName, createErrorTypeConstructor(presentableName), createErrorScope(presentableName),
+                                  arguments, false);
     }
 
     @NotNull
@@ -483,7 +475,7 @@ public class ErrorUtils {
 
     public static boolean containsErrorType(@Nullable KotlinType type) {
         if (type == null) return false;
-        if (type.isError()) return true;
+        if (KotlinTypeKt.isError(type)) return true;
         for (TypeProjection projection : type.getArguments()) {
             if (!projection.isStarProjection() && containsErrorType(projection.getType())) return true;
         }
@@ -497,80 +489,6 @@ public class ErrorUtils {
 
     private static boolean isErrorClass(@Nullable DeclarationDescriptor candidate) {
         return candidate instanceof ErrorClassDescriptor;
-    }
-
-    private static class ErrorTypeImpl extends SimpleType {
-        private final TypeConstructor constructor;
-        private final MemberScope memberScope;
-        private final List<TypeProjection> arguments;
-        private final boolean nullability;
-
-        private ErrorTypeImpl(
-                @NotNull TypeConstructor constructor,
-                @NotNull MemberScope memberScope,
-                @NotNull List<TypeProjection> arguments,
-                boolean nullability
-        ) {
-            this.constructor = constructor;
-            this.memberScope = memberScope;
-            this.arguments = arguments;
-            this.nullability = nullability;
-        }
-
-        private ErrorTypeImpl(@NotNull TypeConstructor constructor, @NotNull MemberScope memberScope) {
-            this(constructor, memberScope, Collections.<TypeProjection>emptyList(), false);
-        }
-
-        @NotNull
-        @Override
-        public TypeConstructor getConstructor() {
-            return constructor;
-        }
-
-        @NotNull
-        @Override
-        public List<TypeProjection> getArguments() {
-            return arguments;
-        }
-
-        @Override
-        public boolean isMarkedNullable() {
-            return nullability;
-        }
-
-        @NotNull
-        @Override
-        public MemberScope getMemberScope() {
-            return memberScope;
-        }
-
-        @Override
-        public boolean isError() {
-            return true;
-        }
-
-        @NotNull
-        @Override
-        public Annotations getAnnotations() {
-            return Annotations.Companion.getEMPTY();
-        }
-
-        @Override
-        public String toString() {
-            return constructor.toString() + (arguments.isEmpty() ? "" : joinToString(arguments, ", ", "<", ">", -1, "...", null));
-        }
-
-        @NotNull
-        @Override
-        public SimpleType replaceAnnotations(@NotNull Annotations newAnnotations) {
-            return this;
-        }
-
-        @NotNull
-        @Override
-        public SimpleType makeNullableAsSpecified(boolean newNullability) {
-            return new ErrorTypeImpl(constructor, memberScope, arguments, newNullability);
-        }
     }
 
     @NotNull

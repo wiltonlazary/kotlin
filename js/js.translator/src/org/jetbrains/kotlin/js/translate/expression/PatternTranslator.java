@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,13 +34,13 @@ import org.jetbrains.kotlin.js.translate.context.TemporaryVariable;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.general.AbstractTranslator;
 import org.jetbrains.kotlin.js.translate.general.Translation;
+import org.jetbrains.kotlin.js.translate.intrinsic.functions.factories.ArrayFIF;
 import org.jetbrains.kotlin.js.translate.intrinsic.functions.factories.TopLevelFIF;
-import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils;
 import org.jetbrains.kotlin.js.translate.reference.ReferenceTranslator;
+import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils;
 import org.jetbrains.kotlin.js.translate.utils.BindingUtils;
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils;
 import org.jetbrains.kotlin.js.translate.utils.TranslationUtils;
-import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS;
 import org.jetbrains.kotlin.psi.KtExpression;
@@ -58,7 +58,7 @@ import static org.jetbrains.kotlin.js.descriptorUtils.DescriptorUtilsKt.getNameI
 import static org.jetbrains.kotlin.js.translate.utils.BindingUtils.getTypeByReference;
 import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.equality;
 import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.not;
-import static org.jetbrains.kotlin.psi.KtPsiUtil.findChildByType;
+import static org.jetbrains.kotlin.psi.KtPsiUtil.*;
 import static org.jetbrains.kotlin.types.TypeUtils.*;
 
 public final class PatternTranslator extends AbstractTranslator {
@@ -210,11 +210,19 @@ public final class PatternTranslator extends AbstractTranslator {
             return namer().isTypeOf(program().getStringLiteral("function"));
         }
 
-        if (isArray(type)) return Namer.IS_ARRAY_FUN_REF;
+        if (isArray(type)) {
+            if (ArrayFIF.typedArraysEnabled(context().getConfig())) {
+                return namer().isArray();
+            }
+            else {
+                return Namer.IS_ARRAY_FUN_REF;
+            }
 
-        if (TypePredicatesKt.getCHAR_SEQUENCE().apply(type)) return namer().isCharSequence();
+        }
 
-        if (TypePredicatesKt.getCOMPARABLE().apply(type)) return namer().isComparable();
+        if (TypePredicatesKt.getCHAR_SEQUENCE().test(type)) return namer().isCharSequence();
+
+        if (TypePredicatesKt.getCOMPARABLE().test(type)) return namer().isComparable();
 
         return null;
     }
@@ -223,28 +231,36 @@ public final class PatternTranslator extends AbstractTranslator {
     private JsExpression getIsTypeCheckCallableForPrimitiveBuiltin(@NotNull KotlinType type) {
         Name typeName = getNameIfStandardType(type);
 
-        if (NamePredicate.STRING.apply(typeName)) {
+        if (NamePredicate.STRING.test(typeName)) {
             return namer().isTypeOf(program().getStringLiteral("string"));
         }
 
-        if (NamePredicate.BOOLEAN.apply(typeName)) {
+        if (NamePredicate.BOOLEAN.test(typeName)) {
             return namer().isTypeOf(program().getStringLiteral("boolean"));
         }
 
-        if (NamePredicate.LONG.apply(typeName)) {
+        if (NamePredicate.LONG.test(typeName)) {
             return namer().isInstanceOf(Namer.kotlinLong());
         }
 
-        if (NamePredicate.NUMBER.apply(typeName)) {
+        if (NamePredicate.NUMBER.test(typeName)) {
             return namer().kotlin(Namer.IS_NUMBER);
         }
 
-        if (NamePredicate.CHAR.apply(typeName)) {
+        if (NamePredicate.CHAR.test(typeName)) {
             return namer().kotlin(Namer.IS_CHAR);
         }
 
-        if (NamePredicate.PRIMITIVE_NUMBERS_MAPPED_TO_PRIMITIVE_JS.apply(typeName)) {
+        if (NamePredicate.PRIMITIVE_NUMBERS_MAPPED_TO_PRIMITIVE_JS.test(typeName)) {
             return namer().isTypeOf(program().getStringLiteral("number"));
+        }
+
+        if (ArrayFIF.typedArraysEnabled(context().getConfig())) {
+            if (KotlinBuiltIns.isPrimitiveArray(type)) {
+                PrimitiveType arrayType = KotlinBuiltIns.getPrimitiveArrayElementType(type);
+                assert arrayType != null;
+                return namer().isPrimitiveArray(arrayType);
+            }
         }
 
         return null;
@@ -306,13 +322,5 @@ public final class PatternTranslator extends AbstractTranslator {
     @NotNull
     public JsExpression translateExpressionForExpressionPattern(@NotNull KtExpression patternExpression) {
         return Translation.translateAsExpression(patternExpression, context());
-    }
-
-    private static boolean isSafeCast(@NotNull KtBinaryExpressionWithTypeRHS expression) {
-        return expression.getOperationReference().getReferencedNameElementType() == KtTokens.AS_SAFE;
-    }
-
-    private static boolean isUnsafeCast(@NotNull KtBinaryExpressionWithTypeRHS expression) {
-        return expression.getOperationReference().getReferencedNameElementType() == KtTokens.AS_KEYWORD;
     }
 }

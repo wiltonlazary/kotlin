@@ -16,8 +16,8 @@
 
 package org.jetbrains.kotlin.descriptors
 
+import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.types.SimpleType
-import org.jetbrains.kotlin.types.TypeSubstitutor
 
 interface TypeAliasDescriptor : ClassifierDescriptorWithTypeParameters {
     /// Right-hand side of the type alias definition.
@@ -32,5 +32,5 @@ interface TypeAliasDescriptor : ClassifierDescriptorWithTypeParameters {
 
     override fun getOriginal(): TypeAliasDescriptor
 
-    override fun substitute(substitutor: TypeSubstitutor): TypeAliasDescriptor
+    val constructors: Collection<TypeAliasConstructorDescriptor>
 }

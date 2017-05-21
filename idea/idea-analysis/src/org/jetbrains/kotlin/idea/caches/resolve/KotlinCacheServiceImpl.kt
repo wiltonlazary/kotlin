@@ -32,6 +32,7 @@ import org.jetbrains.kotlin.analyzer.EmptyResolverForProject
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.caches.resolve.KotlinCacheService
 import org.jetbrains.kotlin.container.getService
+import org.jetbrains.kotlin.container.tryGetService
 import org.jetbrains.kotlin.context.GlobalContext
 import org.jetbrains.kotlin.context.GlobalContextImpl
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
@@ -55,7 +56,7 @@ internal val LOG = Logger.getInstance(KotlinCacheService::class.java)
 
 class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
     override fun getResolutionFacade(elements: List<KtElement>): ResolutionFacade {
-        return getFacadeToAnalyzeFiles(elements.map { it.getContainingKtFile() })
+        return getFacadeToAnalyzeFiles(elements.map { it.containingKtFile })
     }
 
     override fun getSuppressionCache(): KotlinSuppressCache = kotlinSuppressCache.value
@@ -164,7 +165,7 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
     }
 
     fun <T : Any> tryGetProjectService(platform: TargetPlatform, ideaModuleInfo: IdeaModuleInfo, serviceClass: Class<T>): T? {
-        return globalFacade(platform, ideaModuleInfo.sdk).tryGetResolverForModuleInfo(ideaModuleInfo)?.componentProvider?.getService(serviceClass)
+        return globalFacade(platform, ideaModuleInfo.sdk).tryGetResolverForModuleInfo(ideaModuleInfo)?.componentProvider?.tryGetService(serviceClass)
     }
 
     private fun globalFacade(platform: TargetPlatform, sdk: Sdk?) =
@@ -180,11 +181,20 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
     private fun createFacadeForSyntheticFiles(files: Set<KtFile>): ProjectResolutionFacade {
         // we assume that all files come from the same module
         val targetPlatform = files.map { TargetPlatformDetector.getPlatform(it) }.toSet().single()
-        val syntheticFileModule = files.map { it.getModuleInfo() }.toSet().single()
+        val syntheticFileModule = files.map(KtFile::getModuleInfo).toSet().single()
         val sdk = syntheticFileModule.sdk
-        val filesModificationTracker = ModificationTracker {
-            // TODO: Check getUserData(FILE_OUT_OF_BLOCK_MODIFICATION_COUNT) actually works
-            files.sumByLong { it.outOfBlockModificationCount + it.modificationStamp }
+        val filesModificationTracker: ModificationTracker
+        // File copies are created during completion and receive correct modification events through POM.
+        // Dummy files created e.g. by J2K do not receive events.
+        if (files.all { it.originalFile != it }) {
+            filesModificationTracker = ModificationTracker {
+                files.sumByLong { it.outOfBlockModificationCount }
+            }
+        }
+        else {
+            filesModificationTracker = ModificationTracker {
+                files.sumByLong { it.outOfBlockModificationCount + it.modificationStamp }
+            }
         }
         val dependenciesForSyntheticFileCache = listOf(PsiModificationTracker.OUT_OF_CODE_BLOCK_MODIFICATION_COUNT, filesModificationTracker)
         val debugName = "completion/highlighting in $syntheticFileModule for files ${files.joinToString { it.name }} for platform $targetPlatform"
@@ -219,14 +229,28 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
                 )
             }
 
-            syntheticFileModule is ScriptDependenciesModuleInfo -> {
-                createFacadeForScriptDependencies(syntheticFileModule, files)
-            }
             syntheticFileModule is ScriptModuleInfo -> {
                 val facadeForScriptDependencies = getFacadeForScriptDependencies(syntheticFileModule)
                 val globalContext = facadeForScriptDependencies.globalContext.contextWithNewLockAndCompositeExceptionTracker()
                 ProjectResolutionFacade(
                         "facadeForSynthetic in ScriptModuleInfo",
+                        project, globalContext,
+                        makeGlobalResolveSessionProvider(
+                                reuseDataFrom = facadeForScriptDependencies,
+                                allModules = syntheticFileModule.dependencies(),
+                                moduleFilter = { it == syntheticFileModule }
+                        )
+                )
+            }
+            syntheticFileModule is ScriptDependenciesModuleInfo -> {
+                createFacadeForScriptDependencies(syntheticFileModule, files)
+            }
+            syntheticFileModule is ScriptDependenciesSourceModuleInfo -> {
+                // TODO: can be optimized by caching facadeForScriptDependencies
+                val facadeForScriptDependencies = createFacadeForScriptDependencies(syntheticFileModule.binariesModuleInfo, files)
+                val globalContext = facadeForScriptDependencies.globalContext.contextWithNewLockAndCompositeExceptionTracker()
+                ProjectResolutionFacade(
+                        "facadeForSynthetic in ScriptDependenciesSourceModuleInfo",
                         project, globalContext,
                         makeGlobalResolveSessionProvider(
                                 reuseDataFrom = facadeForScriptDependencies,
@@ -262,7 +286,7 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
                 )
             }
 
-            else -> throw IllegalStateException("Unknown IdeaModuleInfo ${syntheticFileModule.javaClass}")
+            else -> throw IllegalStateException("Unknown IdeaModuleInfo ${syntheticFileModule::class.java}")
         }
     }
 
@@ -350,8 +374,8 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
 
     private fun KtCodeFragment.getContextFile(): KtFile? {
         val contextElement = context ?: return null
-        val contextFile = (contextElement as? KtElement)?.getContainingKtFile()
-                          ?: throw AssertionError("Analyzing kotlin code fragment of type $javaClass with java context of type ${contextElement.javaClass}")
+        val contextFile = (contextElement as? KtElement)?.containingKtFile
+                          ?: throw AssertionError("Analyzing kotlin code fragment of type ${this::class.java} with java context of type ${contextElement::class.java}")
         return if (contextFile is KtCodeFragment) contextFile.getContextFile() else contextFile
     }
 }

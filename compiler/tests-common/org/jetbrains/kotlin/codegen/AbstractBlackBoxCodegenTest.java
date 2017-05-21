@@ -16,129 +16,78 @@
 
 package org.jetbrains.kotlin.codegen;
 
-import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.util.Processor;
-import kotlin.Unit;
 import kotlin.io.FilesKt;
-import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.fileClasses.JvmFileClassUtil;
-import org.jetbrains.kotlin.load.java.JvmAbi;
 import org.jetbrains.kotlin.psi.KtDeclaration;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.psi.KtNamedFunction;
 import org.jetbrains.kotlin.psi.KtProperty;
-import org.jetbrains.kotlin.resolve.jvm.extensions.AnalysisHandlerExtension;
-import org.jetbrains.kotlin.resolve.jvm.extensions.PartialAnalysisHandlerExtension;
-import org.jetbrains.kotlin.test.ConfigurationKind;
 import org.jetbrains.kotlin.test.InTextDirectivesUtils;
-import org.jetbrains.kotlin.test.TestJdkKind;
 import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
 
 import java.io.File;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.List;
 
-public abstract class AbstractBlackBoxCodegenTest extends CodegenTestCase {
-    // Set to 'true' to speed up black box tests locally
-    private static final boolean SKIP_LIGHT_ANALYSIS_MODE_TESTS = false;
+import static org.jetbrains.kotlin.codegen.TestUtilsKt.*;
+import static org.jetbrains.kotlin.test.KotlinTestUtils.assertEqualsToFile;
 
-    private boolean addRuntime = false;
-    private boolean addReflect = false;
+public abstract class AbstractBlackBoxCodegenTest extends CodegenTestCase {
 
     @Override
     protected void doMultiFileTest(@NotNull File wholeFile, @NotNull List<TestFile> files, @Nullable File javaFilesDir) throws Exception {
-        TestJdkKind jdkKind = getJdkKind(files);
-
-        List<String> javacOptions = new ArrayList<String>(0);
-        for (TestFile file : files) {
-            if (InTextDirectivesUtils.isDirectiveDefined(file.content, "WITH_RUNTIME")) {
-                addRuntime = true;
-            }
-            if (InTextDirectivesUtils.isDirectiveDefined(file.content, "WITH_REFLECT")) {
-                addReflect = true;
-            }
-
-            javacOptions.addAll(InTextDirectivesUtils.findListWithPrefixes(file.content, "// JAVAC_OPTIONS:"));
-        }
-
-        configurationKind =
-                addReflect ? ConfigurationKind.ALL :
-                addRuntime ? ConfigurationKind.NO_KOTLIN_REFLECT :
-                ConfigurationKind.JDK_ONLY;
-
         try {
-            compileAndRun(files, javaFilesDir, jdkKind, javacOptions);
+            compile(files, javaFilesDir);
+            blackBox();
         }
-        catch (Throwable boxError) {
-            // Even if black box fails, run light analysis mode test to generate the .txt file
+        catch (Throwable t) {
             try {
-                doLightAnalysisModeTest(wholeFile, files, javaFilesDir);
+                // To create .txt file in case of failure
+                doBytecodeListingTest(wholeFile);
             }
             catch (Throwable ignored) {
             }
 
-            throw ExceptionUtilsKt.rethrow(boxError);
+            throw t;
         }
 
-        doLightAnalysisModeTest(wholeFile, files, javaFilesDir);
+        doBytecodeListingTest(wholeFile);
     }
 
-    private void doLightAnalysisModeTest(@NotNull File wholeFile, @NotNull List<TestFile> files, @Nullable File javaFilesDir) {
-        if (SKIP_LIGHT_ANALYSIS_MODE_TESTS) return;
+    private void doBytecodeListingTest(@NotNull File wholeFile) throws Exception {
+        if (!InTextDirectivesUtils.isDirectiveDefined(FileUtil.loadFile(wholeFile), "CHECK_BYTECODE_LISTING")) return;
 
-        File boxTestsDir = new File("compiler/testData/codegen/box");
-        String relativePath = FilesKt.toRelativeString(wholeFile, boxTestsDir);
-        // Do nothing if this test is not under codegen/box
-        if (relativePath.startsWith("..")) return;
+        File expectedFile = new File(wholeFile.getParent(), FilesKt.getNameWithoutExtension(wholeFile) + ".txt");
+        String text =
+                BytecodeListingTextCollectingVisitor.Companion.getText(
+                        classFileFactory,
+                        new BytecodeListingTextCollectingVisitor.Filter() {
+                            @Override
+                            public boolean shouldWriteClass(int access, @NotNull String name) {
+                                return !name.startsWith("helpers/");
+                            }
 
-        String outDir = new File("compiler/testData/codegen/light-analysis", relativePath).getParent();
-        File txtFile = new File(outDir, FilesKt.getNameWithoutExtension(wholeFile) + ".txt");
-        AbstractBytecodeListingTest.doTest(
-                getTestRootDisposable(), files, javaFilesDir, txtFile, ClassBuilderFactories.TEST_KAPT3,
-                new Function1<KotlinCoreEnvironment, Unit>() {
-                    @Override
-                    public Unit invoke(KotlinCoreEnvironment environment) {
-                        AnalysisHandlerExtension.Companion.registerExtension(
-                                environment.getProject(), new PartialAnalysisHandlerExtension()
-                        );
-                        return Unit.INSTANCE;
-                    }
-                }
-        );
-    }
+                            @Override
+                            public boolean shouldWriteMethod(int access, @NotNull String name, @NotNull String desc) {
+                                return true;
+                            }
 
-    @SuppressWarnings("WeakerAccess")
-    protected void compileAndRun(
-            @NotNull List<TestFile> files,
-            @Nullable File javaSourceDir,
-            @NotNull TestJdkKind jdkKind,
-            @NotNull List<String> javacOptions
-    ) {
-        compile(files, javaSourceDir, configurationKind, jdkKind, javacOptions);
+                            @Override
+                            public boolean shouldWriteField(int access, @NotNull String name, @NotNull String desc) {
+                                return true;
+                            }
 
-        blackBox();
-    }
+                            @Override
+                            public boolean shouldWriteInnerClass(@NotNull String name) {
+                                return true;
+                            }
+                        }
+                );
 
-    @NotNull
-    protected static List<String> findJavaSourcesInDirectory(@NotNull File directory) {
-        final List<String> javaFilePaths = new ArrayList<String>(1);
-
-        FileUtil.processFilesRecursively(directory, new Processor<File>() {
-            @Override
-            public boolean process(File file) {
-                if (file.isFile() && FilesKt.getExtension(file).equals(JavaFileType.DEFAULT_EXTENSION)) {
-                    javaFilePaths.add(file.getPath());
-                }
-                return true;
-            }
-        });
-
-        return javaFilePaths;
+        assertEqualsToFile(expectedFile, text);
     }
 
     protected void blackBox() {
@@ -151,8 +100,7 @@ public abstract class AbstractBlackBoxCodegenTest extends CodegenTestCase {
             try {
                 Method method = getBoxMethodOrNull(aClass);
                 if (method != null) {
-                    String r = (String) method.invoke(null);
-                    assertEquals("OK", r);
+                    callBoxMethodAndCheckResult(generatedClassLoader, aClass, method);
                     return;
                 }
             }
@@ -164,21 +112,9 @@ public abstract class AbstractBlackBoxCodegenTest extends CodegenTestCase {
                 clearReflectionCache(generatedClassLoader);
             }
         }
+        fail("Can't find box method!");
     }
 
-    private static void clearReflectionCache(@NotNull ClassLoader classLoader) {
-        try {
-            Class<?> klass = classLoader.loadClass(JvmAbi.REFLECTION_FACTORY_IMPL.asSingleFqName().asString());
-            Method method = klass.getDeclaredMethod("clearCaches");
-            method.invoke(null);
-        }
-        catch (ClassNotFoundException e) {
-            // This is OK for a test without kotlin-reflect in the dependencies
-        }
-        catch (Exception e) {
-            throw ExceptionUtilsKt.rethrow(e);
-        }
-    }
 
     @Nullable
     private static String getFacadeFqName(@NotNull KtFile firstFile) {
@@ -188,24 +124,5 @@ public abstract class AbstractBlackBoxCodegenTest extends CodegenTestCase {
             }
         }
         return null;
-    }
-
-    private static Class<?> getGeneratedClass(GeneratedClassLoader generatedClassLoader, String className) {
-        try {
-            return generatedClassLoader.loadClass(className);
-        }
-        catch (ClassNotFoundException e) {
-            fail("No class file was generated for: " + className);
-        }
-        return null;
-    }
-
-    private static Method getBoxMethodOrNull(Class<?> aClass) {
-        try {
-            return aClass.getMethod("box");
-        }
-        catch (NoSuchMethodException e){
-            return null;
-        }
     }
 }

@@ -21,7 +21,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
-import org.jetbrains.kotlin.descriptors.impl.AnonymousFunctionDescriptor;
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor;
 import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor;
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation;
@@ -44,8 +43,6 @@ import java.util.*;
 
 import static org.jetbrains.kotlin.js.descriptorUtils.DescriptorUtilsKt.isCoroutineLambda;
 import static org.jetbrains.kotlin.js.translate.context.UsageTrackerKt.getNameForCapturedDescriptor;
-import static org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils.isLibraryObject;
-import static org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils.isNativeObject;
 import static org.jetbrains.kotlin.js.translate.utils.BindingUtils.getDescriptorForElement;
 
 /**
@@ -70,14 +67,14 @@ public class TranslationContext {
     private final VariableDescriptor continuationParameterDescriptor;
 
     @NotNull
-    public static TranslationContext rootContext(@NotNull StaticContext staticContext, @NotNull JsFunction rootFunction) {
-        JsBlock block = new JsBlock(staticContext.getTopLevelStatements());
-        DynamicContext rootDynamicContext = DynamicContext.rootContext(rootFunction.getScope(), block);
+    public static TranslationContext rootContext(@NotNull StaticContext staticContext) {
+        DynamicContext rootDynamicContext = DynamicContext.rootContext(
+                staticContext.getFragment().getScope(), staticContext.getFragment().getInitializerBlock());
         AliasingContext rootAliasingContext = AliasingContext.getCleanContext();
         return new TranslationContext(null, staticContext, rootDynamicContext, rootAliasingContext, null, null);
     }
 
-    private final Map<JsExpression, TemporaryConstVariable> expressionToTempConstVariableCache = new HashMap<JsExpression, TemporaryConstVariable>();
+    private final Map<JsExpression, TemporaryConstVariable> expressionToTempConstVariableCache = new HashMap<>();
 
     private TranslationContext(
             @Nullable TranslationContext parent,
@@ -109,7 +106,7 @@ public class TranslationContext {
         }
         if (declarationDescriptor instanceof FunctionDescriptor) {
             FunctionDescriptor function = (FunctionDescriptor) declarationDescriptor;
-            if (function.isSuspend() && !(function instanceof AnonymousFunctionDescriptor)) {
+            if (function.isSuspend()) {
                 ClassDescriptor continuationDescriptor =
                         DescriptorUtilKt.findContinuationClassDescriptor(getCurrentModule(), NoLookupLocation.FROM_BACKEND);
 
@@ -124,11 +121,6 @@ public class TranslationContext {
             }
         }
         return null;
-    }
-
-    @NotNull
-    public Collection<StaticContext.ImportedModule> getImportedModules() {
-        return staticContext.getImportedModules();
     }
 
     @Nullable
@@ -162,13 +154,13 @@ public class TranslationContext {
     @NotNull
     public TranslationContext newFunctionBodyWithUsageTracker(@NotNull JsFunction fun, @NotNull MemberDescriptor descriptor) {
         DynamicContext dynamicContext = DynamicContext.newContext(fun.getScope(), fun.getBody());
-        UsageTracker usageTracker = new UsageTracker(this.usageTracker, descriptor, fun.getScope());
+        UsageTracker usageTracker = new UsageTracker(this.usageTracker, descriptor);
         return new TranslationContext(this, this.staticContext, dynamicContext, this.aliasingContext.inner(), usageTracker, descriptor);
     }
 
     @NotNull
-    public TranslationContext innerWithUsageTracker(@NotNull JsScope scope, @NotNull MemberDescriptor descriptor) {
-        UsageTracker usageTracker = new UsageTracker(this.usageTracker, descriptor, scope);
+    public TranslationContext innerWithUsageTracker(@NotNull MemberDescriptor descriptor) {
+        UsageTracker usageTracker = new UsageTracker(this.usageTracker, descriptor);
         return new TranslationContext(this, staticContext, dynamicContext, aliasingContext.inner(), usageTracker, descriptor);
     }
 
@@ -281,10 +273,6 @@ public class TranslationContext {
 
     @NotNull
     public JsNameRef getInnerReference(@NotNull DeclarationDescriptor descriptor) {
-        if (isNativeObject(descriptor) || isLibraryObject(descriptor)) {
-            return getQualifiedReference(descriptor);
-        }
-
         return JsAstUtils.pureFqn(getInnerNameForDescriptor(descriptor), null);
     }
 
@@ -602,7 +590,7 @@ public class TranslationContext {
     public void startDeclaration() {
         ClassDescriptor classDescriptor = this.classDescriptor;
         if (classDescriptor != null && !(classDescriptor.getContainingDeclaration() instanceof ClassOrPackageFragmentDescriptor)) {
-            staticContext.getDeferredCallSites().put(classDescriptor, new ArrayList<DeferredCallSite>());
+            staticContext.getDeferredCallSites().put(classDescriptor, new ArrayList<>());
         }
     }
 
@@ -631,9 +619,8 @@ public class TranslationContext {
         callSites.add(new DeferredCallSite(constructor, invocationArgs, this));
     }
 
-    @Nullable
-    public JsExpression getModuleExpressionFor(@NotNull DeclarationDescriptor descriptor) {
-        return staticContext.getModuleExpressionFor(descriptor);
+    public void addInlineCall(@NotNull CallableDescriptor descriptor) {
+        staticContext.addInlineCall(descriptor);
     }
 
     public void addDeclarationStatement(@NotNull JsStatement statement) {
@@ -645,18 +632,13 @@ public class TranslationContext {
     }
 
     @NotNull
-    public JsName createGlobalName(@NotNull String suggestedName) {
-        return staticContext.getRootFunction().getScope().declareTemporaryName(suggestedName);
-    }
-
-    @NotNull
     public JsFunction createRootScopedFunction(@NotNull DeclarationDescriptor descriptor) {
         return createRootScopedFunction(descriptor.toString());
     }
 
     @NotNull
     public JsFunction createRootScopedFunction(@NotNull String description) {
-        return new JsFunction(staticContext.getRootFunction().getScope(), new JsBlock(), description);
+        return new JsFunction(staticContext.getFragment().getScope(), new JsBlock(), description);
     }
 
     public void addClass(@NotNull ClassDescriptor classDescriptor) {

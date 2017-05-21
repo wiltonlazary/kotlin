@@ -19,7 +19,10 @@ package org.jetbrains.kotlin.frontend.java.di
 import com.intellij.openapi.project.Project
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.builtins.JvmBuiltInsPackageFragmentProvider
-import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.javac.components.JavacBasedClassFinder
+import org.jetbrains.kotlin.javac.components.StubJavaResolverCache
+import org.jetbrains.kotlin.javac.components.JavacBasedSourceElementFactory
+import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.container.*
@@ -27,7 +30,6 @@ import org.jetbrains.kotlin.context.LazyResolveToken
 import org.jetbrains.kotlin.context.ModuleContext
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PackagePartProvider
-import org.jetbrains.kotlin.frontend.di.configureCommon
 import org.jetbrains.kotlin.frontend.di.configureModule
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.load.java.InternalFlexibleTypeTransformer
@@ -42,7 +44,6 @@ import org.jetbrains.kotlin.platform.JvmBuiltIns
 import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.jvm.JavaDescriptorResolver
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
-import org.jetbrains.kotlin.resolve.lazy.FileScopeProviderImpl
 import org.jetbrains.kotlin.resolve.lazy.KotlinCodeAnalyzer
 import org.jetbrains.kotlin.resolve.lazy.ResolveSession
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory
@@ -50,7 +51,8 @@ import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory
 private fun StorageComponentContainer.configureJavaTopDownAnalysis(
         moduleContentScope: GlobalSearchScope,
         project: Project,
-        lookupTracker: LookupTracker
+        lookupTracker: LookupTracker,
+        useJavac: Boolean
 ) {
     useInstance(moduleContentScope)
     useInstance(lookupTracker)
@@ -62,17 +64,23 @@ private fun StorageComponentContainer.configureJavaTopDownAnalysis(
 
     useInstance(VirtualFileFinderFactory.getInstance(project).create(moduleContentScope))
 
-    useImpl<FileScopeProviderImpl>()
+    if (useJavac) {
+        useImpl<JavacBasedClassFinder>()
+        useImpl<StubJavaResolverCache>()
+        useImpl<JavacBasedSourceElementFactory>()
+    } else {
+        useImpl<JavaClassFinderImpl>()
+        useImpl<LazyResolveBasedCache>()
+        useImpl<JavaSourceElementFactoryImpl>()
+    }
 
-    useImpl<JavaClassFinderImpl>()
+    useImpl<JavaPropertyInitializerEvaluatorImpl>()
+    useImpl<AnnotationResolverImpl>()
     useImpl<SignaturePropagatorImpl>()
-    useImpl<LazyResolveBasedCache>()
     useImpl<TraceBasedErrorReporter>()
     useImpl<PsiBasedExternalAnnotationResolver>()
-    useImpl<JavaPropertyInitializerEvaluatorImpl>()
     useInstance(SamWithReceiverResolver())
     useImpl<SamConversionResolverImpl>()
-    useImpl<JavaSourceElementFactoryImpl>()
     useInstance(InternalFlexibleTypeTransformer)
 
     useImpl<CompilerDeserializationConfiguration>()
@@ -87,18 +95,20 @@ fun createContainerForLazyResolveWithJava(
         targetEnvironment: TargetEnvironment,
         lookupTracker: LookupTracker,
         packagePartProvider: PackagePartProvider,
-        compilerConfiguration: CompilerConfiguration,
+        jvmTarget: JvmTarget,
+        languageVersionSettings: LanguageVersionSettings,
         useBuiltInsProvider: Boolean,
-        useLazyResolve: Boolean
+        useLazyResolve: Boolean,
+        useJavac: Boolean = false
 ): StorageComponentContainer = createContainer("LazyResolveWithJava", JvmPlatform) {
-    configureModule(moduleContext, JvmPlatform, bindingTrace)
-    configureJavaTopDownAnalysis(moduleContentScope, moduleContext.project, lookupTracker)
+    configureModule(moduleContext, JvmPlatform, jvmTarget, bindingTrace)
+    configureJavaTopDownAnalysis(moduleContentScope, moduleContext.project, lookupTracker, useJavac)
 
     useInstance(packagePartProvider)
     useInstance(moduleClassResolver)
     useInstance(declarationProviderFactory)
 
-    configureCommon(compilerConfiguration)
+    useInstance(languageVersionSettings)
 
     if (useBuiltInsProvider) {
         useInstance((moduleContext.module.builtIns as JvmBuiltIns).settings)
@@ -111,7 +121,10 @@ fun createContainerForLazyResolveWithJava(
         useImpl<LazyResolveToken>()
     }
 }.apply {
-    get<JavaClassFinderImpl>().initialize(bindingTrace, get<KotlinCodeAnalyzer>())
+    if (useJavac)
+        get<JavacBasedClassFinder>().initialize(bindingTrace, get<KotlinCodeAnalyzer>())
+    else
+        get<JavaClassFinderImpl>().initialize(bindingTrace, get<KotlinCodeAnalyzer>())
 }
 
 
@@ -123,11 +136,13 @@ fun createContainerForTopDownAnalyzerForJvm(
         lookupTracker: LookupTracker,
         packagePartProvider: PackagePartProvider,
         moduleClassResolver: ModuleClassResolver,
-        compilerConfiguration: CompilerConfiguration
+        jvmTarget: JvmTarget,
+        languageVersionSettings: LanguageVersionSettings,
+        useJavac: Boolean = false
 ): ComponentProvider = createContainerForLazyResolveWithJava(
         moduleContext, bindingTrace, declarationProviderFactory, moduleContentScope, moduleClassResolver,
-        CompilerEnvironment, lookupTracker, packagePartProvider, compilerConfiguration,
-        useBuiltInsProvider = true, useLazyResolve = false
+        CompilerEnvironment, lookupTracker, packagePartProvider, jvmTarget, languageVersionSettings,
+        useBuiltInsProvider = true, useLazyResolve = false, useJavac = useJavac
 )
 
 

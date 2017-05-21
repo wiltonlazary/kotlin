@@ -21,7 +21,7 @@ import com.intellij.util.containers.ContainerUtil
 import org.jetbrains.kotlin.builtins.ReflectionTypes
 import org.jetbrains.kotlin.builtins.isSuspendFunctionType
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptorImpl
+import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.lexer.KtToken
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -127,9 +127,7 @@ fun isOrOverridesSynthesized(descriptor: CallableMemberDescriptor): Boolean {
         return true
     }
     if (descriptor.kind == CallableMemberDescriptor.Kind.FAKE_OVERRIDE) {
-        return descriptor.overriddenDescriptors.all {
-            isOrOverridesSynthesized(it)
-        }
+        return descriptor.overriddenDescriptors.all(::isOrOverridesSynthesized)
     }
     return false
 }
@@ -194,18 +192,25 @@ fun createResolutionCandidatesForConstructors(
         lexicalScope: LexicalScope,
         call: Call,
         typeWithConstructors: KotlinType,
-        knownSubstitutor: TypeSubstitutor? = null
+        useKnownTypeSubstitutor: Boolean
 ): Collection<ResolutionCandidate<ConstructorDescriptor>> {
     val classWithConstructors = typeWithConstructors.constructor.declarationDescriptor as ClassDescriptor
 
     val unwrappedType = typeWithConstructors.unwrap()
+    val knownSubstitutor =
+            if (useKnownTypeSubstitutor)
+                TypeSubstitutor.create(
+                        (unwrappedType as? AbbreviatedType)?.abbreviation ?: unwrappedType
+                )
+            else null
+
     val typeAliasDescriptor =
             if (unwrappedType is AbbreviatedType)
                 unwrappedType.abbreviation.constructor.declarationDescriptor as? TypeAliasDescriptor
             else
                 null
 
-    val constructors = classWithConstructors.constructors
+    val constructors = typeAliasDescriptor?.constructors?.mapNotNull(TypeAliasConstructorDescriptor::withDispatchReceiver) ?: classWithConstructors.constructors
 
     if (constructors.isEmpty()) return emptyList()
 
@@ -229,21 +234,9 @@ fun createResolutionCandidatesForConstructors(
     }
 
     return constructors.map {
-        val constructorDescriptor = it.getConstructorDescriptorForResolution(knownSubstitutor, typeAliasDescriptor)
-        ResolutionCandidate.create(call, constructorDescriptor, dispatchReceiver, receiverKind, knownSubstitutor)
+        ResolutionCandidate.create(call, it, dispatchReceiver, receiverKind, knownSubstitutor)
     }
 }
-
-private fun ClassConstructorDescriptor.getConstructorDescriptorForResolution(
-        knownSubstitutor: TypeSubstitutor?,
-        typeAliasDescriptor: TypeAliasDescriptor?
-): ConstructorDescriptor =
-        if (typeAliasDescriptor != null)
-            TypeAliasConstructorDescriptorImpl.createIfAvailable(typeAliasDescriptor, this, knownSubstitutor ?: TypeSubstitutor.EMPTY,
-                                                                 withDispatchReceiver = true)
-            ?: throw AssertionError("Failed to create type alias constructor with substitutor: $knownSubstitutor")
-        else
-            this
 
 fun KtLambdaExpression.getCorrespondingParameterForFunctionArgument(
         bindingContext: BindingContext

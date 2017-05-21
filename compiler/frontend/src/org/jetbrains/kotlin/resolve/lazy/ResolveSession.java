@@ -18,7 +18,6 @@ package org.jetbrains.kotlin.resolve.lazy;
 
 import com.google.common.collect.Lists;
 import com.intellij.openapi.project.Project;
-import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
 import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
@@ -36,7 +35,6 @@ import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.resolve.*;
 import org.jetbrains.kotlin.resolve.extensions.SyntheticResolveExtension;
-import org.jetbrains.kotlin.resolve.lazy.data.KtClassLikeInfo;
 import org.jetbrains.kotlin.resolve.lazy.data.KtClassOrObjectInfo;
 import org.jetbrains.kotlin.resolve.lazy.data.KtScriptInfo;
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory;
@@ -47,6 +45,7 @@ import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyPackageDescriptor;
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope;
 import org.jetbrains.kotlin.resolve.scopes.MemberScope;
 import org.jetbrains.kotlin.storage.*;
+import org.jetbrains.kotlin.types.WrappedTypeFactory;
 import org.jetbrains.kotlin.utils.SmartList;
 
 import javax.inject.Inject;
@@ -70,7 +69,7 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
     private final MemoizedFunctionToNotNull<KtFile, LazyAnnotations> danglingAnnotations;
 
     private KtImportsFactory jetImportFactory;
-    private AnnotationResolver annotationResolve;
+    private AnnotationResolver annotationResolver;
     private DescriptorResolver descriptorResolver;
     private FunctionDescriptorResolver functionDescriptorResolver;
     private TypeResolver typeResolver;
@@ -82,6 +81,7 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
     private SupertypeLoopChecker supertypeLoopsResolver;
     private LanguageVersionSettings languageVersionSettings;
     private DelegationFilter delegationFilter;
+    private WrappedTypeFactory wrappedTypeFactory;
 
     private final SyntheticResolveExtension syntheticResolveExtension;
 
@@ -91,8 +91,8 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
     }
 
     @Inject
-    public void setAnnotationResolve(AnnotationResolver annotationResolve) {
-        this.annotationResolve = annotationResolve;
+    public void setAnnotationResolve(AnnotationResolver annotationResolver) {
+        this.annotationResolver = annotationResolver;
     }
 
     @Inject
@@ -141,6 +141,11 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
         this.delegationFilter = delegationFilter;
     }
 
+    @Inject
+    public void setWrappedTypeFactory(WrappedTypeFactory wrappedTypeFactory) {
+        this.wrappedTypeFactory = wrappedTypeFactory;
+    }
+
     // Only calls from injectors expected
     @Deprecated
     public ResolveSession(
@@ -158,14 +163,7 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
         this.trace = lockBasedLazyResolveStorageManager.createSafeTrace(delegationTrace);
         this.module = rootDescriptor;
 
-        this.packages =
-                storageManager.createMemoizedFunctionWithNullableValues(new Function1<FqName, LazyPackageDescriptor>() {
-                    @Override
-                    @Nullable
-                    public LazyPackageDescriptor invoke(FqName fqName) {
-                        return createPackage(fqName);
-                    }
-                });
+        this.packages = storageManager.createMemoizedFunctionWithNullableValues(this::createPackage);
 
         this.declarationProviderFactory = declarationProviderFactory;
 
@@ -173,7 +171,7 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
             @NotNull
             @Override
             public List<PackageFragmentDescriptor> getPackageFragments(@NotNull FqName fqName) {
-                return ContainerUtil.<PackageFragmentDescriptor>createMaybeSingletonList(getPackageFragment(fqName));
+                return ContainerUtil.createMaybeSingletonList(getPackageFragment(fqName));
             }
 
             @NotNull
@@ -189,19 +187,9 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
             }
         };
 
-        fileAnnotations = storageManager.createMemoizedFunction(new Function1<KtFile, LazyAnnotations>() {
-            @Override
-            public LazyAnnotations invoke(KtFile file) {
-                return createAnnotations(file, file.getAnnotationEntries());
-            }
-        });
+        fileAnnotations = storageManager.createMemoizedFunction(file -> createAnnotations(file, file.getAnnotationEntries()));
 
-        danglingAnnotations = storageManager.createMemoizedFunction(new Function1<KtFile, LazyAnnotations>() {
-            @Override
-            public LazyAnnotations invoke(KtFile file) {
-                return createAnnotations(file, file.getDanglingAnnotations());
-            }
-        });
+        danglingAnnotations = storageManager.createMemoizedFunction(file -> createAnnotations(file, file.getDanglingAnnotations()));
 
         syntheticResolveExtension = SyntheticResolveExtension.Companion.getInstance(project);
     }
@@ -209,7 +197,7 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
     private LazyAnnotations createAnnotations(KtFile file, List<KtAnnotationEntry> annotationEntries) {
         LexicalScope scope = fileScopeProvider.getFileResolutionScope(file);
         LazyAnnotationsContextImpl lazyAnnotationContext =
-                new LazyAnnotationsContextImpl(annotationResolve, storageManager, trace, scope);
+                new LazyAnnotationsContextImpl(annotationResolver, storageManager, trace, scope);
         return new LazyAnnotations(lazyAnnotationContext, annotationEntries);
     }
 
@@ -254,43 +242,35 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
     @Override
     @NotNull
     @ReadOnly
-    public Collection<ClassifierDescriptor> getTopLevelClassifierDescriptors(@NotNull FqName fqName, @NotNull final LookupLocation location) {
+    public Collection<ClassifierDescriptor> getTopLevelClassifierDescriptors(@NotNull FqName fqName, @NotNull LookupLocation location) {
         if (fqName.isRoot()) return Collections.emptyList();
 
         PackageMemberDeclarationProvider provider = declarationProviderFactory.getPackageMemberDeclarationProvider(fqName.parent());
         if (provider == null) return Collections.emptyList();
 
-        Collection<ClassifierDescriptor> result = new SmartList<ClassifierDescriptor>();
+        Collection<ClassifierDescriptor> result = new SmartList<>();
 
         result.addAll(ContainerUtil.mapNotNull(
                 provider.getClassOrObjectDeclarations(fqName.shortName()),
-                new Function<KtClassLikeInfo, ClassifierDescriptor>() {
-                    @Override
-                    public ClassDescriptor fun(KtClassLikeInfo classLikeInfo) {
-                        if (classLikeInfo instanceof KtClassOrObjectInfo) {
-                            //noinspection RedundantCast
-                            return getClassDescriptor(((KtClassOrObjectInfo) classLikeInfo).getCorrespondingClassOrObject(), location);
-                        }
-                        else if (classLikeInfo instanceof KtScriptInfo) {
-                            return getScriptDescriptor(((KtScriptInfo) classLikeInfo).getScript());
-                        }
-                        else {
-                            throw new IllegalStateException(
-                                    "Unexpected " + classLikeInfo + " of type " + classLikeInfo.getClass().getName()
-                            );
-                        }
+                classLikeInfo -> {
+                    if (classLikeInfo instanceof KtClassOrObjectInfo) {
+                        //noinspection RedundantCast
+                        return getClassDescriptor(((KtClassOrObjectInfo) classLikeInfo).getCorrespondingClassOrObject(), location);
+                    }
+                    else if (classLikeInfo instanceof KtScriptInfo) {
+                        return getScriptDescriptor(((KtScriptInfo) classLikeInfo).getScript());
+                    }
+                    else {
+                        throw new IllegalStateException(
+                                "Unexpected " + classLikeInfo + " of type " + classLikeInfo.getClass().getName()
+                        );
                     }
                 }
         ));
 
         result.addAll(ContainerUtil.map(
                 provider.getTypeAliasDeclarations(fqName.shortName()),
-                new Function<KtTypeAlias, ClassifierDescriptor>() {
-                    @Override
-                    public ClassifierDescriptor fun(KtTypeAlias alias) {
-                        return (ClassifierDescriptor) lazyDeclarationResolver.resolveToDescriptor(alias);
-                    }
-                }
+                alias -> (ClassifierDescriptor) lazyDeclarationResolver.resolveToDescriptor(alias)
         ));
 
         return result;
@@ -359,7 +339,7 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
         LazyPackageDescriptor rootPackage = getPackageFragment(FqName.ROOT);
         assert rootPackage != null : "Root package must be initialized";
 
-        return collectAllPackages(Lists.<LazyPackageDescriptor>newArrayList(), rootPackage);
+        return collectAllPackages(Lists.newArrayList(), rootPackage);
     }
 
     @NotNull
@@ -391,7 +371,7 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
     @Override
     @NotNull
     public AnnotationResolver getAnnotationResolver() {
-        return annotationResolve;
+        return annotationResolver;
     }
 
     @Override
@@ -462,5 +442,11 @@ public class ResolveSession implements KotlinCodeAnalyzer, LazyClassContext {
     @Override
     public SyntheticResolveExtension getSyntheticResolveExtension() {
         return syntheticResolveExtension;
+    }
+
+    @NotNull
+    @Override
+    public WrappedTypeFactory getWrappedTypeFactory() {
+        return wrappedTypeFactory;
     }
 }

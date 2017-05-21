@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,11 +20,11 @@ import com.google.common.collect.Iterables;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.Processor;
 import kotlin.Pair;
 import kotlin.collections.SetsKt;
 import kotlin.io.FilesKt;
 import kotlin.jvm.functions.Function2;
+import kotlin.text.Charsets;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.analyzer.AnalysisResult;
@@ -52,6 +52,7 @@ import org.jetbrains.kotlin.test.*;
 import org.jetbrains.kotlin.test.util.DescriptorValidator;
 import org.jetbrains.kotlin.test.util.RecursiveDescriptorComparator;
 import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
+import org.jetbrains.kotlin.utils.JsMetadataVersion;
 import org.jetbrains.kotlin.utils.StringsKt;
 import org.jetbrains.org.objectweb.asm.ClassReader;
 import org.jetbrains.org.objectweb.asm.ClassVisitor;
@@ -89,23 +90,26 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
 
     @NotNull
     private File compileLibrary(@NotNull String sourcePath, @NotNull File... extraClassPath) {
+        return compileLibrary(sourcePath, Collections.emptyList(), extraClassPath);
+    }
+
+    private File compileLibrary(@NotNull String sourcePath, List<String> additionalOptions, @NotNull File... extraClassPath) {
         File destination = new File(tmpdir, sourcePath + ".jar");
-        compileLibrary(new K2JVMCompiler(), sourcePath, destination, extraClassPath);
+        compileLibrary(new K2JVMCompiler(), sourcePath, destination, additionalOptions, extraClassPath);
         return destination;
     }
 
     private void compileLibrary(
-            @NotNull CLICompiler<?> compiler, @NotNull String sourcePath, @NotNull File destination, @NotNull File... extraClassPath
+            @NotNull CLICompiler<?> compiler, @NotNull String sourcePath, @NotNull File destination, List<String> additionalOptions, @NotNull File... extraClassPath
     ) {
-        Pair<String, ExitCode> output = compileKotlin(compiler, sourcePath, destination, Collections.<String>emptyList(), extraClassPath);
-        Assert.assertEquals(normalizeOutput(new Pair<String, ExitCode>("", ExitCode.OK)), normalizeOutput(output));
+        Pair<String, ExitCode> output = compileKotlin(compiler, sourcePath, destination, additionalOptions, extraClassPath);
+        Assert.assertEquals(normalizeOutput(new Pair<>("", ExitCode.OK)), normalizeOutput(output));
     }
 
     @NotNull
     private String normalizeOutput(@NotNull Pair<String, ExitCode> output) {
-        return AbstractCliTest.getNormalizedCompilerOutput(
-                output.getFirst(), output.getSecond(), getTestDataDirectory().getPath(), JvmMetadataVersion.INSTANCE
-        ).replace(FileUtil.toSystemIndependentName(tmpdir.getAbsolutePath()), "$TMP_DIR$");
+        return AbstractCliTest.getNormalizedCompilerOutput(output.getFirst(), output.getSecond(), getTestDataDirectory().getPath())
+                .replace(FileUtil.toSystemIndependentName(tmpdir.getAbsolutePath()), "$TMP_DIR$");
     }
 
     private void doTestWithTxt(@NotNull File... extraClassPath) throws Exception {
@@ -131,7 +135,7 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
 
     @NotNull
     private KotlinCoreEnvironment createEnvironment(@NotNull List<File> extraClassPath) {
-        List<File> extras = new ArrayList<File>();
+        List<File> extras = new ArrayList<>();
         extras.addAll(extraClassPath);
         extras.add(KotlinTestUtils.getAnnotationsJar());
 
@@ -147,12 +151,7 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
 
     @NotNull
     private static File copyJarFileWithoutEntry(@NotNull File jarPath, @NotNull String... entriesToDelete) {
-        return transformJar(jarPath, new Function2<String, byte[], byte[]>() {
-            @Override
-            public byte[] invoke(String s, byte[] bytes) {
-                return bytes;
-            }
-        }, entriesToDelete);
+        return transformJar(jarPath, (s, bytes) -> bytes, entriesToDelete);
     }
 
     @NotNull
@@ -165,10 +164,8 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
             File outputFile = new File(jarPath.getParentFile(), FileUtil.getNameWithoutExtension(jarPath) + "-after.jar");
             Set<String> toDelete = SetsKt.setOf(entriesToDelete);
 
-            @SuppressWarnings("IOResourceOpenedButNotSafelyClosed")
-            JarFile jar = new JarFile(jarPath);
-            ZipOutputStream output = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(outputFile)));
-            try {
+            try (JarFile jar = new JarFile(jarPath);
+                 ZipOutputStream output = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(outputFile)))) {
                 for (Enumeration<JarEntry> enumeration = jar.entries(); enumeration.hasMoreElements(); ) {
                     JarEntry jarEntry = enumeration.nextElement();
                     String name = jarEntry.getName();
@@ -183,10 +180,6 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
                     output.write(newBytes);
                     output.closeEntry();
                 }
-            }
-            finally {
-                output.close();
-                jar.close();
             }
 
             return outputFile;
@@ -219,7 +212,7 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
             @NotNull File output,
             @NotNull File... classpath
     ) {
-        return compileKotlin(fileName, output, Collections.<String>emptyList(), classpath);
+        return compileKotlin(fileName, output, Collections.emptyList(), classpath);
     }
 
     @NotNull
@@ -240,7 +233,7 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
             @NotNull List<String> additionalOptions,
             @NotNull File... classpath
     ) {
-        List<String> args = new ArrayList<String>();
+        List<String> args = new ArrayList<>();
         File sourceFile = new File(getTestDataDirectory(), fileName);
         assert sourceFile.exists() : "Source file does not exist: " + sourceFile.getAbsolutePath();
         args.add(sourceFile.getPath());
@@ -289,42 +282,52 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
 
     private void doTestKotlinLibraryWithWrongMetadataVersion(
             @NotNull String libraryName,
-            @Nullable final Function2<String, Object, Object> additionalTransformation,
+            @Nullable Function2<String, Object, Object> additionalTransformation,
             @NotNull String... additionalOptions
     ) throws Exception {
-        final int[] version = new JvmMetadataVersion(42, 0, 0).toArray();
-        File library = transformJar(compileLibrary(libraryName), new Function2<String, byte[], byte[]>() {
-            @Override
-            public byte[] invoke(String name, byte[] bytes) {
-                return WrongBytecodeVersionTest.Companion.transformMetadataInClassFile(bytes, new Function2<String, Object, Object>() {
-                    @Override
-                    public Object invoke(String name, Object value) {
-                        if (additionalTransformation != null) {
-                            Object result = additionalTransformation.invoke(name, value);
-                            if (result != null) return result;
-                        }
-                        return JvmAnnotationNames.METADATA_VERSION_FIELD_NAME.equals(name) ? version : null;
+        int[] version = new JvmMetadataVersion(42, 0, 0).toArray();
+        File library = transformJar(
+                compileLibrary(libraryName),
+                (entryName, bytes) -> WrongBytecodeVersionTest.Companion.transformMetadataInClassFile(bytes, (fieldName, value) -> {
+                    if (additionalTransformation != null) {
+                        Object result = additionalTransformation.invoke(fieldName, value);
+                        if (result != null) return result;
                     }
-                });
-            }
-        });
+                    return JvmAnnotationNames.METADATA_VERSION_FIELD_NAME.equals(fieldName) ? version : null;
+                })
+        );
         Pair<String, ExitCode> output = compileKotlin("source.kt", tmpdir, Arrays.asList(additionalOptions), library);
         KotlinTestUtils.assertEqualsToFile(new File(getTestDataDirectory(), "output.txt"), normalizeOutput(output));
     }
 
-    @SuppressWarnings("deprecation")
+    private void doTestKotlinLibraryWithWrongMetadataVersionJs(@NotNull String libraryName, @NotNull String... additionalOptions) {
+        compileLibrary(new K2JSCompiler(), libraryName, new File(tmpdir, "library.js"), Collections.emptyList());
+
+        File library = new File(tmpdir, "library.meta.js");
+        FilesKt.writeText(library, FilesKt.readText(library, Charsets.UTF_8).replace(
+                "(" + JsMetadataVersion.INSTANCE.toInteger() + ", ",
+                "(" + new JsMetadataVersion(42, 0, 0).toInteger() + ", "
+        ), Charsets.UTF_8);
+
+        Pair<String, ExitCode> output = compileKotlin(
+                new K2JSCompiler(), "source.kt", new File(tmpdir, "usage.js"), Arrays.asList(additionalOptions), library
+        );
+        KotlinTestUtils.assertEqualsToFile(new File(getTestDataDirectory(), "output.txt"), normalizeOutput(output));
+    }
+
     private void doTestPreReleaseKotlinLibrary(
             @NotNull CLICompiler<?> compiler,
             @NotNull String libraryName,
             @NotNull File destination,
             @NotNull File result,
+            @NotNull File usageDestination,
             @NotNull String... additionalOptions
     ) throws Exception {
         // Compiles the library with the "pre-release" flag, then compiles a usage of this library in the release mode
 
         try {
             System.setProperty(TEST_IS_PRE_RELEASE_SYSTEM_PROPERTY, "true");
-            compileLibrary(compiler, libraryName, destination);
+            compileLibrary(compiler, libraryName, destination, Collections.emptyList());
         }
         finally {
             System.clearProperty(TEST_IS_PRE_RELEASE_SYSTEM_PROPERTY);
@@ -333,7 +336,7 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
         Pair<String, ExitCode> output;
         try {
             System.setProperty(TEST_IS_PRE_RELEASE_SYSTEM_PROPERTY, "false");
-            output = compileKotlin(compiler, "source.kt", tmpdir, Arrays.asList(additionalOptions), result);
+            output = compileKotlin(compiler, "source.kt", usageDestination, Arrays.asList(additionalOptions), result);
         }
         finally {
             System.clearProperty(TEST_IS_PRE_RELEASE_SYSTEM_PROPERTY);
@@ -455,42 +458,57 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
 
     public void testReleaseCompilerAgainstPreReleaseLibrary() throws Exception {
         File destination = new File(tmpdir, "library.jar");
-        doTestPreReleaseKotlinLibrary(new K2JVMCompiler(), "library", destination, destination);
+        doTestPreReleaseKotlinLibrary(new K2JVMCompiler(), "library", destination, destination, tmpdir);
     }
 
     public void testReleaseCompilerAgainstPreReleaseLibraryJs() throws Exception {
-        doTestPreReleaseKotlinLibrary(new K2JSCompiler(), "library",
-                                      new File(tmpdir, "library.js"),
-                                      new File(tmpdir, "library.meta.js"));
+        doTestPreReleaseKotlinLibrary(
+                new K2JSCompiler(), "library",
+                new File(tmpdir, "library.js"), new File(tmpdir, "library.meta.js"),
+                new File(tmpdir, "usage.js")
+        );
     }
 
     public void testReleaseCompilerAgainstPreReleaseLibrarySkipVersionCheck() throws Exception {
         File destination = new File(tmpdir, "library.jar");
-        doTestPreReleaseKotlinLibrary(new K2JVMCompiler(), "library", destination, destination,
-                                      "-Xskip-metadata-version-check");
+        doTestPreReleaseKotlinLibrary(
+                new K2JVMCompiler(), "library",
+                destination, destination, tmpdir,
+                "-Xskip-metadata-version-check"
+        );
+    }
+
+    public void testReleaseCompilerAgainstPreReleaseLibraryJsSkipVersionCheck() throws Exception {
+        doTestPreReleaseKotlinLibrary(
+                new K2JSCompiler(), "library",
+                new File(tmpdir, "library.js"), new File(tmpdir, "library.meta.js"),
+                new File(tmpdir, "usage.js"),
+                "-Xskip-metadata-version-check"
+        );
     }
 
     public void testWrongMetadataVersion() throws Exception {
         doTestKotlinLibraryWithWrongMetadataVersion("library", null);
     }
 
+    public void testWrongMetadataVersionJs() throws Exception {
+        doTestKotlinLibraryWithWrongMetadataVersionJs("library");
+    }
+
     public void testWrongMetadataVersionBadMetadata() throws Exception {
         doTestKotlinLibraryWithWrongMetadataVersion(
                 "library",
-                new Function2<String, Object, Object>() {
-                    @Override
-                    public Object invoke(String name, Object value) {
-                        if (JvmAnnotationNames.METADATA_DATA_FIELD_NAME.equals(name)) {
-                            String[] strings = (String[]) value;
-                            for (int i = 0; i < strings.length; i++) {
-                                byte[] bytes = strings[i].getBytes();
-                                for (int j = 0; j < bytes.length; j++) bytes[j] ^= 42;
-                                strings[i] = new String(bytes);
-                            }
-                            return strings;
+                (name, value) -> {
+                    if (JvmAnnotationNames.METADATA_DATA_FIELD_NAME.equals(name)) {
+                        String[] strings = (String[]) value;
+                        for (int i = 0; i < strings.length; i++) {
+                            byte[] bytes = strings[i].getBytes();
+                            for (int j = 0; j < bytes.length; j++) bytes[j] ^= 42;
+                            strings[i] = new String(bytes);
                         }
-                        return null;
+                        return strings;
                     }
+                    return null;
                 }
         );
     }
@@ -498,20 +516,21 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
     public void testWrongMetadataVersionBadMetadata2() throws Exception {
         doTestKotlinLibraryWithWrongMetadataVersion(
                 "library",
-                new Function2<String, Object, Object>() {
-                    @Override
-                    public Object invoke(String name, Object value) {
-                        if (JvmAnnotationNames.METADATA_STRINGS_FIELD_NAME.equals(name)) {
-                            return ArrayUtil.EMPTY_STRING_ARRAY;
-                        }
-                        return null;
+                (name, value) -> {
+                    if (JvmAnnotationNames.METADATA_STRINGS_FIELD_NAME.equals(name)) {
+                        return ArrayUtil.EMPTY_STRING_ARRAY;
                     }
+                    return null;
                 }
         );
     }
 
     public void testWrongMetadataVersionSkipVersionCheck() throws Exception {
         doTestKotlinLibraryWithWrongMetadataVersion("library", null, "-Xskip-metadata-version-check");
+    }
+
+    public void testWrongMetadataVersionJsSkipVersionCheck() throws Exception {
+        doTestKotlinLibraryWithWrongMetadataVersionJs("library", "-Xskip-metadata-version-check");
     }
 
     /*test source mapping generation when source info is absent*/
@@ -534,7 +553,7 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
 
         compileKotlin("source.kt", tmpdir, tmpdir);
 
-        final Ref<String> debugInfo = new Ref<String>();
+        Ref<String> debugInfo = new Ref<>();
         File resultFile = new File(tmpdir.getAbsolutePath(), "test/B.class");
         new ClassReader(FilesKt.readBytes(resultFile)).accept(new ClassVisitor(Opcodes.ASM5) {
             @Override
@@ -608,25 +627,32 @@ public class CompileKotlinAgainstCustomBinariesTest extends TestCaseWithTmpdir {
     }
 
     public void testInnerClassPackageConflict2() throws Exception {
-        final File library1 = compileJava("library1");
-        final File library2 = compileJava("library2");
+        File library1 = compileJava("library1");
+        File library2 = compileJava("library2");
 
         // Copy everything from library2 to library1
-        FileUtil.visitFiles(library2, new Processor<File>() {
-            @Override
-            public boolean process(File file) {
-                if (!file.isDirectory()) {
-                    File newFile = new File(library1, FilesKt.relativeTo(file, library2).getPath());
-                    if (!newFile.getParentFile().exists()) {
-                        assert newFile.getParentFile().mkdirs();
-                    }
-                    assert file.renameTo(newFile);
+        FileUtil.visitFiles(library2, file -> {
+            if (!file.isDirectory()) {
+                File newFile = new File(library1, FilesKt.relativeTo(file, library2).getPath());
+                if (!newFile.getParentFile().exists()) {
+                    assert newFile.getParentFile().mkdirs();
                 }
-                return true;
+                assert file.renameTo(newFile);
             }
+            return true;
         });
 
         Pair<String, ExitCode> output = compileKotlin("source.kt", tmpdir, library1);
         KotlinTestUtils.assertEqualsToFile(new File(getTestDataDirectory(), "output.txt"), normalizeOutput(output));
+    }
+
+    public void testWrongInlineTarget() throws Exception {
+        File library = compileLibrary("library", Arrays.asList("-jvm-target", "1.8"));
+
+        Pair<String, ExitCode> outputMain = compileKotlin("source.kt", tmpdir, library);
+
+        KotlinTestUtils.assertEqualsToFile(
+                new File(getTestDataDirectory(), "output.txt"), normalizeOutput(outputMain)
+        );
     }
 }

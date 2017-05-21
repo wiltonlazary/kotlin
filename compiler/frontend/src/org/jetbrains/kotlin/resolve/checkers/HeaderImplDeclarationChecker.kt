@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.resolve.checkers
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.config.AnalysisFlags
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
@@ -39,13 +40,16 @@ import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.TypeConstructor
 import org.jetbrains.kotlin.types.TypeConstructorSubstitution
 import org.jetbrains.kotlin.types.TypeSubstitutor
+import org.jetbrains.kotlin.types.checker.NewKotlinTypeChecker
+import org.jetbrains.kotlin.types.checker.TypeCheckerContext
 import org.jetbrains.kotlin.types.typeUtil.asTypeProjection
 import org.jetbrains.kotlin.utils.SmartList
 import org.jetbrains.kotlin.utils.keysToMap
 
-class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) : DeclarationChecker {
+object HeaderImplDeclarationChecker : DeclarationChecker {
     override fun check(
             declaration: KtDeclaration,
             descriptor: DeclarationDescriptor,
@@ -57,9 +61,9 @@ class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) 
 
         if (descriptor !is MemberDescriptor) return
 
-        val checkImpl = !languageVersionSettings.supportsFeature(LanguageFeature.MultiPlatformDoNotCheckImpl)
+        val checkImpl = !languageVersionSettings.isFlagEnabled(AnalysisFlags.multiPlatformDoNotCheckImpl)
         if (descriptor.isHeader && declaration.hasModifier(KtTokens.HEADER_KEYWORD)) {
-            checkHeaderDeclarationHasImplementation(declaration, descriptor, diagnosticHolder, checkImpl)
+            checkHeaderDeclarationHasImplementation(declaration, descriptor, diagnosticHolder, descriptor.module, checkImpl)
         }
         else if (checkImpl && descriptor.isImpl && declaration.hasModifier(KtTokens.IMPL_KEYWORD)) {
             checkImplementationHasHeaderDeclaration(declaration, descriptor, diagnosticHolder)
@@ -67,86 +71,123 @@ class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) 
     }
 
     fun checkHeaderDeclarationHasImplementation(
-            reportOn: KtDeclaration, descriptor: MemberDescriptor, diagnosticHolder: DiagnosticSink, checkImpl: Boolean
+            reportOn: KtDeclaration,
+            descriptor: MemberDescriptor,
+            diagnosticHolder: DiagnosticSink,
+            platformModule: ModuleDescriptor,
+            checkImpl: Boolean
     ) {
-        val compatibility = when (descriptor) {
-            is CallableMemberDescriptor -> {
-                descriptor.findNamesakesFromTheSameModule().filter { impl ->
-                    descriptor != impl &&
-                    // TODO: support non-source definitions (e.g. from Java)
-                    DescriptorToSourceUtils.getSourceFromDescriptor(impl) is KtElement
-                }.groupBy { impl ->
-                    areCompatibleCallables(descriptor, impl, checkImpl)
-                }
-            }
-            is ClassDescriptor -> {
-                descriptor.findClassifiersFromTheSameModule().filter { impl ->
-                    descriptor != impl &&
-                    DescriptorToSourceUtils.getSourceFromDescriptor(impl) is KtElement
-                }.groupBy { impl ->
-                    areCompatibleClassifiers(descriptor, impl, checkImpl)
-                }
-            }
-            else -> null
-        }
+        val compatibility = findImplForHeader(descriptor, platformModule, checkImpl)
 
-        if (compatibility != null && !compatibility.containsKey(Compatible)) {
+        if (compatibility != null && Compatible !in compatibility) {
             assert(compatibility.keys.all { it is Incompatible })
             @Suppress("UNCHECKED_CAST")
             val incompatibility = compatibility as Map<Incompatible, Collection<MemberDescriptor>>
-            diagnosticHolder.report(Errors.HEADER_WITHOUT_IMPLEMENTATION.on(
-                    reportOn, descriptor, moduleToCheck ?: descriptor.module, incompatibility))
+            diagnosticHolder.report(Errors.HEADER_WITHOUT_IMPLEMENTATION.on(reportOn, descriptor, platformModule, incompatibility))
+        }
+    }
+
+    private fun findImplForHeader(
+            header: MemberDescriptor,
+            platformModule: ModuleDescriptor,
+            checkImpl: Boolean
+    ): Map<Compatibility, List<MemberDescriptor>>? {
+        return when (header) {
+            is CallableMemberDescriptor -> {
+                header.findNamesakesFromModule(platformModule).filter { impl ->
+                    header != impl &&
+                    // TODO: support non-source definitions (e.g. from Java)
+                    DescriptorToSourceUtils.getSourceFromDescriptor(impl) is KtElement
+                }.groupBy { impl ->
+                    areCompatibleCallables(header, impl, checkImpl)
+                }
+            }
+            is ClassDescriptor -> {
+                header.findClassifiersFromModule(platformModule).filter { impl ->
+                    header != impl &&
+                    DescriptorToSourceUtils.getSourceFromDescriptor(impl) is KtElement
+                }.groupBy { impl ->
+                    areCompatibleClassifiers(header, impl, checkImpl)
+                }
+            }
+            else -> null
         }
     }
 
     private fun checkImplementationHasHeaderDeclaration(
             reportOn: KtDeclaration, descriptor: MemberDescriptor, diagnosticHolder: DiagnosticSink
     ) {
-        fun ClassifierDescriptorWithTypeParameters.findDeclarationForClass(): ClassDescriptor? =
-                findClassifiersFromTheSameModule().firstOrNull { declaration ->
-                    this != declaration &&
-                    declaration is ClassDescriptor && declaration.isHeader &&
-                    areCompatibleClassifiers(declaration, this, checkImpl = false) == Compatible
-                } as? ClassDescriptor
+        // Using the platform module instead of the common module is sort of fine here because the former always depends on the latter.
+        // However, it would be clearer to find the common module this platform module implements and look for headers there instead.
+        // TODO: use common module here
+        val compatibility = findHeaderForImpl(descriptor, descriptor.module)
 
-        val hasDeclaration = when (descriptor) {
-            is CallableMemberDescriptor -> {
-                val container = descriptor.containingDeclaration
-                val candidates = when (container) {
-                    is ClassDescriptor -> container.findDeclarationForClass()?.getMembers(descriptor.name).orEmpty()
-                    is PackageFragmentDescriptor -> descriptor.findNamesakesFromTheSameModule()
-                    else -> return // do not report anything for incorrect code, e.g. 'impl' local function
-                }
-                candidates.any { declaration ->
-                    descriptor != declaration &&
-                    declaration.isHeader &&
-                    areCompatibleCallables(declaration, descriptor, checkImpl = false) == Compatible
-                }
-            }
-            is ClassifierDescriptorWithTypeParameters -> descriptor.findDeclarationForClass() != null
-            else -> false
-        }
-
-        if (!hasDeclaration) {
+        if (compatibility != null && Compatible !in compatibility) {
+            assert(compatibility.keys.all { it is Incompatible })
             // TODO: do not report this error for members which are "almost compatible" with some header declarations
             diagnosticHolder.report(Errors.IMPLEMENTATION_WITHOUT_HEADER.on(reportOn.modifierList!!.getModifier(KtTokens.IMPL_KEYWORD)!!))
         }
     }
 
-    fun CallableMemberDescriptor.findNamesakesFromTheSameModule(): Collection<CallableMemberDescriptor> {
+    private fun findHeaderForImpl(impl: MemberDescriptor, commonModule: ModuleDescriptor): Map<Compatibility, List<MemberDescriptor>>? {
+        return when (impl) {
+            is CallableMemberDescriptor -> {
+                val container = impl.containingDeclaration
+                val candidates = when (container) {
+                    is ClassDescriptor -> {
+                        val headerClass = findHeaderForImpl(container, commonModule)?.get(Compatible)?.firstOrNull() as? ClassDescriptor
+                        headerClass?.getMembers(impl.name).orEmpty()
+                    }
+                    is PackageFragmentDescriptor -> impl.findNamesakesFromModule(commonModule)
+                    else -> return null // do not report anything for incorrect code, e.g. 'impl' local function
+                }
+
+                candidates.filter { declaration ->
+                    impl != declaration && declaration.isHeader
+                }.groupBy { declaration ->
+                    // TODO: optimize by caching this per impl-header class pair, do not create a new substitutor for each impl member
+                    val substitutor =
+                            if (container is ClassDescriptor) {
+                                val headerClass = declaration.containingDeclaration as ClassDescriptor
+                                // TODO: this might not work for members of inner generic classes
+                                Substitutor(headerClass.declaredTypeParameters, container.declaredTypeParameters)
+                            }
+                            else null
+                    areCompatibleCallables(declaration, impl, checkImpl = false, parentSubstitutor = substitutor)
+                }
+            }
+            is ClassifierDescriptorWithTypeParameters -> {
+                impl.findClassifiersFromModule(commonModule).filter { declaration ->
+                    impl != declaration &&
+                    declaration is ClassDescriptor && declaration.isHeader
+                }.groupBy { header ->
+                    areCompatibleClassifiers(header as ClassDescriptor, impl, checkImpl = false)
+                }
+            }
+            else -> null
+        }
+    }
+
+    fun MemberDescriptor.findCompatibleImplForHeader(platformModule: ModuleDescriptor): List<MemberDescriptor> =
+            findImplForHeader(this, platformModule, false)?.get(Compatible).orEmpty()
+
+    fun MemberDescriptor.findCompatibleHeaderForImpl(commonModule: ModuleDescriptor): List<MemberDescriptor> =
+            findHeaderForImpl(this, commonModule)?.get(Compatible).orEmpty()
+
+    private fun CallableMemberDescriptor.findNamesakesFromModule(module: ModuleDescriptor): Collection<CallableMemberDescriptor> {
         val packageFqName = (containingDeclaration as? PackageFragmentDescriptor)?.fqName ?: return emptyList()
-        val myModule = moduleToCheck ?: module
-        val scope = myModule.getPackage(packageFqName).memberScope
+        val scope = module.getPackage(packageFqName).memberScope
 
         return when (this) {
             is FunctionDescriptor -> scope.getContributedFunctions(name, NoLookupLocation.FOR_ALREADY_TRACKED)
             is PropertyDescriptor -> scope.getContributedVariables(name, NoLookupLocation.FOR_ALREADY_TRACKED)
             else -> throw AssertionError("Unsupported declaration: $this")
-        } // TODO: only obtain descriptors from our module to start with
+        }
     }
 
-    fun ClassifierDescriptorWithTypeParameters.findClassifiersFromTheSameModule(): Collection<ClassifierDescriptorWithTypeParameters> {
-        val myModule = moduleToCheck ?: module
+    private fun ClassifierDescriptorWithTypeParameters.findClassifiersFromModule(
+            module: ModuleDescriptor
+    ): Collection<ClassifierDescriptorWithTypeParameters> {
         val classId = classId ?: return emptyList()
 
         fun MemberScope.getAllClassifiers(name: Name): Collection<ClassifierDescriptorWithTypeParameters> =
@@ -154,7 +195,7 @@ class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) 
                         .filterIsInstance<ClassifierDescriptorWithTypeParameters>()
 
         val segments = classId.relativeClassName.pathSegments()
-        var classifiers = myModule.getPackage(classId.packageFqName).memberScope.getAllClassifiers(segments.first())
+        var classifiers = module.getPackage(classId.packageFqName).memberScope.getAllClassifiers(segments.first())
 
         for (name in segments.subList(1, segments.size)) {
             classifiers = classifiers.mapNotNull { classifier ->
@@ -235,6 +276,7 @@ class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) 
             a: CallableMemberDescriptor,
             b: CallableMemberDescriptor,
             checkImpl: Boolean,
+            platformModule: ModuleDescriptor = b.module,
             parentSubstitutor: Substitutor? = null
     ): Compatibility {
         assert(a.name == b.name) { "This function should be invoked only for declarations with the same name: $a, $b" }
@@ -256,17 +298,18 @@ class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) 
 
         val substitutor = Substitutor(aTypeParams, bTypeParams, parentSubstitutor)
 
-        if (aParams.map { substitutor(it.type) } != bParams.map { it.type } ||
-            aExtensionReceiver?.type?.let(substitutor) != bExtensionReceiver?.type) return Incompatible.ParameterTypes
-        if (substitutor(a.returnType) != b.returnType) return Incompatible.ReturnType
+        if (!areCompatibleTypeLists(aParams.map { substitutor(it.type) }, bParams.map { it.type }, platformModule) ||
+            !areCompatibleTypes(aExtensionReceiver?.type?.let(substitutor), bExtensionReceiver?.type, platformModule))
+            return Incompatible.ParameterTypes
+        if (!areCompatibleTypes(substitutor(a.returnType), b.returnType, platformModule)) return Incompatible.ReturnType
 
-        if (!equalsBy(aParams, bParams, ValueParameterDescriptor::getName)) return Incompatible.ParameterNames
+        if (b.hasStableParameterNames() && !equalsBy(aParams, bParams, ValueParameterDescriptor::getName)) return Incompatible.ParameterNames
         if (!equalsBy(aTypeParams, bTypeParams, TypeParameterDescriptor::getName)) return Incompatible.TypeParameterNames
 
         if (a.modality != b.modality) return Incompatible.Modality
         if (a.visibility != b.visibility) return Incompatible.Visibility
 
-        areCompatibleTypeParameters(aTypeParams, bTypeParams, substitutor).let { if (it != Compatible) return it }
+        areCompatibleTypeParameters(aTypeParams, bTypeParams, platformModule, substitutor).let { if (it != Compatible) return it }
 
         if (!equalsBy(aParams, bParams, ValueParameterDescriptor::declaresDefaultValue)) return Incompatible.ValueParameterHasDefault
         if (!equalsBy(aParams, bParams, { p -> listOf(p.varargElementType != null, p.isCrossinline, p.isNoinline) })) return Incompatible.ValueParameterModifiers
@@ -282,8 +325,59 @@ class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) 
         return Compatible
     }
 
-    private fun areCompatibleTypeParameters(a: List<TypeParameterDescriptor>, b: List<TypeParameterDescriptor>, substitutor: Substitutor): Compatibility {
-        if (a.map { substitutor(it.defaultType) } != b.map { it.defaultType }) return Incompatible.TypeParameterUpperBounds
+    private fun areCompatibleTypes(a: KotlinType?, b: KotlinType?, platformModule: ModuleDescriptor): Boolean {
+        if (a == null) return b == null
+        if (b == null) return false
+
+        with(NewKotlinTypeChecker) {
+            val context = object : TypeCheckerContext(false) {
+                override fun areEqualTypeConstructors(a: TypeConstructor, b: TypeConstructor): Boolean {
+                    return isHeaderClassAndImplTypeAlias(a, b, platformModule) ||
+                           isHeaderClassAndImplTypeAlias(b, a, platformModule) ||
+                           super.areEqualTypeConstructors(a, b)
+                }
+            }
+            return context.equalTypes(a.unwrap(), b.unwrap())
+        }
+    }
+
+    // For example, headerTypeConstructor may be the header class kotlin.text.StringBuilder, while implTypeConstructor
+    // is java.lang.StringBuilder. For the purposes of type compatibility checking, we must consider these types equal here.
+    // Note that the case of an "impl class" works as expected though, because the impl class by definition has the same FQ name
+    // as the corresponding header class, so their type constructors are equal as per AbstractClassTypeConstructor#equals
+    private fun isHeaderClassAndImplTypeAlias(
+            headerTypeConstructor: TypeConstructor,
+            implTypeConstructor: TypeConstructor,
+            platformModule: ModuleDescriptor
+    ): Boolean {
+        val header = headerTypeConstructor.declarationDescriptor
+        val impl = implTypeConstructor.declarationDescriptor
+        return header is ClassifierDescriptorWithTypeParameters &&
+               header.isHeader &&
+               impl is ClassifierDescriptorWithTypeParameters &&
+               header.findClassifiersFromModule(platformModule).any { classifier ->
+                   // Note that it's fine to only check that this "impl typealias" expands to the expected class, without checking
+                   // whether the type arguments in the expansion are in the correct order or have the correct variance, because we only
+                   // allow simple cases like "impl typealias Foo<A, B> = FooImpl<A, B>", see DeclarationsChecker#checkImplTypeAlias
+                   (classifier as? TypeAliasDescriptor)?.classDescriptor == impl
+               }
+    }
+
+    private fun areCompatibleTypeLists(a: List<KotlinType?>, b: List<KotlinType?>, platformModule: ModuleDescriptor): Boolean {
+        for (i in a.indices) {
+            if (!areCompatibleTypes(a[i], b[i], platformModule)) return false
+        }
+        return true
+    }
+
+    private fun areCompatibleTypeParameters(
+            a: List<TypeParameterDescriptor>,
+            b: List<TypeParameterDescriptor>,
+            platformModule: ModuleDescriptor,
+            substitutor: Substitutor
+    ): Compatibility {
+        if (!areCompatibleTypeLists(a.map { substitutor(it.defaultType) }, b.map { it.defaultType }, platformModule))
+            return Incompatible.TypeParameterUpperBounds
         if (!equalsBy(a, b, TypeParameterDescriptor::getVariance)) return Incompatible.TypeParameterVariance
         if (!equalsBy(a, b, TypeParameterDescriptor::isReified)) return Incompatible.TypeParameterReified
 
@@ -312,23 +406,12 @@ class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) 
     private fun areCompatibleClassifiers(a: ClassDescriptor, other: ClassifierDescriptor, checkImpl: Boolean): Compatibility {
         assert(a.fqNameUnsafe == other.fqNameUnsafe) { "This function should be invoked only for declarations with the same name: $a, $other" }
 
-        var parentSubstitutor: Substitutor? = null
         var implTypealias = false
-
         val b = when (other) {
             is ClassDescriptor -> other
             is TypeAliasDescriptor -> {
-                val classDescriptor = other.classDescriptor ?: return Compatible // do not report extra error on erroneous typealias
                 implTypealias = true
-                // If a platform class test.C is implemented by a typealias test.C = test.CImpl, we must now state that any occurrence
-                // of the type "test.C" in the platform class scope should be replaced with "test.CImpl".
-                // Otherwise the types would not be equal and e.g. test.C's constructor is not going to be found in test.CImpl's scope.
-                // For this, we construct an additional substitutor with a single mapping test.C -> test.CImpl
-                // TODO: this looks like a dirty hack
-                parentSubstitutor = Substitutor(null, TypeSubstitutor.create(TypeConstructorSubstitution.createByConstructorsMap(
-                        mapOf(a.typeConstructor to classDescriptor.defaultType.asTypeProjection())
-                )))
-                classDescriptor
+                other.classDescriptor ?: return Compatible // do not report extra error on erroneous typealias
             }
             else -> throw AssertionError("Incorrect impl classifier for $a: $other")
         }
@@ -341,21 +424,23 @@ class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) 
         val bTypeParams = b.declaredTypeParameters
         if (aTypeParams.size != bTypeParams.size) return Incompatible.TypeParameterCount
 
-        val substitutor = Substitutor(aTypeParams, bTypeParams, parentSubstitutor)
-
         if (a.modality != b.modality && !(a.modality == Modality.FINAL && b.modality == Modality.OPEN)) return Incompatible.Modality
 
         if (a.visibility != b.visibility) return Incompatible.Visibility
 
-        areCompatibleTypeParameters(aTypeParams, bTypeParams, substitutor).let { if (it != Compatible) return it }
+        val platformModule = other.module
+        val substitutor = Substitutor(aTypeParams, bTypeParams)
+        areCompatibleTypeParameters(aTypeParams, bTypeParams, platformModule, substitutor).let { if (it != Compatible) return it }
 
         // Subtract kotlin.Any from supertypes because it's implicitly added if no explicit supertype is specified,
         // and not added if an explicit supertype _is_ specified
         val aSupertypes = a.typeConstructor.supertypes.filterNot(KotlinBuiltIns::isAny)
         val bSupertypes = b.typeConstructor.supertypes.filterNot(KotlinBuiltIns::isAny)
-        if (!bSupertypes.containsAll(aSupertypes.map(substitutor))) return Incompatible.Supertypes
+        if (aSupertypes.map(substitutor).any { aSupertype ->
+            bSupertypes.none { bSupertype -> areCompatibleTypes(aSupertype, bSupertype, platformModule) }
+        }) return Incompatible.Supertypes
 
-        areCompatibleClassScopes(a, b, checkImpl && !implTypealias, substitutor).let { if (it != Compatible) return it }
+        areCompatibleClassScopes(a, b, checkImpl && !implTypealias, platformModule, substitutor).let { if (it != Compatible) return it }
 
         if (checkImpl && !b.isImpl && !implTypealias) return Incompatible.NoImpl
 
@@ -366,6 +451,7 @@ class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) 
             a: ClassDescriptor,
             b: ClassDescriptor,
             checkImpl: Boolean,
+            platformModule: ModuleDescriptor,
             substitutor: Substitutor
     ): Compatibility {
         val unimplemented = arrayListOf<Pair<CallableMemberDescriptor, Map<Incompatible, MutableCollection<CallableMemberDescriptor>>>>()
@@ -376,7 +462,7 @@ class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) 
             if (!aMember.kind.isReal) continue
 
             val mapping = bMembersByName[aMember.name].orEmpty().keysToMap { bMember ->
-                areCompatibleCallables(aMember, bMember, checkImpl, substitutor)
+                areCompatibleCallables(aMember, bMember, checkImpl, platformModule, substitutor)
             }
             if (mapping.values.any { it == Compatible }) continue
 
@@ -426,18 +512,15 @@ class HeaderImplDeclarationChecker(val moduleToCheck: ModuleDescriptor? = null) 
 
     // This substitutor takes the type from A's signature and returns the type that should be in that place in B's signature
     private class Substitutor(
-            private val parent: Substitutor?,
-            private val typeSubstitutor: TypeSubstitutor
+            aTypeParams: List<TypeParameterDescriptor>,
+            bTypeParams: List<TypeParameterDescriptor>,
+            private val parent: Substitutor? = null
     ) : (KotlinType?) -> KotlinType? {
-        constructor(
-                aTypeParams: List<TypeParameterDescriptor>,
-                bTypeParams: List<TypeParameterDescriptor>,
-                parent: Substitutor? = null
-        ) : this(parent, TypeSubstitutor.create(
+        private val typeSubstitutor = TypeSubstitutor.create(
                 TypeConstructorSubstitution.createByParametersMap(aTypeParams.keysToMap {
                     bTypeParams[it.index].defaultType.asTypeProjection()
                 })
-        ))
+        )
 
         override fun invoke(type: KotlinType?): KotlinType? =
                 (parent?.invoke(type) ?: type)?.asTypeProjection()?.let(typeSubstitutor::substitute)?.type

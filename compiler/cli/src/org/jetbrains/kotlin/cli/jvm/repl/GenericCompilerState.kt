@@ -21,21 +21,33 @@ import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.repl.messages.DiagnosticMessageHolder
 import org.jetbrains.kotlin.descriptors.ScriptDescriptor
 import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.script.KotlinScriptExternalDependencies
 import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.script.dependencies.KotlinScriptExternalDependencies
 
 class ReplCompilerStageHistory(private val state: GenericReplCompilerState) : BasicReplStageHistory<ScriptDescriptor>(state.lock) {
 
+    override fun reset(): Iterable<ILineId> {
+        val removedCompiledLines = super.reset()
+        val removedAnalyzedLines = state.analyzerEngine.reset()
+
+        checkConsistent(removedCompiledLines, removedAnalyzedLines)
+        return removedCompiledLines
+    }
+
     override fun resetTo(id: ILineId): Iterable<ILineId> {
         val removedCompiledLines = super.resetTo(id)
-        val removedAnalyzedLines = state.analyzerEngine.resetToLine(id.no)
+        val removedAnalyzedLines = state.analyzerEngine.resetToLine(id)
 
+        checkConsistent(removedCompiledLines, removedAnalyzedLines)
+        return removedCompiledLines
+    }
+
+    private fun checkConsistent(removedCompiledLines: Iterable<ILineId>, removedAnalyzedLines: List<ReplCodeLine>) {
         removedCompiledLines.zip(removedAnalyzedLines).forEach {
             if (it.first != LineId(it.second)) {
                 throw IllegalStateException("History mismatch when resetting lines: ${it.first.no} != ${it.second}")
             }
         }
-        return removedCompiledLines
     }
 }
 

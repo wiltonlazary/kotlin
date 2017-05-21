@@ -29,7 +29,7 @@ import com.intellij.refactoring.util.RefactoringMessageDialog
 import com.intellij.usageView.UsageInfo
 import org.jetbrains.kotlin.idea.refactoring.move.ContainerChangeInfo
 import org.jetbrains.kotlin.idea.refactoring.move.ContainerInfo
-import org.jetbrains.kotlin.idea.refactoring.move.lazilyProcessInternalReferencesToUpdateOnPackageNameChange
+import org.jetbrains.kotlin.idea.refactoring.move.processInternalReferencesToUpdateOnPackageNameChange
 import org.jetbrains.kotlin.idea.refactoring.move.postProcessMoveUsages
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.*
@@ -77,12 +77,12 @@ internal var KtSimpleNameExpression.internalUsageInfos: MutableMap<FqName, (KtSi
         by CopyableUserDataProperty(Key.create("INTERNAL_USAGE_INFOS"))
 
 internal fun preProcessInternalUsages(element: KtElement, usages: List<KtElement>) {
-    val mainFile = element.getContainingKtFile()
-    val targetPackages = usages.mapNotNullTo(LinkedHashSet()) { it.getContainingKtFile().packageFqName }
+    val mainFile = element.containingKtFile
+    val targetPackages = usages.mapNotNullTo(LinkedHashSet()) { it.containingKtFile.packageFqName }
     for (targetPackage in targetPackages) {
         if (targetPackage == mainFile.packageFqName) continue
         val packageNameInfo = ContainerChangeInfo(ContainerInfo.Package(mainFile.packageFqName), ContainerInfo.Package(targetPackage))
-        element.lazilyProcessInternalReferencesToUpdateOnPackageNameChange(packageNameInfo) { expr, factory ->
+        element.processInternalReferencesToUpdateOnPackageNameChange(packageNameInfo) { expr, factory ->
             val infos =
                     expr.internalUsageInfos
                     ?: LinkedHashMap<FqName, (KtSimpleNameExpression) -> UsageInfo?>().apply { expr.internalUsageInfos = this }
@@ -93,7 +93,7 @@ internal fun preProcessInternalUsages(element: KtElement, usages: List<KtElement
 
 internal fun <E : KtElement> postProcessInternalReferences(inlinedElement: E): E? {
     val pointer = inlinedElement.createSmartPointer()
-    val targetPackage = inlinedElement.getContainingKtFile().packageFqName
+    val targetPackage = inlinedElement.containingKtFile.packageFqName
     val expressionsToProcess = inlinedElement.collectDescendantsOfType<KtSimpleNameExpression> { it.internalUsageInfos != null }
     val internalUsages = expressionsToProcess.mapNotNull { it.internalUsageInfos!![targetPackage]?.invoke(it) }
     expressionsToProcess.forEach { it.internalUsageInfos = null }

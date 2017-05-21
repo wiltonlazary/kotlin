@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,12 @@ package org.jetbrains.kotlin.idea
 import com.intellij.psi.PsiDocumentManager
 import junit.framework.TestCase
 import org.intellij.lang.annotations.Language
+import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeFullyAndGetResult
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
 import org.jetbrains.kotlin.idea.imports.importableFqName
-import org.jetbrains.kotlin.idea.search.usagesSearch.constructor
 import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.idea.test.KotlinLightProjectDescriptor
 import org.jetbrains.kotlin.idea.util.application.executeWriteCommand
@@ -35,6 +35,7 @@ import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.types.typeUtil.containsError
 
 class ResolveElementCacheTest : KotlinLightCodeInsightFixtureTestCase() {
     override fun getProjectDescriptor() = KotlinLightProjectDescriptor.INSTANCE
@@ -509,6 +510,32 @@ class C(param1: String = "", param2: Int = 0) {
         val nameRef = file.findDescendantOfType<KtNameReferenceExpression>()!!
         val bindingContext = nameRef.analyze(BodyResolveMode.PARTIAL)
         assert(bindingContext[BindingContext.REFERENCE_TARGET, nameRef]?.fqNameSafe?.asString() == "kotlin.Int")
+    }
+
+    fun testResolveDefaultValueInPrimaryConstructor() {
+        val file = myFixture.configureByText("Test.kt", """
+        class ClassA<N> (
+                messenger: ClassB<N> = object : ClassB<N> {
+                    override fun methodOne(param: List<N>) {
+                    }
+                }
+        )
+
+        interface ClassB<N> {
+            fun methodOne(param: List<N>)
+        }
+        """) as KtFile
+
+        val classA = file.declarations[0] as KtClass
+        val defaultValue = classA.primaryConstructor!!.valueParameters[0].defaultValue as KtObjectLiteralExpression
+        val methodOne = defaultValue.objectDeclaration.declarations[0] as KtFunction
+
+        val bindingContext = methodOne.analyze(BodyResolveMode.FULL)
+
+        val parameter = methodOne.valueParameters[0]
+        val parameterDescriptor = bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, parameter] as ValueParameterDescriptor
+
+        assert(!parameterDescriptor.type.containsError())
     }
 
     private fun checkResolveMultiple(mode: BodyResolveMode, vararg expressions: KtExpression): BindingContext {

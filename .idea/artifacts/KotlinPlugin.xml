@@ -60,16 +60,17 @@
           <element id="module-output" name="backend.jvm" />
           <element id="module-output" name="ir.psi2ir" />
           <element id="module-output" name="annotation-based-compiler-plugins-ide-support" />
+          <element id="module-output" name="frontend.script" />
         </element>
         <element id="library" level="project" name="javax.inject" />
         <element id="directory" name="jps">
           <element id="artifact" artifact-name="KotlinJpsPlugin" />
         </element>
         <element id="library" level="project" name="markdown" />
-        <element id="archive" name="kotlin-android-extensions-plugin.jar">
+        <element id="archive" name="android-extensions-ide.jar">
           <element id="module-output" name="android-extensions-idea" />
         </element>
-        <element id="archive" name="kotlin-android-extensions-compiler-plugin.jar">
+        <element id="archive" name="android-extensions-compiler.jar">
           <element id="module-output" name="android-extensions-compiler" />
         </element>
         <element id="archive" name="android-lint.jar">
@@ -91,8 +92,7 @@
         <element id="archive" name="noarg-ide-plugin.jar">
           <element id="module-output" name="noarg-ide" />
         </element>
-        <element id="file-copy" path="$PROJECT_DIR$/dist/kotlinc/lib/kotlin-daemon-client.jar" />
-        <element id="file-copy" path="$PROJECT_DIR$/dist/kotlinc/lib/kotlin-script-runtime.jar" />
+        <element id="file-copy" path="$PROJECT_DIR$/dependencies/bootstrap-compiler/Kotlin/kotlinc/lib/kotlin-script-runtime.jar" />
         <element id="archive" name="sam-with-receiver-compiler-plugin.jar">
           <element id="module-output" name="sam-with-receiver-cli" />
         </element>
@@ -103,6 +103,8 @@
           <element id="module-output" name="kotlin-gradle-tooling" />
         </element>
         <element id="library" level="project" name="uast-java" />
+        <element id="library" level="project" name="kotlinx-coroutines-core" />
+        <element id="library" level="project" name="javaslang" />
       </element>
       <element id="directory" name="kotlinc">
         <element id="dir-copy" path="$PROJECT_DIR$/dist/kotlinc" />

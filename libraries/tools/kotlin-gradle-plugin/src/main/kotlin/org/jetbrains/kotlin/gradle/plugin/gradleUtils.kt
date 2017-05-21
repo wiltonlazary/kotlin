@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.gradle.plugin
 
 import org.gradle.api.Task
 import org.gradle.api.file.FileCollection
+import org.gradle.api.file.FileTree
 import org.gradle.api.internal.HasConvention
 import org.gradle.api.logging.Logger
 import org.gradle.api.plugins.ExtensionAware
@@ -46,8 +47,12 @@ internal fun Task.finalizedByIfNotFailed(finalizer: Task) {
     this.finalizedBy(finalizer)
 }
 
-internal fun AbstractCompile.mapClasspath(fn: ()->FileCollection) {
+internal fun AbstractCompile.mapClasspath(fn: () -> FileCollection) {
     conventionMapping.map("classpath", fn)
+}
+
+internal fun AbstractCompile.mapSource(fn: () -> FileTree) {
+    conventionMapping.map("source", fn)
 }
 
 internal inline fun <reified T : Any> Any.addConvention(name: String, plugin: T) {

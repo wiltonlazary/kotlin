@@ -36,6 +36,27 @@ public class AndroidLintQuickfixTestGenerated extends AbstractAndroidLintQuickfi
         KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/android/lintQuickfix"), Pattern.compile("^([\\w\\-_]+)\\.kt$"), TargetBackend.ANY, true);
     }
 
+    @TestMetadata("idea/testData/android/lintQuickfix/parcelable")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class Parcelable extends AbstractAndroidLintQuickfixTest {
+        public void testAllFilesPresentInParcelable() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/android/lintQuickfix/parcelable"), Pattern.compile("^([\\w\\-_]+)\\.kt$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("missingCreator.kt")
+        public void testMissingCreator() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/android/lintQuickfix/parcelable/missingCreator.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("noImplementation.kt")
+        public void testNoImplementation() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/android/lintQuickfix/parcelable/noImplementation.kt");
+            doTest(fileName);
+        }
+    }
+
     @TestMetadata("idea/testData/android/lintQuickfix/requiresApi")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -71,6 +92,12 @@ public class AndroidLintQuickfixTestGenerated extends AbstractAndroidLintQuickfi
         @TestMetadata("functionLiteral.kt")
         public void testFunctionLiteral() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/android/lintQuickfix/requiresApi/functionLiteral.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("inlinedConstant.kt")
+        public void testInlinedConstant() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/android/lintQuickfix/requiresApi/inlinedConstant.kt");
             doTest(fileName);
         }
 
@@ -194,6 +221,12 @@ public class AndroidLintQuickfixTestGenerated extends AbstractAndroidLintQuickfi
             doTest(fileName);
         }
 
+        @TestMetadata("inlinedConstant.kt")
+        public void testInlinedConstant() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/android/lintQuickfix/targetApi/inlinedConstant.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("method.kt")
         public void testMethod() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/android/lintQuickfix/targetApi/method.kt");
@@ -254,6 +287,12 @@ public class AndroidLintQuickfixTestGenerated extends AbstractAndroidLintQuickfi
         @TestMetadata("ifWithBlock.kt")
         public void testIfWithBlock() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("idea/testData/android/lintQuickfix/targetVersionCheck/ifWithBlock.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("inlinedConstant.kt")
+        public void testInlinedConstant() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("idea/testData/android/lintQuickfix/targetVersionCheck/inlinedConstant.kt");
             doTest(fileName);
         }
 

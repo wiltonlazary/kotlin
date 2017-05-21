@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils.getNameForAnnotatedObject
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils.isNativeObject
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils.isCompanionObject
 import org.jetbrains.kotlin.resolve.calls.tasks.isDynamic
@@ -85,7 +86,7 @@ class NameSuggestion {
 
             is PackageFragmentDescriptor -> {
                 return if (!descriptor.fqName.isRoot) {
-                    SuggestedName(descriptor.fqName.pathSegments().map { it.asString() }, true, descriptor,
+                    SuggestedName(descriptor.fqName.pathSegments().map(Name::asString), true, descriptor,
                                   descriptor.containingDeclaration)
                 }
                 else {
@@ -169,15 +170,21 @@ class NameSuggestion {
         }
         val fixedDescriptor = current
 
-        do {
-            parts += getSuggestedName(current)
-            val last = current
+        parts += if (fixedDescriptor is ConstructorDescriptor) {
             current = current.containingDeclaration!!
-            if (last is ConstructorDescriptor && !last.isPrimary) {
-                parts[parts.lastIndex] = getSuggestedName(current) + "_init"
-                current = current.containingDeclaration!!
-            }
-        } while (current is FunctionDescriptor)
+            getSuggestedName(current) + "_init"
+        }
+        else {
+            getSuggestedName(fixedDescriptor)
+        }
+        if (current.containingDeclaration is FunctionDescriptor && current !is TypeParameterDescriptor) {
+            val outerFunctionName = suggest(current.containingDeclaration as FunctionDescriptor)!!
+            parts += outerFunctionName.names.single()
+            current = outerFunctionName.scope
+        }
+        else {
+            current = current.containingDeclaration!!
+        }
 
         // Getters and setters have generation strategy similar to common declarations, except for they are declared as
         // members of classes/packages, not corresponding properties.
@@ -266,38 +273,40 @@ class NameSuggestion {
             }
 
             fun mangledAndStable() = NameAndStability(getStableMangledName(baseName, encodeSignature(descriptor)), true)
+            fun mangledInternal() = NameAndStability(getInternalMangledName(baseName, encodeSignature(descriptor)), true)
             fun mangledPrivate() = NameAndStability(getPrivateMangledName(baseName, descriptor), false)
 
             val effectiveVisibility = descriptor.ownEffectiveVisibility
 
             val containingDeclaration = descriptor.containingDeclaration
             return when (containingDeclaration) {
-                is PackageFragmentDescriptor -> if (effectiveVisibility.isPublicAPI) mangledAndStable() else regularAndUnstable()
-                is ClassDescriptor -> {
+                is PackageFragmentDescriptor -> when {
+                    effectiveVisibility.isPublicAPI -> mangledAndStable()
+
+                    effectiveVisibility == Visibilities.INTERNAL -> mangledInternal()
+
+                    else -> regularAndUnstable()
+                }
+                is ClassDescriptor -> when {
                     // valueOf() is created in the library with a mangled name for every enum class
-                    if (descriptor is FunctionDescriptor && descriptor.isEnumValueOfMethod()) return mangledAndStable()
+                    descriptor is FunctionDescriptor && descriptor.isEnumValueOfMethod() -> mangledAndStable()
 
                     // Make all public declarations stable
-                    if (effectiveVisibility == Visibilities.PUBLIC) {
-                        return mangledAndStable()
-                    }
+                    effectiveVisibility == Visibilities.PUBLIC -> mangledAndStable()
 
-                    if (descriptor is CallableMemberDescriptor && descriptor.isOverridableOrOverrides) return mangledAndStable()
+                    descriptor is CallableMemberDescriptor && descriptor.isOverridableOrOverrides -> mangledAndStable()
 
                     // Make all protected declarations of non-final public classes stable
-                    if (effectiveVisibility == Visibilities.PROTECTED &&
+                    effectiveVisibility == Visibilities.PROTECTED &&
                         !containingDeclaration.isFinalClass &&
-                        containingDeclaration.visibility.isPublicAPI
-                    ) {
-                        return mangledAndStable()
-                    }
+                        containingDeclaration.visibility.isPublicAPI -> mangledAndStable()
+
+                    effectiveVisibility == Visibilities.INTERNAL -> mangledInternal()
 
                     // Mangle (but make unstable) all non-public API of public classes
-                    if (containingDeclaration.visibility.isPublicAPI && !containingDeclaration.isFinalClass) {
-                        return mangledPrivate()
-                    }
+                    containingDeclaration.visibility.isPublicAPI && !containingDeclaration.isFinalClass -> mangledPrivate()
 
-                    regularAndUnstable()
+                    else -> regularAndUnstable()
                 }
                 else -> {
                     assert(containingDeclaration is CallableMemberDescriptor) {
@@ -314,6 +323,11 @@ class NameSuggestion {
         @JvmStatic fun getPrivateMangledName(baseName: String, descriptor: CallableDescriptor): String {
             val ownerName = descriptor.containingDeclaration.fqNameUnsafe.asString()
             return getStableMangledName(baseName, ownerName + ":" + encodeSignature(descriptor))
+        }
+
+        fun getInternalMangledName(suggestedName: String, forCalculateId: String): String {
+            val suffix = "_${mangledId("internal:" + forCalculateId)}\$"
+            return suggestedName + suffix
         }
 
         @JvmStatic fun getStableMangledName(suggestedName: String, forCalculateId: String): String {

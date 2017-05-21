@@ -16,44 +16,38 @@
 
 package org.jetbrains.kotlin.resolve.calls.tower
 
-import org.jetbrains.kotlin.descriptors.CallableDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.VariableDescriptor
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
 import org.jetbrains.kotlin.resolve.scopes.ImportingScope
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValueWithSmartCastInfo
 import org.jetbrains.kotlin.resolve.scopes.utils.parentsWithSelf
-import org.jetbrains.kotlin.utils.addToStdlib.check
 import java.util.*
 
-interface Candidate<out D : CallableDescriptor> {
-    val descriptor: D
-
+interface Candidate {
     // this operation should be very fast
     val isSuccessful: Boolean
 
     val status: ResolutionCandidateStatus
 }
 
-interface CandidateFactory<D : CallableDescriptor, out C: Candidate<D>> {
+interface CandidateFactory<out C: Candidate> {
     fun createCandidate(
-            towerCandidate: CandidateWithBoundDispatchReceiver<D>,
+            towerCandidate: CandidateWithBoundDispatchReceiver,
             explicitReceiverKind: ExplicitReceiverKind,
             extensionReceiver: ReceiverValueWithSmartCastInfo?
     ): C
 }
 
-interface CandidateFactoryProviderForInvoke<F : Candidate<FunctionDescriptor>, V : Candidate<VariableDescriptor>> {
+interface CandidateFactoryProviderForInvoke<C : Candidate> {
 
-    fun transformCandidate(variable: V, invoke: F): F
+    fun transformCandidate(variable: C, invoke: C): C
 
-    fun factoryForVariable(stripExplicitReceiver: Boolean): CandidateFactory<VariableDescriptor, V>
+    fun factoryForVariable(stripExplicitReceiver: Boolean): CandidateFactory<C>
 
     // foo() -> ReceiverValue(foo), context for invoke
     // null means that there is no invoke on variable
-    fun factoryForInvoke(variable: V, useExplicitReceiver: Boolean): Pair<ReceiverValueWithSmartCastInfo, CandidateFactory<FunctionDescriptor, F>>?
+    fun factoryForInvoke(variable: C, useExplicitReceiver: Boolean): Pair<ReceiverValueWithSmartCastInfo, CandidateFactory<C>>?
 }
 
 sealed class TowerData {
@@ -70,13 +64,13 @@ interface ScopeTowerProcessor<out C> {
 }
 
 class TowerResolver {
-    fun <C: Candidate<*>> runResolve(
+    fun <C: Candidate> runResolve(
             scopeTower: ImplicitScopeTower,
             processor: ScopeTowerProcessor<C>,
             useOrder: Boolean
     ): Collection<C> = scopeTower.run(processor, SuccessfulResultCollector { it.status }, useOrder)
 
-    fun <C: Candidate<*>> collectAllCandidates(
+    fun <C: Candidate> collectAllCandidates(
             scopeTower: ImplicitScopeTower,
             processor: ScopeTowerProcessor<C>
     ): Collection<C>
@@ -235,11 +229,11 @@ class TowerResolver {
 
         override fun getSuccessfulCandidates(): Collection<C>? = getResolved()
 
-        fun getResolved() = currentCandidates.check { currentLevel == ResolutionCandidateApplicability.RESOLVED }
+        fun getResolved() = currentCandidates.takeIf { currentLevel == ResolutionCandidateApplicability.RESOLVED }
 
-        fun getResolvedLowPriority() = currentCandidates.check { currentLevel == ResolutionCandidateApplicability.RESOLVED_LOW_PRIORITY }
+        fun getResolvedLowPriority() = currentCandidates.takeIf { currentLevel == ResolutionCandidateApplicability.RESOLVED_LOW_PRIORITY }
 
-        fun getErrors() = currentCandidates.check {
+        fun getErrors() = currentCandidates.takeIf {
             currentLevel == null || currentLevel!! > ResolutionCandidateApplicability.RESOLVED_LOW_PRIORITY
         }
 

@@ -55,7 +55,7 @@ fun <D> Pseudocode.traverse(
     }
 }
 
-fun <I : ControlFlowInfo<*>> Pseudocode.collectData(
+fun <I : ControlFlowInfo<*, *>> Pseudocode.collectData(
         traversalOrder: TraversalOrder,
         mergeEdges: (Instruction, Collection<I>) -> Edges<I>,
         updateEdge: (Instruction, Instruction, I) -> I,
@@ -64,24 +64,23 @@ fun <I : ControlFlowInfo<*>> Pseudocode.collectData(
     val edgesMap = LinkedHashMap<Instruction, Edges<I>>()
     edgesMap.put(getStartInstruction(traversalOrder), Edges(initialInfo, initialInfo))
 
-    val changed = BooleanArray(1)
-    changed[0] = true
-    while (changed[0]) {
-        changed[0] = false
+    val changed = mutableMapOf<Instruction, Boolean>()
+    do {
         collectDataFromSubgraph(
                 traversalOrder, edgesMap,
                 mergeEdges, updateEdge, Collections.emptyList<Instruction>(), changed, false)
-    }
+    } while (changed.any { it.value })
+
     return edgesMap
 }
 
-private fun <I : ControlFlowInfo<*>> Pseudocode.collectDataFromSubgraph(
+private fun <I : ControlFlowInfo<*, *>> Pseudocode.collectDataFromSubgraph(
         traversalOrder: TraversalOrder,
         edgesMap: MutableMap<Instruction, Edges<I>>,
         mergeEdges: (Instruction, Collection<I>) -> Edges<I>,
         updateEdge: (Instruction, Instruction, I) -> I,
         previousSubGraphInstructions: Collection<Instruction>,
-        changed: BooleanArray,
+        changed: MutableMap<Instruction, Boolean>,
         isLocal: Boolean
 ) {
     val instructions = getInstructions(traversalOrder)
@@ -107,7 +106,13 @@ private fun <I : ControlFlowInfo<*>> Pseudocode.collectDataFromSubgraph(
             updateEdgeDataForInstruction(instruction, previousValue, updatedValue, edgesMap, changed)
             continue
         }
+
+
         val previousDataValue = edgesMap[instruction]
+        if (previousDataValue != null && previousInstructions.all { changed[it] == false }) {
+            changed[instruction] = false
+            continue
+        }
 
         val incomingEdgesData = HashSet<I>()
 
@@ -138,11 +143,19 @@ private fun getPreviousIncludingSubGraphInstructions(
     return result
 }
 
-private fun <I : ControlFlowInfo<*>> updateEdgeDataForInstruction(
-        instruction: Instruction, previousValue: Edges<I>?, newValue: Edges<I>?, edgesMap: MutableMap<Instruction, Edges<I>>, changed: BooleanArray) {
+private fun <I : ControlFlowInfo<*, *>> updateEdgeDataForInstruction(
+        instruction: Instruction,
+        previousValue: Edges<I>?,
+        newValue: Edges<I>?,
+        edgesMap: MutableMap<Instruction, Edges<I>>,
+        changed: MutableMap<Instruction, Boolean>
+) {
     if (previousValue != newValue && newValue != null) {
-        changed[0] = true
+        changed[instruction] = true
         edgesMap.put(instruction, newValue)
+    }
+    else {
+        changed[instruction] = false
     }
 }
 

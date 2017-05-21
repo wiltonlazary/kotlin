@@ -22,7 +22,6 @@ import com.intellij.util.ArrayUtil;
 import kotlin.Pair;
 import kotlin.collections.CollectionsKt;
 import kotlin.io.FilesKt;
-import kotlin.jvm.functions.Function1;
 import kotlin.text.Charsets;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.cli.common.CLICompiler;
@@ -31,7 +30,6 @@ import org.jetbrains.kotlin.cli.js.K2JSCompiler;
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler;
 import org.jetbrains.kotlin.config.KotlinCompilerVersion;
 import org.jetbrains.kotlin.load.kotlin.JvmMetadataVersion;
-import org.jetbrains.kotlin.serialization.deserialization.BinaryVersion;
 import org.jetbrains.kotlin.test.InTextDirectivesUtils;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
 import org.jetbrains.kotlin.test.TestCaseWithTmpdir;
@@ -56,7 +54,7 @@ public abstract class AbstractCliTest extends TestCaseWithTmpdir {
         try {
             System.setErr(new PrintStream(bytes));
             ExitCode exitCode = CLICompiler.doMainNoExit(compiler, ArrayUtil.toStringArray(args));
-            return new Pair<String, ExitCode>(bytes.toString("utf-8"), exitCode);
+            return new Pair<>(bytes.toString("utf-8"), exitCode);
         }
         catch (Exception e) {
             throw ExceptionUtilsKt.rethrow(e);
@@ -67,30 +65,25 @@ public abstract class AbstractCliTest extends TestCaseWithTmpdir {
     }
 
     @NotNull
-    public static String getNormalizedCompilerOutput(
-            @NotNull String pureOutput,
-            @NotNull ExitCode exitCode,
-            @NotNull String testDataDir,
-            @NotNull BinaryVersion version
-    ) {
+    public static String getNormalizedCompilerOutput(@NotNull String pureOutput, @NotNull ExitCode exitCode, @NotNull String testDataDir) {
         String testDataAbsoluteDir = new File(testDataDir).getAbsolutePath();
         String normalizedOutputWithoutExitCode = StringUtil.convertLineSeparators(pureOutput)
                 .replace(testDataAbsoluteDir, "$TESTDATA_DIR$")
                 .replace(FileUtil.toSystemIndependentName(testDataAbsoluteDir), "$TESTDATA_DIR$")
                 .replace(PathUtil.getKotlinPathsForDistDirectory().getHomePath().getAbsolutePath(), "$PROJECT_DIR$")
-                .replace("expected version is " + version, "expected version is $ABI_VERSION$")
+                .replace("expected version is " + JvmMetadataVersion.INSTANCE, "expected version is $ABI_VERSION$")
+                .replace("expected version is " + JsMetadataVersion.INSTANCE, "expected version is $ABI_VERSION$")
                 .replace("\\", "/")
-                .replaceAll("^.+running the Kotlin compiler under Java 6 or 7 is unsupported and will no longer be possible in a future update\\.\n", "")
                 .replace(KotlinCompilerVersion.VERSION, "$VERSION$");
 
         return normalizedOutputWithoutExitCode + exitCode;
     }
 
-    private void doTest(@NotNull String fileName, @NotNull CLICompiler<?> compiler, BinaryVersion version) throws Exception {
+    private void doTest(@NotNull String fileName, @NotNull CLICompiler<?> compiler) throws Exception {
         System.setProperty("java.awt.headless", "true");
         Pair<String, ExitCode> outputAndExitCode = executeCompilerGrabOutput(compiler, readArgs(fileName, tmpdir.getPath()));
         String actual = getNormalizedCompilerOutput(
-                outputAndExitCode.getFirst(), outputAndExitCode.getSecond(), new File(fileName).getParent(), version
+                outputAndExitCode.getFirst(), outputAndExitCode.getSecond(), new File(fileName).getParent()
         );
 
         File outFile = new File(fileName.replaceFirst("\\.args$", ".out"));
@@ -103,7 +96,7 @@ public abstract class AbstractCliTest extends TestCaseWithTmpdir {
     }
 
     private void doTestAdditionalChecks(@NotNull File testConfigFile) throws IOException {
-        List<String> diagnostics = new ArrayList<String>(0);
+        List<String> diagnostics = new ArrayList<>(0);
         String content = FilesKt.readText(testConfigFile, Charsets.UTF_8);
 
         List<String> existsList = InTextDirectivesUtils.findListWithPrefixes(content, "// EXISTS: ");
@@ -132,35 +125,32 @@ public abstract class AbstractCliTest extends TestCaseWithTmpdir {
     }
 
     @NotNull
-    static List<String> readArgs(@NotNull final String argsFilePath, @NotNull final String tempDir) throws IOException {
+    static List<String> readArgs(@NotNull String argsFilePath, @NotNull String tempDir) throws IOException {
         List<String> lines = FilesKt.readLines(new File(argsFilePath), Charsets.UTF_8);
 
-        return CollectionsKt.mapNotNull(lines, new Function1<String, String>() {
-            @Override
-            public String invoke(String arg) {
-                if (arg.isEmpty()) {
-                    return null;
-                }
-
-                // Do not replace ':' after '\' (used in compiler plugin tests)
-                String argsWithColonsReplaced = arg
-                        .replace("\\:", "$COLON$")
-                        .replace(":", File.pathSeparator)
-                        .replace("$COLON$", ":");
-
-                return argsWithColonsReplaced
-                        .replace("$TEMP_DIR$", tempDir)
-                        .replace("$TESTDATA_DIR$", new File(argsFilePath).getParent());
+        return CollectionsKt.mapNotNull(lines, arg -> {
+            if (arg.isEmpty()) {
+                return null;
             }
+
+            // Do not replace ':' after '\' (used in compiler plugin tests)
+            String argsWithColonsReplaced = arg
+                    .replace("\\:", "$COLON$")
+                    .replace(":", File.pathSeparator)
+                    .replace("$COLON$", ":");
+
+            return argsWithColonsReplaced
+                    .replace("$TEMP_DIR$", tempDir)
+                    .replace("$TESTDATA_DIR$", new File(argsFilePath).getParent());
         });
     }
 
     protected void doJvmTest(@NotNull String fileName) throws Exception {
-        doTest(fileName, new K2JVMCompiler(), JvmMetadataVersion.INSTANCE);
+        doTest(fileName, new K2JVMCompiler());
     }
 
     protected void doJsTest(@NotNull String fileName) throws Exception {
-        doTest(fileName, new K2JSCompiler(), JsMetadataVersion.INSTANCE);
+        doTest(fileName, new K2JSCompiler());
     }
 
     public static String removePerfOutput(String output) {

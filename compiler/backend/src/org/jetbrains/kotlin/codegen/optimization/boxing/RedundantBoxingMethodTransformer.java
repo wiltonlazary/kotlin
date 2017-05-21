@@ -18,10 +18,11 @@ package org.jetbrains.kotlin.codegen.optimization.boxing;
 
 import com.intellij.openapi.util.Pair;
 import kotlin.collections.CollectionsKt;
-import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.codegen.optimization.common.StrictBasicValue;
+import org.jetbrains.kotlin.codegen.optimization.common.UtilKt;
 import org.jetbrains.kotlin.codegen.optimization.transformer.MethodTransformer;
+import org.jetbrains.org.objectweb.asm.Label;
 import org.jetbrains.org.objectweb.asm.Opcodes;
 import org.jetbrains.org.objectweb.asm.Type;
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter;
@@ -48,7 +49,7 @@ public class RedundantBoxingMethodTransformer extends MethodTransformer {
 
             adaptLocalVariableTableForBoxedValues(node, frames);
 
-            applyVariablesRemapping(node, buildVariablesRemapping(valuesToOptimize, node));
+            UtilKt.remapLocalVariables(node, buildVariablesRemapping(valuesToOptimize, node));
 
             adaptInstructionsForBoxedValues(node, valuesToOptimize);
         }
@@ -98,12 +99,7 @@ public class RedundantBoxingMethodTransformer extends MethodTransformer {
 
             List<BasicValue> variableValues = getValuesStoredOrLoadedToVariable(localVariableNode, node, frames);
 
-            Collection<BasicValue> boxed = CollectionsKt.filter(variableValues, new Function1<BasicValue, Boolean>() {
-                @Override
-                public Boolean invoke(BasicValue value) {
-                    return value instanceof BoxedBasicValue;
-                }
-            });
+            Collection<BasicValue> boxed = CollectionsKt.filter(variableValues, value -> value instanceof BoxedBasicValue);
 
             if (boxed.isEmpty()) continue;
 
@@ -124,17 +120,14 @@ public class RedundantBoxingMethodTransformer extends MethodTransformer {
         return needToRepeat;
     }
 
-    private static boolean isUnsafeToRemoveBoxingForConnectedValues(List<BasicValue> usedValues, final Type unboxedType) {
-        return CollectionsKt.any(usedValues, new Function1<BasicValue, Boolean>() {
-            @Override
-            public Boolean invoke(BasicValue input) {
-                if (input == StrictBasicValue.UNINITIALIZED_VALUE) return false;
-                if (!(input instanceof BoxedBasicValue)) return true;
+    private static boolean isUnsafeToRemoveBoxingForConnectedValues(List<BasicValue> usedValues, Type unboxedType) {
+        return CollectionsKt.any(usedValues, input -> {
+            if (input == StrictBasicValue.UNINITIALIZED_VALUE) return false;
+            if (!(input instanceof BoxedBasicValue)) return true;
 
-                BoxedValueDescriptor descriptor = ((BoxedBasicValue) input).getDescriptor();
-                return !descriptor.isSafeToRemove() ||
-                       !(descriptor.getUnboxedType().equals(unboxedType));
-            }
+            BoxedValueDescriptor descriptor = ((BoxedBasicValue) input).getDescriptor();
+            return !descriptor.isSafeToRemove() ||
+                   !(descriptor.getUnboxedType().equals(unboxedType));
         });
     }
 
@@ -160,7 +153,7 @@ public class RedundantBoxingMethodTransformer extends MethodTransformer {
             @NotNull MethodNode node,
             @NotNull Frame<BasicValue>[] frames
     ) {
-        List<BasicValue> values = new ArrayList<BasicValue>();
+        List<BasicValue> values = new ArrayList<>();
         InsnList insnList = node.instructions;
         int from = insnList.indexOf(localVariableNode.start) + 1;
         int to = insnList.indexOf(localVariableNode.end) - 1;
@@ -199,7 +192,7 @@ public class RedundantBoxingMethodTransformer extends MethodTransformer {
 
     @NotNull
     private static int[] buildVariablesRemapping(@NotNull RedundantBoxedValuesCollection values, @NotNull MethodNode node) {
-        Set<Integer> doubleSizedVars = new HashSet<Integer>();
+        Set<Integer> doubleSizedVars = new HashSet<>();
         for (BoxedValueDescriptor valueDescriptor : values) {
             if (valueDescriptor.isDoubleSize()) {
                 doubleSizedVars.addAll(valueDescriptor.getVariablesIndexes());
@@ -219,21 +212,6 @@ public class RedundantBoxingMethodTransformer extends MethodTransformer {
         }
 
         return remapping;
-    }
-
-    private static void applyVariablesRemapping(@NotNull MethodNode node, @NotNull int[] remapping) {
-        for (AbstractInsnNode insn : node.instructions.toArray()) {
-            if (insn instanceof VarInsnNode) {
-                ((VarInsnNode) insn).var = remapping[((VarInsnNode) insn).var];
-            }
-            if (insn instanceof IincInsnNode) {
-                ((IincInsnNode) insn).var = remapping[((IincInsnNode) insn).var];
-            }
-        }
-
-        for (LocalVariableNode localVariableNode : node.localVariables) {
-            localVariableNode.index = remapping[localVariableNode.index];
-        }
     }
 
     private static void adaptInstructionsForBoxedValues(
@@ -341,9 +319,68 @@ public class RedundantBoxingMethodTransformer extends MethodTransformer {
                 );
                 node.instructions.set(insn, new InsnNode(Opcodes.ICONST_1));
                 break;
+            case Opcodes.INVOKESTATIC:
+                if (BoxingInterpreterKt.isAreEqualIntrinsic(insn)) {
+                    adaptAreEqualIntrinsic(node, insn, value);
+                    break;
+                }
+                else {
+                    // fall-through to default
+                }
             default:
                 // CHECKCAST or unboxing-method call
                 node.instructions.remove(insn);
         }
+    }
+
+    private static void adaptAreEqualIntrinsic(@NotNull MethodNode node, @NotNull AbstractInsnNode insn, @NotNull BoxedValueDescriptor value) {
+        Type unboxedType = value.getUnboxedType();
+
+        switch (unboxedType.getSort()) {
+            case Type.BOOLEAN:
+            case Type.BYTE:
+            case Type.SHORT:
+            case Type.INT:
+            case Type.CHAR:
+                adaptAreEqualIntrinsicForInt(node, insn);
+                break;
+            case Type.LONG:
+                adaptAreEqualIntrinsicForLong(node, insn);
+                break;
+            case Type.OBJECT:
+                break;
+            default:
+                throw new AssertionError("Unexpected unboxed type kind: " + unboxedType);
+        }
+    }
+
+    private static void adaptAreEqualIntrinsicForInt(@NotNull MethodNode node, @NotNull AbstractInsnNode insn) {
+        LabelNode lNotEqual = new LabelNode(new Label());
+        LabelNode lDone = new LabelNode(new Label());
+        node.instructions.insertBefore(insn, new JumpInsnNode(Opcodes.IF_ICMPNE, lNotEqual));
+        node.instructions.insertBefore(insn, new InsnNode(Opcodes.ICONST_1));
+        node.instructions.insertBefore(insn, new JumpInsnNode(Opcodes.GOTO, lDone));
+        node.instructions.insertBefore(insn, lNotEqual);
+        node.instructions.insertBefore(insn, new InsnNode(Opcodes.ICONST_0));
+        node.instructions.insertBefore(insn, lDone);
+
+        node.instructions.remove(insn);
+    }
+
+    private static void adaptAreEqualIntrinsicForLong(@NotNull MethodNode node, @NotNull AbstractInsnNode insn) {
+        node.instructions.insertBefore(insn, new InsnNode(Opcodes.LCMP));
+        ifEqual1Else0(node, insn);
+        node.instructions.remove(insn);
+    }
+
+    private static void ifEqual1Else0(@NotNull MethodNode node, @NotNull AbstractInsnNode insn) {
+        LabelNode lNotEqual = new LabelNode(new Label());
+        LabelNode lDone = new LabelNode(new Label());
+        node.instructions.insertBefore(insn, new JumpInsnNode(Opcodes.IFNE, lNotEqual));
+        node.instructions.insertBefore(insn, new InsnNode(Opcodes.ICONST_1));
+        node.instructions.insertBefore(insn, new JumpInsnNode(Opcodes.GOTO, lDone));
+        node.instructions.insertBefore(insn, lNotEqual);
+        node.instructions.insertBefore(insn, new InsnNode(Opcodes.ICONST_0));
+        node.instructions.insertBefore(insn, lDone);
     }
 }

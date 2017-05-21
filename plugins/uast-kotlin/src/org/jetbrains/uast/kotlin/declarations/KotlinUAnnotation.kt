@@ -4,17 +4,18 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.descriptorUtil.annotationClass
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.uast.*
 
 class KotlinUAnnotation(
         override val psi: KtAnnotationEntry,
-        override val containingElement: UElement?
+        override val uastParent: UElement?
 ) : UAnnotation {
     private val resolvedAnnotation by lz { psi.analyze()[BindingContext.ANNOTATION, psi] }
 
     override val qualifiedName: String?
-        get() = resolvedAnnotation?.type?.constructor?.declarationDescriptor?.fqNameSafe?.asString()
+        get() = resolvedAnnotation?.annotationClass?.fqNameSafe?.asString()
 
     override val attributeValues by lz {
         val context = getUastContext()
@@ -28,7 +29,7 @@ class KotlinUAnnotation(
     }
 
     override fun resolve(): PsiClass? {
-        val descriptor = resolvedAnnotation?.type?.constructor?.declarationDescriptor ?: return null
+        val descriptor = resolvedAnnotation?.annotationClass ?: return null
         return descriptor.toSource()?.getMaybeLightElement(this) as? PsiClass
     }
 
@@ -40,7 +41,7 @@ class KotlinUAnnotation(
     }
 }
 
-class KotlinUNamedExpression(override val name: String, override val containingElement: UElement?) : UNamedExpression {
+class KotlinUNamedExpression(override val name: String, override val uastParent: UElement?) : UNamedExpression {
     override lateinit var expression: UExpression
 
     override val annotations: List<UAnnotation>

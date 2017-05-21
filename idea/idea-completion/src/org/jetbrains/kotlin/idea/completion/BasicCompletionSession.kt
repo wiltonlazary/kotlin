@@ -25,6 +25,7 @@ import com.intellij.codeInsight.template.TemplateManager
 import com.intellij.patterns.PatternCondition
 import com.intellij.patterns.StandardPatterns
 import com.intellij.psi.*
+import com.intellij.psi.impl.source.tree.LeafPsiElement
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.ProcessingContext
 import org.jetbrains.kotlin.descriptors.*
@@ -51,7 +52,6 @@ import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindExclude
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.util.supertypesWithAny
-import org.jetbrains.kotlin.utils.addToStdlib.check
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import java.util.*
 
@@ -96,6 +96,9 @@ class BasicCompletionSession(
                 else -> KEYWORDS_ONLY
             }
         }
+
+        if (OPERATOR_NAME.isApplicable())
+            return OPERATOR_NAME
 
         if (NamedArgumentCompletion.isOnlyNamedArgumentExpected(nameExpression)) {
             return NAMED_ARGUMENTS_ONLY
@@ -151,7 +154,6 @@ class BasicCompletionSession(
             val smartCompletionInBasicWeigher = SmartCompletionInBasicWeigher(smartCompletion, callTypeAndReceiver, resolutionFacade, bindingContext)
             sorter = sorter.weighBefore(KindWeigher.toString(),
                                         smartCompletionInBasicWeigher,
-                                        SmartCompletionPriorityWeigher,
                                         CallableReferenceWeigher(callTypeAndReceiver.callType))
         }
 
@@ -347,8 +349,8 @@ class BasicCompletionSession(
             if (userType != typeRef.typeElement) return null
             val parent = typeRef.parent
             return when (parent) {
-                is KtNamedFunction -> parent.check { typeRef == it.receiverTypeReference }
-                is KtProperty -> parent.check { typeRef == it.receiverTypeReference }
+                is KtNamedFunction -> parent.takeIf { typeRef == it.receiverTypeReference }
+                is KtProperty -> parent.takeIf { typeRef == it.receiverTypeReference }
                 else -> null
             }
         }
@@ -452,6 +454,26 @@ class BasicCompletionSession(
 
         override fun doComplete() {
             NamedArgumentCompletion.complete(collector, expectedInfos, callTypeAndReceiver.callType)
+        }
+    }
+
+    private val OPERATOR_NAME = object : CompletionKind {
+        override val descriptorKindFilter: DescriptorKindFilter?
+            get() = null
+
+        fun isApplicable(): Boolean {
+            if (nameExpression == null || nameExpression != expression) return false
+            val func = position.getParentOfType<KtNamedFunction>(strict = false) ?: return false
+            val funcNameIdentifier = func.nameIdentifier ?: return false
+            val identifierInNameExpression = nameExpression.nextLeaf { it is LeafPsiElement && it.elementType == KtTokens.IDENTIFIER } ?: return false
+            if (!func.hasModifier(KtTokens.OPERATOR_KEYWORD) || identifierInNameExpression != funcNameIdentifier) return false
+            val originalFunc = toFromOriginalFileMapper.toOriginalFile(func) ?: return false
+            return !originalFunc.isTopLevel || (originalFunc.isExtensionDeclaration())
+        }
+
+        override fun doComplete() {
+            OperatorNameCompletion.doComplete(collector, descriptorNameFilter)
+            flushToResultSet()
         }
     }
 
@@ -619,9 +641,16 @@ class BasicCompletionSession(
     }
 
     private fun addReferenceVariantElements(lookupElementFactory: LookupElementFactory, descriptorKindFilter: DescriptorKindFilter) {
-        val (imported, notImported) = referenceVariantsCollector!!.collectReferenceVariants(descriptorKindFilter).excludeNonInitializedVariable()
-        collector.addDescriptorElements(imported, lookupElementFactory)
-        collector.addDescriptorElements(notImported, lookupElementFactory, notImported = true)
+        fun addReferenceVariants(referenceVariants: ReferenceVariants) {
+            collector.addDescriptorElements(referenceVariantsHelper.excludeNonInitializedVariable(referenceVariants.imported, position), lookupElementFactory)
+            collector.addDescriptorElements(referenceVariants.notImportedExtensions, lookupElementFactory, notImported = true)
+        }
+
+        val referenceVariantsCollector = referenceVariantsCollector!!
+        referenceVariantsCollector.collectReferenceVariants(descriptorKindFilter) { referenceVariants ->
+            addReferenceVariants(referenceVariants)
+            flushToResultSet()
+        }
     }
 }
 

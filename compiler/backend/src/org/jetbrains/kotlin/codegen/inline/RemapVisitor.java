@@ -20,6 +20,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.codegen.StackValue;
 import org.jetbrains.org.objectweb.asm.Label;
 import org.jetbrains.org.objectweb.asm.MethodVisitor;
+import org.jetbrains.org.objectweb.asm.Opcodes;
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter;
 import org.jetbrains.org.objectweb.asm.tree.FieldInsnNode;
 
@@ -58,11 +59,17 @@ public class RemapVisitor extends MethodBodyVisitor {
 
     @Override
     public void visitFieldInsn(int opcode, @NotNull String owner, @NotNull String name, @NotNull String desc) {
-        if (name.startsWith("$$$") && (nodeRemapper instanceof RegeneratedLambdaFieldRemapper || nodeRemapper.isRoot())) {
+        if (name.startsWith(InlineCodegenUtil.CAPTURED_FIELD_FOLD_PREFIX) &&
+            (nodeRemapper instanceof RegeneratedLambdaFieldRemapper || nodeRemapper.isRoot())) {
             FieldInsnNode fin = new FieldInsnNode(opcode, owner, name, desc);
             StackValue inline = nodeRemapper.getFieldForInline(fin, null);
             assert inline != null : "Captured field should have not null stackValue " + fin;
-            inline.put(inline.type, this);
+            if (Opcodes.PUTSTATIC == opcode) {
+                inline.store(StackValue.onStack(inline.type), this);
+            }
+            else {
+                inline.put(inline.type, this);
+            }
             return;
         }
         super.visitFieldInsn(opcode, owner, name, desc);

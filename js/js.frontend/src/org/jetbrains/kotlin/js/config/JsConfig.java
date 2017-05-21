@@ -17,12 +17,19 @@
 package org.jetbrains.kotlin.js.config;
 
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.StandardFileSystems;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.openapi.vfs.VirtualFileSystem;
+import com.intellij.util.PathUtil;
 import com.intellij.util.SmartList;
+import com.intellij.util.io.URLUtil;
+import kotlin.Unit;
 import kotlin.collections.CollectionsKt;
+import kotlin.jvm.functions.Function2;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.config.CommonConfigurationKeys;
-import org.jetbrains.kotlin.config.CompilerConfiguration;
+import org.jetbrains.kotlin.config.*;
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider;
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl;
 import org.jetbrains.kotlin.js.resolve.JsPlatform;
@@ -34,28 +41,39 @@ import org.jetbrains.kotlin.serialization.js.ModuleKind;
 import org.jetbrains.kotlin.storage.LockBasedStorageManager;
 import org.jetbrains.kotlin.utils.JsMetadataVersion;
 import org.jetbrains.kotlin.utils.KotlinJavascriptMetadata;
+import org.jetbrains.kotlin.utils.KotlinJavascriptMetadataUtils;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.io.File;
+import java.util.*;
 
-/**
- * Base class representing a configuration of translator.
- */
-public abstract class JsConfig {
+import static org.jetbrains.kotlin.config.CommonConfigurationKeysKt.getLanguageVersionSettings;
+import static org.jetbrains.kotlin.utils.PathUtil.getKotlinPathsForDistDirectory;
+
+public class JsConfig {
+    public static final List<String> JS_STDLIB =
+            Collections.singletonList(getKotlinPathsForDistDirectory().getJsStdLibJarPath().getAbsolutePath());
+
+    public static final List<String> JS_KOTLIN_TEST =
+            Collections.singletonList(getKotlinPathsForDistDirectory().getJsKotlinTestJarPath().getAbsolutePath());
+
+    public static final String UNKNOWN_EXTERNAL_MODULE_NAME = "<unknown>";
+
     private final Project project;
     private final CompilerConfiguration configuration;
     private final LockBasedStorageManager storageManager = new LockBasedStorageManager();
 
-    @NotNull
-    protected final List<KotlinJavascriptMetadata> metadata = new SmartList<KotlinJavascriptMetadata>();
+    private final List<KotlinJavascriptMetadata> metadata = new SmartList<>();
+    private final List<KotlinJavascriptMetadata> friends = new SmartList<>();
 
     @Nullable
     private List<JsModuleDescriptor<ModuleDescriptorImpl>> moduleDescriptors = null;
 
+    @Nullable
+    private List<JsModuleDescriptor<ModuleDescriptorImpl>> friendModuleDescriptors = null;
+
     private boolean initialized = false;
 
-    protected JsConfig(@NotNull Project project, @NotNull CompilerConfiguration configuration) {
+    public JsConfig(@NotNull Project project, @NotNull CompilerConfiguration configuration) {
         this.project = project;
         this.configuration = configuration;
     }
@@ -80,22 +98,103 @@ public abstract class JsConfig {
         return configuration.get(JSConfigurationKeys.MODULE_KIND, ModuleKind.PLAIN);
     }
 
+    @NotNull
+    public List<String> getLibraries() {
+        return getConfiguration().getList(JSConfigurationKeys.LIBRARIES);
+    }
+
+    @NotNull
+    public List<String> getFriends() {
+        if (getConfiguration().getBoolean(JSConfigurationKeys.FRIEND_PATHS_DISABLED)) return Collections.emptyList();
+        return getConfiguration().getList(JSConfigurationKeys.FRIEND_PATHS);
+    }
+
+
     public static abstract class Reporter {
         public void error(@NotNull String message) { /*Do nothing*/ }
+
         public void warning(@NotNull String message) { /*Do nothing*/ }
     }
 
-    public abstract boolean checkLibFilesAndReportErrors(@NotNull Reporter report);
+    public boolean checkLibFilesAndReportErrors(@NotNull JsConfig.Reporter report) {
+        return checkLibFilesAndReportErrors(report, null);
+    }
 
-    protected abstract void init(@NotNull List<KotlinJavascriptMetadata> metadata);
+    private boolean checkLibFilesAndReportErrors(@NotNull JsConfig.Reporter report, @Nullable Function2<VirtualFile, String, Unit> action) {
+        return checkLibFilesAndReportErrors(getLibraries(), report, action);
+    }
+
+    private boolean checkLibFilesAndReportErrors(
+            @NotNull Collection<String> libraries,
+            @NotNull JsConfig.Reporter report,
+            @Nullable Function2<VirtualFile, String, Unit> action
+    ) {
+        if (libraries.isEmpty()) {
+            return false;
+        }
+
+        VirtualFileSystem fileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL);
+        VirtualFileSystem jarFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.JAR_PROTOCOL);
+
+        Set<String> modules = new HashSet<>();
+
+        boolean skipMetadataVersionCheck =
+                getLanguageVersionSettings(configuration).isFlagEnabled(AnalysisFlags.getSkipMetadataVersionCheck());
+
+        for (String path : libraries) {
+            VirtualFile file;
+
+            File filePath = new File(path);
+            if (!filePath.exists()) {
+                report.error("Path '" + path + "' does not exist");
+                return true;
+            }
+
+            if (path.endsWith(".jar") || path.endsWith(".zip")) {
+                file = jarFileSystem.findFileByPath(path + URLUtil.JAR_SEPARATOR);
+            }
+            else {
+                file = fileSystem.findFileByPath(path);
+            }
+
+            if (file == null) {
+                report.error("File '" + path + "' does not exist or could not be read");
+                return true;
+            }
+
+            List<KotlinJavascriptMetadata> metadataList = KotlinJavascriptMetadataUtils.loadMetadata(filePath);
+            if (metadataList.isEmpty()) {
+                report.warning("'" + path + "' is not a valid Kotlin Javascript library");
+                continue;
+            }
+
+            for (KotlinJavascriptMetadata metadata : metadataList) {
+                if (!metadata.getVersion().isCompatible() && !skipMetadataVersionCheck) {
+                    report.error("File '" + path + "' was compiled with an incompatible version of Kotlin. " +
+                                 "The binary version of its metadata is " + metadata.getVersion() +
+                                 ", expected version is " + JsMetadataVersion.INSTANCE);
+                    return true;
+                }
+                if (!modules.add(metadata.getModuleName())) {
+                    report.warning("Module \"" + metadata.getModuleName() + "\" is defined in more than one file");
+                }
+            }
+
+            if (action != null) {
+                action.invoke(file, path);
+            }
+        }
+
+        return false;
+    }
 
     @NotNull
     public List<JsModuleDescriptor<ModuleDescriptorImpl>> getModuleDescriptors() {
         init();
         if (moduleDescriptors != null) return moduleDescriptors;
 
-        moduleDescriptors = new SmartList<JsModuleDescriptor<ModuleDescriptorImpl>>();
-        List<ModuleDescriptorImpl> kotlinModuleDescriptors = new ArrayList<ModuleDescriptorImpl>();
+        moduleDescriptors = new SmartList<>();
+        List<ModuleDescriptorImpl> kotlinModuleDescriptors = new ArrayList<>();
         for (KotlinJavascriptMetadata metadataEntry : metadata) {
             JsModuleDescriptor<ModuleDescriptorImpl> descriptor = createModuleDescriptor(metadataEntry);
             moduleDescriptors.add(descriptor);
@@ -112,29 +211,85 @@ public abstract class JsConfig {
         return moduleDescriptors;
     }
 
+    @NotNull
+    public List<JsModuleDescriptor<ModuleDescriptorImpl>> getFriendModuleDescriptors() {
+        init();
+        if (friendModuleDescriptors != null) return friendModuleDescriptors;
+
+        friendModuleDescriptors = new SmartList<>();
+        for (KotlinJavascriptMetadata metadataEntry : friends) {
+            JsModuleDescriptor<ModuleDescriptorImpl> descriptor = createModuleDescriptor(metadataEntry);
+            friendModuleDescriptors.add(descriptor);
+        }
+
+        friendModuleDescriptors = Collections.unmodifiableList(friendModuleDescriptors);
+
+        return friendModuleDescriptors;
+    }
+
     private void init() {
         if (initialized) return;
 
-        init(metadata);
+        if (!getLibraries().isEmpty()) {
+            JsConfig.Reporter reporter = new Reporter() {
+                @Override
+                public void error(@NotNull String message) {
+                    throw new IllegalStateException(message);
+                }
+            };
+
+            boolean hasErrors = checkLibFilesAndReportErrors(getFriends(), reporter, (file, path) -> {
+                List<KotlinJavascriptMetadata> metaList = loadMetadata(file, "friendPath");
+                metadata.addAll(metaList);
+                friends.addAll(metaList);
+
+                return Unit.INSTANCE;
+            });
+
+
+            hasErrors |= checkLibFilesAndReportErrors(CollectionsKt.subtract(getLibraries(), getFriends()), reporter, (file, path) -> {
+                metadata.addAll(loadMetadata(file, "libraryPath"));
+
+
+                return Unit.INSTANCE;
+            });
+
+            assert !hasErrors : "hasErrors should be false";
+        }
+
         initialized = true;
     }
 
+    @NotNull
+    private static List<KotlinJavascriptMetadata> loadMetadata(@NotNull VirtualFile file, @NotNull String name) {
+        String libraryPath = PathUtil.getLocalPath(file);
+        assert libraryPath != null : name + " for " + file + " should not be null";
+        return  KotlinJavascriptMetadataUtils.loadMetadata(libraryPath);
+    }
+
+    private final IdentityHashMap<KotlinJavascriptMetadata, JsModuleDescriptor<ModuleDescriptorImpl>> factoryMap = new IdentityHashMap<>();
+
     private JsModuleDescriptor<ModuleDescriptorImpl> createModuleDescriptor(KotlinJavascriptMetadata metadata) {
-        assert metadata.getVersion().isCompatible() :
-                "Expected JS metadata version " + JsMetadataVersion.INSTANCE + ", but actual metadata version is " + metadata.getVersion();
+        return factoryMap.computeIfAbsent(metadata, m -> {
+            LanguageVersionSettings languageVersionSettings = CommonConfigurationKeysKt.getLanguageVersionSettings(configuration);
+            assert m.getVersion().isCompatible() ||
+                   languageVersionSettings.isFlagEnabled(AnalysisFlags.getSkipMetadataVersionCheck()) :
+                    "Expected JS metadata version " + JsMetadataVersion.INSTANCE + ", but actual metadata version is " + m.getVersion();
 
-        ModuleDescriptorImpl moduleDescriptor = new ModuleDescriptorImpl(
-                Name.special("<" + metadata.getModuleName() + ">"), storageManager, JsPlatform.INSTANCE.getBuiltIns()
-        );
+            ModuleDescriptorImpl moduleDescriptor = new ModuleDescriptorImpl(
+                    Name.special("<" + m.getModuleName() + ">"), storageManager, JsPlatform.INSTANCE.getBuiltIns()
+            );
 
-        JsModuleDescriptor<PackageFragmentProvider> rawDescriptor = KotlinJavascriptSerializationUtil.readModule(
-                metadata.getBody(), storageManager, moduleDescriptor, new CompilerDeserializationConfiguration(configuration)
-        );
+            JsModuleDescriptor<PackageFragmentProvider> rawDescriptor = KotlinJavascriptSerializationUtil.readModule(
+                    m.getBody(), storageManager, moduleDescriptor,
+                    new CompilerDeserializationConfiguration(languageVersionSettings)
+            );
 
-        PackageFragmentProvider provider = rawDescriptor.getData();
-        moduleDescriptor.initialize(provider != null ? provider : PackageFragmentProvider.Empty.INSTANCE);
+            PackageFragmentProvider provider = rawDescriptor.getData();
+            moduleDescriptor.initialize(provider != null ? provider : PackageFragmentProvider.Empty.INSTANCE);
 
-        return rawDescriptor.copy(moduleDescriptor);
+            return rawDescriptor.copy(moduleDescriptor);
+        });
     }
 
     private static void setDependencies(ModuleDescriptorImpl module, List<ModuleDescriptorImpl> modules) {

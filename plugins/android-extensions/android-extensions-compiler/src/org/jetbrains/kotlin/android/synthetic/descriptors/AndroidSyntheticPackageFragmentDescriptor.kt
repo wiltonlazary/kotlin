@@ -63,7 +63,7 @@ class AndroidSyntheticPackageFragmentDescriptor(
                         val resolvedWidget = resource.resolve(module)
                         if (resolvedWidget != null) {
                             for (receiver in widgetReceivers) {
-                                properties += genPropertyForWidget(packageFragmentDescriptor, receiver, resolvedWidget, context)
+                                properties += genPropertyForWidget(packageFragmentDescriptor, receiver.type, resolvedWidget, context)
                             }
                         }
                     }
@@ -84,7 +84,7 @@ class AndroidSyntheticPackageFragmentDescriptor(
         override fun getContributedVariables(name: Name, location: LookupLocation) = properties().filter { it.name == name }
 
         override fun printScopeStructure(p: Printer) {
-            p.println(javaClass.simpleName)
+            p.println(this::class.java.simpleName)
         }
     }
 }

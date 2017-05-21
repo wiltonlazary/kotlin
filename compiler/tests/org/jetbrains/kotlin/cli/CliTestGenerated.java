@@ -74,6 +74,12 @@ public class CliTestGenerated extends AbstractCliTest {
             doJvmTest(fileName);
         }
 
+        @TestMetadata("argumentPassedMultipleTimes.args")
+        public void testArgumentPassedMultipleTimes() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/argumentPassedMultipleTimes.args");
+            doJvmTest(fileName);
+        }
+
         @TestMetadata("classAndFileClassClash.args")
         public void testClassAndFileClassClash() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/classAndFileClassClash.args");
@@ -128,39 +134,21 @@ public class CliTestGenerated extends AbstractCliTest {
             doJvmTest(fileName);
         }
 
-        @TestMetadata("coroutinesEnableWarnAndErrorClash.args")
-        public void testCoroutinesEnableWarnAndErrorClash() throws Exception {
-            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/coroutinesEnableWarnAndErrorClash.args");
-            doJvmTest(fileName);
-        }
-
         @TestMetadata("coroutinesError.args")
         public void testCoroutinesError() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/coroutinesError.args");
             doJvmTest(fileName);
         }
 
-        @TestMetadata("coroutinesErrorAndEnableClash.args")
-        public void testCoroutinesErrorAndEnableClash() throws Exception {
-            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/coroutinesErrorAndEnableClash.args");
+        @TestMetadata("coroutinesErrorAndEnable.args")
+        public void testCoroutinesErrorAndEnable() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/coroutinesErrorAndEnable.args");
             doJvmTest(fileName);
         }
 
-        @TestMetadata("coroutinesWarnAndEnableClash.args")
-        public void testCoroutinesWarnAndEnableClash() throws Exception {
-            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/coroutinesWarnAndEnableClash.args");
-            doJvmTest(fileName);
-        }
-
-        @TestMetadata("coroutinesWarnAndErrorClash.args")
-        public void testCoroutinesWarnAndErrorClash() throws Exception {
-            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/coroutinesWarnAndErrorClash.args");
-            doJvmTest(fileName);
-        }
-
-        @TestMetadata("coroutinesWarninig.args")
-        public void testCoroutinesWarninig() throws Exception {
-            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/coroutinesWarninig.args");
+        @TestMetadata("coroutinesWarn.args")
+        public void testCoroutinesWarn() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/coroutinesWarn.args");
             doJvmTest(fileName);
         }
 
@@ -185,6 +173,12 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("emptySources.args")
         public void testEmptySources() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/emptySources.args");
+            doJvmTest(fileName);
+        }
+
+        @TestMetadata("extraArgumentPassedInObsoleteForm.args")
+        public void testExtraArgumentPassedInObsoleteForm() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/extraArgumentPassedInObsoleteForm.args");
             doJvmTest(fileName);
         }
 
@@ -221,6 +215,12 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("inlineCycle.args")
         public void testInlineCycle() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/inlineCycle.args");
+            doJvmTest(fileName);
+        }
+
+        @TestMetadata("javaSrcWrongPackage.args")
+        public void testJavaSrcWrongPackage() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/javaSrcWrongPackage.args");
             doJvmTest(fileName);
         }
 
@@ -332,6 +332,12 @@ public class CliTestGenerated extends AbstractCliTest {
             doJvmTest(fileName);
         }
 
+        @TestMetadata("singleJavaFileRoots.args")
+        public void testSingleJavaFileRoots() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/singleJavaFileRoots.args");
+            doJvmTest(fileName);
+        }
+
         @TestMetadata("suppressAllWarningsJvm.args")
         public void testSuppressAllWarningsJvm() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/suppressAllWarningsJvm.args");
@@ -365,12 +371,6 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("unsupportedTypeAlias.args")
         public void testUnsupportedTypeAlias() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/unsupportedTypeAlias.args");
-            doJvmTest(fileName);
-        }
-
-        @TestMetadata("version.args")
-        public void testVersion() throws Exception {
-            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/jvm/version.args");
             doJvmTest(fileName);
         }
 
@@ -518,12 +518,6 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("suppressAllWarningsJS.args")
         public void testSuppressAllWarningsJS() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/js/suppressAllWarningsJS.args");
-            doJsTest(fileName);
-        }
-
-        @TestMetadata("version.args")
-        public void testVersion() throws Exception {
-            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/cli/js/version.args");
             doJsTest(fileName);
         }
 

@@ -136,6 +136,7 @@ class ClassCodegen private constructor(val irClass: IrClass, val context: JvmBac
     }
 
     fun generateMethod(method: IrFunction) {
+        if (method.descriptor.kind == CallableMemberDescriptor.Kind.FAKE_OVERRIDE) return
         FunctionCodegen(method, this).generate()
     }
 
@@ -269,9 +270,9 @@ val IrFunction.OtherOrigin: JvmDeclarationOrigin
     get() = OtherOrigin(descriptor.psiElement, this.descriptor)
 
 fun DeclarationDescriptor.getMemberOwnerKind(): OwnerKind = when (this) {
-    is FileClassDescriptor ->
+    is FileClassDescriptor,
+    is PackageFragmentDescriptor ->
         OwnerKind.PACKAGE
-    is PackageFragmentDescriptor,
     is ClassDescriptor ->
         OwnerKind.IMPLEMENTATION
     else ->

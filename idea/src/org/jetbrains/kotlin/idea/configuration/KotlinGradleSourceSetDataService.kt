@@ -27,6 +27,7 @@ import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.config.CoroutineSupport
 import org.jetbrains.kotlin.config.JvmTarget
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.TargetPlatformKind
 import org.jetbrains.kotlin.extensions.ProjectExtensionDescriptor
 import org.jetbrains.kotlin.idea.facet.*
@@ -35,7 +36,6 @@ import org.jetbrains.kotlin.idea.inspections.gradle.findKotlinPluginVersion
 import org.jetbrains.kotlin.idea.inspections.gradle.getResolvedKotlinStdlibVersionByModuleData
 import org.jetbrains.plugins.gradle.model.data.BuildScriptClasspathData
 import org.jetbrains.plugins.gradle.model.data.GradleSourceSetData
-import org.jetbrains.plugins.gradle.service.project.data.ExternalProjectDataService
 import java.util.*
 
 interface GradleProjectImportHandler {
@@ -62,7 +62,7 @@ class KotlinGradleSourceSetDataService : AbstractProjectDataService<GradleSource
             val ideModule = modelsProvider.findIdeModule(sourceSetData) ?: continue
 
             val moduleNode = ExternalSystemApiUtil.findParent(sourceSetNode, ProjectKeys.MODULE) ?: continue
-            val kotlinFacet = configureFacetByGradleModule(moduleNode, ideModule, modelsProvider) ?: continue
+            val kotlinFacet = configureFacetByGradleModule(moduleNode, sourceSetNode, ideModule, modelsProvider) ?: continue
             GradleProjectImportHandler.getInstances(project).forEach { it.importBySourceSet(kotlinFacet, sourceSetNode) }
         }
     }
@@ -83,34 +83,37 @@ class KotlinGradleProjectDataService : AbstractProjectDataService<ModuleData, Vo
 
             val moduleData = moduleNode.data
             val ideModule = modelsProvider.findIdeModule(moduleData) ?: continue
-            val kotlinFacet = configureFacetByGradleModule(moduleNode, ideModule, modelsProvider) ?: continue
+            val kotlinFacet = configureFacetByGradleModule(moduleNode, null, ideModule, modelsProvider) ?: continue
             GradleProjectImportHandler.getInstances(project).forEach { it.importByModule(kotlinFacet, moduleNode) }
         }
     }
 }
 
 private fun detectPlatformByPlugin(moduleNode: DataNode<ModuleData>): TargetPlatformKind<*>? {
-    val projectNode = ExternalSystemApiUtil.findParent(moduleNode, ProjectKeys.PROJECT)
-    val externalProjectNode = ExternalSystemApiUtil.find(projectNode as DataNode<*>, ExternalProjectDataService.KEY)
-    return externalProjectNode?.let {
-        when (it.data.plugins.values.map { it.id }.firstOrNull { it.startsWith("kotlin-platform-") }) {
-            "kotlin-platform-jvm" -> TargetPlatformKind.Jvm[JvmTarget.JVM_1_6]
-            "kotlin-platform-js" -> TargetPlatformKind.JavaScript
-            "kotlin-platform-common" -> TargetPlatformKind.Common
-            else -> null
-        }
+    return when (moduleNode.platformPluginId) {
+        "kotlin-platform-jvm" -> TargetPlatformKind.Jvm[JvmTarget.JVM_1_6]
+        "kotlin-platform-js" -> TargetPlatformKind.JavaScript
+        "kotlin-platform-common" -> TargetPlatformKind.Common
+        else -> null
     }
 }
 
 private fun detectPlatformByLibrary(moduleNode: DataNode<ModuleData>): TargetPlatformKind<*>? {
-    return TargetPlatformKind.ALL_PLATFORMS.firstOrNull { moduleNode.getResolvedKotlinStdlibVersionByModuleData(it.mavenLibraryIds) != null }
+    val detectedPlatforms = mavenLibraryIdToPlatform.entries.filter { moduleNode.getResolvedKotlinStdlibVersionByModuleData(listOf(it.key)) != null }.map { it.value }.distinct()
+    return detectedPlatforms.singleOrNull() ?: detectedPlatforms.firstOrNull { it != TargetPlatformKind.Common }
 }
 
 private fun configureFacetByGradleModule(
         moduleNode: DataNode<ModuleData>,
+        sourceSetNode: DataNode<GradleSourceSetData>?,
         ideModule: Module,
         modelsProvider: IdeModifiableModelsProvider
 ): KotlinFacet? {
+    if (!moduleNode.hasKotlinPlugin) {
+        KotlinFacet.get(ideModule)?.let { modelsProvider.getModifiableFacetModel(ideModule).removeFacet(it) }
+        return null
+    }
+
     val compilerVersion = moduleNode.findAll(BuildScriptClasspathData.KEY).firstOrNull()?.data?.let(::findKotlinPluginVersion)
                           ?: return null
     val platformKind = detectPlatformByPlugin(moduleNode) ?: detectPlatformByLibrary(moduleNode)
@@ -121,8 +124,10 @@ private fun configureFacetByGradleModule(
     val kotlinFacet = ideModule.getOrCreateFacet(modelsProvider, false)
     kotlinFacet.configureFacet(compilerVersion, coroutinesProperty, platformKind, modelsProvider)
 
-    val currentCompilerArguments = moduleNode.currentCompilerArguments
-    val defaultCompilerArguments = moduleNode.defaultCompilerArguments ?: emptyList()
+    val sourceSetName = sourceSetNode?.data?.id?.let { it.substring(it.lastIndexOf(':') + 1) } ?: "main"
+
+    val currentCompilerArguments = moduleNode.currentCompilerArgumentsBySourceSet?.get(sourceSetName)
+    val defaultCompilerArguments = moduleNode.defaultCompilerArgumentsBySourceSet?.get(sourceSetName) ?: emptyList()
     if (currentCompilerArguments != null) {
         parseCompilerArgumentsToFacet(currentCompilerArguments, defaultCompilerArguments, kotlinFacet)
     }
@@ -140,5 +145,5 @@ private fun findKotlinCoroutinesProperty(project: Project): String {
         properties.getProperty("kotlin.coroutines")?.let { return it }
     }
 
-    return CoroutineSupport.DEFAULT.compilerArgument
+    return CoroutineSupport.getCompilerArgument(LanguageFeature.Coroutines.defaultState)
 }

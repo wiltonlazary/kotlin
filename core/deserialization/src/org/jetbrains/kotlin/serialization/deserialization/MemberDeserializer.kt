@@ -29,7 +29,6 @@ import org.jetbrains.kotlin.resolve.DescriptorFactory
 import org.jetbrains.kotlin.serialization.Flags
 import org.jetbrains.kotlin.serialization.ProtoBuf
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.*
-import org.jetbrains.kotlin.utils.toReadOnlyList
 
 class MemberDeserializer(private val c: DeserializationContext) {
     private val annotationDeserializer = AnnotationDeserializer(c.components.moduleDescriptor, c.components.notFoundClasses)
@@ -48,6 +47,7 @@ class MemberDeserializer(private val c: DeserializationContext) {
                 Flags.IS_CONST.get(flags),
                 Flags.IS_EXTERNAL_PROPERTY.get(flags),
                 Flags.IS_DELEGATED.get(flags),
+                Flags.IS_HEADER_PROPERTY.get(flags),
                 proto,
                 c.nameResolver,
                 c.typeTable,
@@ -175,6 +175,7 @@ class MemberDeserializer(private val c: DeserializationContext) {
         function.isInline = Flags.IS_INLINE.get(flags)
         function.isTailrec = Flags.IS_TAILREC.get(flags)
         function.isSuspend = Flags.IS_SUSPEND.get(flags)
+        function.isHeader = Flags.IS_HEADER_FUNCTION.get(flags)
         return function
     }
 
@@ -183,7 +184,7 @@ class MemberDeserializer(private val c: DeserializationContext) {
 
         val visibility = Deserialization.visibility(Flags.VISIBILITY.get(proto.flags))
         val typeAlias = DeserializedTypeAliasDescriptor(
-                c.containingDeclaration, annotations, c.nameResolver.getName(proto.name),
+                c.storageManager, c.containingDeclaration, annotations, c.nameResolver.getName(proto.name),
                 visibility, proto, c.nameResolver, c.typeTable, c.sinceKotlinInfoTable, c.containerSource
         )
 
@@ -267,7 +268,7 @@ class MemberDeserializer(private val c: DeserializationContext) {
                     proto.varargElementType(c.typeTable)?.let { c.typeDeserializer.type(it) },
                     SourceElement.NO_SOURCE
             )
-        }.toReadOnlyList()
+        }.toList()
     }
 
     private fun DeclarationDescriptor.asProtoContainer(): ProtoContainer? = when (this) {

@@ -26,7 +26,6 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.ClassConstructorDescriptorImpl
 import org.jetbrains.kotlin.descriptors.impl.PropertyDescriptorImpl
-import org.jetbrains.kotlin.descriptors.impl.ValueParameterDescriptorImpl
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.declarations.*
@@ -42,8 +41,6 @@ import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi2ir.findSingleFunction
 import org.jetbrains.kotlin.types.*
-import org.jetbrains.kotlin.utils.addToStdlib.singletonList
-import org.jetbrains.kotlin.utils.addToStdlib.singletonOrEmptyList
 import org.jetbrains.org.objectweb.asm.Opcodes
 import java.util.*
 
@@ -169,8 +166,8 @@ class EnumClassLowering(val context: JvmBackendContext) : ClassLoweringPass {
         private fun lowerEnumEntries() {
             irClass.declarations.transformFlat { declaration ->
                 if (declaration is IrEnumEntry) {
-                    createFieldForEnumEntry(declaration).singletonList() +
-                    lowerEnumEntryClass(declaration.correspondingClass).singletonOrEmptyList()
+                    listOfNotNull(createFieldForEnumEntry(declaration),
+                                  lowerEnumEntryClass(declaration.correspondingClass))
                 }
                 else null
             }
@@ -190,7 +187,7 @@ class EnumClassLowering(val context: JvmBackendContext) : ClassLoweringPass {
             enumEntriesByField[fieldPropertyDescriptor] = enumEntry.descriptor
             enumEntryFields.add(fieldPropertyDescriptor)
 
-            val enumEntryInitializer = enumEntry.initializerExpression
+            val enumEntryInitializer = enumEntry.initializerExpression!!
             return IrFieldImpl(
                     enumEntry.startOffset, enumEntry.endOffset, JvmLoweredDeclarationOrigin.FIELD_FOR_ENUM_ENTRY,
                     fieldPropertyDescriptor,

@@ -43,23 +43,22 @@ fun generateDelegateCall(
         toDescriptor: FunctionDescriptor,
         thisObject: JsExpression,
         context: TranslationContext
-) {
+): JsStatement {
     val overriddenMemberFunctionName = context.getNameForDescriptor(toDescriptor)
     val overriddenMemberFunctionRef = JsNameRef(overriddenMemberFunctionName, thisObject)
 
     val parameters = SmartList<JsParameter>()
     val args = SmartList<JsExpression>()
-    val functionScope = context.getScopeForDescriptor(fromDescriptor)
 
     if (DescriptorUtils.isExtension(fromDescriptor)) {
-        val extensionFunctionReceiverName = functionScope.declareTemporaryName(Namer.getReceiverParameterName())
+        val extensionFunctionReceiverName = JsScope.declareTemporaryName(Namer.getReceiverParameterName())
         parameters.add(JsParameter(extensionFunctionReceiverName))
         args.add(JsNameRef(extensionFunctionReceiverName))
     }
 
     for (param in fromDescriptor.valueParameters) {
         val paramName = param.name.asString()
-        val jsParamName = functionScope.declareTemporaryName(paramName)
+        val jsParamName = JsScope.declareTemporaryName(paramName)
         parameters.add(JsParameter(jsParamName))
         args.add(JsNameRef(jsParamName))
     }
@@ -75,7 +74,7 @@ fun generateDelegateCall(
     val functionObject = simpleReturnFunction(context.getScopeForDescriptor(fromDescriptor), invocation)
     functionObject.parameters.addAll(parameters)
 
-    context.addFunctionToPrototype(classDescriptor, fromDescriptor, functionObject)
+    return context.addFunctionToPrototype(classDescriptor, fromDescriptor, functionObject)
 }
 
 fun <T, S> List<T>.splitToRanges(classifier: (T) -> S): List<Pair<List<T>, S>> {
@@ -120,10 +119,14 @@ fun getReferenceToJsClass(type: KotlinType, context: TranslationContext): JsExpr
     return referenceToJsClass
 }
 
-fun TranslationContext.addFunctionToPrototype(classDescriptor: ClassDescriptor, descriptor: FunctionDescriptor, function: JsExpression) {
+fun TranslationContext.addFunctionToPrototype(
+        classDescriptor: ClassDescriptor,
+        descriptor: FunctionDescriptor,
+        function: JsExpression
+): JsStatement {
     val prototypeRef = JsAstUtils.prototypeOf(getInnerReference(classDescriptor))
     val functionRef = JsNameRef(getNameForDescriptor(descriptor), prototypeRef)
-    addDeclarationStatement(JsAstUtils.assignment(functionRef, function).makeStmt())
+    return JsAstUtils.assignment(functionRef, function).makeStmt()
 }
 
 fun TranslationContext.addAccessorsToPrototype(
@@ -144,7 +147,7 @@ fun FunctionDescriptor.requiresStateMachineTransformation(context: TranslationCo
 fun JsFunction.fillCoroutineMetadata(
         context: TranslationContext,
         descriptor: FunctionDescriptor,
-        hasController: Boolean, isLambda: Boolean
+        hasController: Boolean
 ) {
     if (!descriptor.requiresStateMachineTransformation(context)) return
 
@@ -159,7 +162,6 @@ fun JsFunction.fillCoroutineMetadata(
 
     coroutineMetadata = CoroutineMetadata(
             doResumeName = context.getNameForDescriptor(TranslationUtils.getCoroutineDoResumeFunction(context)),
-            resumeName = context.getNameForDescriptor(TranslationUtils.getCoroutineResumeFunction(context)),
             suspendObjectRef = ReferenceTranslator.translateAsValueReference(suspendPropertyDescriptor, context),
             baseClassRef = coroutineBaseClassRef,
             stateName = getCoroutinePropertyName("state"),
@@ -167,9 +169,7 @@ fun JsFunction.fillCoroutineMetadata(
             finallyPathName = getCoroutinePropertyName("finallyPath"),
             resultName = getCoroutinePropertyName("result"),
             exceptionName = getCoroutinePropertyName("exception"),
-            facadeName = getCoroutinePropertyName("facade"),
             hasController = hasController,
-            isLambda = isLambda,
             hasReceiver = descriptor.dispatchReceiverParameter != null
     )
 }

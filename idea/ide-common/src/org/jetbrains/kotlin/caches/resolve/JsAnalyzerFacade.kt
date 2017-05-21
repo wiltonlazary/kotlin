@@ -19,8 +19,7 @@ package org.jetbrains.kotlin.idea.caches.resolve
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.analyzer.*
 import org.jetbrains.kotlin.caches.resolve.LibraryModuleInfo
-import org.jetbrains.kotlin.config.CompilerConfiguration
-import org.jetbrains.kotlin.config.languageVersionSettings
+import org.jetbrains.kotlin.config.TargetPlatformVersion
 import org.jetbrains.kotlin.container.get
 import org.jetbrains.kotlin.context.ModuleContext
 import org.jetbrains.kotlin.descriptors.PackagePartProvider
@@ -52,26 +51,27 @@ object JsAnalyzerFacade : AnalyzerFacade<PlatformAnalysisParameters>() {
         val (syntheticFiles, moduleContentScope) = moduleContent
         val project = moduleContext.project
         val declarationProviderFactory = DeclarationProviderFactoryService.createDeclarationProviderFactory(
-                project, moduleContext.storageManager, syntheticFiles, if (moduleInfo.isLibrary) GlobalSearchScope.EMPTY_SCOPE else moduleContentScope
+                project,
+                moduleContext.storageManager,
+                syntheticFiles,
+                if (moduleInfo.isLibrary) GlobalSearchScope.EMPTY_SCOPE else moduleContentScope,
+                moduleInfo
         )
 
-        // TODO: deduplicate this with JvmAnalyzerFacade
-        val configuration = CompilerConfiguration().apply {
-            languageVersionSettings = LanguageSettingsProvider.getInstance(project).getLanguageVersionSettings(moduleInfo, project)
-            isReadOnly = true
-        }
+        val languageVersionSettings = LanguageSettingsProvider.getInstance(project).getLanguageVersionSettings(moduleInfo, project)
 
         val container = createContainerForLazyResolve(
                 moduleContext,
                 declarationProviderFactory,
                 BindingTraceContext(),
                 JsPlatform,
+                TargetPlatformVersion.NoVersion,
                 targetEnvironment,
-                configuration
+                languageVersionSettings
         )
         var packageFragmentProvider = container.get<ResolveSession>().packageFragmentProvider
 
-        if (moduleInfo is LibraryModuleInfo && moduleInfo.isJsLibrary()) {
+        if (moduleInfo is LibraryModuleInfo && moduleInfo.platform == JsPlatform) {
             val providers = moduleInfo.getLibraryRoots()
                     .flatMap { KotlinJavascriptMetadataUtils.loadMetadata(it) }
                     .filter { it.version.isCompatible() }

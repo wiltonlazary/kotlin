@@ -52,6 +52,7 @@ import org.jetbrains.kotlin.util.OperatorNameConventions;
 import org.jetbrains.org.objectweb.asm.*;
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter;
 import org.jetbrains.org.objectweb.asm.tree.*;
+import org.jetbrains.org.objectweb.asm.util.Printer;
 import org.jetbrains.org.objectweb.asm.util.Textifier;
 import org.jetbrains.org.objectweb.asm.util.TraceMethodVisitor;
 
@@ -87,26 +88,24 @@ public class InlineCodegenUtil {
     public static final String INLINE_FUN_THIS_0_SUFFIX = "$inline_fun";
     public static final String INLINE_FUN_VAR_SUFFIX = "$iv";
 
+    public static final String DEFAULT_LAMBDA_FAKE_CALL = "$$$DEFAULT_LAMBDA_FAKE_CALL$$$";
+    public static final String CAPTURED_FIELD_FOLD_PREFIX = "$$$";
+    
     @Nullable
     public static SMAPAndMethodNode getMethodNode(
             byte[] classData,
-            final String methodName,
-            final String methodDescriptor,
-            ClassId classId,
-            final @NotNull GenerationState state
+            @NotNull String methodName,
+            @NotNull String methodDescriptor,
+            @NotNull String classInternalName
     ) {
         ClassReader cr = new ClassReader(classData);
-        final MethodNode[] node = new MethodNode[1];
-        final String[] debugInfo = new String[2];
-        final int[] lines = new int[2];
+        MethodNode[] node = new MethodNode[1];
+        String[] debugInfo = new String[2];
+        int[] lines = new int[2];
         lines[0] = Integer.MAX_VALUE;
         lines[1] = Integer.MIN_VALUE;
         //noinspection PointlessBitwiseExpression
         cr.accept(new ClassVisitor(API) {
-            @Override
-            public void visit(int version, int access, @NotNull String name, String signature, String superName, String[] interfaces) {
-                assertVersionNotGreaterThanGeneratedOne(version, name, state);
-            }
 
             @Override
             public void visitSource(String source, String debug) {
@@ -142,23 +141,13 @@ public class InlineCodegenUtil {
             return null;
         }
 
-        if (classId.equals(IntrinsicArrayConstructorsKt.getClassId())) {
+        if (IntrinsicArrayConstructorsKt.getClassId().asString().equals(classInternalName)) {
             // Don't load source map for intrinsic array constructors
             debugInfo[0] = null;
         }
 
-        SMAP smap = SMAPParser.parseOrCreateDefault(debugInfo[1], debugInfo[0], classId.asString(), lines[0], lines[1]);
+        SMAP smap = SMAPParser.parseOrCreateDefault(debugInfo[1], debugInfo[0], classInternalName, lines[0], lines[1]);
         return new SMAPAndMethodNode(node[0], smap);
-    }
-
-    public static void assertVersionNotGreaterThanGeneratedOne(int version, String internalName, @NotNull GenerationState state) {
-        // TODO: report a proper diagnostic
-        if (version > state.getClassFileVersion() && !"true".equals(System.getProperty("kotlin.skip.bytecode.version.check"))) {
-            throw new UnsupportedOperationException(
-                    "Cannot inline bytecode of class " + internalName + " which has version " + version + ". " +
-                    "This compiler can only inline Java 1.6 bytecode (version " + Opcodes.V1_6 + ")"
-            );
-        }
     }
 
     public static void initDefaultSourceMappingIfNeeded(
@@ -183,7 +172,7 @@ public class InlineCodegenUtil {
     }
 
     @Nullable
-    private static VirtualFile findVirtualFileImprecise(@NotNull GenerationState state, @NotNull String internalClassName) {
+    public static VirtualFile findVirtualFileImprecise(@NotNull GenerationState state, @NotNull String internalClassName) {
         FqName packageFqName = JvmClassName.byInternalName(internalClassName).getPackageFqName();
         String classNameWithDollars = StringsKt.substringAfterLast(internalClassName, "/", internalClassName);
         //TODO: we cannot construct proper classId at this point, we need to read InnerClasses info from class file
@@ -406,6 +395,11 @@ public class InlineCodegenUtil {
     }
 
     @NotNull
+    public static String getInsnOpcodeText(@Nullable AbstractInsnNode node) {
+        return node == null ? "null" : Printer.OPCODES[node.getOpcode()];
+    }
+
+    @NotNull
     /* package */ static ClassReader buildClassReaderByInternalName(@NotNull GenerationState state, @NotNull String internalName) {
         //try to find just compiled classes then in dependencies
         try {
@@ -453,7 +447,6 @@ public class InlineCodegenUtil {
 
     public static int getConstant(@NotNull AbstractInsnNode ins) {
         int opcode = ins.getOpcode();
-        Integer value;
         if (opcode >= Opcodes.ICONST_0 && opcode <= Opcodes.ICONST_5) {
             return opcode - Opcodes.ICONST_0;
         }

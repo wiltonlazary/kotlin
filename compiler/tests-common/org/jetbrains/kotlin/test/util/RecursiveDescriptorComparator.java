@@ -16,12 +16,9 @@
 
 package org.jetbrains.kotlin.test.util;
 
-import com.google.common.base.Predicate;
-import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import kotlin.Unit;
-import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
@@ -44,6 +41,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Predicate;
 
 import static org.jetbrains.kotlin.resolve.DescriptorUtils.isEnumEntry;
 import static org.jetbrains.kotlin.test.util.DescriptorValidator.ValidationVisitor.errorTypesForbidden;
@@ -51,41 +49,32 @@ import static org.jetbrains.kotlin.test.util.DescriptorValidator.ValidationVisit
 public class RecursiveDescriptorComparator {
 
     private static final DescriptorRenderer DEFAULT_RENDERER = DescriptorRenderer.Companion.withOptions(
-            new Function1<DescriptorRendererOptions, Unit>() {
-                @Override
-                public Unit invoke(DescriptorRendererOptions options) {
-                    options.setWithDefinedIn(false);
-                    options.setExcludedAnnotationClasses(Collections.singleton(new FqName(ExpectedLoadErrorsUtil.ANNOTATION_CLASS_NAME)));
-                    options.setOverrideRenderingPolicy(OverrideRenderingPolicy.RENDER_OPEN_OVERRIDE);
-                    options.setIncludePropertyConstant(true);
-                    options.setClassifierNamePolicy(ClassifierNamePolicy.FULLY_QUALIFIED.INSTANCE);
-                    options.setVerbose(true);
-                    options.setAnnotationArgumentsRenderingPolicy(AnnotationArgumentsRenderingPolicy.UNLESS_EMPTY);
-                    options.setModifiers(DescriptorRendererModifier.ALL);
-                    return Unit.INSTANCE;
-                }
+            options -> {
+                options.setWithDefinedIn(false);
+                options.setExcludedAnnotationClasses(Collections.singleton(new FqName(ExpectedLoadErrorsUtil.ANNOTATION_CLASS_NAME)));
+                options.setOverrideRenderingPolicy(OverrideRenderingPolicy.RENDER_OPEN_OVERRIDE);
+                options.setIncludePropertyConstant(true);
+                options.setClassifierNamePolicy(ClassifierNamePolicy.FULLY_QUALIFIED.INSTANCE);
+                options.setVerbose(true);
+                options.setAnnotationArgumentsRenderingPolicy(AnnotationArgumentsRenderingPolicy.UNLESS_EMPTY);
+                options.setModifiers(DescriptorRendererModifier.ALL);
+                return Unit.INSTANCE;
             }
     );
 
     public static final Configuration DONT_INCLUDE_METHODS_OF_OBJECT = new Configuration(false, false, false, false,
-                                                                                         Predicates.<DeclarationDescriptor>alwaysTrue(),
-                                                                                         errorTypesForbidden(), DEFAULT_RENDERER);
+                                                                                         descriptor -> true, errorTypesForbidden(), DEFAULT_RENDERER);
     public static final Configuration RECURSIVE = new Configuration(false, false, true, false,
-                                                                    Predicates.<DeclarationDescriptor>alwaysTrue(),
-                                                                    errorTypesForbidden(), DEFAULT_RENDERER);
+                                                                    descriptor -> true, errorTypesForbidden(), DEFAULT_RENDERER);
 
     public static final Configuration RECURSIVE_ALL = new Configuration(true, true, true, false,
-                                                                        Predicates.<DeclarationDescriptor>alwaysTrue(),
-                                                                        errorTypesForbidden(), DEFAULT_RENDERER);
+                                                                        descriptor -> true, errorTypesForbidden(), DEFAULT_RENDERER);
 
-    public static final Predicate<DeclarationDescriptor> SKIP_BUILT_INS_PACKAGES = new Predicate<DeclarationDescriptor>() {
-        @Override
-        public boolean apply(DeclarationDescriptor descriptor) {
-            if (descriptor instanceof PackageViewDescriptor) {
-                return !KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME.equals(((PackageViewDescriptor) descriptor).getFqName());
-            }
-            return true;
+    public static final Predicate<DeclarationDescriptor> SKIP_BUILT_INS_PACKAGES = descriptor -> {
+        if (descriptor instanceof PackageViewDescriptor) {
+            return !KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME.equals(((PackageViewDescriptor) descriptor).getFqName());
         }
+        return true;
     };
 
     private static final ImmutableSet<String> KOTLIN_ANY_METHOD_NAMES = ImmutableSet.of("equals", "hashCode", "toString");
@@ -139,18 +128,18 @@ public class RecursiveDescriptorComparator {
                 if (!DescriptorUtils.getAllDescriptors(staticScope).isEmpty()) {
                     printer.println();
                     printer.println("// Static members");
-                    appendSubDescriptors(descriptor, module, staticScope, Collections.<DeclarationDescriptor>emptyList(), printer);
+                    appendSubDescriptors(descriptor, module, staticScope, Collections.emptyList(), printer);
                 }
             }
             else if (descriptor instanceof PackageFragmentDescriptor) {
                 appendSubDescriptors(descriptor, module,
                                      ((PackageFragmentDescriptor) descriptor).getMemberScope(),
-                                     Collections.<DeclarationDescriptor>emptyList(), printer);
+                                     Collections.emptyList(), printer);
             }
             else if (descriptor instanceof PackageViewDescriptor) {
                 appendSubDescriptors(descriptor, module,
                                      getPackageScopeInModule((PackageViewDescriptor) descriptor, module),
-                                     Collections.<DeclarationDescriptor>emptyList(), printer);
+                                     Collections.emptyList(), printer);
             }
 
             if (!topLevel) {
@@ -185,7 +174,7 @@ public class RecursiveDescriptorComparator {
     @NotNull
     private MemberScope getPackageScopeInModule(@NotNull PackageViewDescriptor descriptor, @NotNull ModuleDescriptor module) {
         // See LazyPackageViewDescriptorImpl#memberScope
-        List<MemberScope> scopes = new ArrayList<MemberScope>();
+        List<MemberScope> scopes = new ArrayList<>();
         for (PackageFragmentDescriptor fragment : descriptor.getFragments()) {
             if (isFromModule(fragment, module)) {
                 scopes.add(fragment.getMemberScope());
@@ -216,7 +205,7 @@ public class RecursiveDescriptorComparator {
         boolean isFunctionFromAny = subDescriptor.getContainingDeclaration() instanceof ClassDescriptor
                                     && subDescriptor instanceof FunctionDescriptor
                                     && KOTLIN_ANY_METHOD_NAMES.contains(subDescriptor.getName().asString());
-        return (isFunctionFromAny && !conf.includeMethodsOfKotlinAny) || !conf.recursiveFilter.apply(subDescriptor);
+        return (isFunctionFromAny && !conf.includeMethodsOfKotlinAny) || !conf.recursiveFilter.test(subDescriptor);
     }
 
     private void appendSubDescriptors(
@@ -233,7 +222,7 @@ public class RecursiveDescriptorComparator {
         subDescriptors.addAll(DescriptorUtils.getAllDescriptors(memberScope));
         subDescriptors.addAll(extraSubDescriptors);
 
-        Collections.sort(subDescriptors, MemberComparator.INSTANCE);
+        subDescriptors.sort(MemberComparator.INSTANCE);
 
         for (DeclarationDescriptor subDescriptor : subDescriptors) {
             if (!shouldSkip(subDescriptor)) {

@@ -464,7 +464,9 @@ public class JsToStringGenerationVisitor extends JsVisitor {
 
         rightParen();
         nestedPush(x.getBody());
-        accept(x.getBody());
+        if (x.getBody() != null) {
+            accept(x.getBody());
+        }
         nestedPop(x.getBody());
     }
 
@@ -729,11 +731,6 @@ public class JsToStringGenerationVisitor extends JsVisitor {
     @Override
     public void visitProgram(@NotNull JsProgram x) {
         p.print("<JsProgram>");
-    }
-
-    @Override
-    public void visitProgramFragment(@NotNull JsProgramFragment x) {
-        p.print("<JsProgramFragment>");
     }
 
     @Override

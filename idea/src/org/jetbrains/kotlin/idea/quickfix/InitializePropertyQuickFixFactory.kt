@@ -32,7 +32,7 @@ import org.jetbrains.kotlin.descriptors.VariableDescriptor
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.codeInsight.CodeInsightUtils
-import org.jetbrains.kotlin.idea.codeInsight.shorten.runWithElementsToShortenIsEmptyIgnored
+import org.jetbrains.kotlin.idea.codeInsight.shorten.runRefactoringAndKeepDelayedRequests
 import org.jetbrains.kotlin.idea.core.CollectingNameValidator
 import org.jetbrains.kotlin.idea.core.KotlinNameSuggester
 import org.jetbrains.kotlin.idea.core.appendElement
@@ -115,7 +115,7 @@ object InitializePropertyQuickFixFactory : KotlinIntentionActionsFactory() {
                 val changeSignature = { runChangeSignature(project, constructorDescriptor, config, contextElement, text) }
                 changeSignature.runRefactoringWithPostprocessing(project, "refactoring.changeSignature") {
                     val constructorOrClass = constructorPointer.element
-                    val constructor = constructorOrClass as? KtConstructor<*> ?: (constructorOrClass as? KtClass)?.getPrimaryConstructor()
+                    val constructor = constructorOrClass as? KtConstructor<*> ?: (constructorOrClass as? KtClass)?.primaryConstructor
                     constructor?.getValueParameters()?.lastOrNull()?.replace(parameterToInsert)
                 }
             }
@@ -174,7 +174,7 @@ object InitializePropertyQuickFixFactory : KotlinIntentionActionsFactory() {
 
             changeSignature.runRefactoringWithPostprocessing(project, "refactoring.changeSignature") {
                 val constructorOrClass = constructorPointer?.element
-                val constructor = constructorOrClass as? KtConstructor<*> ?: (constructorOrClass as? KtClass)?.getPrimaryConstructor()
+                val constructor = constructorOrClass as? KtConstructor<*> ?: (constructorOrClass as? KtClass)?.primaryConstructor
                 if (constructor == null || !visitedElements.add(constructor)) return@runRefactoringWithPostprocessing
                 constructor.getValueParameters().lastOrNull()?.let { newParam ->
                     val psiFactory = KtPsiFactory(project)
@@ -191,7 +191,7 @@ object InitializePropertyQuickFixFactory : KotlinIntentionActionsFactory() {
             val propertyDescriptor = element.resolveToDescriptorIfAny() as? PropertyDescriptor ?: return
             val classDescriptor = propertyDescriptor.containingDeclaration as? ClassDescriptorWithResolutionScopes ?: return
             val klass = element.containingClassOrObject ?: return
-            val constructorDescriptors = if (klass.hasExplicitPrimaryConstructor() || klass.getSecondaryConstructors().isEmpty()) {
+            val constructorDescriptors = if (klass.hasExplicitPrimaryConstructor() || klass.secondaryConstructors.isEmpty()) {
                 listOf(classDescriptor.unsubstitutedPrimaryConstructor!!)
             }
             else {
@@ -201,7 +201,7 @@ object InitializePropertyQuickFixFactory : KotlinIntentionActionsFactory() {
                 }
             }
 
-            project.runWithElementsToShortenIsEmptyIgnored {
+            project.runRefactoringAndKeepDelayedRequests {
                 processConstructors(project, propertyDescriptor, constructorDescriptors.iterator())
             }
         }
@@ -222,7 +222,7 @@ object InitializePropertyQuickFixFactory : KotlinIntentionActionsFactory() {
         (property.containingClassOrObject as? KtClass)?.let { klass ->
             if (klass.isAnnotation() || klass.isInterface()) return@let
 
-            if (property.accessors.isNotEmpty() || klass.getSecondaryConstructors().any { !it.getDelegationCall().isCallToThis }) {
+            if (property.accessors.isNotEmpty() || klass.secondaryConstructors.any { !it.getDelegationCall().isCallToThis }) {
                 actions.add(InitializeWithConstructorParameter(property))
             }
             else {

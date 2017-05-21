@@ -38,6 +38,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt.getAnnotationClass;
+import static org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt.isEffectivelyExternal;
+
 public final class AnnotationsUtils {
     private static final String JS_NAME = "kotlin.js.JsName";
     public static final FqName JS_MODULE_ANNOTATION = new FqName("kotlin.js.JsModule");
@@ -97,7 +100,7 @@ public final class AnnotationsUtils {
             return name != null ? name : descriptor.getName().asString();
         }
 
-        if (defaultJsName == null && isEffectivelyExternal(descriptor)) {
+        if (defaultJsName == null && isEffectivelyExternalMember(descriptor)) {
             return descriptor.getName().asString();
         }
 
@@ -119,7 +122,7 @@ public final class AnnotationsUtils {
     }
 
     public static boolean isNativeObject(@NotNull DeclarationDescriptor descriptor) {
-        if (hasAnnotationOrInsideAnnotatedClass(descriptor, PredefinedAnnotation.NATIVE) || isEffectivelyExternal(descriptor)) return true;
+        if (hasAnnotationOrInsideAnnotatedClass(descriptor, PredefinedAnnotation.NATIVE) || isEffectivelyExternalMember(descriptor)) return true;
 
         if (descriptor instanceof PropertyAccessorDescriptor) {
             PropertyAccessorDescriptor accessor = (PropertyAccessorDescriptor) descriptor;
@@ -133,8 +136,8 @@ public final class AnnotationsUtils {
         return isNativeObject(descriptor) && DescriptorUtils.isInterface(descriptor);
     }
 
-    private static boolean isEffectivelyExternal(@NotNull DeclarationDescriptor descriptor) {
-        return descriptor instanceof MemberDescriptor && DescriptorUtils.isEffectivelyExternal((MemberDescriptor) descriptor);
+    private static boolean isEffectivelyExternalMember(@NotNull DeclarationDescriptor descriptor) {
+        return descriptor instanceof MemberDescriptor && isEffectivelyExternal((MemberDescriptor) descriptor);
     }
 
     public static boolean isLibraryObject(@NotNull DeclarationDescriptor descriptor) {
@@ -162,7 +165,7 @@ public final class AnnotationsUtils {
 
     public static boolean isPredefinedObject(@NotNull DeclarationDescriptor descriptor) {
         if (descriptor instanceof MemberDescriptor && ((MemberDescriptor) descriptor).isHeader()) return true;
-        if (isEffectivelyExternal(descriptor)) return true;
+        if (isEffectivelyExternalMember(descriptor)) return true;
 
         for (PredefinedAnnotation annotation : PredefinedAnnotation.values()) {
             if (hasAnnotationOrInsideAnnotatedClass(descriptor, annotation)) {
@@ -218,10 +221,10 @@ public final class AnnotationsUtils {
             @NotNull FqName annotationFqName
     ) {
         for (AnnotationDescriptor annotation : getContainingFileAnnotations(bindingContext, declaration)) {
-            DeclarationDescriptor annotationType = annotation.getType().getConstructor().getDeclarationDescriptor();
+            DeclarationDescriptor annotationType = getAnnotationClass(annotation);
             if (annotationType == null) continue;
 
-            FqNameUnsafe fqName = DescriptorUtils.getFqName(annotation.getType().getConstructor().getDeclarationDescriptor());
+            FqNameUnsafe fqName = DescriptorUtils.getFqName(annotationType);
             if (fqName.equals(annotationFqName.toUnsafe())) {
                 return extractSingleStringArgument(annotation);
             }
@@ -235,10 +238,10 @@ public final class AnnotationsUtils {
 
     public static boolean isFromNonModuleFile(@NotNull BindingContext bindingContext, @NotNull DeclarationDescriptor declaration) {
         for (AnnotationDescriptor annotation : getContainingFileAnnotations(bindingContext, declaration)) {
-            DeclarationDescriptor annotationType = annotation.getType().getConstructor().getDeclarationDescriptor();
+            DeclarationDescriptor annotationType = getAnnotationClass(annotation);
             if (annotationType == null) continue;
 
-            DeclarationDescriptor annotationTypeDescriptor = annotation.getType().getConstructor().getDeclarationDescriptor();
+            DeclarationDescriptor annotationTypeDescriptor = getAnnotationClass(annotation);
             assert annotationTypeDescriptor != null : "Annotation type should have descriptor: " + annotation.getType();
 
             FqNameUnsafe fqName = DescriptorUtils.getFqName(annotationTypeDescriptor);
@@ -273,7 +276,7 @@ public final class AnnotationsUtils {
 
         KtFile kotlinFile = getFile(descriptor);
         if (kotlinFile != null) {
-            List<AnnotationDescriptor> annotations = new ArrayList<AnnotationDescriptor>();
+            List<AnnotationDescriptor> annotations = new ArrayList<>();
             for (KtAnnotationEntry psiAnnotation : kotlinFile.getAnnotationEntries()) {
                 AnnotationDescriptor annotation = bindingContext.get(BindingContext.ANNOTATION, psiAnnotation);
                 if (annotation != null) {

@@ -17,10 +17,13 @@
 package org.jetbrains.kotlin.ir.declarations.impl
 
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrEnumEntry
 import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.symbols.IrEnumEntrySymbol
+import org.jetbrains.kotlin.ir.symbols.impl.IrEnumEntrySymbolImpl
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 
@@ -28,30 +31,38 @@ class IrEnumEntryImpl(
         startOffset: Int,
         endOffset: Int,
         origin: IrDeclarationOrigin,
-        override val descriptor: ClassDescriptor
+        override val symbol: IrEnumEntrySymbol
 ) : IrDeclarationBase(startOffset, endOffset, origin), IrEnumEntry {
+    constructor(startOffset: Int, endOffset: Int, origin: IrDeclarationOrigin, descriptor: ClassDescriptor) :
+            this(startOffset, endOffset, origin, IrEnumEntrySymbolImpl(descriptor))
+
     constructor(
             startOffset: Int, endOffset: Int, origin: IrDeclarationOrigin, descriptor: ClassDescriptor,
-            correspondingClass: IrClass?, initializerExpression: IrExpression
+            correspondingClass: IrClass?, initializerExpression: IrExpression?
     ) : this(startOffset, endOffset, origin, descriptor) {
         this.correspondingClass = correspondingClass
         this.initializerExpression = initializerExpression
     }
 
+    init {
+        symbol.bind(this)
+    }
+
+    override val descriptor: ClassDescriptor get() = symbol.descriptor
     override var correspondingClass: IrClass? = null
-    override lateinit var initializerExpression: IrExpression
+    override var initializerExpression: IrExpression? = null
 
     override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R {
         return visitor.visitEnumEntry(this, data)
     }
 
     override fun <D> acceptChildren(visitor: IrElementVisitor<Unit, D>, data: D) {
-        initializerExpression.accept(visitor, data)
+        initializerExpression?.accept(visitor, data)
         correspondingClass?.accept(visitor, data)
     }
 
     override fun <D> transformChildren(transformer: IrElementTransformer<D>, data: D) {
-        initializerExpression = initializerExpression.transform(transformer, data)
+        initializerExpression = initializerExpression?.transform(transformer, data)
         correspondingClass = correspondingClass?.transform(transformer, data) as? IrClass
     }
 }

@@ -19,10 +19,14 @@ package org.jetbrains.kotlin.idea.project;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.roots.ProjectFileIndex;
+import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.idea.framework.CommonLibraryDetectionUtil;
+import org.jetbrains.kotlin.idea.framework.KotlinJavaScriptLibraryDetectionUtil;
+import org.jetbrains.kotlin.js.resolve.JsPlatform;
 import org.jetbrains.kotlin.psi.KtCodeFragment;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.psi.KtPsiFactoryKt;
@@ -38,6 +42,9 @@ public class TargetPlatformDetector {
 
     @NotNull
     public static TargetPlatform getPlatform(@NotNull KtFile file) {
+        TargetPlatform explicitPlatform = KtPsiFactoryKt.getTargetPlatform(file);
+        if (explicitPlatform != null) return explicitPlatform;
+
         if (file instanceof KtCodeFragment) {
             KtFile contextFile = ((KtCodeFragment) file).getContextContainingFile();
             if (contextFile != null) {
@@ -51,22 +58,16 @@ public class TargetPlatformDetector {
             return contextFile instanceof KtFile ? getPlatform((KtFile) contextFile) : JvmPlatform.INSTANCE;
         }
 
-        return getPlatform((PsiFile) file);
-    }
-
-    public static TargetPlatform getPlatform(@NotNull PsiFile file) {
-
         VirtualFile virtualFile = file.getOriginalFile().getVirtualFile();
-        if (virtualFile == null) {
-            return getDefaultPlatform(file);
+        if (virtualFile != null) {
+            Module moduleForFile = ProjectFileIndex.SERVICE.getInstance(file.getProject()).getModuleForFile(virtualFile);
+            if (moduleForFile != null) {
+                return getPlatform(moduleForFile);
+            }
         }
 
-        Module moduleForFile = ProjectFileIndex.SERVICE.getInstance(file.getProject()).getModuleForFile(virtualFile);
-        if (moduleForFile == null) {
-            return getDefaultPlatform(file);
-        }
-
-        return getPlatform(moduleForFile);
+        LOG.info("Using default platform for file: " + file.getName());
+        return JvmPlatform.INSTANCE;
     }
 
     @NotNull
@@ -75,8 +76,13 @@ public class TargetPlatformDetector {
     }
 
     @NotNull
-    private static TargetPlatform getDefaultPlatform(@NotNull PsiFile file) {
-        LOG.info("Using default platform for file: " + file.getName());
+    public static TargetPlatform getPlatform(@NotNull Library library) {
+        if (KotlinJavaScriptLibraryDetectionUtil.isKotlinJavaScriptLibrary(library)) {
+            return JsPlatform.INSTANCE;
+        }
+        if (CommonLibraryDetectionUtil.isCommonLibrary(library)) {
+            return TargetPlatform.Default.INSTANCE;
+        }
         return JvmPlatform.INSTANCE;
     }
 }

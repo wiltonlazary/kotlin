@@ -16,14 +16,15 @@
 
 package org.jetbrains.kotlin.ir.expressions.impl
 
-import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.ir.expressions.IrCall
-import org.jetbrains.kotlin.ir.expressions.IrCallWithShallowCopy
-import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
-import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
+import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
+import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
+import org.jetbrains.kotlin.ir.symbols.impl.createClassSymbolOrNull
+import org.jetbrains.kotlin.ir.symbols.impl.createFunctionSymbol
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 import org.jetbrains.kotlin.types.KotlinType
 
@@ -31,21 +32,64 @@ class IrCallImpl(
         startOffset: Int,
         endOffset: Int,
         type: KotlinType,
-        override val descriptor: CallableDescriptor,
+        override val symbol: IrFunctionSymbol,
+        override val descriptor: FunctionDescriptor,
         typeArguments: Map<TypeParameterDescriptor, KotlinType>?,
         override val origin: IrStatementOrigin? = null,
-        override val superQualifier: ClassDescriptor? = null
-) : IrCallWithIndexedArgumentsBase(startOffset, endOffset, type, descriptor.valueParameters.size, typeArguments), IrCallWithShallowCopy {
+        override val superQualifierSymbol: IrClassSymbol? = null
+) : IrCall,
+        IrCallWithIndexedArgumentsBase(startOffset, endOffset, type, symbol.descriptor.valueParameters.size, typeArguments)
+{
+    @Deprecated("Creates unbound symbols")
     constructor(
-            startOffset: Int, endOffset: Int, descriptor: CallableDescriptor,
+            startOffset: Int,
+            endOffset: Int,
+            type: KotlinType,
+            calleeDescriptor: FunctionDescriptor,
             typeArguments: Map<TypeParameterDescriptor, KotlinType>? = null,
             origin: IrStatementOrigin? = null,
-            superQualifier: ClassDescriptor? = null
-    ) : this(startOffset, endOffset, descriptor.returnType!!, descriptor, typeArguments, origin, superQualifier)
+            superQualifierDescriptor: ClassDescriptor? = null
+    ) : this(
+            startOffset, endOffset,
+            type,
+            createFunctionSymbol(calleeDescriptor),
+            calleeDescriptor,
+            typeArguments, origin,
+            createClassSymbolOrNull(superQualifierDescriptor)
+    )
+
+    @Deprecated("Creates unbound symbols")
+    constructor(
+            startOffset: Int,
+            endOffset: Int,
+            calleeDescriptor: FunctionDescriptor,
+            typeArguments: Map<TypeParameterDescriptor, KotlinType>? = null,
+            origin: IrStatementOrigin? = null,
+            superQualifierDescriptor: ClassDescriptor? = null
+    ) : this(
+            startOffset, endOffset,
+            calleeDescriptor.returnType!!,
+            createFunctionSymbol(calleeDescriptor),
+            calleeDescriptor,
+            typeArguments, origin,
+            createClassSymbolOrNull(superQualifierDescriptor)
+    )
+
+    constructor(
+            startOffset: Int, endOffset: Int,
+            symbol: IrFunctionSymbol,
+            descriptor: FunctionDescriptor,
+            typeArguments: Map<TypeParameterDescriptor, KotlinType>? = null,
+            origin: IrStatementOrigin? = null,
+            superQualifierSymbol: IrClassSymbol? = null
+    ) : this(startOffset, endOffset, descriptor.returnType!!, symbol, descriptor, typeArguments, origin, superQualifierSymbol)
+
+    constructor(startOffset: Int, endOffset: Int, symbol: IrFunctionSymbol) :
+            this(startOffset, endOffset, symbol, symbol.descriptor)
+
+
+    override val superQualifier: ClassDescriptor? = superQualifierSymbol?.descriptor
 
     override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R =
             visitor.visitCall(this, data)
-
-    override fun shallowCopy(newOrigin: IrStatementOrigin?, newCallee: CallableDescriptor, newSuperQualifier: ClassDescriptor?): IrCall =
-            IrCallImpl(startOffset, endOffset, type, newCallee, typeArguments, newOrigin, newSuperQualifier)
 }

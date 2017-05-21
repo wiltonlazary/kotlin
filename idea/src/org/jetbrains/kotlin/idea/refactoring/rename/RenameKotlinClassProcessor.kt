@@ -66,7 +66,7 @@ class RenameKotlinClassProcessor : RenameKotlinPsiProcessor() {
 
         val classOrObject = getClassOrObject(element) as? KtClassOrObject ?: return
 
-        val file = classOrObject.getContainingKtFile()
+        val file = classOrObject.containingKtFile
 
         val virtualFile = file.virtualFile
         if (virtualFile != null) {
@@ -127,7 +127,7 @@ class RenameKotlinClassProcessor : RenameKotlinPsiProcessor() {
             when (element) {
                 is KtLightClassForSourceDeclaration -> element.kotlinOrigin
                 is KtLightClassForFacade -> element
-                else -> throw AssertionError("Should not be suggested to rename element of type " + element.javaClass + " " + element)
+                else -> throw AssertionError("Should not be suggested to rename element of type " + element::class.java + " " + element)
             }
 
         is KtConstructor<*> ->

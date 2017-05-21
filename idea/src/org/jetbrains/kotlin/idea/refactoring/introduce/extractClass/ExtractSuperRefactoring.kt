@@ -37,7 +37,7 @@ import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
-import org.jetbrains.kotlin.idea.codeInsight.shorten.performDelayedShortening
+import org.jetbrains.kotlin.idea.codeInsight.shorten.performDelayedRefactoringRequests
 import org.jetbrains.kotlin.idea.core.*
 import org.jetbrains.kotlin.idea.refactoring.introduce.insertDeclaration
 import org.jetbrains.kotlin.idea.refactoring.memberInfo.KotlinMemberInfo
@@ -67,6 +67,8 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.resolve.scopes.utils.findClassifier
 import java.util.*
+import kotlin.collections.LinkedHashMap
+import kotlin.collections.LinkedHashSet
 
 data class ExtractSuperInfo(
         val originalClass: KtClassOrObject,
@@ -103,7 +105,7 @@ class ExtractSuperRefactoring(
 
                 val superTypeList = originalClass.getSuperTypeList()
                 if (superTypeList != null) {
-                    for (superTypeListEntry in originalClass.getSuperTypeListEntries()) {
+                    for (superTypeListEntry in originalClass.superTypeListEntries) {
                         val superType = superTypeListEntry.analyze(BodyResolveMode.PARTIAL)[BindingContext.TYPE, superTypeListEntry.typeReference]
                                         ?: continue
                         val superClassDescriptor = superType.constructor.declarationDescriptor ?: continue
@@ -155,7 +157,7 @@ class ExtractSuperRefactoring(
 
             project.runSynchronouslyWithProgress(RefactoringBundle.message("detecting.possible.conflicts"), true) {
                 runReadAction {
-                    val usages = ArrayList<UsageInfo>()
+                    val usages = LinkedHashSet<UsageInfo>()
                     for (element in elementsToMove) {
                         ReferencesSearch.search(element).mapTo(usages) { MoveRenameUsageInfo(it, element) }
                         if (element is KtCallableDeclaration) {
@@ -164,7 +166,7 @@ class ExtractSuperRefactoring(
                             }
                         }
                     }
-                    conflictChecker.checkAllConflicts(usages, conflicts)
+                    conflictChecker.checkAllConflicts(usages, LinkedHashSet<UsageInfo>(), conflicts)
                     if (targetParent is PsiDirectory) {
                         ExtractSuperClassUtil.checkSuperAccessible(targetParent, conflicts, originalClass.toLightClass())
                     }
@@ -261,7 +263,7 @@ class ExtractSuperRefactoring(
         val needSuperCall = !extractInfo.isInterface
                             && (superClassEntry is KtSuperTypeCallEntry
                             || originalClass.hasPrimaryConstructor()
-                            || originalClass.getSecondaryConstructors().isEmpty())
+                            || originalClass.secondaryConstructors.isEmpty())
         val newSuperTypeListEntry = if (needSuperCall) {
             psiFactory.createSuperTypeCallEntry("$superTypeText()")
         }
@@ -297,7 +299,7 @@ class ExtractSuperRefactoring(
         val superClassEntry = if (!extractInfo.isInterface) {
             val originalClassDescriptor = originalClass.resolveToDescriptor() as ClassDescriptor
             val superClassDescriptor = originalClassDescriptor.getSuperClassNotAny()
-            originalClass.getSuperTypeListEntries().firstOrNull {
+            originalClass.superTypeListEntries.firstOrNull {
                 bindingContext[BindingContext.TYPE, it.typeReference]?.constructor?.declarationDescriptor == superClassDescriptor
             }
         }
@@ -318,7 +320,7 @@ class ExtractSuperRefactoring(
                     extractInfo.docPolicy
             ).moveMembersToBase()
 
-            performDelayedShortening(project)
+            performDelayedRefactoringRequests(project)
         }
     }
 }

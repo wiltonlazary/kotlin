@@ -18,9 +18,9 @@ package org.jetbrains.kotlin.asJava
 
 import com.intellij.psi.PsiElement
 import com.intellij.psi.search.GlobalSearchScope
-import org.jetbrains.kotlin.asJava.builder.OutermostKotlinClassLightClassData
-import org.jetbrains.kotlin.asJava.classes.KtLightClassForSourceDeclaration
+import org.jetbrains.kotlin.asJava.builder.InvalidLightClassDataHolder
 import org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade
+import org.jetbrains.kotlin.asJava.classes.KtLightClassForSourceDeclaration
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.DiagnosticFactory
 import org.jetbrains.kotlin.diagnostics.DiagnosticFactory.cast
@@ -42,7 +42,11 @@ fun getJvmSignatureDiagnostics(element: PsiElement, otherDiagnostics: Diagnostic
     }
 
     fun getDiagnosticsForClass(ktClassOrObject: KtClassOrObject): Diagnostics {
-        return (KtLightClassForSourceDeclaration.getLightClassData(ktClassOrObject) as? OutermostKotlinClassLightClassData)?.extraDiagnostics ?: Diagnostics.EMPTY
+        val lightClassDataHolder = KtLightClassForSourceDeclaration.getLightClassDataHolder(ktClassOrObject)
+        if (lightClassDataHolder is InvalidLightClassDataHolder) {
+            return Diagnostics.EMPTY
+        }
+        return lightClassDataHolder.extraDiagnostics
     }
 
     fun doGetDiagnostics(): Diagnostics? {
@@ -91,12 +95,12 @@ class FilteredJvmDiagnostics(val jvmDiagnostics: Diagnostics, val otherDiagnosti
         val higherPriority = setOf<DiagnosticFactory<*>>(
                 CONFLICTING_OVERLOADS, REDECLARATION, NOTHING_TO_OVERRIDE, MANY_IMPL_MEMBER_NOT_IMPLEMENTED)
         return otherDiagnostics.forElement(psiElement).any { it.factory in higherPriority }
-                || psiElement is KtPropertyAccessor && alreadyReported(psiElement.getParent()!!)
+                || psiElement is KtPropertyAccessor && alreadyReported(psiElement.parent)
     }
 
     override fun forElement(psiElement: PsiElement): Collection<Diagnostic> {
         val jvmDiagnosticFactories = setOf(CONFLICTING_JVM_DECLARATIONS, ACCIDENTAL_OVERRIDE, CONFLICTING_INHERITED_JVM_DECLARATIONS)
-        fun Diagnostic.data() = cast(this, jvmDiagnosticFactories).getA()
+        fun Diagnostic.data() = cast(this, jvmDiagnosticFactories).a
         val (conflicting, other) = jvmDiagnostics.forElement(psiElement).partition { it.factory in jvmDiagnosticFactories }
         if (alreadyReported(psiElement)) {
             // CONFLICTING_OVERLOADS already reported, no need to duplicate it

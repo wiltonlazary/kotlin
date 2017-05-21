@@ -16,6 +16,9 @@
 
 package org.jetbrains.kotlin.idea.caches.resolve
 
+import com.intellij.openapi.module.Module
+import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime
+import org.jetbrains.kotlin.config.TargetPlatformKind
 import org.jetbrains.kotlin.idea.project.PluginJetFilesProvider
 import org.jetbrains.kotlin.idea.stubs.AbstractMultiHighlightingTest
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
@@ -25,10 +28,38 @@ abstract class AbstractMultiModuleHighlightingTest : AbstractMultiHighlightingTe
 
     override val testPath = PluginTestCaseBase.getTestDataPathBase() + "/multiModuleHighlighting/"
 
-    protected fun checkHighlightingInAllFiles() {
+    protected fun doMultiPlatformTest(
+            vararg platforms: TargetPlatformKind<*>,
+            withStdlibCommon: Boolean = false,
+            configureModule: (Module, TargetPlatformKind<*>) -> Unit = { _, _ -> },
+            useFullJdk: Boolean = false
+    ) {
+        val commonModule = module("common", useFullJdk = useFullJdk)
+        commonModule.createFacet(TargetPlatformKind.Common)
+        if (withStdlibCommon) {
+            commonModule.addLibrary(ForTestCompileRuntime.stdlibCommonForTests())
+        }
+
+        for (platform in platforms) {
+            val path = when (platform) {
+                is TargetPlatformKind.Jvm -> "jvm"
+                is TargetPlatformKind.JavaScript -> "js"
+                else -> error("Unsupported platform: $platform")
+            }
+            val platformModule = module(path, useFullJdk = useFullJdk)
+            platformModule.createFacet(platform)
+            platformModule.enableMultiPlatform()
+            platformModule.addDependency(commonModule)
+            configureModule(platformModule, platform)
+        }
+
+        checkHighlightingInAllFiles()
+    }
+
+    protected fun checkHighlightingInAllFiles(nameFilter: (fileName: String) -> Boolean = { true }) {
         var atLeastOneFile = false
         PluginJetFilesProvider.allFilesInProject(myProject!!).forEach { file ->
-            if (!file.text.contains("// !CHECK_HIGHLIGHTING")) {
+            if (nameFilter(file.name) && !file.text.contains("// !CHECK_HIGHLIGHTING")) {
                 atLeastOneFile = true
                 configureByExistingFile(file.virtualFile!!)
                 checkHighlighting(myEditor, true, false)

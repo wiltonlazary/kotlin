@@ -23,12 +23,15 @@ import org.jetbrains.kotlin.ir.expressions.*
 interface IrElementVisitor<out R, in D> {
     fun visitElement(element: IrElement, data: D): R
     fun visitModuleFragment(declaration: IrModuleFragment, data: D) = visitElement(declaration, data)
-    fun visitFile(declaration: IrFile, data: D) = visitElement(declaration, data)
+    fun visitPackageFragment(declaration: IrPackageFragment, data: D) = visitElement(declaration, data)
+    fun visitFile(declaration: IrFile, data: D) = visitPackageFragment(declaration, data)
+    fun visitExternalPackageFragment(declaration: IrExternalPackageFragment, data: D) = visitPackageFragment(declaration, data)
 
     fun visitDeclaration(declaration: IrDeclaration, data: D) = visitElement(declaration, data)
     fun visitClass(declaration: IrClass, data: D) = visitDeclaration(declaration, data)
     fun visitTypeAlias(declaration: IrTypeAlias, data: D) = visitDeclaration(declaration, data)
     fun visitFunction(declaration: IrFunction, data: D) = visitDeclaration(declaration, data)
+    fun visitSimpleFunction(declaration: IrSimpleFunction, data: D) = visitFunction(declaration, data)
     fun visitConstructor(declaration: IrConstructor, data: D) = visitFunction(declaration, data)
     fun visitProperty(declaration: IrProperty, data: D) = visitDeclaration(declaration, data)
     fun visitField(declaration: IrField, data: D) = visitDeclaration(declaration, data)
@@ -36,6 +39,8 @@ interface IrElementVisitor<out R, in D> {
     fun visitVariable(declaration: IrVariable, data: D) = visitDeclaration(declaration, data)
     fun visitEnumEntry(declaration: IrEnumEntry, data: D) = visitDeclaration(declaration, data)
     fun visitAnonymousInitializer(declaration: IrAnonymousInitializer, data: D) = visitDeclaration(declaration, data)
+    fun visitTypeParameter(declaration: IrTypeParameter, data: D) = visitDeclaration(declaration, data)
+    fun visitValueParameter(declaration: IrValueParameter, data: D) = visitDeclaration(declaration, data)
 
     fun visitBody(body: IrBody, data: D) = visitElement(body, data)
     fun visitExpressionBody(body: IrExpressionBody, data: D) = visitBody(body, data)
@@ -62,13 +67,19 @@ interface IrElementVisitor<out R, in D> {
     fun visitFieldAccess(expression: IrFieldAccessExpression, data: D) = visitDeclarationReference(expression, data)
     fun visitGetField(expression: IrGetField, data: D) = visitFieldAccess(expression, data)
     fun visitSetField(expression: IrSetField, data: D) = visitFieldAccess(expression, data)
-    fun visitMemberAccess(expression: IrMemberAccessExpression, data: D) = visitDeclarationReference(expression, data)
-    fun visitCall(expression: IrCall, data: D) = visitMemberAccess(expression, data)
-    fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall, data: D) = visitMemberAccess(expression, data)
-    fun visitEnumConstructorCall(expression: IrEnumConstructorCall, data: D) = visitMemberAccess(expression, data)
+
+    fun visitMemberAccess(expression: IrMemberAccessExpression, data: D) = visitExpression(expression, data)
+    fun visitFunctionAccess(expression: IrFunctionAccessExpression, data: D) = visitMemberAccess(expression, data)
+    fun visitCall(expression: IrCall, data: D) = visitFunctionAccess(expression, data)
+    fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall, data: D) = visitFunctionAccess(expression, data)
+    fun visitEnumConstructorCall(expression: IrEnumConstructorCall, data: D) = visitFunctionAccess(expression, data)
     fun visitGetClass(expression: IrGetClass, data: D) = visitExpression(expression, data)
 
     fun visitCallableReference(expression: IrCallableReference, data: D) = visitMemberAccess(expression, data)
+    fun visitFunctionReference(expression: IrFunctionReference, data: D) = visitCallableReference(expression, data)
+    fun visitPropertyReference(expression: IrPropertyReference, data: D) = visitCallableReference(expression, data)
+    fun visitLocalDelegatedPropertyReference(expression: IrLocalDelegatedPropertyReference, data: D) = visitCallableReference(expression, data)
+
     fun visitClassReference(expression: IrClassReference, data: D) = visitDeclarationReference(expression, data)
 
     fun visitInstanceInitializerCall(expression: IrInstanceInitializerCall, data: D) = visitExpression(expression, data)

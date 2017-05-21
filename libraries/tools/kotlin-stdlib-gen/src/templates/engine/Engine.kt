@@ -76,6 +76,13 @@ enum class Platform {
     JS
 }
 
+enum class SequenceClass {
+    terminal,
+    intermediate,
+    stateless,
+    stateful
+}
+
 data class Deprecation(val message: String, val replaceWith: String? = null, val level: DeprecationLevel = DeprecationLevel.WARNING)
 val forBinaryCompatibility = Deprecation("Provided for binary compatibility", level = DeprecationLevel.HIDDEN)
 
@@ -213,6 +220,7 @@ class GenericFunction(val signature: String, val keyword: String = "fun") {
     val customPrimitiveBodies = HashMap<Pair<Family, PrimitiveType>, String>()
     val annotations = PlatformFamilyProperty<String>()
     val sourceFile = FamilyProperty<SourceFile>()
+    val sequenceClassification = mutableListOf<SequenceClass>()
 
     fun bodyForTypes(family: Family, vararg primitiveTypes: PrimitiveType, b: (PrimitiveType) -> String) {
         include(family)
@@ -223,6 +231,10 @@ class GenericFunction(val signature: String, val keyword: String = "fun") {
 
     fun typeParam(t: String) {
         typeParams.add(t)
+    }
+
+    fun sequenceClassification(vararg sequenceClass: SequenceClass) {
+        sequenceClassification.addAll(sequenceClass)
     }
 
     fun exclude(vararg families: Family) {
@@ -442,6 +454,10 @@ class GenericFunction(val signature: String, val keyword: String = "fun") {
             StringReader(methodDoc.trim()).forEachLine { line ->
                 builder.append(" * ").append(line.trim()).append("\n")
             }
+            if (f == Sequences && sequenceClassification.isNotEmpty()) {
+                builder.append(" *\n")
+                builder.append(" * The operation is ${sequenceClassification.joinToString(" and ") { "_${it}_" }}.\n")
+            }
             builder.append(" */\n")
         }
 
@@ -467,7 +483,7 @@ class GenericFunction(val signature: String, val keyword: String = "fun") {
             builder.append("@SinceKotlin(\"$since\")\n")
         }
 
-        annotations[platform, f]?.let { builder.append(it).append('\n') }
+        annotations[platform, f]?.let { builder.append(it.trimIndent()).append('\n') }
 
         if (inline[platform, f] == Inline.Only) {
             builder.append("@kotlin.internal.InlineOnly").append('\n')

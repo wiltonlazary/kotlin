@@ -19,13 +19,9 @@
 
 package org.jetbrains.kotlin.incremental
 
-import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.text.StringUtil
-import org.jetbrains.kotlin.build.GeneratedFile
-import org.jetbrains.kotlin.build.GeneratedJvmClass
-import org.jetbrains.kotlin.build.JvmSourceRoot
-import org.jetbrains.kotlin.build.isModuleMappingFile
+import org.jetbrains.kotlin.build.*
 import org.jetbrains.kotlin.compilerRunner.OutputItemsCollectorImpl
 import org.jetbrains.kotlin.config.IncrementalCompilation
 import org.jetbrains.kotlin.config.Services
@@ -42,7 +38,7 @@ import java.util.*
 
 
 fun Iterable<File>.javaSourceRoots(roots: Iterable<File>): Iterable<File> =
-        filter { it.isJavaFile() }
+        filter(File::isJavaFile)
                 .map { findSrcDirRoot(it, roots) }
                 .filterNotNull()
 
@@ -145,7 +141,7 @@ fun LookupStorage.update(
         filesToCompile: Iterable<File>,
         removedFiles: Iterable<File>
 ) {
-    if (lookupTracker !is LookupTrackerImpl) throw AssertionError("Lookup tracker is expected to be LookupTrackerImpl, got ${lookupTracker.javaClass}")
+    if (lookupTracker !is LookupTrackerImpl) throw AssertionError("Lookup tracker is expected to be LookupTrackerImpl, got ${lookupTracker::class.java}")
 
     removeLookupsFrom(filesToCompile.asSequence() + removedFiles.asSequence())
 
@@ -168,10 +164,11 @@ fun<Target> OutputItemsCollectorImpl.generatedFiles(
                 outputItem.sourceFiles.firstOrNull()?.let { sourceToTarget[it] } ?:
                 targets.filter { getOutputDir(it)?.let { outputItem.outputFile.startsWith(it) } ?: false }.singleOrNull() ?:
                 representativeTarget
-        if (outputItem.outputFile.name.endsWith(".class"))
-            GeneratedJvmClass(target, outputItem.sourceFiles, outputItem.outputFile)
-        else
-            GeneratedFile(target, outputItem.sourceFiles, outputItem.outputFile)
+
+        when (outputItem.outputFile.extension) {
+            "class" -> GeneratedJvmClass(target, outputItem.sourceFiles, outputItem.outputFile)
+            else -> GeneratedFile(target, outputItem.sourceFiles, outputItem.outputFile)
+        }
     }
 }
 

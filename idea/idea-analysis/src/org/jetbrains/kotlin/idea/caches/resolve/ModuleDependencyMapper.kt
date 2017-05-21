@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.idea.caches.resolve
 
+import com.intellij.openapi.components.service
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.projectRoots.ProjectJdkTable
@@ -23,16 +24,15 @@ import com.intellij.openapi.projectRoots.Sdk
 import com.intellij.openapi.roots.JdkOrderEntry
 import com.intellij.openapi.roots.LibraryOrderEntry
 import com.intellij.openapi.roots.ModuleRootManager
+import org.jetbrains.kotlin.analyzer.AnalyzerFacade
 import org.jetbrains.kotlin.analyzer.ModuleContent
 import org.jetbrains.kotlin.analyzer.ModuleInfo
 import org.jetbrains.kotlin.analyzer.ResolverForProject
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.context.GlobalContextImpl
 import org.jetbrains.kotlin.context.withProject
-import org.jetbrains.kotlin.descriptors.SourceKind
 import org.jetbrains.kotlin.idea.project.AnalyzerFacadeProvider
 import org.jetbrains.kotlin.idea.project.IdeaEnvironment
-import org.jetbrains.kotlin.idea.project.TargetPlatformDetector
 import org.jetbrains.kotlin.load.java.structure.JavaClass
 import org.jetbrains.kotlin.load.java.structure.impl.JavaClassImpl
 import org.jetbrains.kotlin.psi.KtFile
@@ -62,7 +62,7 @@ fun createModuleResolverProvider(
 
     val allModuleInfos = (allModules ?: collectAllModuleInfosFromIdeaModel(project)).toHashSet()
 
-    val syntheticFilesByModule = syntheticFiles.groupBy { it.getModuleInfo() }
+    val syntheticFilesByModule = syntheticFiles.groupBy(KtFile::getModuleInfo)
     val syntheticFilesModules = syntheticFilesByModule.keys
     allModuleInfos.addAll(syntheticFilesModules)
 
@@ -79,23 +79,14 @@ fun createModuleResolverProvider(
             psiClass.getNullableModuleInfo()
         }
 
-        return AnalyzerFacadeProvider.getAnalyzerFacade(platform).setupResolverForProject(
-                debugName, globalContext.withProject(project), modulesToCreateResolversFor, modulesContent,
-                jvmPlatformParameters, IdeaEnvironment, builtInsProvider,
+        return AnalyzerFacade.setupResolverForProject(
+                debugName, globalContext.withProject(project), modulesToCreateResolversFor,
+                { module -> AnalyzerFacadeProvider.getAnalyzerFacade(module.platform ?: platform) },
+                modulesContent, jvmPlatformParameters, IdeaEnvironment, builtInsProvider,
                 delegateResolver, { _, c -> IDEPackagePartProvider(c.moduleContentScope) },
                 sdk?.let { SdkInfo(project, it) },
-                modulePlatforms = { moduleInfo ->
-                    val module = (moduleInfo as? ModuleSourceInfo)?.module
-                    module?.let { TargetPlatformDetector.getPlatform(module).multiTargetPlatform }
-                },
-                moduleSources = { moduleInfo ->
-                    when (moduleInfo) {
-                        is ModuleProductionSourceInfo -> SourceKind.PRODUCTION
-                        is ModuleTestSourceInfo -> SourceKind.TEST
-                        else -> SourceKind.NONE
-                    }
-                }
-
+                modulePlatforms = { module -> module.platform?.multiTargetPlatform },
+                packageOracleFactory = project.service<IdePackageOracleFactory>()
         )
     }
 
@@ -114,7 +105,7 @@ fun createModuleResolverProvider(
     )
 }
 
-private fun collectAllModuleInfosFromIdeaModel(project: Project): List<IdeaModuleInfo> {
+fun collectAllModuleInfosFromIdeaModel(project: Project): List<IdeaModuleInfo> {
     val ideaModules = ModuleManager.getInstance(project).modules.toList()
     val modulesSourcesInfos = ideaModules.flatMap { listOf(it.productionSourceInfo(), it.testSourceInfo()) }
 

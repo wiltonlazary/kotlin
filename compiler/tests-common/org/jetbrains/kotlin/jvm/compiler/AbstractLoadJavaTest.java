@@ -18,9 +18,7 @@ package org.jetbrains.kotlin.jvm.compiler;
 
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.psi.search.GlobalSearchScope;
 import junit.framework.ComparisonFailure;
-import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.analyzer.AnalysisResult;
 import org.jetbrains.kotlin.cli.jvm.compiler.CliLightClassGenerationSupport;
@@ -31,7 +29,10 @@ import org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt;
 import org.jetbrains.kotlin.config.CompilerConfiguration;
 import org.jetbrains.kotlin.config.ContentRootsKt;
 import org.jetbrains.kotlin.config.JVMConfigurationKeys;
-import org.jetbrains.kotlin.descriptors.*;
+import org.jetbrains.kotlin.descriptors.ClassDescriptor;
+import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
+import org.jetbrains.kotlin.descriptors.PackageViewDescriptor;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
@@ -46,7 +47,6 @@ import org.jetbrains.kotlin.test.util.DescriptorValidator;
 import org.junit.Assert;
 
 import java.io.File;
-import java.io.FileFilter;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
@@ -123,7 +123,7 @@ public abstract class AbstractLoadJavaTest extends TestCaseWithTmpdir {
         Assert.assertEquals("test", packageFromSource.getName().asString());
 
         PackageViewDescriptor packageFromBinary = LoadDescriptorUtil.loadTestPackageAndBindingContextFromJavaRoot(
-                tmpdir, getTestRootDisposable(), getJdkKind(), configurationKind, true
+                tmpdir, getTestRootDisposable(), getJdkKind(), configurationKind, true, false
         ).first;
 
         for (DeclarationDescriptor descriptor : DescriptorUtils.getAllDescriptors(packageFromBinary.getMemberScope())) {
@@ -138,33 +138,27 @@ public abstract class AbstractLoadJavaTest extends TestCaseWithTmpdir {
         compareDescriptors(packageFromSource, packageFromBinary, comparatorConfiguration, txtFile);
     }
 
+    protected boolean useFastClassFilesReading() {
+        return false;
+    }
+
     protected void doTestJavaAgainstKotlin(String expectedFileName) throws Exception {
         File expectedFile = new File(expectedFileName);
         File sourcesDir = new File(expectedFileName.replaceFirst("\\.txt$", ""));
 
-        FileUtil.copyDir(sourcesDir, new File(tmpdir, "test"), new FileFilter() {
-            @Override
-            public boolean accept(@NotNull File pathname) {
-                return pathname.getName().endsWith(".java");
-            }
-        });
+        FileUtil.copyDir(sourcesDir, new File(tmpdir, "test"), pathname -> pathname.getName().endsWith(".java"));
 
         CompilerConfiguration configuration = KotlinTestUtils.newConfiguration(ConfigurationKind.JDK_ONLY, getJdkKind());
         ContentRootsKt.addKotlinSourceRoot(configuration, sourcesDir.getAbsolutePath());
         JvmContentRootsKt.addJavaSourceRoot(configuration, new File("compiler/testData/loadJava/include"));
         JvmContentRootsKt.addJavaSourceRoot(configuration, tmpdir);
 
-        final KotlinCoreEnvironment environment =
+        KotlinCoreEnvironment environment =
                 KotlinCoreEnvironment.createForTests(getTestRootDisposable(), configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES);
 
         AnalysisResult result = TopDownAnalyzerFacadeForJVM.analyzeFilesWithJavaIntegration(
                 environment.getProject(), environment.getSourceFiles(), new CliLightClassGenerationSupport.NoScopeRecordCliBindingTrace(),
-                configuration, new Function1<GlobalSearchScope, PackagePartProvider>() {
-                    @Override
-                    public PackagePartProvider invoke(GlobalSearchScope scope) {
-                        return new JvmPackagePartProvider(environment, scope);
-                    }
-                }
+                configuration, scope -> new JvmPackagePartProvider(environment, scope)
         );
 
         PackageViewDescriptor packageView = result.getModuleDescriptor().getPackage(TEST_PACKAGE_FQNAME);
@@ -217,8 +211,8 @@ public abstract class AbstractLoadJavaTest extends TestCaseWithTmpdir {
         FileUtil.copy(originalJavaFile, new File(testPackageDir, originalJavaFile.getName()));
 
         Pair<PackageViewDescriptor, BindingContext> javaPackageAndContext = loadTestPackageAndBindingContextFromJavaRoot(
-                tmpdir, getTestRootDisposable(), getJdkKind(), ConfigurationKind.JDK_ONLY, false
-        );
+                tmpdir, getTestRootDisposable(), getJdkKind(), ConfigurationKind.JDK_ONLY, false,
+                false);
 
         checkJavaPackage(
                 expectedFile, javaPackageAndContext.first, javaPackageAndContext.second,
@@ -227,7 +221,7 @@ public abstract class AbstractLoadJavaTest extends TestCaseWithTmpdir {
     }
 
     private void doTestCompiledJava(@NotNull String javaFileName, Configuration configuration) throws Exception {
-        final File srcDir = new File(tmpdir, "src");
+        File srcDir = new File(tmpdir, "src");
         File compiledDir = new File(tmpdir, "compiled");
         assertTrue(srcDir.mkdir());
         assertTrue(compiledDir.mkdir());
@@ -263,7 +257,8 @@ public abstract class AbstractLoadJavaTest extends TestCaseWithTmpdir {
             @NotNull ConfigurationKind configurationKind
     ) throws IOException {
         compileJavaWithAnnotationsJar(javaFiles, outDir);
-        return loadTestPackageAndBindingContextFromJavaRoot(outDir, myTestRootDisposable, getJdkKind(), configurationKind, true);
+        return loadTestPackageAndBindingContextFromJavaRoot(outDir, myTestRootDisposable, getJdkKind(), configurationKind, true,
+                                                            useFastClassFilesReading());
     }
 
     private static void checkJavaPackage(

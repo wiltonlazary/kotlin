@@ -28,7 +28,6 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.before
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.BindingContext.*
-import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.callUtil.isSafeCall
@@ -43,6 +42,7 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.TransientReceiver
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils
 import org.jetbrains.kotlin.types.expressions.PreliminaryDeclarationVisitor
+import org.jetbrains.kotlin.types.isError
 
 /**
  * This class is intended to create data flow values for different kind of expressions.
@@ -123,7 +123,7 @@ object DataFlowValueFactory {
                                                      receiverValue.getType(),
                                                      bindingContext,
                                                      containingDeclarationOrModule)
-        else -> throw UnsupportedOperationException("Unsupported receiver value: " + receiverValue.javaClass.name)
+        else -> throw UnsupportedOperationException("Unsupported receiver value: " + receiverValue::class.java.name)
     }
 
     @JvmStatic
@@ -242,7 +242,7 @@ object DataFlowValueFactory {
                     }
                     else {
                         IdentifierInfo.qualified(receiverInfo, implicitReceiver.type,
-                                                 selectorInfo, resolvedCall?.call?.isSafeCall() ?: false)
+                                                 selectorInfo, resolvedCall.call.isSafeCall())
                     }
                 }
             }
@@ -269,19 +269,6 @@ object DataFlowValueFactory {
         else -> IdentifierInfo.NO
     }
 
-    private fun getVariableContainingDeclaration(variableDescriptor: VariableDescriptor): DeclarationDescriptor {
-        val containingDeclarationDescriptor = variableDescriptor.containingDeclaration
-        return if (containingDeclarationDescriptor is ConstructorDescriptor && containingDeclarationDescriptor.isPrimary) {
-            // This code is necessary just because JetClassInitializer has no associated descriptor in trace
-            // Because of it we have to use class itself instead of initializer,
-            // otherwise we could not find this descriptor inside isAccessedInsideClosure below
-            containingDeclarationDescriptor.containingDeclaration
-        }
-        else {
-            containingDeclarationDescriptor
-        }
-    }
-
     private fun isAccessedInsideClosure(
             variableContainingDeclaration: DeclarationDescriptor,
             bindingContext: BindingContext,
@@ -290,7 +277,8 @@ object DataFlowValueFactory {
         val parent = ControlFlowInformationProvider.getElementParentDeclaration(accessElement)
         return if (parent != null)
             // Access is at the same declaration: not in closure, lower: in closure
-            variableContainingDeclaration != bindingContext.get(DECLARATION_TO_DESCRIPTOR, parent)
+            ControlFlowInformationProvider.getDeclarationDescriptorIncludingConstructors(bindingContext, parent) !=
+                    variableContainingDeclaration
         else
             false
     }
@@ -304,7 +292,7 @@ object DataFlowValueFactory {
         // All writers should be before access element, with the exception:
         // writer which is the same with declaration site does not count
         writers.filterNotNull().forEach { writer ->
-            val writerDescriptor = bindingContext.get(DECLARATION_TO_DESCRIPTOR, writer)
+            val writerDescriptor = ControlFlowInformationProvider.getDeclarationDescriptorIncludingConstructors(bindingContext, writer)
             // Access is after some writer
             if (variableContainingDeclaration != writerDescriptor && !accessElement.before(writer)) {
                 return false
@@ -351,7 +339,7 @@ object DataFlowValueFactory {
         if (writers.isEmpty()) return STABLE_VARIABLE
 
         // If access element is inside closure: captured
-        val variableContainingDeclaration = getVariableContainingDeclaration(variableDescriptor)
+        val variableContainingDeclaration = variableDescriptor.containingDeclaration
         if (isAccessedInsideClosure(variableContainingDeclaration, bindingContext, accessElement)) return CAPTURED_VARIABLE
 
         // Otherwise, stable iff considered position is BEFORE all writers except declarer itself

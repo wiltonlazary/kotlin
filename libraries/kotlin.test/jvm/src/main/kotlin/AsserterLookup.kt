@@ -3,12 +3,15 @@ package kotlin.test
 import java.util.*
 import java.util.concurrent.atomic.*
 import java.util.concurrent.locks.*
+import kotlin.concurrent.withLock
 
 private val inited = AtomicBoolean()
 private val lock = ReentrantLock()
 private val contributors = ArrayList<AsserterContributor>()
 
 internal impl fun lookupAsserter(): Asserter = lookup()
+
+private val defaultAsserter = DefaultAsserter()
 
 internal fun lookup(): Asserter {
     initContributorsIfNeeded()
@@ -20,7 +23,7 @@ internal fun lookup(): Asserter {
         }
     }
 
-    return DefaultAsserter()
+    return defaultAsserter
 }
 
 private fun initContributors() {
@@ -41,14 +44,5 @@ private fun initContributorsIfNeeded() {
                 initContributors()
             }
         }
-    }
-}
-
-private inline fun Lock.withLock(block: () -> Unit) {
-    lockInterruptibly()
-    try {
-        block()
-    } finally {
-        unlock()
     }
 }

@@ -17,11 +17,12 @@
 package org.jetbrains.kotlin.ir.declarations
 
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.ir.expressions.IrBody
 import org.jetbrains.kotlin.ir.expressions.IrExpressionBody
+import org.jetbrains.kotlin.ir.symbols.IrFieldSymbol
 
 interface IrProperty : IrDeclaration {
     override val descriptor: PropertyDescriptor
+    val typeParameters: MutableList<IrTypeParameter>
     val isDelegated: Boolean
     var backingField: IrField?
     var getter: IrFunction?
@@ -31,7 +32,7 @@ interface IrProperty : IrDeclaration {
         get() = IrDeclarationKind.PROPERTY
 }
 
-interface IrField : IrDeclaration {
+interface IrField : IrSymbolDeclaration<IrFieldSymbol> {
     override val descriptor: PropertyDescriptor
 
     override val declarationKind: IrDeclarationKind

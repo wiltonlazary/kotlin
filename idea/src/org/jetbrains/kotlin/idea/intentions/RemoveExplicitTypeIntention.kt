@@ -28,7 +28,7 @@ class RemoveSetterParameterTypeInspection : IntentionBasedInspection<KtCallableD
         RemoveExplicitTypeIntention::class,
         { it -> RemoveExplicitTypeIntention.isSetterParameter(it) }
 ) {
-    override val problemHighlightType = ProblemHighlightType.LIKE_UNUSED_SYMBOL
+    override fun problemHighlightType(element: KtCallableDeclaration) = ProblemHighlightType.LIKE_UNUSED_SYMBOL
 
     override fun inspectionTarget(element: KtCallableDeclaration) = (element as? KtParameter)?.typeReference
 }
@@ -64,6 +64,6 @@ class RemoveExplicitTypeIntention : SelfTargetingRangeIntention<KtCallableDeclar
         fun isSetterParameter(element: KtCallableDeclaration) =
                 element is KtParameter && element.isSetterParameter
 
-        private val KtParameter.isSetterParameter: Boolean get() = (parent?.parent as? KtPropertyAccessor)?.isSetter ?: false
+        private val KtParameter.isSetterParameter: Boolean get() = (parent.parent as? KtPropertyAccessor)?.isSetter ?: false
     }
 }

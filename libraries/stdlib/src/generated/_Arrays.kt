@@ -2156,6 +2156,7 @@ public inline fun <T> Array<out T>.single(predicate: (T) -> Boolean): T {
         }
     }
     if (!found) throw NoSuchElementException("Array contains no element matching the predicate.")
+    @Suppress("UNCHECKED_CAST")
     return single as T
 }
 
@@ -2173,6 +2174,7 @@ public inline fun ByteArray.single(predicate: (Byte) -> Boolean): Byte {
         }
     }
     if (!found) throw NoSuchElementException("Array contains no element matching the predicate.")
+    @Suppress("UNCHECKED_CAST")
     return single as Byte
 }
 
@@ -2190,6 +2192,7 @@ public inline fun ShortArray.single(predicate: (Short) -> Boolean): Short {
         }
     }
     if (!found) throw NoSuchElementException("Array contains no element matching the predicate.")
+    @Suppress("UNCHECKED_CAST")
     return single as Short
 }
 
@@ -2207,6 +2210,7 @@ public inline fun IntArray.single(predicate: (Int) -> Boolean): Int {
         }
     }
     if (!found) throw NoSuchElementException("Array contains no element matching the predicate.")
+    @Suppress("UNCHECKED_CAST")
     return single as Int
 }
 
@@ -2224,6 +2228,7 @@ public inline fun LongArray.single(predicate: (Long) -> Boolean): Long {
         }
     }
     if (!found) throw NoSuchElementException("Array contains no element matching the predicate.")
+    @Suppress("UNCHECKED_CAST")
     return single as Long
 }
 
@@ -2241,6 +2246,7 @@ public inline fun FloatArray.single(predicate: (Float) -> Boolean): Float {
         }
     }
     if (!found) throw NoSuchElementException("Array contains no element matching the predicate.")
+    @Suppress("UNCHECKED_CAST")
     return single as Float
 }
 
@@ -2258,6 +2264,7 @@ public inline fun DoubleArray.single(predicate: (Double) -> Boolean): Double {
         }
     }
     if (!found) throw NoSuchElementException("Array contains no element matching the predicate.")
+    @Suppress("UNCHECKED_CAST")
     return single as Double
 }
 
@@ -2275,6 +2282,7 @@ public inline fun BooleanArray.single(predicate: (Boolean) -> Boolean): Boolean 
         }
     }
     if (!found) throw NoSuchElementException("Array contains no element matching the predicate.")
+    @Suppress("UNCHECKED_CAST")
     return single as Boolean
 }
 
@@ -2292,6 +2300,7 @@ public inline fun CharArray.single(predicate: (Char) -> Boolean): Char {
         }
     }
     if (!found) throw NoSuchElementException("Array contains no element matching the predicate.")
+    @Suppress("UNCHECKED_CAST")
     return single as Char
 }
 
@@ -5179,6 +5188,8 @@ public inline fun <T> Array<out T>.contentDeepHashCode(): Int {
  * 
  * If any of arrays contains itself on any nesting level that reference
  * is rendered as `"[...]"` to prevent recursion.
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentDeepToString
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
@@ -5359,6 +5370,8 @@ public inline fun CharArray.contentHashCode(): Int {
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
@@ -5368,6 +5381,8 @@ public inline fun <T> Array<out T>.contentToString(): String {
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
@@ -5377,6 +5392,8 @@ public inline fun ByteArray.contentToString(): String {
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
@@ -5386,6 +5403,8 @@ public inline fun ShortArray.contentToString(): String {
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
@@ -5395,6 +5414,8 @@ public inline fun IntArray.contentToString(): String {
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
@@ -5404,6 +5425,8 @@ public inline fun LongArray.contentToString(): String {
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
@@ -5413,6 +5436,8 @@ public inline fun FloatArray.contentToString(): String {
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
@@ -5422,6 +5447,8 @@ public inline fun DoubleArray.contentToString(): String {
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
@@ -5431,6 +5458,8 @@ public inline fun BooleanArray.contentToString(): String {
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
@@ -7716,6 +7745,8 @@ public inline fun <K, V, M : MutableMap<in K, MutableList<V>>> CharArray.groupBy
 /**
  * Creates a [Grouping] source from an array to be used later with one of group-and-fold operations
  * using the specified [keySelector] function to extract a key from each element.
+ * 
+ * @sample samples.collections.Collections.Transformations.groupingByEachCount
  */
 @SinceKotlin("1.1")
 public inline fun <T, K> Array<out T>.groupingBy(crossinline keySelector: (T) -> K): Grouping<T, K> {
@@ -12597,6 +12628,8 @@ public fun CharArray.asIterable(): Iterable<Char> {
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public fun <T> Array<out T>.asSequence(): Sequence<T> {
     if (isEmpty()) return emptySequence()
@@ -12605,6 +12638,8 @@ public fun <T> Array<out T>.asSequence(): Sequence<T> {
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public fun ByteArray.asSequence(): Sequence<Byte> {
     if (isEmpty()) return emptySequence()
@@ -12613,6 +12648,8 @@ public fun ByteArray.asSequence(): Sequence<Byte> {
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public fun ShortArray.asSequence(): Sequence<Short> {
     if (isEmpty()) return emptySequence()
@@ -12621,6 +12658,8 @@ public fun ShortArray.asSequence(): Sequence<Short> {
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public fun IntArray.asSequence(): Sequence<Int> {
     if (isEmpty()) return emptySequence()
@@ -12629,6 +12668,8 @@ public fun IntArray.asSequence(): Sequence<Int> {
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public fun LongArray.asSequence(): Sequence<Long> {
     if (isEmpty()) return emptySequence()
@@ -12637,6 +12678,8 @@ public fun LongArray.asSequence(): Sequence<Long> {
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public fun FloatArray.asSequence(): Sequence<Float> {
     if (isEmpty()) return emptySequence()
@@ -12645,6 +12688,8 @@ public fun FloatArray.asSequence(): Sequence<Float> {
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public fun DoubleArray.asSequence(): Sequence<Double> {
     if (isEmpty()) return emptySequence()
@@ -12653,6 +12698,8 @@ public fun DoubleArray.asSequence(): Sequence<Double> {
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public fun BooleanArray.asSequence(): Sequence<Boolean> {
     if (isEmpty()) return emptySequence()
@@ -12661,6 +12708,8 @@ public fun BooleanArray.asSequence(): Sequence<Boolean> {
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public fun CharArray.asSequence(): Sequence<Char> {
     if (isEmpty()) return emptySequence()
@@ -13643,6 +13692,7 @@ public fun CharArray.sort(): Unit {
  */
 @kotlin.internal.InlineOnly
 public inline fun <T: Comparable<T>> Array<out T>.sort(): Unit {
+    @Suppress("UNCHECKED_CAST")
     (this as Array<Any?>).sort()
 }
 

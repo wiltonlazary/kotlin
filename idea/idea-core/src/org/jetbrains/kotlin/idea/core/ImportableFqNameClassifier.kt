@@ -34,7 +34,7 @@ class ImportableFqNameClassifier(private val file: KtFile) {
     init {
         for (import in file.importDirectives) {
             val importPath = import.importPath ?: continue
-            val fqName = importPath.fqnPart()
+            val fqName = importPath.fqName
             if (importPath.isAllUnder) {
                 allUnderImports.add(fqName)
             }
@@ -93,4 +93,4 @@ class ImportableFqNameClassifier(private val file: KtFile) {
 }
 
 fun isJavaClassNotToBeUsedInKotlin(fqName: FqName): Boolean
-        = JavaToKotlinClassMap.INSTANCE.isJavaPlatformClass(fqName) || JavaAnnotationMapper.javaToKotlinNameMap[fqName] != null
+        = JavaToKotlinClassMap.isJavaPlatformClass(fqName) || JavaAnnotationMapper.javaToKotlinNameMap[fqName] != null

@@ -16,7 +16,6 @@
 
 package org.jetbrains.kotlin.codegen;
 
-import kotlin.jvm.functions.Function0;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.codegen.context.CodegenContext;
 import org.jetbrains.kotlin.codegen.context.MethodContext;
@@ -61,7 +60,7 @@ public class ScriptCodegen extends MemberCodegen<KtScript> {
         List<ScriptDescriptor> earlierScripts = state.getReplSpecific().getEarlierScriptsForReplInterpreter();
         ScriptContext scriptContext = parentContext.intoScript(
                 scriptDescriptor,
-                earlierScripts == null ? Collections.<ScriptDescriptor>emptyList() : earlierScripts,
+                earlierScripts == null ? Collections.emptyList() : earlierScripts,
                 scriptDescriptor,
                 state.getTypeMapper()
         );
@@ -159,7 +158,7 @@ public class ScriptCodegen extends MemberCodegen<KtScript> {
 
                 iv.load(0, classType);
 
-                int valueParamStart = context.getEarlierScripts().size() + 1;
+                int valueParamStart = context.getEarlierScripts().isEmpty() ? 1 : 2; // this + array of earlier scripts if not empty
 
                 List<ValueParameterDescriptor> valueParameters = scriptDescriptor.getUnsubstitutedPrimaryConstructor().getValueParameters();
                 for (ValueParameterDescriptor superclassParam: ctorDesc.getValueParameters()) {
@@ -186,28 +185,25 @@ public class ScriptCodegen extends MemberCodegen<KtScript> {
             FrameMap frameMap = new FrameMap();
             frameMap.enterTemp(OBJECT_TYPE);
 
-            for (ScriptDescriptor importedScript : context.getEarlierScripts()) {
-                frameMap.enter(importedScript, OBJECT_TYPE);
-            }
 
-            int offset = 1;
+            if (!context.getEarlierScripts().isEmpty()) {
+                int scriptsParamIndex = frameMap.enterTemp(AsmUtil.getArrayType(OBJECT_TYPE));
 
-            for (ScriptDescriptor earlierScript : context.getEarlierScripts()) {
-                Type earlierClassType = typeMapper.mapClass(earlierScript);
-                iv.load(0, classType);
-                iv.load(offset, earlierClassType);
-                offset += earlierClassType.getSize();
-                iv.putfield(classType.getInternalName(), context.getScriptFieldName(earlierScript), earlierClassType.getDescriptor());
-            }
-
-            final ExpressionCodegen codegen = new ExpressionCodegen(mv, frameMap, Type.VOID_TYPE, methodContext, state, this);
-
-            generateInitializers(new Function0<ExpressionCodegen>() {
-                @Override
-                public ExpressionCodegen invoke() {
-                    return codegen;
+                int earlierScriptIndex = 0;
+                for (ScriptDescriptor earlierScript : context.getEarlierScripts()) {
+                    Type earlierClassType = typeMapper.mapClass(earlierScript);
+                    iv.load(0, classType);
+                    iv.load(scriptsParamIndex, earlierClassType);
+                    iv.aconst(earlierScriptIndex++);
+                    iv.aload(OBJECT_TYPE);
+                    iv.checkcast(earlierClassType);
+                    iv.putfield(classType.getInternalName(), context.getScriptFieldName(earlierScript), earlierClassType.getDescriptor());
                 }
-            });
+            }
+
+            ExpressionCodegen codegen = new ExpressionCodegen(mv, frameMap, Type.VOID_TYPE, methodContext, state, this);
+
+            generateInitializers(() -> codegen);
 
             iv.areturn(Type.VOID_TYPE);
         }

@@ -46,7 +46,6 @@
 
 package org.jetbrains.kotlin.codegen.inline;
 
-import com.intellij.openapi.util.Factory;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.org.objectweb.asm.*;
@@ -105,9 +104,8 @@ public class MaxStackFrameSizeAndLocalsCalculator extends MaxLocalsCalculator {
      */
     private int maxStack;
 
-
-    private final Collection<ExceptionHandler> exceptionHandlers = new LinkedList<ExceptionHandler>();
-    private final Map<Label, LabelWrapper> labelWrappersMap = new HashMap<Label, LabelWrapper>();
+    private final Collection<ExceptionHandler> exceptionHandlers = new LinkedList<>();
+    private final Map<Label, LabelWrapper> labelWrappersMap = new HashMap<>();
 
     public MaxStackFrameSizeAndLocalsCalculator(int api, int access, String descriptor, MethodVisitor mv) {
         super(api, access, descriptor, mv);
@@ -332,8 +330,8 @@ public class MaxStackFrameSizeAndLocalsCalculator extends MaxLocalsCalculator {
          * stack sizes of these blocks.
          */
         int max = 0;
-        Stack<LabelWrapper> stack = new Stack<LabelWrapper>();
-        Set<LabelWrapper> pushed = new HashSet<LabelWrapper>();
+        Stack<LabelWrapper> stack = new Stack<>();
+        Set<LabelWrapper> pushed = new HashSet<>();
 
         stack.push(firstLabel);
         pushed.add(firstLabel);
@@ -412,7 +410,7 @@ public class MaxStackFrameSizeAndLocalsCalculator extends MaxLocalsCalculator {
     private static class LabelWrapper {
         private final Label label;
         private LabelWrapper nextLabel = null;
-        private final Collection<ControlFlowEdge> successors = new LinkedList<ControlFlowEdge>();
+        private final Collection<ControlFlowEdge> successors = new LinkedList<>();
 
         private int outputStackMax = 0;
         private int inputStackSize = 0;
@@ -429,13 +427,8 @@ public class MaxStackFrameSizeAndLocalsCalculator extends MaxLocalsCalculator {
     // Utility methods
     // ------------------------------------------------------------------------
 
-    private LabelWrapper getLabelWrapper(final Label label) {
-        return ContainerUtil.getOrCreate(labelWrappersMap, label, new Factory<LabelWrapper>() {
-            @Override
-            public LabelWrapper create() {
-                return new LabelWrapper(label);
-            }
-        });
+    private LabelWrapper getLabelWrapper(Label label) {
+        return ContainerUtil.<Label, LabelWrapper>getOrCreate(labelWrappersMap, label, () -> new LabelWrapper(label));
     }
 
     private void increaseStackSize(int variation) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,13 +50,13 @@ import org.jetbrains.kotlin.types.expressions.ValueParameterResolver;
 import org.jetbrains.kotlin.types.expressions.typeInfoFactory.TypeInfoFactoryKt;
 import org.jetbrains.kotlin.util.Box;
 import org.jetbrains.kotlin.util.ReenteringLazyValueComputationException;
-import org.jetbrains.kotlin.util.slicedMap.WritableSlice;
 
 import java.util.*;
 
 import static org.jetbrains.kotlin.config.LanguageFeature.TopLevelSealedInheritance;
 import static org.jetbrains.kotlin.diagnostics.Errors.*;
 import static org.jetbrains.kotlin.resolve.BindingContext.*;
+import static org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt.isEffectivelyExternal;
 import static org.jetbrains.kotlin.types.TypeUtils.NO_EXPECTED_TYPE;
 
 public class BodyResolver {
@@ -140,30 +140,22 @@ public class BodyResolver {
     }
 
     public void resolveSecondaryConstructorBody(
-            @NotNull final DataFlowInfo outerDataFlowInfo,
-            @NotNull final BindingTrace trace,
-            @NotNull final KtSecondaryConstructor constructor,
-            @NotNull final ClassConstructorDescriptor descriptor,
+            @NotNull DataFlowInfo outerDataFlowInfo,
+            @NotNull BindingTrace trace,
+            @NotNull KtSecondaryConstructor constructor,
+            @NotNull ClassConstructorDescriptor descriptor,
             @NotNull LexicalScope declaringScope
     ) {
         ForceResolveUtil.forceResolveAllContents(descriptor.getAnnotations());
 
         resolveFunctionBody(outerDataFlowInfo, trace, constructor, descriptor, declaringScope,
-                            new Function1<LexicalScope, DataFlowInfo>() {
-                                @Override
-                                public DataFlowInfo invoke(@NotNull LexicalScope headerInnerScope) {
-                                    return resolveSecondaryConstructorDelegationCall(outerDataFlowInfo, trace, headerInnerScope,
-                                                                                     constructor, descriptor);
-                                }
-                            },
-                            new Function1<LexicalScope, LexicalScope>() {
-                                @Override
-                                public LexicalScope invoke(LexicalScope scope) {
-                                    return new LexicalScopeImpl(
-                                            scope, descriptor, scope.isOwnerDescriptorAccessibleByLabel(), scope.getImplicitReceiver(),
-                                            LexicalScopeKind.CONSTRUCTOR_HEADER);
-                                }
-                            });
+                            headerInnerScope -> resolveSecondaryConstructorDelegationCall(
+                                    outerDataFlowInfo, trace, headerInnerScope, constructor, descriptor
+                            ),
+                            scope -> new LexicalScopeImpl(
+                                    scope, descriptor, scope.isOwnerDescriptorAccessibleByLabel(), scope.getImplicitReceiver(),
+                                    LexicalScopeKind.CONSTRUCTOR_HEADER
+                            ));
     }
 
     @Nullable
@@ -174,7 +166,7 @@ public class BodyResolver {
             @NotNull KtSecondaryConstructor constructor,
             @NotNull ClassConstructorDescriptor descriptor
     ) {
-        if (descriptor.isHeader() || DescriptorUtils.isEffectivelyExternal(descriptor)) {
+        if (descriptor.isHeader() || isEffectivelyExternal(descriptor)) {
             // For header and external classes, we do not resolve constructor delegation calls because they are prohibited
             return DataFlowInfo.Companion.getEMPTY();
         }
@@ -266,21 +258,24 @@ public class BodyResolver {
     }
 
     public void resolveSuperTypeEntryList(
-            @NotNull final DataFlowInfo outerDataFlowInfo,
+            @NotNull DataFlowInfo outerDataFlowInfo,
             @NotNull KtClassOrObject ktClass,
-            @NotNull final ClassDescriptor descriptor,
-            @Nullable final ConstructorDescriptor primaryConstructor,
+            @NotNull ClassDescriptor descriptor,
+            @Nullable ConstructorDescriptor primaryConstructor,
             @NotNull LexicalScope scopeForConstructorResolution,
-            @NotNull final LexicalScope scopeForMemberResolution
+            @NotNull LexicalScope scopeForMemberResolution
     ) {
-        final LexicalScope scopeForConstructor =
+        LexicalScope scopeForConstructor =
                 primaryConstructor == null
                 ? null
                 : FunctionDescriptorUtil.getFunctionInnerScope(scopeForConstructorResolution, primaryConstructor, trace, overloadChecker);
-        final ExpressionTypingServices typeInferrer = expressionTypingServices; // TODO : flow
+        if (primaryConstructor == null) {
+            checkRedeclarationsInClassHeaderWithoutPrimaryConstructor(descriptor, scopeForConstructorResolution);
+        }
+        ExpressionTypingServices typeInferrer = expressionTypingServices; // TODO : flow
 
-        final Map<KtTypeReference, KotlinType> supertypes = Maps.newLinkedHashMap();
-        final ResolvedCall<?>[] primaryConstructorDelegationCall = new ResolvedCall[1];
+        Map<KtTypeReference, KotlinType> supertypes = Maps.newLinkedHashMap();
+        ResolvedCall<?>[] primaryConstructorDelegationCall = new ResolvedCall[1];
         KtVisitorVoid visitor = new KtVisitorVoid() {
             private void recordSupertype(KtTypeReference typeReference, KotlinType supertype) {
                 if (supertype == null) return;
@@ -372,7 +367,7 @@ public class BodyResolver {
                     descriptor.getUnsubstitutedPrimaryConstructor() != null &&
                     superClass.getKind() != ClassKind.INTERFACE &&
                     !superClass.getConstructors().isEmpty() &&
-                    !descriptor.isHeader() && !DescriptorUtils.isEffectivelyExternal(descriptor) &&
+                    !descriptor.isHeader() && !isEffectivelyExternal(descriptor) &&
                     !ErrorUtils.isError(superClass)
                 ) {
                     trace.report(SUPERTYPE_NOT_INITIALIZED.on(specifier));
@@ -405,6 +400,25 @@ public class BodyResolver {
         checkSupertypeList(descriptor, supertypes, ktClass);
     }
 
+    private void checkRedeclarationsInClassHeaderWithoutPrimaryConstructor(
+            @NotNull final ClassDescriptor descriptor, @NotNull LexicalScope scopeForConstructorResolution
+    ) {
+        // Initializing a scope will report errors if any.
+        new LexicalScopeImpl(
+                scopeForConstructorResolution, descriptor, true, null, LexicalScopeKind.CLASS_HEADER,
+                new TraceBasedLocalRedeclarationChecker(trace, overloadChecker),
+                new Function1<LexicalScopeImpl.InitializeHandler, Unit>() {
+                    @Override
+                    public Unit invoke(LexicalScopeImpl.InitializeHandler handler) {
+                        // If a class has no primary constructor, it still can have type parameters declared in header.
+                        for (TypeParameterDescriptor typeParameter : descriptor.getDeclaredTypeParameters()) {
+                            handler.addClassifierDescriptor(typeParameter);
+                        }
+                        return Unit.INSTANCE;
+                    }
+                });
+    }
+
     private void resolveConstructorCallForEnumEntryWithoutInitializer(
             @NotNull KtEnumEntry ktEnumEntry,
             @NotNull ClassDescriptor enumEntryDescriptor,
@@ -422,7 +436,7 @@ public class BodyResolver {
             return;
         }
 
-        KtInitializerList ktInitializerList = new KtPsiFactory(project).createEnumEntryInitializerList();
+        KtInitializerList ktInitializerList = new KtPsiFactory(project, false).createEnumEntryInitializerList();
         KtSuperTypeCallEntry ktCallEntry = (KtSuperTypeCallEntry) ktInitializerList.getInitializers().get(0);
         Call call = CallMaker.makeConstructorCallWithoutTypeArguments(ktCallEntry);
         trace.record(BindingContext.TYPE, ktCallEntry.getTypeReference(), enumClassDescriptor.getDefaultType());
@@ -456,7 +470,7 @@ public class BodyResolver {
                 currentDescriptor = (ClassDescriptor) currentDescriptor.getContainingDeclaration();
                 if (DescriptorUtils.isSealedClass(currentDescriptor)) {
                     if (parentEnumOrSealed.isEmpty()) {
-                        parentEnumOrSealed = new HashSet<TypeConstructor>();
+                        parentEnumOrSealed = new HashSet<>();
                     }
                     parentEnumOrSealed.add(currentDescriptor.getTypeConstructor());
                 }
@@ -627,25 +641,32 @@ public class BodyResolver {
                 valueParameterResolver.resolveValueParameters(klass.getPrimaryConstructorParameters(),
                                                               unsubstitutedPrimaryConstructor.getValueParameters(),
                                                               parameterScope, c.getOuterDataFlowInfo(), trace);
+                // Annotations on value parameter and constructor parameter could be splitted
+                resolveConstructorPropertyDescriptors(klass);
+            }
+        }
+    }
+
+    private void resolveConstructorPropertyDescriptors(KtClassOrObject ktClassOrObject) {
+        for (KtParameter parameter : ktClassOrObject.getPrimaryConstructorParameters()) {
+            PropertyDescriptor descriptor = trace.getBindingContext().get(BindingContext.PRIMARY_CONSTRUCTOR_PARAMETER, parameter);
+            if (descriptor != null) {
+                ForceResolveUtil.forceResolveAllContents(descriptor.getAnnotations());
             }
         }
     }
 
     private static LexicalScope getPrimaryConstructorParametersScope(
             LexicalScope originalScope,
-            final ConstructorDescriptor unsubstitutedPrimaryConstructor
+            ConstructorDescriptor unsubstitutedPrimaryConstructor
     ) {
         return new LexicalScopeImpl(originalScope, unsubstitutedPrimaryConstructor, false, null,
                                     LexicalScopeKind.DEFAULT_VALUE, LocalRedeclarationChecker.DO_NOTHING.INSTANCE,
-                                    new Function1<LexicalScopeImpl.InitializeHandler, Unit>() {
-                                        @Override
-                                        public Unit invoke(LexicalScopeImpl.InitializeHandler handler) {
-                                            for (ValueParameterDescriptor
-                                                    valueParameterDescriptor : unsubstitutedPrimaryConstructor.getValueParameters()) {
-                                                handler.addVariableDescriptor(valueParameterDescriptor);
-                                            }
-                                            return Unit.INSTANCE;
+                                    handler -> {
+                                        for (ValueParameterDescriptor valueParameter : unsubstitutedPrimaryConstructor.getValueParameters()) {
+                                            handler.addVariableDescriptor(valueParameter);
                                         }
+                                        return Unit.INSTANCE;
                                     });
     }
 
@@ -736,23 +757,17 @@ public class BodyResolver {
         }
     }
 
-    private ObservableBindingTrace createFieldTrackingTrace(final PropertyDescriptor propertyDescriptor) {
+    private ObservableBindingTrace createFieldTrackingTrace(PropertyDescriptor propertyDescriptor) {
         return new ObservableBindingTrace(trace).addHandler(
                 BindingContext.REFERENCE_TARGET,
-                new ObservableBindingTrace.RecordHandler<KtReferenceExpression, DeclarationDescriptor>() {
-            @Override
-            public void handleRecord(
-                    WritableSlice<KtReferenceExpression, DeclarationDescriptor> slice,
-                    KtReferenceExpression expression,
-                    DeclarationDescriptor descriptor
-            ) {
-                if (expression instanceof KtSimpleNameExpression &&
-                    descriptor instanceof SyntheticFieldDescriptor) {
-                    trace.record(BindingContext.BACKING_FIELD_REQUIRED,
-                                 propertyDescriptor);
+                (slice, expression, descriptor) -> {
+                    if (expression instanceof KtSimpleNameExpression &&
+                        descriptor instanceof SyntheticFieldDescriptor) {
+                        trace.record(BindingContext.BACKING_FIELD_REQUIRED,
+                                     propertyDescriptor);
+                    }
                 }
-            }
-        });
+        );
     }
 
     private void resolvePropertyDelegate(
@@ -847,16 +862,13 @@ public class BodyResolver {
         if (functionDescriptor instanceof PropertyAccessorDescriptor && functionDescriptor.getExtensionReceiverParameter() == null) {
             PropertyAccessorDescriptor accessorDescriptor = (PropertyAccessorDescriptor) functionDescriptor;
             KtProperty property = (KtProperty) function.getParent();
-            final SyntheticFieldDescriptor fieldDescriptor = new SyntheticFieldDescriptor(accessorDescriptor, property);
+            SyntheticFieldDescriptor fieldDescriptor = new SyntheticFieldDescriptor(accessorDescriptor, property);
             innerScope = new LexicalScopeImpl(innerScope, functionDescriptor, true, null,
                                               LexicalScopeKind.PROPERTY_ACCESSOR_BODY,
-                                              LocalRedeclarationChecker.DO_NOTHING.INSTANCE, new Function1<LexicalScopeImpl.InitializeHandler, Unit>() {
-                @Override
-                public Unit invoke(LexicalScopeImpl.InitializeHandler handler) {
-                    handler.addVariableDescriptor(fieldDescriptor);
-                    return Unit.INSTANCE;
-                }
-            });
+                                              LocalRedeclarationChecker.DO_NOTHING.INSTANCE, handler -> {
+                                                  handler.addVariableDescriptor(fieldDescriptor);
+                                                  return Unit.INSTANCE;
+                                              });
             // Check parameter name shadowing
             for (KtParameter parameter : function.getValueParameters()) {
                 if (SyntheticFieldDescriptor.NAME.equals(parameter.getNameAsName())) {
@@ -913,17 +925,8 @@ public class BodyResolver {
             return;
         }
         // +1 is a work around against new Queue(0).addLast(...) bug // stepan.koltsov@ 2011-11-21
-        final Queue<DeferredType> queue = new Queue<DeferredType>(deferredTypes.size() + 1);
-        trace.addHandler(DEFERRED_TYPE, new ObservableBindingTrace.RecordHandler<Box<DeferredType>, Boolean>() {
-            @Override
-            public void handleRecord(
-                    WritableSlice<Box<DeferredType>, Boolean> deferredTypeKeyDeferredTypeWritableSlice,
-                    Box<DeferredType> key,
-                    Boolean value
-            ) {
-                queue.addLast(key.getData());
-            }
-        });
+        Queue<DeferredType> queue = new Queue<>(deferredTypes.size() + 1);
+        trace.addHandler(DEFERRED_TYPE, (deferredTypeKeyDeferredTypeWritableSlice, key, value) -> queue.addLast(key.getData()));
         for (Box<DeferredType> deferredType : deferredTypes) {
             queue.addLast(deferredType.getData());
         }

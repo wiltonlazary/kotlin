@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.jvm.compiler
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.search.DelegatingGlobalSearchScope
 import com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.kotlin.analyzer.AnalyzerFacade
 import org.jetbrains.kotlin.analyzer.ModuleContent
 import org.jetbrains.kotlin.analyzer.ModuleInfo
 import org.jetbrains.kotlin.analyzer.ResolverForProject
@@ -37,6 +38,7 @@ import org.jetbrains.kotlin.platform.JvmBuiltIns
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.MultiTargetPlatform
 import org.jetbrains.kotlin.resolve.constants.EnumValue
+import org.jetbrains.kotlin.resolve.descriptorUtil.annotationClass
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.jvm.JvmAnalyzerFacade
 import org.jetbrains.kotlin.resolve.jvm.JvmPlatformParameters
@@ -65,9 +67,9 @@ class MultiModuleJavaAnalysisCustomTest : KtUsefulTestCase() {
         val modules = setupModules(environment, moduleDirs)
         val projectContext = ProjectContext(environment.project)
         val builtIns = JvmBuiltIns(projectContext.storageManager)
-        val resolverForProject = JvmAnalyzerFacade.setupResolverForProject(
+        val resolverForProject = AnalyzerFacade.setupResolverForProject(
                 "test",
-                projectContext, modules,
+                projectContext, modules, { JvmAnalyzerFacade },
                 { module -> ModuleContent(module.kotlinFiles, module.javaFilesScope) },
                 JvmPlatformParameters {
                     javaClass ->
@@ -157,7 +159,7 @@ class MultiModuleJavaAnalysisCustomTest : KtUsefulTestCase() {
         }.forEach { checkDescriptor(it, callable) }
 
         callable.annotations.forEach {
-            val annotationClassDescriptor = it.type.constructor.declarationDescriptor as ClassDescriptor
+            val annotationClassDescriptor = it.annotationClass!!
             checkDescriptor(annotationClassDescriptor, callable)
 
             Assert.assertEquals(

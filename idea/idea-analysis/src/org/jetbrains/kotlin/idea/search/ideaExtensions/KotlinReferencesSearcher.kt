@@ -23,10 +23,7 @@ import com.intellij.psi.search.*
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.util.Processor
 import org.jetbrains.kotlin.asJava.LightClassUtil
-import org.jetbrains.kotlin.asJava.elements.KtLightElement
-import org.jetbrains.kotlin.asJava.elements.KtLightField
-import org.jetbrains.kotlin.asJava.elements.KtLightMethod
-import org.jetbrains.kotlin.asJava.elements.KtLightParameter
+import org.jetbrains.kotlin.asJava.elements.*
 import org.jetbrains.kotlin.asJava.namedUnwrappedElement
 import org.jetbrains.kotlin.asJava.toLightClass
 import org.jetbrains.kotlin.asJava.toLightElements
@@ -36,7 +33,7 @@ import org.jetbrains.kotlin.idea.search.KOTLIN_NAMED_ARGUMENT_SEARCH_CONTEXT
 import org.jetbrains.kotlin.idea.search.allScope
 import org.jetbrains.kotlin.idea.search.effectiveSearchScope
 import org.jetbrains.kotlin.idea.search.unionSafe
-import org.jetbrains.kotlin.idea.search.usagesSearch.OperatorReferenceSearcher
+import org.jetbrains.kotlin.idea.search.usagesSearch.operators.OperatorReferenceSearcher
 import org.jetbrains.kotlin.idea.search.usagesSearch.dataClassComponentFunction
 import org.jetbrains.kotlin.idea.search.usagesSearch.getClassNameForCompanionObject
 import org.jetbrains.kotlin.idea.stubindex.KotlinSourceFilterScope
@@ -245,7 +242,7 @@ class KotlinReferencesSearcher : QueryExecutorBase<PsiReference, ReferencesSearc
                 if (kotlinOptions.acceptCompanionObjectMembers) {
                     val originLightClass = element.getStrictParentOfType<KtClass>()?.toLightClass()
                     if (originLightClass != null) {
-                        val lightDeclarations: List<KtLightElement<*, *>?> =
+                        val lightDeclarations: List<KtLightMember<*>?> =
                                 originLightClass.methods.map { it as? KtLightMethod } +
                                 originLightClass.fields.map { it as? KtLightField }
 

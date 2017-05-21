@@ -72,6 +72,36 @@ public class JavaAgainstKotlinBinariesCheckerTestGenerated extends AbstractJavaA
         doTest(fileName);
     }
 
+    @TestMetadata("ExtendClassWithDefaultImplementationComplex.kt")
+    public void testExtendClassWithDefaultImplementationComplex() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/kotlinAndJavaChecker/javaAgainstKotlin/ExtendClassWithDefaultImplementationComplex.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("ExtendClassWithDefaultImplementation_1_6.kt")
+    public void testExtendClassWithDefaultImplementation_1_6() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/kotlinAndJavaChecker/javaAgainstKotlin/ExtendClassWithDefaultImplementation_1_6.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("ExtendClassWithDefaultImplementation_1_8.kt")
+    public void testExtendClassWithDefaultImplementation_1_8() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/kotlinAndJavaChecker/javaAgainstKotlin/ExtendClassWithDefaultImplementation_1_8.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("ExtendingMutableInterfaces.kt")
+    public void testExtendingMutableInterfaces() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/kotlinAndJavaChecker/javaAgainstKotlin/ExtendingMutableInterfaces.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("ExtendingReadOnlyInterfaces.kt")
+    public void testExtendingReadOnlyInterfaces() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/kotlinAndJavaChecker/javaAgainstKotlin/ExtendingReadOnlyInterfaces.kt");
+        doTest(fileName);
+    }
+
     @TestMetadata("FunctionInNestedClassInDataFlowInspection.kt")
     public void testFunctionInNestedClassInDataFlowInspection() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/kotlinAndJavaChecker/javaAgainstKotlin/FunctionInNestedClassInDataFlowInspection.kt");
@@ -159,6 +189,18 @@ public class JavaAgainstKotlinBinariesCheckerTestGenerated extends AbstractJavaA
     @TestMetadata("UsingKotlinPackageDeclarations.kt")
     public void testUsingKotlinPackageDeclarations() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/kotlinAndJavaChecker/javaAgainstKotlin/UsingKotlinPackageDeclarations.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("UsingMutableInterfaces.kt")
+    public void testUsingMutableInterfaces() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/kotlinAndJavaChecker/javaAgainstKotlin/UsingMutableInterfaces.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("UsingReadOnlyInterfaces.kt")
+    public void testUsingReadOnlyInterfaces() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/kotlinAndJavaChecker/javaAgainstKotlin/UsingReadOnlyInterfaces.kt");
         doTest(fileName);
     }
 }

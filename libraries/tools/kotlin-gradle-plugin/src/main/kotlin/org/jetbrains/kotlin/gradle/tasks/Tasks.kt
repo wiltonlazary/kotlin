@@ -86,6 +86,10 @@ abstract class AbstractKotlinCompile<T : CommonCompilerArguments>() : AbstractCo
             System.setProperty("kotlin.incremental.compilation.experimental", value.toString())
         }
 
+    init {
+        incremental = true //to execute the setter as well
+    }
+
     internal var coroutinesFromGradleProperties: Coroutines? = null
     // Input is needed to force rebuild even if source files are not changed
     @get:Input
@@ -118,7 +122,7 @@ abstract class AbstractKotlinCompile<T : CommonCompilerArguments>() : AbstractCo
     }
 
     @TaskAction
-    fun execute(inputs: IncrementalTaskInputs): Unit {
+    open fun execute(inputs: IncrementalTaskInputs): Unit {
         val sourceRoots = getSourceRoots()
         val allKotlinSources = sourceRoots.kotlinSourceFiles
 
@@ -141,10 +145,10 @@ abstract class AbstractKotlinCompile<T : CommonCompilerArguments>() : AbstractCo
     internal abstract fun callCompiler(args: T, sourceRoots: SourceRoots, changedFiles: ChangedFiles)
 
     open fun setupCompilerArgs(args: T, defaultsOnly: Boolean = false) {
-        coroutines.let {
-            args.coroutinesEnable = it == Coroutines.ENABLE
-            args.coroutinesWarn =   it == Coroutines.WARN
-            args.coroutinesError =  it == Coroutines.ERROR
+        args.coroutinesState = when (coroutines) {
+            Coroutines.ENABLE -> CommonCompilerArguments.ENABLE
+            Coroutines.WARN -> CommonCompilerArguments.WARN
+            Coroutines.ERROR -> CommonCompilerArguments.ERROR
         }
 
         if (project.logger.isDebugEnabled) {
@@ -158,7 +162,7 @@ open class KotlinCompile : AbstractKotlinCompile<K2JVMCompilerArguments>(), Kotl
     private val kotlinOptionsImpl = KotlinJvmOptionsImpl()
     override val kotlinOptions: KotlinJvmOptions
             get() = kotlinOptionsImpl
-    internal val sourceRootsContainer = FilteringSourceRootsContainer()
+    internal open val sourceRootsContainer = FilteringSourceRootsContainer()
 
     internal val taskBuildDirectory: File
         get() = File(File(project.buildDir, KOTLIN_BUILD_DIR_NAME), name).apply { mkdirs() }
@@ -192,9 +196,11 @@ open class KotlinCompile : AbstractKotlinCompile<K2JVMCompilerArguments>(), Kotl
         super.setupCompilerArgs(args, defaultsOnly)
         args.apply { fillDefaultValues() }
 
-        handleKaptProperties()
         args.pluginClasspaths = pluginOptions.classpath.toTypedArray()
-        args.pluginOptions = pluginOptions.arguments.toTypedArray()
+
+        val kaptPluginOptions = getKaptPluginOptions()
+        args.pluginOptions = (pluginOptions.arguments + kaptPluginOptions.arguments).toTypedArray()
+
         args.moduleName = moduleName
         args.addCompilerBuiltIns = true
 
@@ -280,23 +286,24 @@ open class KotlinCompile : AbstractKotlinCompile<K2JVMCompilerArguments>(), Kotl
         throwGradleExceptionIfError(exitCode)
     }
 
-    private fun handleKaptProperties() {
-        kaptOptions.annotationsFile?.let { kaptAnnotationsFile ->
-            if (incremental) {
-                kaptAnnotationsFileUpdater = AnnotationFileUpdaterImpl(kaptAnnotationsFile)
+    private fun getKaptPluginOptions() =
+            CompilerPluginOptions().apply {
+                kaptOptions.annotationsFile?.let { kaptAnnotationsFile ->
+                    if (incremental) {
+                        kaptAnnotationsFileUpdater = AnnotationFileUpdaterImpl(kaptAnnotationsFile)
+                    }
+
+                    addPluginArgument(ANNOTATIONS_PLUGIN_NAME, "output", kaptAnnotationsFile.canonicalPath)
+                }
+
+                if (kaptOptions.generateStubs) {
+                    addPluginArgument(ANNOTATIONS_PLUGIN_NAME, "stubs", destinationDir.canonicalPath)
+                }
+
+                if (kaptOptions.supportInheritedAnnotations) {
+                    addPluginArgument(ANNOTATIONS_PLUGIN_NAME, "inherited", true.toString())
+                }
             }
-
-            pluginOptions.addPluginArgument(ANNOTATIONS_PLUGIN_NAME, "output", kaptAnnotationsFile.canonicalPath)
-        }
-
-        if (kaptOptions.generateStubs) {
-            pluginOptions.addPluginArgument(ANNOTATIONS_PLUGIN_NAME, "stubs", destinationDir.canonicalPath)
-        }
-
-        if (kaptOptions.supportInheritedAnnotations) {
-            pluginOptions.addPluginArgument(ANNOTATIONS_PLUGIN_NAME, "inherited", true.toString())
-        }
-    }
 
     // override setSource to track source directory sets and files (for generated android folders)
     override fun setSource(sources: Any?) {
@@ -365,6 +372,8 @@ open class Kotlin2JsCompile() : AbstractKotlinCompile<K2JSCompilerArguments>(), 
                 null
         }
 
+        args.friendModules = friendDependency
+
         logger.kotlinDebug("compiling with args ${ArgumentUtils.convertArgumentsToStringList(args)}")
 
         val messageCollector = GradleMessageCollector(logger)
@@ -395,39 +404,39 @@ internal class GradleMessageCollector(val logger: Logger) : MessageCollector {
         // Do nothing
     }
 
-    override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation) {
-        val text = with(StringBuilder()) {
-            append(when (severity) {
-                in CompilerMessageSeverity.VERBOSE -> "v"
-                in CompilerMessageSeverity.ERRORS -> {
-                    hasErrors = true
-                    "e"
-                }
-                CompilerMessageSeverity.INFO -> "i"
-                CompilerMessageSeverity.WARNING, CompilerMessageSeverity.STRONG_WARNING -> "w"
-                else -> throw IllegalArgumentException("Unknown CompilerMessageSeverity: $severity")
-            })
-            append(": ")
+    override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation?) {
+        fun formatMsg(prefix: String) =
+            buildString {
+                append("$prefix: ")
 
-            val (path, line, column) = location
-            if (path != null) {
-                append(path)
-                append(": ")
-                if (line > 0 && column > 0) {
-                    append("($line, $column): ")
+                location?.apply {
+                    append("$path: ")
+                    if (line > 0 && column > 0) {
+                        append("($line, $column): ")
+                    }
                 }
+
+                append(message)
             }
 
-            append(message)
-
-            toString()
-        }
         when (severity) {
-            in CompilerMessageSeverity.VERBOSE -> logger.debug(text)
-            in CompilerMessageSeverity.ERRORS -> logger.error(text)
-            CompilerMessageSeverity.INFO -> logger.info(text)
-            CompilerMessageSeverity.WARNING, CompilerMessageSeverity.STRONG_WARNING -> logger.warn(text)
-            else -> throw IllegalArgumentException("Unknown CompilerMessageSeverity: $severity")
-        }
+            CompilerMessageSeverity.ERROR,
+            CompilerMessageSeverity.EXCEPTION ->  {
+                hasErrors = true
+                logger.error(formatMsg("e"))
+            }
+
+            CompilerMessageSeverity.WARNING,
+            CompilerMessageSeverity.STRONG_WARNING -> {
+                logger.warn(formatMsg("w"))
+            }
+            CompilerMessageSeverity.INFO -> {
+                logger.info(formatMsg("i"))
+            }
+            CompilerMessageSeverity.LOGGING,
+            CompilerMessageSeverity.OUTPUT -> {
+                logger.debug(formatMsg("v"))
+            }
+        }!! // !! is used to force compile-time exhaustiveness
     }
 }

@@ -42,6 +42,12 @@ public class ShortenRefsTestGenerated extends AbstractShortenRefsTest {
         doTest(fileName);
     }
 
+    @TestMetadata("callableRefsOnCompanion.kt")
+    public void testCallableRefsOnCompanion() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/shortenRefs/callableRefsOnCompanion.kt");
+        doTest(fileName);
+    }
+
     @TestMetadata("ClassNameConflict.kt")
     public void testClassNameConflict() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/shortenRefs/ClassNameConflict.kt");
@@ -129,6 +135,12 @@ public class ShortenRefsTestGenerated extends AbstractShortenRefsTest {
     @TestMetadata("removeCompanionRefWithQualifiedReceiverInCalleeExpression.kt")
     public void testRemoveCompanionRefWithQualifiedReceiverInCalleeExpression() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("idea/testData/shortenRefs/removeCompanionRefWithQualifiedReceiverInCalleeExpression.kt");
+        doTest(fileName);
+    }
+
+    @TestMetadata("shortCompanionRefInsideShortenedCall.kt")
+    public void testShortCompanionRefInsideShortenedCall() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("idea/testData/shortenRefs/shortCompanionRefInsideShortenedCall.kt");
         doTest(fileName);
     }
 

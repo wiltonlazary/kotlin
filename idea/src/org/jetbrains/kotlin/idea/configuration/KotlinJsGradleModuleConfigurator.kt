@@ -27,8 +27,9 @@ class KotlinJsGradleModuleConfigurator : KotlinWithGradleConfigurator() {
     override val targetPlatform: TargetPlatform = JsPlatform
 
     override val applyPluginDirective: String = APPLY_KOTLIN_JS
+    override fun getMinimumSupportedVersion() = "1.1.0"
 
-    override fun getDependencyDirective(sdk: Sdk?): String {
+    override fun getDependencyDirective(sdk: Sdk?, version: String): String {
         return KotlinWithGradleConfigurator.getDependencySnippet(MAVEN_JS_STDLIB_ID)
     }
 

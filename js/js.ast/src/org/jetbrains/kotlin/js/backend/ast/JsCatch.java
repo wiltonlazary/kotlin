@@ -17,6 +17,11 @@ public class JsCatch extends SourceInfoAwareJsNode implements HasCondition {
     private JsExpression condition;
     private JsParameter param;
 
+    public JsCatch(@NotNull JsName name) {
+        param = new JsParameter(name);
+        scope = null;
+    }
+
     public JsCatch(JsScope parent, @NotNull String ident) {
         super();
         assert (parent != null);
@@ -88,7 +93,7 @@ public class JsCatch extends SourceInfoAwareJsNode implements HasCondition {
     @NotNull
     @Override
     public JsCatch deepCopy() {
-        JsCatchScope scopeCopy = scope.copy();
+        JsCatchScope scopeCopy = scope != null ? scope.copy() : null;
         JsBlock bodyCopy = AstUtil.deepCopy(body);
         JsExpression conditionCopy = AstUtil.deepCopy(condition);
         JsParameter paramCopy = AstUtil.deepCopy(param);

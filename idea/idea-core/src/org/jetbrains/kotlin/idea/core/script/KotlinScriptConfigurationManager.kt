@@ -17,11 +17,14 @@
 package org.jetbrains.kotlin.idea.core.script
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.extensions.Extensions
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.ProjectUtil
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.roots.ex.ProjectRootManagerEx
 import com.intellij.openapi.startup.StartupManager
 import com.intellij.openapi.util.EmptyRunnable
@@ -36,11 +39,9 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.NonClasspathDirectoriesScope
 import com.intellij.util.io.URLUtil
 import org.jetbrains.annotations.TestOnly
-import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.script.KotlinScriptDefinitionProvider
 import org.jetbrains.kotlin.script.KotlinScriptExternalImportsProvider
-import org.jetbrains.kotlin.script.StandardScriptDefinition
 import org.jetbrains.kotlin.script.makeScriptDefsFromTemplatesProviderExtensions
 import java.io.File
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -50,7 +51,6 @@ import kotlin.concurrent.write
 @Suppress("SimplifyAssertNotNull")
 class KotlinScriptConfigurationManager(
         private val project: Project,
-        private val dumbService: DumbService,
         private val scriptDefinitionProvider: KotlinScriptDefinitionProvider,
         private val scriptExternalImportsProvider: KotlinScriptExternalImportsProvider
 ) {
@@ -60,15 +60,28 @@ class KotlinScriptConfigurationManager(
 
         StartupManager.getInstance(project).runWhenProjectIsInitialized {
             DumbService.getInstance(project).smartInvokeLater {
-                cacheAllScriptsExtraImports()
-                invalidateLocalCaches()
-                notifyRootsChanged()
+                if (cacheAllScriptsExtraImports()) {
+                    invalidateLocalCaches()
+                    notifyRootsChanged()
+                }
             }
         }
 
         project.messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener.Adapter() {
+
+            val projectFileIndex = ProjectRootManager.getInstance(project).fileIndex
+            val application = ApplicationManager.getApplication()
+
             override fun after(events: List<VFileEvent>) {
-                updateExternalImportsCache(events.mapNotNull { it.file }) {
+                if (updateExternalImportsCache(events.mapNotNull {
+                        // The check is partly taken from the BuildManager.java
+                        it.file?.takeIf {
+                            // the isUnitTestMode check fixes ScriptConfigurationHighlighting & Navigation tests, since they are not trigger proper update mechanims
+                            // TODO: find out the reason, then consider to fix tests and remove this check
+                            (application.isUnitTestMode || projectFileIndex.isInContent(it)) && !ProjectUtil.isProjectOrWorkspaceFile(it)
+                        }
+                    }))
+                {
                     invalidateLocalCaches()
                     notifyRootsChanged()
                 }
@@ -95,16 +108,21 @@ class KotlinScriptConfigurationManager(
     }
 
     private fun notifyRootsChanged() {
-        // TODO: it seems invokeLater leads to inconsistent behaviour (at least in tests)
-        ApplicationManager.getApplication().invokeLater {
+        val rootsChangesRunnable = {
             runWriteAction {
                 if (project.isDisposed) return@runWriteAction
 
                 ProjectRootManagerEx.getInstanceEx(project)?.makeRootsChange(EmptyRunnable.getInstance(), false, true)
-                dumbService.runWhenSmart {
-                    ScriptDependenciesModificationTracker.getInstance(project).incModificationCount()
-                }
+                ScriptDependenciesModificationTracker.getInstance(project).incModificationCount()
             }
+        }
+
+        val application = ApplicationManager.getApplication()
+        if (application.isUnitTestMode) {
+            rootsChangesRunnable.invoke()
+        }
+        else {
+            application.invokeLater(rootsChangesRunnable, ModalityState.defaultModalityState())
         }
     }
 
@@ -121,28 +139,20 @@ class KotlinScriptConfigurationManager(
     fun getAllLibrarySourcesScope() = allLibrarySourcesScope.get()
 
     private fun reloadScriptDefinitions() {
-        makeScriptDefsFromTemplatesProviderExtensions(project, { ep, ex -> log.warn("[kts] Error loading definition from ${ep.id}", ex) }).let {
-            scriptDefinitionProvider.setScriptDefinitions(it)
-        }
+        val def = makeScriptDefsFromTemplatesProviderExtensions(project, { ep, ex -> log.warn("[kts] Error loading definition from ${ep.id}", ex) })
+        scriptDefinitionProvider.setScriptDefinitions(def)
     }
 
-    private fun cacheAllScriptsExtraImports() {
-        runReadAction {
-            scriptExternalImportsProvider.apply {
-                invalidateCaches()
-                cacheExternalImports(
-                        scriptDefinitionProvider.getAllKnownFileTypes()
-                                .flatMap { FileTypeIndex.getFiles(it, GlobalSearchScope.allScope(project)) })
-            }
+    private fun cacheAllScriptsExtraImports(): Boolean =
+        scriptExternalImportsProvider.run {
+            invalidateCaches()
+            cacheExternalImports(
+                    scriptDefinitionProvider.getAllKnownFileTypes()
+                            .flatMap { FileTypeIndex.getFiles(it, GlobalSearchScope.allScope(project)) }
+            ).any()
         }
-    }
 
-    private fun updateExternalImportsCache(files: Iterable<VirtualFile>, onChange: () -> Unit) {
-        val isChanged = scriptExternalImportsProvider.updateExternalImportsCache(files).any()
-        if (isChanged) {
-            onChange()
-        }
-    }
+    private fun updateExternalImportsCache(files: Iterable<VirtualFile>) = scriptExternalImportsProvider.updateExternalImportsCache(files).any()
 
     private fun invalidateLocalCaches() {
         allScriptsClasspathCache.clear()

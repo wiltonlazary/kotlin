@@ -35,7 +35,7 @@ object PluginCliParser {
                         ?.map { File(it).toURI().toURL() }
                         ?.toTypedArray()
                         ?: arrayOf<URL>(),
-                javaClass.classLoader
+                this::class.java.classLoader
         )
 
         val componentRegistrars = ServiceLoader.load(ComponentRegistrar::class.java, classLoader).toMutableList()
@@ -50,7 +50,7 @@ object PluginCliParser {
             configuration: CompilerConfiguration,
             classLoader: ClassLoader
     ) {
-        val optionValuesByPlugin = arguments.pluginOptions?.map { parsePluginOption(it) }?.groupBy {
+        val optionValuesByPlugin = arguments.pluginOptions?.map(::parsePluginOption)?.groupBy {
             if (it == null) throw CliOptionProcessingException("Wrong plugin option format: $it, should be ${CommonCompilerArguments.PLUGIN_OPTION_FORMAT}")
             it.pluginId
         } ?: mapOf()

@@ -23,9 +23,10 @@ import org.jetbrains.kotlin.descriptors.annotations.KotlinRetention
 import org.jetbrains.kotlin.diagnostics.DiagnosticSink
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.checkers.SimpleDeclarationChecker
+import org.jetbrains.kotlin.resolve.descriptorUtil.annotationClass
 import org.jetbrains.kotlin.resolve.descriptorUtil.getAnnotationRetention
+import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyExternal
 import org.jetbrains.kotlin.resolve.source.PsiSourceElement
 
 object JsRuntimeAnnotationChecker : SimpleDeclarationChecker {
@@ -36,12 +37,12 @@ object JsRuntimeAnnotationChecker : SimpleDeclarationChecker {
             bindingContext: BindingContext
     ) {
         for ((annotationDescriptor, _) in descriptor.annotations.getAllAnnotations()) {
-            val annotationClass = annotationDescriptor.type.constructor.declarationDescriptor as? ClassDescriptor ?: continue
+            val annotationClass = annotationDescriptor.annotationClass ?: continue
             if (annotationClass.getAnnotationRetention() != KotlinRetention.RUNTIME) continue
 
             val annotationPsi = (annotationDescriptor.source as? PsiSourceElement)?.psi ?: declaration
 
-            if (descriptor is MemberDescriptor && DescriptorUtils.isEffectivelyExternal(descriptor)) {
+            if (descriptor is MemberDescriptor && descriptor.isEffectivelyExternal()) {
                 diagnosticHolder.report(ErrorsJs.RUNTIME_ANNOTATION_ON_EXTERNAL_DECLARATION.on(annotationPsi))
             }
             else {

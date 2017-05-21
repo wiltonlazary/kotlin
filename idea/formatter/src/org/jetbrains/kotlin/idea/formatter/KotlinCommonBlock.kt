@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.idea.formatter
 
 import com.intellij.formatting.*
+import com.intellij.formatting.ChildAttributes.DELEGATE_TO_NEXT_CHILD
 import com.intellij.lang.ASTNode
 import com.intellij.psi.TokenType
 import com.intellij.psi.codeStyle.CodeStyleSettings
@@ -157,6 +158,13 @@ abstract class KotlinCommonBlock(
             return ChildAttributes(Indent.getNoneIndent(), null)
         }
 
+        if (type == KtNodeTypes.IF) {
+            val elseBlock = mySubBlocks?.getOrNull(newChildIndex)
+            if (elseBlock is ASTBlock && elseBlock.node.elementType == KtTokens.ELSE_KEYWORD) {
+                return ChildAttributes.DELEGATE_TO_NEXT_CHILD
+            }
+        }
+
         return when (type) {
             in CODE_BLOCKS, KtNodeTypes.WHEN, KtNodeTypes.IF, KtNodeTypes.FOR, KtNodeTypes.WHILE, KtNodeTypes.DO_WHILE -> ChildAttributes(Indent.getNormalIndent(), null)
 
@@ -186,6 +194,11 @@ abstract class KotlinCommonBlock(
                     if (isIncomplete) {
                         return getSuperChildAttributes(newChildIndex)
                     }
+                }
+
+                if (blocks.size > newChildIndex) {
+                    val block = blocks[newChildIndex]
+                    return ChildAttributes(block.indent, block.alignment)
                 }
 
                 ChildAttributes(Indent.getNoneIndent(), null)

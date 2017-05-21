@@ -16,74 +16,64 @@
 
 package org.jetbrains.kotlin.idea.intentions.branchedTransformations.intentions
 
+import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.openapi.editor.Editor
 import org.jetbrains.kotlin.idea.core.replaced
 import org.jetbrains.kotlin.idea.inspections.IntentionBasedInspection
 import org.jetbrains.kotlin.idea.intentions.SelfTargetingOffsetIndependentIntention
 import org.jetbrains.kotlin.idea.intentions.branchedTransformations.*
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
-import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.resolve.bindingContextUtil.isUsedAsExpression
 
-class IfThenToSafeAccessInspection : IntentionBasedInspection<KtIfExpression>(IfThenToSafeAccessIntention::class)
+class IfThenToSafeAccessInspection : IntentionBasedInspection<KtIfExpression>(IfThenToSafeAccessIntention::class) {
+    override fun inspectionTarget(element: KtIfExpression) = element.ifKeyword
 
-class IfThenToSafeAccessIntention : SelfTargetingOffsetIndependentIntention<KtIfExpression>(KtIfExpression::class.java, "Replace 'if' expression with safe access expression") {
+    override fun problemHighlightType(element: KtIfExpression): ProblemHighlightType =
+            if (element.shouldBeTransformed()) ProblemHighlightType.WEAK_WARNING else ProblemHighlightType.INFORMATION
+}
+
+class IfThenToSafeAccessIntention : SelfTargetingOffsetIndependentIntention<KtIfExpression>(
+        KtIfExpression::class.java, "Replace 'if' expression with safe access expression"
+) {
 
     override fun isApplicableTo(element: KtIfExpression): Boolean {
-        val condition = element.condition as? KtBinaryExpression ?: return false
-        val thenClause = element.then
-        val elseClause = element.`else`
-
-        val receiverExpression = condition.expressionComparedToNull() ?: return false
-        if (!receiverExpression.isStableVariable()) return false
-
-        return when (condition.operationToken) {
-            KtTokens.EQEQ ->
-                thenClause?.isNullExpressionOrEmptyBlock() ?: true &&
-                elseClause != null && clauseContainsAppropriateDotQualifiedExpression(elseClause, receiverExpression)
-
-            KtTokens.EXCLEQ ->
-                elseClause?.isNullExpressionOrEmptyBlock() ?: true &&
-                thenClause != null && clauseContainsAppropriateDotQualifiedExpression(thenClause, receiverExpression)
-
-            else ->
-                false
+        val ifThenToSelectData = element.buildSelectTransformationData() ?: return false
+        if (!ifThenToSelectData.receiverExpression.isStableVariable(ifThenToSelectData.context)) return false
+        if (ifThenToSelectData.baseClause !is KtDotQualifiedExpression) {
+            if (ifThenToSelectData.condition is KtIsExpression) {
+                text = "Replace 'if' expression with safe cast expression"
+            }
+            else {
+                text = "Remove redundant 'if' expression"
+            }
         }
+
+        return ifThenToSelectData.clausesReplaceableBySafeCall()
     }
 
     override fun startInWriteAction() = false
 
     override fun applyTo(element: KtIfExpression, editor: Editor?) {
-        val condition = element.condition as KtBinaryExpression
-        val receiverExpression = condition.expressionComparedToNull()!!
+        val ifThenToSelectData = element.buildSelectTransformationData() ?: return
 
-        val selectorExpression =
-                when(condition.operationToken) {
-                    KtTokens.EQEQ -> findSelectorExpressionInClause(element.`else`!!, receiverExpression)!!
-
-                    KtTokens.EXCLEQ -> findSelectorExpressionInClause(element.then!!, receiverExpression)!!
-
-                    else -> throw IllegalArgumentException()
-                }
-
-        val newExpr = KtPsiFactory(element).createExpressionByPattern("$0?.$1", receiverExpression, selectorExpression) as KtSafeQualifiedExpression
-        val safeAccessExpr = runWriteAction {
-            element.replaced(newExpr)
+        val factory = KtPsiFactory(element)
+        val resultExpr = runWriteAction {
+            val replacedBaseClause = ifThenToSelectData.replacedBaseClause(factory)
+            val newExpr = element.replaced(replacedBaseClause)
+            KtPsiUtil.deparenthesize(newExpr)
         }
 
         if (editor != null) {
-            safeAccessExpr.inlineReceiverIfApplicableWithPrompt(editor)
+            (resultExpr as? KtSafeQualifiedExpression)?.inlineReceiverIfApplicableWithPrompt(editor)
         }
     }
 
-    private fun clauseContainsAppropriateDotQualifiedExpression(clause: KtExpression, receiverExpression: KtExpression)
-            = findSelectorExpressionInClause(clause, receiverExpression) != null
-
-    private fun findSelectorExpressionInClause(clause: KtExpression, receiverExpression: KtExpression): KtExpression? {
-        val expression = clause.unwrapBlockOrParenthesis() as? KtDotQualifiedExpression ?: return null
-
-        if (expression.receiverExpression.text != receiverExpression.text) return null
-
-        return expression.selectorExpression
+    private fun IfThenToSelectData.clausesReplaceableBySafeCall(): Boolean {
+        if (baseClause == null) return false
+        if (negatedClause == null && baseClause.isUsedAsExpression(context)) return false
+        if (negatedClause != null && !negatedClause.isNullExpression()) return false
+        return baseClause.evaluatesTo(receiverExpression) ||
+               baseClause.hasFirstReceiverOf(receiverExpression) && !baseClause.hasNullableType(context)
     }
 }

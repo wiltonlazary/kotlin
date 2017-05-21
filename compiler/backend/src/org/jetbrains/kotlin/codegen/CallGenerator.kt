@@ -21,6 +21,16 @@ import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.org.objectweb.asm.Type
 
+enum class ValueKind {
+    GENERAL,
+    GENERAL_VARARG,
+    DEFAULT_PARAMETER,
+    DEFAULT_MASK,
+    METHOD_HANDLE_IN_DEFAULT,
+    CAPTURED,
+    DEFAULT_LAMBDA_CAPTURED_PARAMETER
+}
+
 abstract class CallGenerator {
 
     internal class DefaultCallGenerator(private val codegen: ExpressionCodegen) : CallGenerator() {
@@ -36,13 +46,6 @@ abstract class CallGenerator {
             else {
                 (callableMethod as CallableMethod).genInvokeDefaultInstruction(codegen.v)
             }
-        }
-
-        override fun afterParameterPut(
-                type: Type,
-                stackValue: StackValue?,
-                parameterIndex: Int) {
-
         }
 
         override fun processAndPutHiddenParameters(justProcess: Boolean) {
@@ -67,8 +70,7 @@ abstract class CallGenerator {
             stackValue.put(stackValue.type, codegen.v)
         }
 
-        override fun putValueIfNeeded(
-                parameterType: Type, value: StackValue) {
+        override fun putValueIfNeeded(parameterType: Type, value: StackValue, kind: ValueKind, parameterIndex: Int) {
             value.put(value.type, codegen.v)
         }
 
@@ -106,20 +108,23 @@ abstract class CallGenerator {
 
     abstract fun genCallInner(callableMethod: Callable, resolvedCall: ResolvedCall<*>?, callDefault: Boolean, codegen: ExpressionCodegen)
 
-    abstract fun afterParameterPut(
-            type: Type,
-            stackValue: StackValue?,
-            parameterIndex: Int)
-
     abstract fun genValueAndPut(
             valueParameterDescriptor: ValueParameterDescriptor,
             argumentExpression: KtExpression,
             parameterType: Type,
             parameterIndex: Int)
 
+    fun putValueIfNeeded(
+            parameterType: Type,
+            value: StackValue) {
+        putValueIfNeeded(parameterType, value, ValueKind.GENERAL)
+    }
+
     abstract fun putValueIfNeeded(
             parameterType: Type,
-            value: StackValue)
+            value: StackValue,
+            kind: ValueKind = ValueKind.GENERAL,
+            parameterIndex: Int = -1)
 
     abstract fun putCapturedValueOnStack(
             stackValue: StackValue,

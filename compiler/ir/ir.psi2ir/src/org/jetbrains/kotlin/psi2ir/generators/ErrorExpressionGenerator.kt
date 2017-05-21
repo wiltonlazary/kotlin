@@ -16,9 +16,9 @@
 
 package org.jetbrains.kotlin.psi2ir.generators
 
+import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.impl.IrErrorCallExpressionImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrErrorExpressionImpl
-import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
@@ -31,7 +31,7 @@ class ErrorExpressionGenerator(statementGenerator: StatementGenerator) : Stateme
             if (ignoreErrors)
                 body()
             else
-                throw RuntimeException("${e?.message}: ${ktElement.javaClass.simpleName}:\n${ktElement.text}", e)
+                throw RuntimeException("${e?.message}: ${ktElement::class.java.simpleName}:\n${ktElement.text}", e)
 
     fun generateErrorExpression(ktElement: KtElement, e: Exception): IrExpression =
             generateErrorExpression(ktElement, e) {

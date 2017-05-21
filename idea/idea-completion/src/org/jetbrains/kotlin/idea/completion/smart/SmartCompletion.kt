@@ -42,12 +42,10 @@ import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeUtils
+import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.isBooleanOrNullableBoolean
 import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
 import org.jetbrains.kotlin.utils.addIfNotNull
-import org.jetbrains.kotlin.utils.addToStdlib.check
-import org.jetbrains.kotlin.utils.addToStdlib.singletonList
-import org.jetbrains.kotlin.utils.addToStdlib.singletonOrEmptySet
 import java.util.*
 
 interface InheritanceItemsSearcher {
@@ -94,7 +92,7 @@ class SmartCompletion(
     val descriptorFilter: ((DeclarationDescriptor, AbstractLookupElementFactory) -> Collection<LookupElement>)? =
             { descriptor: DeclarationDescriptor, factory: AbstractLookupElementFactory ->
                 filterDescriptor(descriptor, factory).map { postProcess(it) }
-            }.check { expectedInfos.isNotEmpty() }
+            }.takeIf { expectedInfos.isNotEmpty() }
 
     fun additionalItems(lookupElementFactory: LookupElementFactory): Pair<Collection<LookupElement>, InheritanceItemsSearcher?> {
         val (items, inheritanceSearcher) = additionalItemsNoPostProcess(lookupElementFactory)
@@ -120,14 +118,14 @@ class SmartCompletion(
                     if (operationToken == KtTokens.EQ || operationToken in COMPARISON_TOKENS) {
                         val left = parent.left
                         if (left is KtReferenceExpression) {
-                            return@lazy bindingContext[BindingContext.REFERENCE_TARGET, left].singletonOrEmptySet()
+                            return@lazy bindingContext[BindingContext.REFERENCE_TARGET, left]?.let(::setOf).orEmpty()
                         }
                     }
                 }
             }
 
             is KtWhenConditionWithExpression -> {
-                val entry = parent.getParent() as KtWhenEntry
+                val entry = parent.parent as KtWhenEntry
                 val whenExpression = entry.parent as KtWhenExpression
                 val subject = whenExpression.subjectExpression ?: return@lazy emptySet()
 
@@ -222,6 +220,8 @@ class SmartCompletion(
 
                 items.addNamedArgumentsWithLiteralValueItems(expectedInfos)
 
+                LambdaSignatureItems.addToCollection(items, expressionWithType, bindingContext, resolutionFacade)
+
                 if (!forBasicCompletion) {
                     LambdaItems.addToCollection(items, expectedInfos)
 
@@ -287,7 +287,7 @@ class SmartCompletion(
                 val types = smartCastCalculator.types(item.receiverParameter).map { it.toFuzzyType(emptyList()) }
                 val matcher = { expectedInfo: ExpectedInfo -> types.matchExpectedInfo(expectedInfo) }
                 addLookupElements(null, expectedInfos, matcher) {
-                    item.createLookupElement().assignSmartCompletionPriority(SmartCompletionItemPriority.THIS).singletonList()
+                    listOf(item.createLookupElement().assignSmartCompletionPriority(SmartCompletionItemPriority.THIS))
                 }
             }
         }
@@ -328,7 +328,7 @@ class SmartCompletion(
     private fun createNamedArgumentWithValueLookupElement(name: Name, value: String, priority: SmartCompletionItemPriority): LookupElement {
         val lookupElement = LookupElementBuilder.create("${name.asString()} = $value")
                 .withIcon(KotlinIcons.PARAMETER)
-                .withInsertHandler({ context, item -> context.document.replaceString(context.startOffset, context.tailOffset, "${name.render()} = $value") })
+                .withInsertHandler({ context, _ -> context.document.replaceString(context.startOffset, context.tailOffset, "${name.render()} = $value") })
         lookupElement.putUserData(SmartCompletionInBasicWeigher.NAMED_ARGUMENT_KEY, Unit)
         lookupElement.assignSmartCompletionPriority(priority)
         return lookupElement
@@ -414,7 +414,7 @@ class SmartCompletion(
                 if (descriptor.modality != Modality.ABSTRACT && !descriptor.isInner) {
                     descriptor.constructors
                             .filter(visibilityFilter)
-                            .mapNotNullTo(this) { toLookupElement(it) }
+                            .mapNotNullTo(this, ::toLookupElement)
                 }
             }
         }

@@ -30,10 +30,10 @@ import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.serialization.deserialization.NotFoundClasses
 import org.jetbrains.kotlin.serialization.deserialization.findClassAcrossModuleDependencies
 import org.jetbrains.kotlin.types.*
-import java.util.*
 import kotlin.reflect.KProperty
 
 val KOTLIN_REFLECT_FQ_NAME = FqName("kotlin.reflect")
+val K_FUNCTION_PREFIX = "KFunction"
 
 class ReflectionTypes(module: ModuleDescriptor, private val notFoundClasses: NotFoundClasses) {
     private val kotlinReflectScope: MemberScope by lazy(LazyThreadSafetyMode.PUBLICATION) {
@@ -52,7 +52,7 @@ class ReflectionTypes(module: ModuleDescriptor, private val notFoundClasses: Not
         }
     }
 
-    fun getKFunction(n: Int): ClassDescriptor = find("KFunction$n", n + 1)
+    fun getKFunction(n: Int): ClassDescriptor = find("$K_FUNCTION_PREFIX$n", n + 1)
 
     val kClass: ClassDescriptor by ClassLookup(1)
     val kProperty0: ClassDescriptor by ClassLookup(1)
@@ -60,6 +60,7 @@ class ReflectionTypes(module: ModuleDescriptor, private val notFoundClasses: Not
     val kProperty2: ClassDescriptor by ClassLookup(3)
     val kMutableProperty0: ClassDescriptor by ClassLookup(1)
     val kMutableProperty1: ClassDescriptor by ClassLookup(2)
+    val kMutableProperty2: ClassDescriptor by ClassLookup(3)
 
     fun getKClassType(annotations: Annotations, type: KotlinType, variance: Variance): KotlinType =
             KotlinTypeFactory.simpleNotNullType(annotations, kClass, listOf(TypeProjectionImpl(variance, type)))
@@ -71,29 +72,30 @@ class ReflectionTypes(module: ModuleDescriptor, private val notFoundClasses: Not
             parameterNames: List<Name>?,
             returnType: KotlinType,
             builtIns: KotlinBuiltIns
-    ): KotlinType {
+    ): SimpleType {
         val arguments = getFunctionTypeArgumentProjections(receiverType, parameterTypes, parameterNames, returnType, builtIns)
         val classDescriptor = getKFunction(arguments.size - 1 /* return type */)
         return KotlinTypeFactory.simpleNotNullType(annotations, classDescriptor, arguments)
     }
 
-    fun getKPropertyType(annotations: Annotations, receiverType: KotlinType?, returnType: KotlinType, mutable: Boolean): KotlinType {
-        val classDescriptor = when {
-            receiverType != null -> when {
-                mutable -> kMutableProperty1
-                else -> kProperty1
-            }
-            else -> when {
+    fun getKPropertyType(annotations: Annotations, receiverTypes: List<KotlinType>, returnType: KotlinType, mutable: Boolean): SimpleType {
+        val classDescriptor = when (receiverTypes.size) {
+            0 -> when {
                 mutable -> kMutableProperty0
                 else -> kProperty0
             }
+            1 -> when {
+                mutable -> kMutableProperty1
+                else -> kProperty1
+            }
+            2 ->  when {
+                mutable -> kMutableProperty2
+                else -> kProperty2
+            }
+            else -> throw AssertionError("More than 2 receivers is not allowed")
         }
 
-        val arguments = ArrayList<TypeProjection>(2)
-        if (receiverType != null) {
-            arguments.add(TypeProjectionImpl(receiverType))
-        }
-        arguments.add(TypeProjectionImpl(returnType))
+        val arguments = (receiverTypes + returnType).map(::TypeProjectionImpl)
         return KotlinTypeFactory.simpleNotNullType(annotations, classDescriptor, arguments)
     }
 
@@ -126,6 +128,15 @@ class ReflectionTypes(module: ModuleDescriptor, private val notFoundClasses: Not
             return hasFqName(descriptor, KotlinBuiltIns.FQ_NAMES.kProperty0) ||
                    hasFqName(descriptor, KotlinBuiltIns.FQ_NAMES.kProperty1) ||
                    hasFqName(descriptor, KotlinBuiltIns.FQ_NAMES.kProperty2)
+        }
+
+        fun isNumberedKFunction(type: KotlinType): Boolean {
+            val descriptor = type.constructor.declarationDescriptor as? ClassDescriptor ?: return false
+            val shortName = descriptor.name.asString()
+
+            return shortName.length > K_FUNCTION_PREFIX.length &&
+                   shortName.startsWith(K_FUNCTION_PREFIX) &&
+                   DescriptorUtils.getFqName(descriptor).parent().toSafe() == KOTLIN_REFLECT_FQ_NAME
         }
 
         private fun hasFqName(typeConstructor: TypeConstructor, fqName: FqNameUnsafe): Boolean {

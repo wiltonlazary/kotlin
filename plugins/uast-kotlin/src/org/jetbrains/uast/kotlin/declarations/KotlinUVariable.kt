@@ -18,6 +18,7 @@ package org.jetbrains.uast.kotlin
 
 import com.intellij.psi.*
 import org.jetbrains.kotlin.asJava.elements.KtLightElement
+import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtVariableDeclaration
 import org.jetbrains.uast.*
@@ -25,6 +26,7 @@ import org.jetbrains.uast.java.AbstractJavaUVariable
 import org.jetbrains.uast.java.JavaAbstractUExpression
 import org.jetbrains.uast.java.JavaUAnnotation
 import org.jetbrains.uast.java.annotations
+import org.jetbrains.uast.kotlin.declarations.UastLightIdentifier
 import org.jetbrains.uast.kotlin.psi.UastKotlinPsiParameter
 import org.jetbrains.uast.kotlin.psi.UastKotlinPsiVariable
 
@@ -47,16 +49,23 @@ abstract class AbstractKotlinUVariable : AbstractJavaUVariable() {
             } ?: return null
             return getLanguagePlugin().convertElement(initializerExpression, this) as? UExpression ?: UastEmptyExpression
         }
+
+    override fun getNameIdentifier(): PsiIdentifier {
+        val kotlinOrigin = (psi as? KtLightElement<*, *>)?.kotlinOrigin
+        return UastLightIdentifier(psi, kotlinOrigin as KtNamedDeclaration?)
+    }
 }
 
 class KotlinUVariable(
         psi: PsiVariable,
-        override val containingElement: UElement?
+        override val uastParent: UElement?
 ) : AbstractKotlinUVariable(), UVariable, PsiVariable by psi {
     override val psi = unwrap<UVariable, PsiVariable>(psi)
 
     override val annotations by lz { psi.annotations.map { JavaUAnnotation(it, this) } }
     override val typeReference by lz { getLanguagePlugin().convertOpt<UTypeReferenceExpression>(psi.typeElement, this) }
+
+    override fun getContainingFile(): PsiFile? = (psi as? KtLightElement<*, *>)?.kotlinOrigin?.containingFile ?: psi.containingFile
 
     override fun getInitializer(): PsiExpression? {
         return super<AbstractKotlinUVariable>.getInitializer()
@@ -64,6 +73,10 @@ class KotlinUVariable(
 
     override fun getOriginalElement(): PsiElement? {
         return super<AbstractKotlinUVariable>.getOriginalElement()
+    }
+
+    override fun getNameIdentifier(): PsiIdentifier {
+        return super.getNameIdentifier()
     }
 
     companion object {
@@ -81,7 +94,7 @@ class KotlinUVariable(
 
 open class KotlinUParameter(
         psi: PsiParameter,
-        override val containingElement: UElement?
+        override val uastParent: UElement?
 ) : AbstractKotlinUVariable(), UParameter, PsiParameter by psi {
 
     override val psi = unwrap<UParameter, PsiParameter>(psi)
@@ -93,11 +106,15 @@ open class KotlinUParameter(
     override fun getOriginalElement(): PsiElement? {
         return super<AbstractKotlinUVariable>.getOriginalElement()
     }
+
+    override fun getNameIdentifier(): PsiIdentifier {
+        return super.getNameIdentifier()
+    }
 }
 
 open class KotlinUField(
         psi: PsiField,
-        override val containingElement: UElement?
+        override val uastParent: UElement?
 ) : AbstractKotlinUVariable(), UField, PsiField by psi {
 
     override val psi = unwrap<UField, PsiField>(psi)
@@ -109,11 +126,21 @@ open class KotlinUField(
     override fun getOriginalElement(): PsiElement? {
         return super<AbstractKotlinUVariable>.getOriginalElement()
     }
+
+    override fun getNameIdentifier(): PsiIdentifier {
+        return super.getNameIdentifier()
+    }
+
+    override fun isPhysical(): Boolean {
+        return true
+    }
+
+    override fun getContainingFile(): PsiFile? = (psi as? KtLightElement<*, *>)?.kotlinOrigin?.containingFile ?: psi.containingFile
 }
 
 open class KotlinULocalVariable(
         psi: PsiLocalVariable,
-        override val containingElement: UElement?
+        override val uastParent: UElement?
 ) : AbstractKotlinUVariable(), ULocalVariable, PsiLocalVariable by psi {
 
     override val psi = unwrap<ULocalVariable, PsiLocalVariable>(psi)
@@ -126,11 +153,14 @@ open class KotlinULocalVariable(
         return super<AbstractKotlinUVariable>.getOriginalElement()
     }
 
+    override fun getNameIdentifier(): PsiIdentifier {
+        return super.getNameIdentifier()
+    }
 }
 
 open class KotlinUEnumConstant(
         psi: PsiEnumConstant,
-        override val containingElement: UElement?
+        override val uastParent: UElement?
 ) : AbstractKotlinUVariable(), UEnumConstant, PsiEnumConstant by psi {
     override val initializingClass: UClass? by lz { getLanguagePlugin().convertOpt<UClass>(psi.initializingClass, this) }
 
@@ -142,6 +172,10 @@ open class KotlinUEnumConstant(
 
     override fun getOriginalElement(): PsiElement? {
         return super<AbstractKotlinUVariable>.getOriginalElement()
+    }
+
+    override fun getNameIdentifier(): PsiIdentifier {
+        return super.getNameIdentifier()
     }
 
     override val kind: UastCallKind
@@ -177,7 +211,7 @@ open class KotlinUEnumConstant(
 
     private class KotlinEnumConstantClassReference(
             override val psi: PsiEnumConstant,
-            override val containingElement: UElement?
+            override val uastParent: UElement?
     ) : JavaAbstractUExpression(), USimpleNameReferenceExpression {
         override fun resolve() = psi.containingClass
         override val resolvedName: String?

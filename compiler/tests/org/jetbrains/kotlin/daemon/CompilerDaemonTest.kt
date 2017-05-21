@@ -23,7 +23,6 @@ import org.jetbrains.kotlin.daemon.client.*
 import org.jetbrains.kotlin.daemon.common.*
 import org.jetbrains.kotlin.integration.KotlinIntegrationTestBase
 import org.jetbrains.kotlin.progress.CompilationCanceledStatus
-import org.jetbrains.kotlin.script.*
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -34,6 +33,11 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
+import kotlin.script.dependencies.KotlinScriptExternalDependencies
+import kotlin.script.dependencies.ScriptContents
+import kotlin.script.dependencies.ScriptDependenciesResolver
+import kotlin.script.dependencies.asFuture
+import kotlin.script.templates.ScriptTemplateDefinition
 import kotlin.test.fail
 
 
@@ -92,22 +96,17 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
                                        "-include-runtime", File(getTestBaseDir(), "hello.kt").absolutePath, "-d", jar)
 
                 KotlinCompilerClient.shutdownCompileService(compilerId, daemonOptions)
+                Thread.sleep(100)
                 daemonShotDown = true
                 var compileTime1 = 0L
                 var compileTime2 = 0L
-                logFile.reader().useLines {
-                    it.ifNotContainsSequence(LinePattern("Kotlin compiler daemon version"),
-                                             LinePattern("Starting compilation with args: "),
-                                             LinePattern("Compile on daemon: (\\d+) ms", { it.groups[1]?.value?.toLong()?.let { compileTime1 = it }; true }),
-                                             LinePattern("Starting compilation with args: "),
-                                             LinePattern("Compile on daemon: (\\d+) ms", { it.groups[1]?.value?.toLong()?.let { compileTime2 = it }; true }),
-                                             LinePattern("Shutdown complete"))
-                    { unmatchedPattern, lineNo ->
-                        fail("pattern not found in the input: " + unmatchedPattern.regex +
-                                      "\nunmatched part of the log file (" + logFile.absolutePath +
-                                      ") from line " + lineNo + ":\n\n" + logFile.reader().useLines { it.drop(lineNo).joinToString("\n") })
-                    }
-                }
+                logFile.assertLogContainsSequence(
+                        LinePattern("Kotlin compiler daemon version"),
+                        LinePattern("Starting compilation with args: "),
+                        LinePattern("Compile on daemon: (\\d+) ms", { it.groups[1]?.value?.toLong()?.let { compileTime1 = it }; true }),
+                        LinePattern("Starting compilation with args: "),
+                        LinePattern("Compile on daemon: (\\d+) ms", { it.groups[1]?.value?.toLong()?.let { compileTime2 = it }; true }),
+                        LinePattern("Shutdown started"))
                 assertTrue("Expecting that compilation 1 ($compileTime1 ms) is at least two times longer than compilation 2 ($compileTime2 ms)",
                            compileTime1 > compileTime2 * 2)
                 logFile.delete()
@@ -183,14 +182,12 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
             logFile2.assertLogContainsSequence("Starting compilation with args: ")
 
             KotlinCompilerClient.shutdownCompileService(compilerId, daemonOptions)
-            Thread.sleep(100)
-            logFile1.assertLogContainsSequence("Shutdown complete")
-            logFile1.delete()
-
             KotlinCompilerClient.shutdownCompileService(compilerId2, daemonOptions)
+
             Thread.sleep(100)
-            logFile2.assertLogContainsSequence("Shutdown complete")
-            logFile2.delete()
+
+            logFile1.assertLogContainsSequence("Shutdown started")
+            logFile2.assertLogContainsSequence("Shutdown started")
         }
     }
 
@@ -216,7 +213,7 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
             Thread.sleep(200)
 
             logFile.assertLogContainsSequence("Unused timeout exceeded 1s",
-                                              "Shutdown complete")
+                                              "Shutdown started")
             logFile.delete()
         }
     }
@@ -248,7 +245,7 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
             }
             Thread.sleep(200)
             logFile.assertLogContainsSequence("Idle timeout exceeded 1s",
-                                              "Shutdown complete")
+                                              "Shutdown started")
             logFile.delete()
         }
     }
@@ -285,7 +282,7 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
             Thread.sleep(100) // allow after session timed action to run
 
             logFile.assertLogContainsSequence("All sessions finished, shutting down",
-                                              "Shutdown complete")
+                                              "Shutdown started")
             logFile.delete()
         }
     }
@@ -401,7 +398,7 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
 
     fun testParallelDaemonStart() {
 
-        val PARALLEL_THREADS_TO_START = 10
+        val PARALLEL_THREADS_TO_START = 8
 
         val doneLatch = CountDownLatch(PARALLEL_THREADS_TO_START)
 
@@ -417,23 +414,23 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
                                                           runFilesPath = File(tmpdir, getTestName(true)).absolutePath,
                                                           verbose = true)
                         val logFile = createTempFile("kotlin-daemon-test", ".log")
+                        logFiles[threadNo] = logFile
                         val daemonJVMOptions =
                                 configureDaemonJVMOptions(DaemonJVMOptions(maxMemory = "2048m"),
                                                           "D$COMPILE_DAEMON_LOG_PATH_PROPERTY=\"${logFile.loggerCompatiblePath}\"",
                                                           inheritMemoryLimits = false, inheritAdditionalProperties = false)
-                        val daemonWithSession = KotlinCompilerClient.connectAndLease(compilerId, flagFile, daemonJVMOptions, daemonOptions,
+                        val compileServiceSession = KotlinCompilerClient.connectAndLease(compilerId, flagFile, daemonJVMOptions, daemonOptions,
                                                                                      DaemonReportingTargets(out = System.err), autostart = true,
                                                                                      leaseSession = true, sessionAliveFlagFile = sessionFlagFile)
-                        assertNotNull("failed to connect daemon", daemonWithSession?.first)
+                        assertNotNull("failed to connect daemon", compileServiceSession?.compileService)
                         val jar = tmpdir.absolutePath + File.separator + "hello.$threadNo.jar"
                         val res = KotlinCompilerClient.compile(
-                                daemonWithSession!!.first,
-                                daemonWithSession.second,
+                                compileServiceSession!!.compileService,
+                                compileServiceSession.sessionId,
                                 CompileService.TargetPlatform.JVM,
                                 arrayOf(File(getHelloAppBaseDir(), "hello.kt").absolutePath, "-d", jar),
                                 outStreams[threadNo])
                         resultCodes[threadNo] = res
-                        logFiles[threadNo] = logFile
                     }
                 }
             }
@@ -442,23 +439,32 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
             }
         }
 
-        (1..PARALLEL_THREADS_TO_START).forEach { connectThread(it - 1) }
+        System.setProperty(COMPILE_DAEMON_VERBOSE_REPORT_PROPERTY, "true")
+        System.setProperty(COMPILE_DAEMON_STARTUP_TIMEOUT_PROPERTY, "100000")
 
-        val succeeded = doneLatch.await(PARALLEL_WAIT_TIMEOUT_S, TimeUnit.SECONDS)
+        val succeeded = try {
+            (1..PARALLEL_THREADS_TO_START).forEach { connectThread(it - 1) }
+            doneLatch.await(PARALLEL_WAIT_TIMEOUT_S, TimeUnit.SECONDS)
+        }
+        finally {
+            System.clearProperty(COMPILE_DAEMON_STARTUP_TIMEOUT_PROPERTY)
+            System.clearProperty(COMPILE_DAEMON_VERBOSE_REPORT_PROPERTY)
+        }
+
         assertTrue("parallel daemons start failed to complete in $PARALLEL_WAIT_TIMEOUT_S s, ${doneLatch.count} unfinished threads", succeeded)
 
         Thread.sleep(100) // Wait for processes to finish and close log files
 
-        val electionLogs = logFiles.map { it to it?.readLines()?.find { it.contains(LOG_PREFIX_ASSUMING_OTHER_DAEMONS_HAVE) } }
+        val electionLogs = (0..(PARALLEL_THREADS_TO_START - 1)).map {
+            val logContents = logFiles[it]?.readLines()
+            assertEquals("Compilation on thread $it failed:\n${outStreams[it]}\n\n------- daemon log: -------\n${logContents?.joinToString("\n")}\n-------", 0, resultCodes[it])
+            logContents?.find { it.contains(LOG_PREFIX_ASSUMING_OTHER_DAEMONS_HAVE) }
+        }
 
         assertTrue("No daemon elected: \n${electionLogs.joinToString("\n")}",
-                   electionLogs.any { (_, electionLine) -> electionLine != null && (electionLine.contains("lower prio") || electionLine.contains("equal prio")) })
+                   electionLogs.any { it != null && (it.contains("lower prio") || it.contains("equal prio")) })
 
-        electionLogs.forEach { (logFile, _) -> logFile?.delete() }
-
-        (1..PARALLEL_THREADS_TO_START).forEach {
-            assertEquals("Compilation on thread $it failed:\n${outStreams[it - 1]}", 0, resultCodes[it - 1])
-        }
+        logFiles.forEach { it?.delete() }
     }
 
     fun testDaemonConnectionProblems() {
@@ -636,7 +642,7 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
 
             Thread.sleep(200)
             logFile.assertLogContainsSequence("Idle timeout exceeded 1s",
-                                              "Shutdown complete")
+                                              "Shutdown started")
             logFile.delete()
         }
     }
@@ -680,14 +686,19 @@ internal fun generateLargeKotlinFile(size: Int): String {
 
 internal fun File.ifLogNotContainsSequence(vararg patterns: String, body: (LinePattern, Int) -> Unit) {
     reader().useLines {
-        it.ifNotContainsSequence( patterns.map { LinePattern(it) }, body)
+        it.asSequence().ifNotContainsSequence(patterns.map { LinePattern(it) }, body)
     }
 }
 
-internal fun File.assertLogContainsSequence(vararg patterns: String) {
-    ifLogNotContainsSequence(*patterns)
-    {
-        pattern, _ -> fail("Pattern '${pattern.regex}' is not found in the log file '$absolutePath'")
+internal fun File.assertLogContainsSequence(vararg patterns: String) = assertLogContainsSequence(patterns.map { LinePattern(it) })
+
+internal fun File.assertLogContainsSequence(vararg patterns: LinePattern) = assertLogContainsSequence(patterns.asIterable())
+
+internal fun File.assertLogContainsSequence(patterns: Iterable<LinePattern>) {
+    val lines = reader().readLines()
+    lines.asSequence().ifNotContainsSequence(patterns.iterator())
+    { unmatchedPattern, lineNo ->
+        fail("pattern not found in the input: ${unmatchedPattern.regex}\nunmatched part of the log file ($absolutePath) from line $lineNo:\n\n${lines.asSequence().drop(lineNo).joinToString("\n")}\n-------")
     }
 }
 

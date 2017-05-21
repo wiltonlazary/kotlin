@@ -27,12 +27,13 @@ fun PropertyDescriptor.asImportedFromObject(original: PropertyImportedFromObject
 
 abstract class ImportedFromObjectCallableDescriptor<out TCallable : CallableMemberDescriptor>(
         val callableFromObject: TCallable,
-        originalOrNull: TCallable?
+        private val originalOrNull: TCallable?
 ) : CallableDescriptor {
 
     val containingObject = callableFromObject.containingDeclaration as ClassDescriptor
 
-    protected val _original = originalOrNull ?: this
+    protected val _original
+        get() = originalOrNull ?: this
 }
 
 // members imported from object should be wrapped to not require dispatch receiver
@@ -53,7 +54,7 @@ class FunctionImportedFromObject(
             newOwner: DeclarationDescriptor?, modality: Modality?, visibility: Visibility?,
             kind: CallableMemberDescriptor.Kind?, copyOverrides: Boolean
     ): FunctionDescriptor {
-        throw UnsupportedOperationException("copy() should not be called on ${this.javaClass.simpleName}, was called for $this")
+        throw UnsupportedOperationException("copy() should not be called on ${this::class.java.simpleName}, was called for $this")
     }
 }
 
@@ -73,7 +74,7 @@ class PropertyImportedFromObject(
             newOwner: DeclarationDescriptor?, modality: Modality?, visibility: Visibility?,
             kind: CallableMemberDescriptor.Kind?, copyOverrides: Boolean
     ): FunctionDescriptor {
-        throw UnsupportedOperationException("copy() should not be called on ${this.javaClass.simpleName}, was called for $this")
+        throw UnsupportedOperationException("copy() should not be called on ${this::class.java.simpleName}, was called for $this")
     }
 }
 

@@ -36,7 +36,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperclassesWithoutAny
 import org.jetbrains.kotlin.resolve.descriptorUtil.overriddenTreeUniqueAsSequence
-import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
+import org.jetbrains.kotlin.resolve.jvm.diagnostics.CollectionStub
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodGenericSignature
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
@@ -337,7 +337,7 @@ class CollectionStubMethodGenerator(
         val access = ACC_PUBLIC or (if (synthetic) ACC_SYNTHETIC else 0)
         val asmMethod = signature.asmMethod
         val genericSignature = if (synthetic) null else signature.genericsSignature
-        val mv = v.newMethod(JvmDeclarationOrigin.NO_ORIGIN, access, asmMethod.name, asmMethod.descriptor, genericSignature, null)
+        val mv = v.newMethod(CollectionStub, access, asmMethod.name, asmMethod.descriptor, genericSignature, null)
         mv.visitCode()
         AsmUtil.genThrow(
                 InstructionAdapter(mv),
@@ -351,7 +351,7 @@ private val READ_ONLY_ARE_EQUAL_TO_MUTABLE_TYPE_CHECKER = KotlinTypeCheckerImpl.
     val firstClass = x.declarationDescriptor as? ClassDescriptor ?: return@withAxioms x == y
     val secondClass = y.declarationDescriptor as? ClassDescriptor ?: return@withAxioms x == y
 
-    val j2k = JavaToKotlinClassMap.INSTANCE
+    val j2k = JavaToKotlinClassMap
     val firstReadOnly = if (j2k.isMutable(firstClass)) j2k.convertMutableToReadOnly(firstClass) else firstClass
     val secondReadOnly = if (j2k.isMutable(secondClass)) j2k.convertMutableToReadOnly(secondClass) else secondClass
     firstReadOnly.typeConstructor == secondReadOnly.typeConstructor

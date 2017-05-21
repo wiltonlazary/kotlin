@@ -329,7 +329,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -778,7 +778,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -911,7 +911,7 @@ public final class ProtoBuf {
             org.jetbrains.kotlin.protobuf.ByteString.newOutput();
         org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
             org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-                unknownFieldsOutput);
+                unknownFieldsOutput, 1);
         try {
           boolean done = false;
           while (!done) {
@@ -1903,7 +1903,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -2024,7 +2024,7 @@ public final class ProtoBuf {
             org.jetbrains.kotlin.protobuf.ByteString.newOutput();
         org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
             org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-                unknownFieldsOutput);
+                unknownFieldsOutput, 1);
         try {
           boolean done = false;
           while (!done) {
@@ -2235,7 +2235,7 @@ public final class ProtoBuf {
               org.jetbrains.kotlin.protobuf.ByteString.newOutput();
           org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
               org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-                  unknownFieldsOutput);
+                  unknownFieldsOutput, 1);
           try {
             boolean done = false;
             while (!done) {
@@ -4542,7 +4542,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -4764,7 +4764,7 @@ public final class ProtoBuf {
             org.jetbrains.kotlin.protobuf.ByteString.newOutput();
         org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
             org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-                unknownFieldsOutput);
+                unknownFieldsOutput, 1);
         try {
           boolean done = false;
           while (!done) {
@@ -6955,7 +6955,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -7936,6 +7936,7 @@ public final class ProtoBuf {
      *ClassKind
      *isInner
      *isData
+     *isHeader
      * </pre>
      */
     boolean hasFlags();
@@ -7949,6 +7950,7 @@ public final class ProtoBuf {
      *ClassKind
      *isInner
      *isData
+     *isHeader
      * </pre>
      */
     int getFlags();
@@ -8178,7 +8180,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -8544,6 +8546,7 @@ public final class ProtoBuf {
      *ClassKind
      *isInner
      *isData
+     *isHeader
      * </pre>
      */
     public boolean hasFlags() {
@@ -8559,6 +8562,7 @@ public final class ProtoBuf {
      *ClassKind
      *isInner
      *isData
+     *isHeader
      * </pre>
      */
     public int getFlags() {
@@ -9659,6 +9663,7 @@ public final class ProtoBuf {
        *ClassKind
        *isInner
        *isData
+       *isHeader
        * </pre>
        */
       public boolean hasFlags() {
@@ -9674,6 +9679,7 @@ public final class ProtoBuf {
        *ClassKind
        *isInner
        *isData
+       *isHeader
        * </pre>
        */
       public int getFlags() {
@@ -9689,6 +9695,7 @@ public final class ProtoBuf {
        *ClassKind
        *isInner
        *isData
+       *isHeader
        * </pre>
        */
       public Builder setFlags(int value) {
@@ -9707,6 +9714,7 @@ public final class ProtoBuf {
        *ClassKind
        *isInner
        *isData
+       *isHeader
        * </pre>
        */
       public Builder clearFlags() {
@@ -11132,7 +11140,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -12298,7 +12306,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -12933,7 +12941,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -13606,6 +13614,8 @@ public final class ProtoBuf {
      *isInline
      *isTailrec
      *isExternal
+     *isSuspend
+     *isHeader
      * </pre>
      */
     boolean hasFlags();
@@ -13622,6 +13632,8 @@ public final class ProtoBuf {
      *isInline
      *isTailrec
      *isExternal
+     *isSuspend
+     *isHeader
      * </pre>
      */
     int getFlags();
@@ -13769,7 +13781,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -13925,6 +13937,8 @@ public final class ProtoBuf {
      *isInline
      *isTailrec
      *isExternal
+     *isSuspend
+     *isHeader
      * </pre>
      */
     public boolean hasFlags() {
@@ -13943,6 +13957,8 @@ public final class ProtoBuf {
      *isInline
      *isTailrec
      *isExternal
+     *isSuspend
+     *isHeader
      * </pre>
      */
     public int getFlags() {
@@ -14620,6 +14636,8 @@ public final class ProtoBuf {
        *isInline
        *isTailrec
        *isExternal
+       *isSuspend
+       *isHeader
        * </pre>
        */
       public boolean hasFlags() {
@@ -14638,6 +14656,8 @@ public final class ProtoBuf {
        *isInline
        *isTailrec
        *isExternal
+       *isSuspend
+       *isHeader
        * </pre>
        */
       public int getFlags() {
@@ -14656,6 +14676,8 @@ public final class ProtoBuf {
        *isInline
        *isTailrec
        *isExternal
+       *isSuspend
+       *isHeader
        * </pre>
        */
       public Builder setFlags(int value) {
@@ -14677,6 +14699,8 @@ public final class ProtoBuf {
        *isInline
        *isTailrec
        *isExternal
+       *isSuspend
+       *isHeader
        * </pre>
        */
       public Builder clearFlags() {
@@ -15324,6 +15348,7 @@ public final class ProtoBuf {
      *hasConstant
      *isExternal
      *isDelegated
+     *isHeader
      * </pre>
      */
     boolean hasFlags();
@@ -15343,6 +15368,7 @@ public final class ProtoBuf {
      *hasConstant
      *isExternal
      *isDelegated
+     *isHeader
      * </pre>
      */
     int getFlags();
@@ -15512,7 +15538,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -15670,6 +15696,7 @@ public final class ProtoBuf {
      *hasConstant
      *isExternal
      *isDelegated
+     *isHeader
      * </pre>
      */
     public boolean hasFlags() {
@@ -15691,6 +15718,7 @@ public final class ProtoBuf {
      *hasConstant
      *isExternal
      *isDelegated
+     *isHeader
      * </pre>
      */
     public int getFlags() {
@@ -16381,6 +16409,7 @@ public final class ProtoBuf {
        *hasConstant
        *isExternal
        *isDelegated
+       *isHeader
        * </pre>
        */
       public boolean hasFlags() {
@@ -16402,6 +16431,7 @@ public final class ProtoBuf {
        *hasConstant
        *isExternal
        *isDelegated
+       *isHeader
        * </pre>
        */
       public int getFlags() {
@@ -16423,6 +16453,7 @@ public final class ProtoBuf {
        *hasConstant
        *isExternal
        *isDelegated
+       *isHeader
        * </pre>
        */
       public Builder setFlags(int value) {
@@ -16447,6 +16478,7 @@ public final class ProtoBuf {
        *hasConstant
        *isExternal
        *isDelegated
+       *isHeader
        * </pre>
        */
       public Builder clearFlags() {
@@ -17156,7 +17188,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -18114,7 +18146,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -19469,7 +19501,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -19916,7 +19948,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -20762,7 +20794,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {
@@ -21277,7 +21309,7 @@ public final class ProtoBuf {
           org.jetbrains.kotlin.protobuf.ByteString.newOutput();
       org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
           org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-              unknownFieldsOutput);
+              unknownFieldsOutput, 1);
       try {
         boolean done = false;
         while (!done) {

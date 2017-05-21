@@ -57,7 +57,6 @@ import org.jetbrains.kotlin.types.typeUtil.builtIns
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
 import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
 import org.jetbrains.kotlin.types.typeUtil.makeNullable
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.kotlin.utils.yieldIfNotNull
 import java.lang.UnsupportedOperationException
 import java.util.*
@@ -263,7 +262,7 @@ class DoubleColonExpressionResolver(
     private fun KtQualifiedExpression.buildNewExpressionForReservedGenericPropertyCallChainResolution(): KtExpression? {
         val parts = this.getQualifierChainParts()?.map { it.getQualifiedNameStringPart() ?: return null } ?: return null
         val qualifiedExpressionText = parts.joinToString(separator = ".")
-        return KtPsiFactory(this).createExpression(qualifiedExpressionText)
+        return KtPsiFactory(this, markGenerated = false).createExpression(qualifiedExpressionText)
     }
 
     private fun resolveReservedExpressionOnLHS(expression: KtExpression, c: ExpressionTypingContext): DoubleColonLHS.Expression? {
@@ -424,7 +423,9 @@ class DoubleColonExpressionResolver(
                 val classDescriptor = resultingDescriptor.classDescriptor
                 if (classDescriptor.companionObjectDescriptor != null) return null
 
-                if (DescriptorUtils.isObject(classDescriptor)) {
+                if (DescriptorUtils.isObject(classDescriptor) ||
+                    (!languageVersionSettings.supportsFeature(LanguageFeature.BoundCallableReferences) &&
+                     DescriptorUtils.isEnumEntry(classDescriptor))) {
                     return DoubleColonLHS.Expression(typeInfo, isObjectQualifier = true)
                 }
             }
@@ -605,26 +606,29 @@ class DoubleColonExpressionResolver(
                 if (expression.isEmptyLHS) null
                 else resolveDoubleColonLHS(expression, context)
 
-        if (lhsResult is DoubleColonLHS.Expression) {
-            reportUnsupportedIfNeeded(expression, context)
-        }
+        val resolutionResults = resolveCallableReferenceRHS(expression, lhsResult, context, resolveArgumentsMode)
 
-        val resolutionResults =
-                resolveCallableReferenceRHS(expression, lhsResult, context, resolveArgumentsMode)
-
-        reportUnsupportedReferenceToSuspendFunction(resolutionResults, expression, context)
+        reportUnsupportedCallableReferenceIfNeeded(expression, context, lhsResult, resolutionResults)
 
         return lhsResult to resolutionResults
     }
 
-    private fun reportUnsupportedReferenceToSuspendFunction(
-            resolutionResults: OverloadResolutionResults<CallableDescriptor>?,
+    private fun reportUnsupportedCallableReferenceIfNeeded(
             expression: KtCallableReferenceExpression,
-            context: ExpressionTypingContext
+            context: ExpressionTypingContext,
+            lhsResult: DoubleColonLHS?,
+            resolutionResults: OverloadResolutionResults<CallableDescriptor>?
     ) {
-        if (resolutionResults?.isSingleResult == true &&
-                resolutionResults.resultingDescriptor.safeAs<FunctionDescriptor>()?.isSuspend == true) {
+        val descriptor =
+                if (resolutionResults?.isSingleResult == true) resolutionResults.resultingDescriptor as? FunctionDescriptor else null
+        if (descriptor?.isSuspend == true) {
             context.trace.report(UNSUPPORTED.on(expression.callableReference, "Callable references to suspend functions"))
+        }
+
+        val expressionResult = lhsResult as? DoubleColonLHS.Expression ?: return
+        // "<expr>::foo" was not supported without bound callable references, except the case of a nested class constructor in an object
+        if (!expressionResult.isObjectQualifier || descriptor !is ConstructorDescriptor) {
+            reportUnsupportedIfNeeded(expression, context)
         }
     }
 
@@ -661,7 +665,7 @@ class DoubleColonExpressionResolver(
             resolutionResults.isNothing -> null
             else -> ResolutionResultsAndTraceCommitCallback(resolutionResults) {
                 checkReservedYield(reference, outerContext.trace)
-                if (resolutionMode != ResolveArgumentsMode.SHAPE_FUNCTION_ARGUMENTS || resolutionResults.isSingleResult) {
+                if (resolutionMode != ResolveArgumentsMode.SHAPE_FUNCTION_ARGUMENTS || resolutionResults.isSuccess) {
                     temporaryTrace.commit()
                 }
             }
@@ -768,7 +772,7 @@ class DoubleColonExpressionResolver(
                         val setter = descriptor.setter
                         setter == null || Visibilities.isVisible(receiverType?.let(::TransientReceiver), setter, scopeOwnerDescriptor)
                     }
-                    reflectionTypes.getKPropertyType(Annotations.EMPTY, receiverType, descriptor.type, mutable)
+                    reflectionTypes.getKPropertyType(Annotations.EMPTY, listOfNotNull(receiverType), descriptor.type, mutable)
                 }
                 is VariableDescriptor -> null
                 else -> throw UnsupportedOperationException("Callable reference resolved to an unsupported descriptor: $descriptor")

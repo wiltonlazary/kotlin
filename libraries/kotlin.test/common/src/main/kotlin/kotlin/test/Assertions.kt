@@ -24,9 +24,16 @@
 package kotlin.test
 
 import kotlin.internal.*
+import kotlin.reflect.KClass
 
+/**
+ * Current adapter providing assertion implementations
+ */
 val asserter: Asserter
-    get() = lookupAsserter()
+    get() = _asserter ?: lookupAsserter()
+
+/** Used to override current asserter internally */
+internal var _asserter: Asserter? = null
 
 /** Asserts that the given [block] returns `true`. */
 fun assertTrue(message: String? = null, block: () -> Boolean): Unit = assertTrue(block(), message)
@@ -97,10 +104,21 @@ fun assertFails(message: String?, block: () -> Unit): Throwable {
     try {
         block()
     } catch (e: Throwable) {
+        assertEquals(e.message, e.message) // success path assertion for qunit
         return e
     }
     asserter.fail(messagePrefix(message) + "Expected an exception to be thrown, but was completed successfully.")
 }
+
+/** Asserts that a [block] fails with a specific exception of type [T] being thrown.
+ *  Since inline method doesn't allow to trace where it was invoked, it is required to pass a [message] to distinguish this method call from others.
+ */
+@InlineOnly
+inline fun <reified T : Throwable> assertFailsWith(message: String? = null, noinline block: () -> Unit): T = assertFailsWith(T::class, message, block)
+
+/** Asserts that a [block] fails with a specific exception of type [exceptionClass] being thrown. */
+fun <T : Throwable> assertFailsWith(exceptionClass: KClass<T>, block: () -> Unit): T = assertFailsWith(exceptionClass, null, block)
+
 
 /**
  * Abstracts the logic for performing assertions. Specific implementations of [Asserter] can use JUnit

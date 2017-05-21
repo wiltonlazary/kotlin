@@ -1,4 +1,4 @@
-// IS_APPLICABLE: false
+// IS_APPLICABLE: true
 // WITH_RUNTIME
 
 fun foo() {

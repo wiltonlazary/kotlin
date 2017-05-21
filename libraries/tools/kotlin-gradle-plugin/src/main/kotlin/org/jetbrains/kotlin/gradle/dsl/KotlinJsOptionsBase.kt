@@ -24,6 +24,11 @@ internal abstract class KotlinJsOptionsBase : org.jetbrains.kotlin.gradle.dsl.Ko
         get() = verboseField ?: false
         set(value) { verboseField = value }
 
+    private var friendModulesDisabledField: kotlin.Boolean? = null
+    override var friendModulesDisabled: kotlin.Boolean
+        get() = friendModulesDisabledField ?: false
+        set(value) { friendModulesDisabledField = value }
+
     private var mainField: kotlin.String? = null
     override var main: kotlin.String
         get() = mainField ?: "call"
@@ -59,11 +64,17 @@ internal abstract class KotlinJsOptionsBase : org.jetbrains.kotlin.gradle.dsl.Ko
         get() = targetField ?: "v5"
         set(value) { targetField = value }
 
+    private var typedArraysField: kotlin.Boolean? = null
+    override var typedArrays: kotlin.Boolean
+        get() = typedArraysField ?: false
+        set(value) { typedArraysField = value }
+
     internal open fun updateArguments(args: org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments) {
         apiVersionField?.let { args.apiVersion = it }
         languageVersionField?.let { args.languageVersion = it }
         suppressWarningsField?.let { args.suppressWarnings = it }
         verboseField?.let { args.verbose = it }
+        friendModulesDisabledField?.let { args.friendModulesDisabled = it }
         mainField?.let { args.main = it }
         metaInfoField?.let { args.metaInfo = it }
         moduleKindField?.let { args.moduleKind = it }
@@ -71,6 +82,7 @@ internal abstract class KotlinJsOptionsBase : org.jetbrains.kotlin.gradle.dsl.Ko
         outputFileField?.let { args.outputFile = it }
         sourceMapField?.let { args.sourceMap = it }
         targetField?.let { args.target = it }
+        typedArraysField?.let { args.typedArrays = it }
     }
 }
 
@@ -79,6 +91,7 @@ internal fun org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments.fil
     languageVersion = "1.1"
     suppressWarnings = false
     verbose = false
+    friendModulesDisabled = false
     main = "call"
     metaInfo = true
     moduleKind = "plain"
@@ -86,4 +99,5 @@ internal fun org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments.fil
     outputFile = null
     sourceMap = false
     target = "v5"
+    typedArrays = false
 }

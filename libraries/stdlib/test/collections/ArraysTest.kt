@@ -16,7 +16,7 @@
 
 package test.collections
 
-import test.collections.behaviors.listBehavior
+import test.collections.behaviors.*
 import test.comparisons.STRING_CASE_INSENSITIVE_ORDER
 import kotlin.test.*
 import org.junit.Test
@@ -228,11 +228,16 @@ class ArraysTest {
         assertEquals(arr.asList().toString(), arr.contentToString())
     }
 
-//    @Ignore("KT-16056")
-//    @Test fun contentDeepToString() {
-//        val arr = arrayOf("aa", 1, null, charArrayOf('d'))
-//        assertEquals("[aa, 1, null, [d]]", arr.contentDeepToString())
-//    }
+    @Test fun contentDeepToString() {
+        // Don't run this test unless primitive array `is` checks are supported (KT-17137)
+        if ((intArrayOf() as Any) is Array<*>) {
+            assertTrue(true)
+            return
+        }
+
+        val arr = arrayOf("aa", 1, null, charArrayOf('d'))
+        assertEquals("[aa, 1, null, [d]]", arr.contentDeepToString())
+    }
 
     @Test fun contentDeepToStringNoRecursion() {
         // a[b[a, b]]
@@ -631,6 +636,24 @@ class ArraysTest {
         assertArrayNotSameButEquals(booleanArrayOf(true, false, true), booleanArrayOf(true, false, true, true).sliceArray(coll))
     }
 
+    @Test fun iterators() {
+        fun <T, E> checkContract(array: T, toList: T.() -> List<E>, iterator: T.() -> Iterator<E>) =
+                compare(array.toList().iterator(), array.iterator()) {
+                    iteratorBehavior()
+                }
+
+        checkContract(arrayOf("a", "b", "c"), { toList() }, { iterator() })
+        checkContract(intArrayOf(), { toList() }, { iterator() })
+        checkContract(intArrayOf(1, 2, 3), { toList() }, { iterator() })
+        checkContract(shortArrayOf(1, 2, 3), { toList() }, { iterator() })
+        checkContract(byteArrayOf(1, 2, 3), { toList() }, { iterator() })
+        checkContract(longArrayOf(1L, 2L, 3L), { toList() }, { iterator() })
+        checkContract(doubleArrayOf(2.0, 3.0, 9.0), { toList() }, { iterator() })
+        checkContract(floatArrayOf(2f, 3f, 9f), { toList() }, { iterator() })
+        checkContract(charArrayOf('a', 'b', 'c'), { toList() }, { iterator() })
+        checkContract(booleanArrayOf(true, false), { toList() }, { iterator() })
+    }
+
     @Test fun asIterable() {
         val arr1 = intArrayOf(1, 2, 3, 4, 5)
         val iter1 = arr1.asIterable()
@@ -737,7 +760,7 @@ class ArraysTest {
         expect(1.toShort()) { shortArrayOf(3, 2, 1).reduceIndexed { index, a, b -> if (index != 2) (a - b).toShort() else a.toShort() } }
 
         assertFailsWith<UnsupportedOperationException> {
-            intArrayOf().reduceIndexed { index, a, b -> a + b }
+            intArrayOf().reduceIndexed { index, a, b -> index + a + b }
         }
     }
 
@@ -753,7 +776,7 @@ class ArraysTest {
         expect(1.toShort()) { shortArrayOf(3, 2, 1).reduceRightIndexed { index, a, b -> if (index != 1) (a - b).toShort() else a.toShort() } }
 
         assertFailsWith<UnsupportedOperationException> {
-            intArrayOf().reduceRightIndexed { index, a, b -> a + b }
+            intArrayOf().reduceRightIndexed { index, a, b -> index + a + b }
         }
     }
 
@@ -1033,6 +1056,7 @@ class ArraysTest {
         val arr1: Array<Array<Int>> = arrayOf(arrayOf(1, 2, 3), arrayOf(4, 5, 6))
         val arr2: Array<out Array<Int>> = arr1
         val arr3: Array<out Array<out Int>> = arr1
+        @Suppress("UNCHECKED_CAST")
         val arr4: Array<Array<out Int>> = arr1 as Array<Array<out Int>>
 
         val expected = listOf(1, 2, 3, 4, 5, 6)

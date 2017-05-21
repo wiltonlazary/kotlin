@@ -1,6 +1,7 @@
 package templates
 
 import templates.Family.*
+import templates.SequenceClass.*
 
 fun mapping(): List<GenericFunction> {
     val templates = arrayListOf<GenericFunction>()
@@ -36,7 +37,6 @@ fun mapping(): List<GenericFunction> {
         }
         typeParam("R")
         returns("List<R>")
-        annotations(Iterables) { """@Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")""" }
         body(Iterables) {
             "return mapIndexedTo(ArrayList<R>(collectionSizeOrDefault(10)), transform)"
         }
@@ -64,7 +64,6 @@ fun mapping(): List<GenericFunction> {
         }
         typeParam("R")
         returns("List<R>")
-        annotations(Iterables) { """@Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")""" }
         body(Iterables) {
             "return mapTo(ArrayList<R>(collectionSizeOrDefault(10)), transform)"
         }
@@ -300,6 +299,7 @@ fun mapping(): List<GenericFunction> {
             @sample samples.collections.Collections.Transformations.groupBy
             """
         }
+        sequenceClassification(terminal)
         typeParam("K")
         returns("Map<K, List<T>>")
         body { "return groupByTo(LinkedHashMap<K, MutableList<T>>(), keySelector)" }
@@ -321,6 +321,7 @@ fun mapping(): List<GenericFunction> {
             @sample samples.collections.Collections.Transformations.groupBy
             """
         }
+        sequenceClassification(terminal)
         returns("M")
         body {
             """
@@ -349,6 +350,7 @@ fun mapping(): List<GenericFunction> {
             @sample samples.collections.Collections.Transformations.groupByKeysAndValues
             """
         }
+        sequenceClassification(terminal)
         typeParam("K")
         typeParam("V")
         returns("Map<K, List<V>>")
@@ -375,6 +377,7 @@ fun mapping(): List<GenericFunction> {
             @sample samples.collections.Collections.Transformations.groupByKeysAndValues
             """
         }
+        sequenceClassification(terminal)
         returns("M")
         body {
             """
@@ -402,6 +405,8 @@ fun mapping(): List<GenericFunction> {
             """
             Creates a [Grouping] source from ${f.collection.prefixWithArticle()} to be used later with one of group-and-fold operations
             using the specified [keySelector] function to extract a key from each ${f.element}.
+
+            @sample samples.collections.Collections.Transformations.groupingByEachCount
             """
         }
 
@@ -415,5 +420,14 @@ fun mapping(): List<GenericFunction> {
         }
     }
 
+    val terminalOperationPattern = Regex("^\\w+To")
+    templates.forEach { with (it) {
+        if (sequenceClassification.isEmpty()) {
+            if (terminalOperationPattern in signature)
+                sequenceClassification(terminal)
+            else
+                sequenceClassification(intermediate, stateless)
+        }
+    } }
     return templates
 }

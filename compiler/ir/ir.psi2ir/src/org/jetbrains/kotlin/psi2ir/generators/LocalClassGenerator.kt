@@ -17,9 +17,9 @@
 package org.jetbrains.kotlin.psi2ir.generators
 
 import org.jetbrains.kotlin.ir.IrStatement
+import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
 import org.jetbrains.kotlin.ir.expressions.impl.IrBlockImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
-import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtObjectLiteralExpression
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
@@ -45,8 +45,15 @@ class LocalClassGenerator(statementGenerator: StatementGenerator): StatementGene
             "Object literal constructor should have no value parameters: $objectConstructor"
         }
 
-        irBlock.statements.add(IrCallImpl(ktObjectLiteral.startOffset, ktObjectLiteral.endOffset, objectLiteralType,
-                                        objectConstructor, null, IrStatementOrigin.OBJECT_LITERAL))
+        irBlock.statements.add(
+                IrCallImpl(
+                        ktObjectLiteral.startOffset, ktObjectLiteral.endOffset, objectLiteralType,
+                        context.symbolTable.referenceConstructor(objectConstructor),
+                        objectConstructor,
+                        null,
+                        IrStatementOrigin.OBJECT_LITERAL
+                )
+        )
 
         return irBlock
     }

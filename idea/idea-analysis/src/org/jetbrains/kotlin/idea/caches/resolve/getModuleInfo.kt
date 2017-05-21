@@ -26,8 +26,10 @@ import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.asJava.classes.FakeLightClassForFileOfPackage
 import org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade
 import org.jetbrains.kotlin.asJava.elements.KtLightElement
+import org.jetbrains.kotlin.idea.caches.resolve.lightClasses.KtLightClassForDecompiledDeclaration
 import org.jetbrains.kotlin.idea.core.script.KotlinScriptConfigurationManager
 import org.jetbrains.kotlin.idea.util.ProjectRootsUtil
+import org.jetbrains.kotlin.idea.util.isKotlinBinary
 import org.jetbrains.kotlin.idea.util.isInSourceContentWithoutInjected
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
@@ -56,7 +58,7 @@ private fun PsiElement.getModuleInfo(onFailure: (String) -> IdeaModuleInfo?): Id
     val doNotAnalyze = containingJetFile?.doNotAnalyze
     if (doNotAnalyze != null) {
         return onFailure(
-                "Should not analyze element: ${text} in file ${containingJetFile?.name ?: " <no file>"}\n$doNotAnalyze"
+                "Should not analyze element: $text in file ${containingJetFile.name}\n$doNotAnalyze"
         )
     }
 
@@ -65,28 +67,32 @@ private fun PsiElement.getModuleInfo(onFailure: (String) -> IdeaModuleInfo?): Id
 
     if (containingJetFile is KtCodeFragment) {
         return containingJetFile.getContext()?.getModuleInfo()
-               ?: onFailure("Analyzing code fragment of type ${containingJetFile.javaClass} with no context element\nText:\n${containingJetFile.getText()}")
+               ?: onFailure("Analyzing code fragment of type ${containingJetFile::class.java} with no context element\nText:\n${containingJetFile.getText()}")
     }
 
-    val containingFile = containingFile ?: return onFailure("Analyzing element of type $javaClass with no containing file\nText:\n$text")
+    val containingFile = containingFile ?: return onFailure("Analyzing element of type ${this::class.java} with no containing file\nText:\n$text")
 
     val virtualFile = containingFile.originalFile.virtualFile
-            ?: return onFailure("Analyzing element of type $javaClass in non-physical file $containingFile of type ${containingFile.javaClass}\nText:\n$text")
+            ?: return onFailure("Analyzing element of type ${this::class.java} in non-physical file $containingFile of type ${containingFile::class.java}\nText:\n$text")
 
     return getModuleInfoByVirtualFile(
             project,
             virtualFile,
-            isDecompiledFile = (containingFile as? KtFile)?.isCompiled ?: false
+            treatAsLibrarySource = (containingFile as? KtFile)?.isCompiled ?: false
     )
 }
 
-private fun getModuleInfoByVirtualFile(project: Project, virtualFile: VirtualFile, isDecompiledFile: Boolean): IdeaModuleInfo {
+fun getModuleInfoByVirtualFile(
+        project: Project, virtualFile: VirtualFile
+): IdeaModuleInfo = getModuleInfoByVirtualFile(project, virtualFile, treatAsLibrarySource = false)
+
+private fun getModuleInfoByVirtualFile(project: Project, virtualFile: VirtualFile, treatAsLibrarySource: Boolean): IdeaModuleInfo {
     val projectFileIndex = ProjectFileIndex.SERVICE.getInstance(project)
 
     val module = projectFileIndex.getModuleForFile(virtualFile)
     if (module != null) {
         fun warnIfDecompiled() {
-            if (isDecompiledFile) {
+            if (treatAsLibrarySource) {
                 LOG.warn("Decompiled file for ${virtualFile.canonicalPath} is in content of $module")
             }
         }
@@ -110,10 +116,10 @@ private fun getModuleInfoByVirtualFile(project: Project, virtualFile: VirtualFil
         when (orderEntry) {
             is LibraryOrderEntry -> {
                 val library = orderEntry.library ?: continue@entries
-                if (ProjectRootsUtil.isLibraryClassFile(project, virtualFile) && !isDecompiledFile) {
+                if (ProjectRootsUtil.isLibraryClassFile(project, virtualFile) && !treatAsLibrarySource) {
                     return LibraryInfo(project, library)
                 }
-                else if (ProjectRootsUtil.isLibraryFile(project, virtualFile) || isDecompiledFile) {
+                else if (ProjectRootsUtil.isLibraryFile(project, virtualFile) || treatAsLibrarySource) {
                     return LibrarySourceInfo(project, library)
                 }
             }
@@ -129,8 +135,18 @@ private fun getModuleInfoByVirtualFile(project: Project, virtualFile: VirtualFil
         return ScriptModuleInfo(project, virtualFile, scriptDefinition)
     }
 
-    if (KotlinScriptConfigurationManager.getInstance(project).getAllScriptsClasspathScope().contains(virtualFile)) {
-        return ScriptDependenciesModuleInfo(project, null, null)
+    val isBinary = virtualFile.isKotlinBinary()
+    val scriptConfigurationManager = KotlinScriptConfigurationManager.getInstance(project)
+    if (isBinary && virtualFile in scriptConfigurationManager.getAllScriptsClasspathScope()) {
+        if (treatAsLibrarySource) {
+            return ScriptDependenciesSourceModuleInfo(project)
+        }
+        else {
+            return ScriptDependenciesModuleInfo(project, null, null)
+        }
+    }
+    if (!isBinary && virtualFile in scriptConfigurationManager.getAllLibrarySourcesScope()) {
+        return ScriptDependenciesSourceModuleInfo(project)
     }
 
     return NotUnderContentRootModuleInfo

@@ -22,7 +22,7 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.DiagnosticFactory
 import org.jetbrains.kotlin.diagnostics.Errors
-import org.jetbrains.kotlin.idea.caches.resolve.analyzeAndGetResult
+import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.core.setVisibility
 import org.jetbrains.kotlin.idea.inspections.RedundantSamConstructorInspection
 import org.jetbrains.kotlin.idea.intentions.*
@@ -33,6 +33,7 @@ import org.jetbrains.kotlin.idea.intentions.conventionNameCalls.ReplaceGetOrSetI
 import org.jetbrains.kotlin.idea.quickfix.RemoveModifierFix
 import org.jetbrains.kotlin.idea.quickfix.RemoveUselessCastFix
 import org.jetbrains.kotlin.idea.references.mainReference
+import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.visibilityModifierType
@@ -81,7 +82,7 @@ object J2KPostProcessingRegistrar {
         registerIntentionBasedProcessing(DestructureIntention())
         registerIntentionBasedProcessing(SimplifyAssertNotNullIntention())
 
-        registerDiagnosticBasedProcessing<KtBinaryExpressionWithTypeRHS>(Errors.USELESS_CAST) { element, diagnostic ->
+        registerDiagnosticBasedProcessing<KtBinaryExpressionWithTypeRHS>(Errors.USELESS_CAST) { element, _ ->
             val expression = RemoveUselessCastFix.invoke(element)
 
             val variable = expression.parent as? KtProperty
@@ -94,20 +95,20 @@ object J2KPostProcessingRegistrar {
             }
         }
 
-        registerDiagnosticBasedProcessing<KtTypeProjection>(Errors.REDUNDANT_PROJECTION) { element, diagnostic ->
+        registerDiagnosticBasedProcessing<KtTypeProjection>(Errors.REDUNDANT_PROJECTION) { _, diagnostic ->
             val fix = RemoveModifierFix.createRemoveProjectionFactory(true).createActions(diagnostic).single() as RemoveModifierFix
             fix.invoke()
         }
 
-        registerDiagnosticBasedProcessing<KtSimpleNameExpression>(Errors.UNNECESSARY_NOT_NULL_ASSERTION) { element, diagnostic ->
+        registerDiagnosticBasedProcessing<KtSimpleNameExpression>(Errors.UNNECESSARY_NOT_NULL_ASSERTION) { element, _ ->
             val exclExclExpr = element.parent as KtUnaryExpression
             exclExclExpr.replace(exclExclExpr.baseExpression!!)
         }
 
         registerDiagnosticBasedProcessingFactory(
-                Errors.VAL_REASSIGNMENT, Errors.CAPTURED_VAL_INITIALIZATION
+                Errors.VAL_REASSIGNMENT, Errors.CAPTURED_VAL_INITIALIZATION, Errors.CAPTURED_MEMBER_VAL_INITIALIZATION
         ) {
-            element: KtSimpleNameExpression, diagnostic: Diagnostic ->
+            element: KtSimpleNameExpression, _: Diagnostic ->
             val property = element.mainReference.resolve() as? KtProperty
             if (property == null) {
                 null
@@ -136,7 +137,12 @@ object J2KPostProcessingRegistrar {
                 if (!additionalChecker(tElement)) return null
                 return {
                     if (intention.applicabilityRange(tElement) != null) { // check availability of the intention again because something could change
-                        intention.applyTo(element, null)
+                        val apply = { intention.applyTo(element, null) }
+
+                        if (intention.startInWriteAction())
+                            runWriteAction(apply)
+                        else
+                            apply()
                     }
                 }
             }
@@ -231,7 +237,7 @@ object J2KPostProcessingRegistrar {
         override fun createAction(element: KtElement, diagnostics: Diagnostics): (() -> Unit)? {
             if (element !is KtBinaryExpressionWithTypeRHS) return null
 
-            val context = element.analyzeAndGetResult().bindingContext
+            val context = element.analyze()
             val leftType = context.getType(element.left) ?: return null
             val rightType = context.get(BindingContext.TYPE, element.right) ?: return null
 
@@ -256,7 +262,7 @@ object J2KPostProcessingRegistrar {
                 })
                 return null
 
-            val bindingContext = element.analyzeAndGetResult().bindingContext
+            val bindingContext = element.analyze()
             val rightType = element.right?.getType(bindingContext) ?: return null
 
             if (KotlinBuiltIns.isString(rightType)) {

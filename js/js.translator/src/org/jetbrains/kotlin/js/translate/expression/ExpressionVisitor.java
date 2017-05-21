@@ -26,7 +26,6 @@ import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor;
 import org.jetbrains.kotlin.descriptors.annotations.KotlinRetention;
 import org.jetbrains.kotlin.js.backend.ast.*;
 import org.jetbrains.kotlin.js.backend.ast.metadata.MetadataProperties;
-import org.jetbrains.kotlin.js.translate.context.Namer;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.declaration.ClassTranslator;
 import org.jetbrains.kotlin.js.translate.declaration.PropertyTranslatorKt;
@@ -66,6 +65,7 @@ import static org.jetbrains.kotlin.js.translate.utils.TranslationUtils.translate
 import static org.jetbrains.kotlin.resolve.BindingContext.*;
 import static org.jetbrains.kotlin.resolve.BindingContextUtils.isVarCapturedInClosure;
 import static org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt.getResolvedCallWithAssert;
+import static org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt.getAnnotationClass;
 import static org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isFunctionExpression;
 import static org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isFunctionLiteral;
 
@@ -114,7 +114,9 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
         KtExpression jetInitializer = multiDeclaration.getInitializer();
         assert jetInitializer != null : "Initializer for multi declaration must be not null";
         JsExpression initializer = Translation.translateAsExpression(jetInitializer, context);
-        return DestructuringDeclarationTranslator.translate(multiDeclaration, context.scope().declareTemporary(), initializer, context);
+        JsName parameterName = JsScope.declareTemporary();
+        context.addStatementToCurrentBlock(JsAstUtils.newVar(parameterName, initializer));
+        return DestructuringDeclarationTranslator.translate(multiDeclaration, JsAstUtils.pureFqn(parameterName, null), context);
     }
 
     @Override
@@ -125,7 +127,11 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
         // TODO: add related descriptor to context and use it here
         KtDeclarationWithBody parent = PsiTreeUtil.getParentOfType(jetReturnExpression, KtDeclarationWithBody.class);
         if (parent instanceof KtSecondaryConstructor) {
-            return new JsReturn(new JsNameRef(Namer.ANOTHER_THIS_PARAMETER_NAME)).source(jetReturnExpression);
+            ClassDescriptor classDescriptor = context.getClassDescriptor();
+            assert classDescriptor != null : "Missing class descriptor in context while translating constructor: " +
+                    PsiUtilsKt.getTextWithLocation(jetReturnExpression);
+            JsExpression ref = ReferenceTranslator.translateAsValueReference(classDescriptor.getThisAsReceiverParameter(), context);
+            return new JsReturn(ref.source(jetReturnExpression));
         }
 
         JsReturn jsReturn;
@@ -238,6 +244,10 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
 
         if (lhs instanceof DoubleColonLHS.Expression && !((DoubleColonLHS.Expression) lhs).isObjectQualifier()) {
             JsExpression receiver = translateAsExpression(receiverExpression, context);
+            KotlinType type = context.bindingContext().getType(receiverExpression);
+            if (type != null && KotlinBuiltIns.isChar(type)) {
+                receiver = JsAstUtils.charToBoxedChar(receiver);
+            }
             return new JsInvocation(context.namer().kotlin(GET_KCLASS_FROM_EXPRESSION), receiver);
         }
 
@@ -528,7 +538,7 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
 
         JsExpression constructor = ReferenceTranslator.translateAsTypeReference(descriptor, context);
         List<DeclarationDescriptor> closure = context.getClassOrConstructorClosure(descriptor);
-        List<JsExpression> closureArgs = new ArrayList<JsExpression>();
+        List<JsExpression> closureArgs = new ArrayList<>();
         if (closure != null) {
             for (DeclarationDescriptor capturedValue : closure) {
                 closureArgs.add(context.getArgumentForClosureConstructor(capturedValue));
@@ -564,7 +574,7 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
             AnnotationDescriptor descriptor = context.bindingContext().get(BindingContext.ANNOTATION, entry);
             if (descriptor == null) continue;
 
-            ClassifierDescriptor classifierDescriptor = descriptor.getType().getConstructor().getDeclarationDescriptor();
+            ClassifierDescriptor classifierDescriptor = getAnnotationClass(descriptor);
             if (classifierDescriptor == null) continue;
 
             KotlinRetention retention = DescriptorUtilsKt.getAnnotationRetention(classifierDescriptor);
@@ -598,8 +608,7 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
             @NotNull ClassDescriptor descriptor,
             @NotNull TranslationContext context
     ) {
-        JsScope scope = context.getScopeForDescriptor(descriptor);
-        TranslationContext classContext = context.innerWithUsageTracker(scope, descriptor);
-        ClassTranslator.translate(declaration, classContext);
+        TranslationContext classContext = context.innerWithUsageTracker(descriptor);
+        ClassTranslator.translate(declaration, classContext, null);
     }
 }

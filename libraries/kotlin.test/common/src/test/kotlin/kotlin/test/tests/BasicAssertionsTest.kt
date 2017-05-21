@@ -14,49 +14,81 @@ class BasicAssertionsTest {
         assertEquals("a", "a")
     }
 
-    @Test(expected = AssertionError::class)
+    @Test
+    fun testAssertFailsWith() {
+        assertFailsWith<IllegalStateException> { throw IllegalStateException() }
+        assertFailsWith<AssertionError> { throw AssertionError() }
+    }
+
+    @Test fun testAssertFailsWithFails() {
+        assertTrue(true) // at least one assertion required for qunit
+
+        withDefaultAsserter run@ {
+            try {
+                assertFailsWith<IllegalStateException> { throw IllegalArgumentException() }
+            }
+            catch (e: AssertionError) {
+                return@run
+            }
+            throw AssertionError("Expected to fail")
+        }
+
+        withDefaultAsserter run@ {
+            try {
+                assertFailsWith<IllegalStateException> {  }
+            }
+            catch (e: AssertionError) {
+                return@run
+            }
+            throw AssertionError("Expected to fail")
+        }
+    }
+
+    @Test
+    fun testAssertFailsWithClass() {
+        assertFailsWith(IllegalArgumentException::class) {
+            throw IllegalArgumentException("This is illegal")
+        }
+    }
+
+    @Test
+    fun testAssertFailsWithClassFails() {
+        checkFailedAssertion {
+            assertFailsWith(IllegalArgumentException::class) { throw IllegalStateException() }
+        }
+
+        checkFailedAssertion {
+            assertFailsWith(Exception::class) { }
+        }
+    }
+
+    @Test
     fun testAssertEqualsFails() {
-        assertEquals(1, 2)
+        checkFailedAssertion { assertEquals(1, 2) }
     }
 
     @Test
     fun testAssertTrue() {
         assertTrue(true)
-    }
-
-    @Test
-    fun testAssertTrueWithLambda() {
         assertTrue { true }
     }
 
-    @Test(expected = AssertionError::class)
+    @Test()
     fun testAssertTrueFails() {
-        assertTrue(false)
-    }
-
-    @Test(expected = AssertionError::class)
-    fun testAssertTrueWithLambdaFails() {
-        assertTrue { false }
+        checkFailedAssertion { assertTrue(false) }
+        checkFailedAssertion { assertTrue { false } }
     }
 
     @Test
     fun testAssertFalse() {
         assertFalse(false)
-    }
-
-    @Test
-    fun testAssertFalseLambda() {
         assertFalse { false }
     }
 
-    @Test(expected = AssertionError::class)
+    @Test
     fun testAssertFalseFails() {
-        assertFalse(true)
-    }
-
-    @Test(expected = AssertionError::class)
-    fun testAssertFalseWithLambdaFails() {
-        assertFalse { true }
+        checkFailedAssertion { assertFalse(true) }
+        checkFailedAssertion{ assertFalse { true } }
     }
 
     @Test
@@ -64,10 +96,9 @@ class BasicAssertionsTest {
         assertFails { throw IllegalStateException() }
     }
 
-    @Test(expected = AssertionError::class)
+    @Test()
     fun testAssertFailsFails() {
-        assertFails {  }
-        Assert.fail("Shouldn't pass here")
+        checkFailedAssertion { assertFails {  } }
     }
 
 
@@ -76,9 +107,9 @@ class BasicAssertionsTest {
         assertNotEquals(1, 2)
     }
 
-    @Test(expected = AssertionError::class)
+    @Test()
     fun testAssertNotEqualsFails() {
-        assertNotEquals(1, 1)
+        checkFailedAssertion { assertNotEquals(1, 1) }
     }
 
     @Test
@@ -86,9 +117,9 @@ class BasicAssertionsTest {
         assertNotNull(true)
     }
 
-    @Test(expected = AssertionError::class)
+    @Test()
     fun testAssertNotNullFails() {
-        assertNotNull(null)
+        checkFailedAssertion { assertNotNull(null) }
     }
 
     @Test
@@ -96,11 +127,13 @@ class BasicAssertionsTest {
         assertNotNull("") { assertEquals("", it) }
     }
 
-    @Test(expected = AssertionError::class)
+    @Test
     fun testAssertNotNullLambdaFails() {
-        assertNotNull(null) {
-            @Suppress("UNREACHABLE_CODE")
-            assertNotNull(it)
+        checkFailedAssertion {
+            val value: String? = null
+            assertNotNull(value) {
+                it.substring(0, 0)
+            }
         }
     }
 
@@ -109,14 +142,14 @@ class BasicAssertionsTest {
         assertNull(null)
     }
 
-    @Test(expected = AssertionError::class)
+    @Test
     fun testAssertNullFails() {
-        assertNull(true)
+        checkFailedAssertion { assertNull("") }
     }
 
-    @Test(expected = AssertionError::class)
+    @Test()
     fun testFail() {
-        fail("should fail")
+        checkFailedAssertion { fail("should fail") }
     }
 
     @Test
@@ -124,8 +157,24 @@ class BasicAssertionsTest {
         expect(1) { 1 }
     }
 
-    @Test(expected = AssertionError::class)
+    @Test
     fun testExpectFails() {
-        expect(1) { 2 }
+        checkFailedAssertion { expect(1) { 2 } }
+    }
+}
+
+
+private fun checkFailedAssertion(assertion: () -> Unit) {
+    assertFailsWith<AssertionError> { withDefaultAsserter(assertion) }
+}
+
+@Suppress("INVISIBLE_MEMBER")
+private fun withDefaultAsserter(block: () -> Unit) {
+    val current = overrideAsserter(DefaultAsserter())
+    try {
+        block()
+    }
+    finally {
+        overrideAsserter(current)
     }
 }

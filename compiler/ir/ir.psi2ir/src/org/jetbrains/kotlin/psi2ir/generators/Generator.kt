@@ -17,7 +17,6 @@
 package org.jetbrains.kotlin.psi2ir.generators
 
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
-import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.expressions.IrBlockBody
 import org.jetbrains.kotlin.ir.expressions.IrExpression
@@ -27,11 +26,12 @@ import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
+import org.jetbrains.kotlin.psi2ir.endOffsetOrUndefined
+import org.jetbrains.kotlin.psi2ir.startOffsetOrUndefined
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.util.slicedMap.ReadOnlySlice
-import java.lang.AssertionError
 import java.lang.RuntimeException
 
 
@@ -68,11 +68,9 @@ inline fun GeneratorWithScope.irBlock(ktElement: KtElement?,
                                       origin: IrStatementOrigin? = null, resultType: KotlinType? = null,
                                       body: IrBlockBuilder.() -> Unit
 ): IrExpression =
-        this.irBlock(ktElement?.startOffset ?: UNDEFINED_OFFSET,
-                     ktElement?.endOffset ?: UNDEFINED_OFFSET,
-                     origin, resultType, body)
+        this.irBlock(ktElement.startOffsetOrUndefined, ktElement.endOffsetOrUndefined, origin, resultType, body)
 
 inline fun GeneratorWithScope.irBlockBody(ktElement: KtElement?, body: IrBlockBodyBuilder.() -> Unit) : IrBlockBody =
-        this.irBlockBody(ktElement?.startOffset ?: UNDEFINED_OFFSET,
-                         ktElement?.endOffset ?: UNDEFINED_OFFSET,
-                         body)
+        this.irBlockBody(ktElement.startOffsetOrUndefined, ktElement.endOffsetOrUndefined, body)
+
+

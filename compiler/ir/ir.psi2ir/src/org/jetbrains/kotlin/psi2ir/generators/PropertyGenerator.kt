@@ -16,21 +16,13 @@
 
 package org.jetbrains.kotlin.psi2ir.generators
 
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.PropertyGetterDescriptor
-import org.jetbrains.kotlin.descriptors.PropertySetterDescriptor
-import org.jetbrains.kotlin.ir.declarations.IrDeclaration
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
-import org.jetbrains.kotlin.ir.declarations.IrFunction
-import org.jetbrains.kotlin.ir.declarations.IrProperty
-import org.jetbrains.kotlin.ir.declarations.impl.IrFieldImpl
-import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrPropertyImpl
-import org.jetbrains.kotlin.ir.expressions.IrBlockBody
-import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.expressions.IrExpressionBody
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
-import org.jetbrains.kotlin.ir.expressions.impl.*
+import org.jetbrains.kotlin.ir.expressions.impl.IrExpressionBodyImpl
+import org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
@@ -39,9 +31,7 @@ import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.kotlin.resolve.BindingContext
 
-class PropertyGenerator(val declarationGenerator: DeclarationGenerator) : Generator {
-    override val context: GeneratorContext get() = declarationGenerator.context
-
+class PropertyGenerator(declarationGenerator: DeclarationGenerator) : DeclarationGeneratorExtension(declarationGenerator) {
     fun generatePropertyDeclaration(ktProperty: KtProperty): IrProperty {
         val propertyDescriptor = getPropertyDescriptor(ktProperty)
         val ktDelegate = ktProperty.delegate
@@ -51,127 +41,90 @@ class PropertyGenerator(val declarationGenerator: DeclarationGenerator) : Genera
             generateSimpleProperty(ktProperty, propertyDescriptor)
     }
 
-    fun generatePropertyForPrimaryConstructorParameter(ktParameter: KtParameter): IrDeclaration {
-        val valueParameterDescriptor = getOrFail(BindingContext.VALUE_PARAMETER, ktParameter)
+    fun generatePropertyForPrimaryConstructorParameter(ktParameter: KtParameter, irValueParameter: IrValueParameter): IrDeclaration {
         val propertyDescriptor = getOrFail(BindingContext.PRIMARY_CONSTRUCTOR_PARAMETER, ktParameter)
 
-        val irProperty = IrPropertyImpl(ktParameter.startOffset, ktParameter.endOffset, IrDeclarationOrigin.DEFINED, false, propertyDescriptor)
+        return IrPropertyImpl(
+                ktParameter.startOffset, ktParameter.endOffset,
+                IrDeclarationOrigin.DEFINED, false,
+                propertyDescriptor
+        ).also { irProperty ->
+            irProperty.backingField =
+                    generatePropertyBackingField(ktParameter, propertyDescriptor) {
+                        IrExpressionBodyImpl(IrGetValueImpl(
+                                ktParameter.startOffset, ktParameter.endOffset,
+                                irValueParameter.symbol,
+                                IrStatementOrigin.INITIALIZE_PROPERTY_FROM_PARAMETER
+                        ))
+                    }
 
-        val irField = IrFieldImpl(ktParameter.startOffset, ktParameter.endOffset, IrDeclarationOrigin.PROPERTY_BACKING_FIELD, propertyDescriptor)
-        val irGetParameter = IrGetValueImpl(ktParameter.startOffset, ktParameter.endOffset,
-                                            valueParameterDescriptor, IrStatementOrigin.INITIALIZE_PROPERTY_FROM_PARAMETER)
-        irField.initializer = IrExpressionBodyImpl(irGetParameter)
-        irProperty.backingField = irField
+            val getter = propertyDescriptor.getter ?:
+                         throw AssertionError("Property declared in primary constructor has no getter: $propertyDescriptor")
+            irProperty.getter = FunctionGenerator(declarationGenerator).generateDefaultAccessorForPrimaryConstructorParameter(getter, ktParameter)
 
-        val getter = propertyDescriptor.getter ?:
-                     throw AssertionError("Property declared in primary constructor has no getter: $propertyDescriptor")
-        val irGetter = IrFunctionImpl(ktParameter.startOffset, ktParameter.endOffset, IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR, getter)
-        irProperty.getter = irGetter
-        irGetter.body = generateDefaultGetterBody(ktParameter, getter)
-
-        if (propertyDescriptor.isVar) {
-            val setter = propertyDescriptor.setter ?:
-                         throw AssertionError("Property declared in primary constructor has no setter: $propertyDescriptor")
-            val irSetter = IrFunctionImpl(ktParameter.startOffset, ktParameter.endOffset, IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR, setter)
-            irSetter.body = generateDefaultSetterBody(ktParameter, setter)
-            irProperty.setter = irSetter
+            if (propertyDescriptor.isVar) {
+                val setter = propertyDescriptor.setter ?:
+                             throw AssertionError("Property declared in primary constructor has no setter: $propertyDescriptor")
+                irProperty.setter = FunctionGenerator(declarationGenerator).generateDefaultAccessorForPrimaryConstructorParameter(setter, ktParameter)
+            }
         }
-
-        return irProperty
     }
 
-    private fun generateDelegatedProperty(ktProperty: KtProperty, ktDelegate: KtPropertyDelegate, propertyDescriptor: PropertyDescriptor): IrProperty {
-        val ktDelegateExpression = ktDelegate.expression!!
-        val irDelegateInitializer = declarationGenerator.generateInitializerBody(propertyDescriptor, ktDelegateExpression)
-        return DelegatedPropertyGenerator(context).generateDelegatedProperty(ktProperty, ktDelegate, propertyDescriptor, irDelegateInitializer)
-    }
+    private inline fun generatePropertyBackingField(
+            ktPropertyElement: KtElement,
+            propertyDescriptor: PropertyDescriptor,
+            generateInitializer: (IrField) -> IrExpressionBody?
+    ) : IrField =
+            context.symbolTable.declareField(
+                    ktPropertyElement.startOffset, ktPropertyElement.endOffset,
+                    IrDeclarationOrigin.PROPERTY_BACKING_FIELD,
+                    propertyDescriptor
+            ).also {
+                it.initializer = generateInitializer(it)
+            }
 
-    private fun generateSimpleProperty(ktProperty: KtProperty, propertyDescriptor: PropertyDescriptor): IrProperty {
-        val irProperty = IrPropertyImpl(ktProperty.startOffset, ktProperty.endOffset, IrDeclarationOrigin.DEFINED, false, propertyDescriptor)
 
-        val irField = if (propertyDescriptor.hasBackingField()) {
-            IrFieldImpl(ktProperty.startOffset, ktProperty.endOffset, IrDeclarationOrigin.PROPERTY_BACKING_FIELD, propertyDescriptor,
-                        ktProperty.initializer?.let { declarationGenerator.generateInitializerBody(propertyDescriptor, it) })
-        }
-        else null
-        irProperty.backingField = irField
+    private fun generateDelegatedProperty(
+            ktProperty: KtProperty,
+            ktDelegate: KtPropertyDelegate,
+            propertyDescriptor: PropertyDescriptor
+    ): IrProperty =
+            DelegatedPropertyGenerator(declarationGenerator)
+                    .generateDelegatedProperty(ktProperty, ktDelegate, propertyDescriptor)
 
-        irProperty.getter = generateGetterIfRequired(ktProperty, propertyDescriptor)
+    private fun generateSimpleProperty(ktProperty: KtProperty, propertyDescriptor: PropertyDescriptor): IrProperty =
+            IrPropertyImpl(
+                    ktProperty.startOffset, ktProperty.endOffset,
+                    IrDeclarationOrigin.DEFINED, false,
+                    propertyDescriptor
+            ).buildWithScope { irProperty ->
+                irProperty.backingField =
+                        if (propertyDescriptor.hasBackingField())
+                            generatePropertyBackingField(ktProperty, propertyDescriptor) { irField ->
+                                ktProperty.initializer?.let { ktInitializer ->
+                                    declarationGenerator.generateInitializerBody(irField.symbol, ktInitializer)
+                                }
+                            }
+                        else
+                            null
 
-        irProperty.setter = generateSetterIfRequired(ktProperty, propertyDescriptor)
+                irProperty.getter = generateGetterIfRequired(ktProperty, propertyDescriptor)
 
-        return irProperty
-    }
+                irProperty.setter = generateSetterIfRequired(ktProperty, propertyDescriptor)
+            }
 
     private fun PropertyDescriptor.hasBackingField(): Boolean =
             get(BindingContext.BACKING_FIELD_REQUIRED, this) ?: false
 
     private fun generateGetterIfRequired(ktProperty: KtProperty, property: PropertyDescriptor): IrFunction? {
         val getter = property.getter ?: return null
-
-        val ktGetter = ktProperty.getter
-
-        val irGetter = ktGetter?.let {
-            IrFunctionImpl(it.startOffset, it.endOffset, IrDeclarationOrigin.DEFINED, getter)
-        } ?: IrFunctionImpl(ktProperty.startOffset, ktProperty.endOffset, IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR, getter)
-
-        irGetter.body = ktGetter?.bodyExpression?.let {
-            declarationGenerator.generateFunctionBody(getter, it )
-        } ?: generateDefaultGetterBody(ktProperty, getter)
-
-        return irGetter
+        return FunctionGenerator(declarationGenerator).generatePropertyAccessor(getter, ktProperty, ktProperty.getter)
     }
 
     private fun generateSetterIfRequired(ktProperty: KtProperty, property: PropertyDescriptor): IrFunction? {
         if (!property.isVar) return null
         val setter = property.setter ?: return null
-
-        val ktSetter = ktProperty.setter
-
-        val irSetter = ktSetter?.let {
-            IrFunctionImpl(it.startOffset, it.endOffset, IrDeclarationOrigin.DEFINED, setter)
-        } ?: IrFunctionImpl(ktProperty.startOffset, ktProperty.endOffset, IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR, setter)
-
-        irSetter.body = ktSetter?.bodyExpression?.let {
-            declarationGenerator.generateFunctionBody(setter, it )
-        } ?: generateDefaultSetterBody(ktProperty, setter)
-
-        return irSetter
-    }
-
-    private fun generateDefaultGetterBody(ktProperty: KtElement, getter: PropertyGetterDescriptor): IrBlockBody {
-        val property = getter.correspondingProperty
-
-        val irBody = IrBlockBodyImpl(ktProperty.startOffset, ktProperty.endOffset)
-
-        val receiver = generateReceiverExpressionForDefaultPropertyAccessor(ktProperty, property)
-
-        irBody.statements.add(IrReturnImpl(ktProperty.startOffset, ktProperty.endOffset, context.builtIns.nothingType, getter,
-                                           IrGetFieldImpl(ktProperty.startOffset, ktProperty.endOffset, property, receiver)))
-        return irBody
-    }
-
-    private fun generateDefaultSetterBody(ktProperty: KtElement, setter: PropertySetterDescriptor): IrBlockBody {
-        val property = setter.correspondingProperty
-
-        val irBody = IrBlockBodyImpl(ktProperty.startOffset, ktProperty.endOffset)
-
-        val receiver = generateReceiverExpressionForDefaultPropertyAccessor(ktProperty, property)
-
-        val setterParameter = setter.valueParameters.single()
-        irBody.statements.add(IrSetFieldImpl(ktProperty.startOffset, ktProperty.endOffset, property, receiver,
-                                             IrGetValueImpl(ktProperty.startOffset, ktProperty.endOffset, setterParameter)))
-        return irBody
-    }
-
-    private fun generateReceiverExpressionForDefaultPropertyAccessor(ktProperty: KtElement, property: PropertyDescriptor): IrExpression? {
-        val containingDeclaration = property.containingDeclaration
-        val receiver =
-                if (containingDeclaration is ClassDescriptor)
-                    IrGetValueImpl(ktProperty.startOffset, ktProperty.endOffset, containingDeclaration.thisAsReceiverParameter)
-                else
-                    null
-        return receiver
+        return FunctionGenerator(declarationGenerator).generatePropertyAccessor(setter, ktProperty, ktProperty.setter)
     }
 
     private fun getPropertyDescriptor(ktProperty: KtProperty): PropertyDescriptor {

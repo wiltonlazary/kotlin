@@ -20,6 +20,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.LanguageVersionSettings
+import org.jetbrains.kotlin.config.TargetPlatformVersion
 import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.container.get
 import org.jetbrains.kotlin.context.GlobalContext
@@ -51,6 +52,7 @@ import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyClassDescriptor
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.resolve.scopes.LexicalWritableScope
 import org.jetbrains.kotlin.storage.StorageManager
+import org.jetbrains.kotlin.types.WrappedTypeFactory
 
 class LocalClassifierAnalyzer(
         private val globalContext: GlobalContext,
@@ -62,8 +64,10 @@ class LocalClassifierAnalyzer(
         private val platform: TargetPlatform,
         private val lookupTracker: LookupTracker,
         private val supertypeLoopChecker: SupertypeLoopChecker,
-        private val compilerConfiguration: CompilerConfiguration,
-        private val delegationFilter: DelegationFilter
+        private val targetPlatformVersion: TargetPlatformVersion,
+        private val languageVersionSettings: LanguageVersionSettings,
+        private val delegationFilter: DelegationFilter,
+        private val wrappedTypeFactory: WrappedTypeFactory
 ) {
     fun processClassOrObject(
             scope: LexicalWritableScope?,
@@ -72,14 +76,15 @@ class LocalClassifierAnalyzer(
             classOrObject: KtClassOrObject
     ) {
         val module = DescriptorUtils.getContainingModule(containingDeclaration)
-        val project = classOrObject.getProject()
+        val project = classOrObject.project
         val moduleContext = globalContext.withProject(project).withModule(module)
         val container = createContainerForLazyLocalClassifierAnalyzer(
                 moduleContext,
                 context.trace,
                 platform,
                 lookupTracker,
-                compilerConfiguration,
+                targetPlatformVersion,
+                languageVersionSettings,
                 context.statementFilter,
                 LocalClassDescriptorHolder(
                         scope,
@@ -93,9 +98,10 @@ class LocalClassifierAnalyzer(
                         typeResolver,
                         annotationResolver,
                         supertypeLoopChecker,
-                        compilerConfiguration.languageVersionSettings,
+                        languageVersionSettings,
                         SyntheticResolveExtension.getInstance(project),
-                        delegationFilter
+                        delegationFilter,
+                        wrappedTypeFactory
                 )
         )
 
@@ -121,7 +127,8 @@ class LocalClassDescriptorHolder(
         val supertypeLoopChecker: SupertypeLoopChecker,
         val languageVersionSettings: LanguageVersionSettings,
         val syntheticResolveExtension: SyntheticResolveExtension,
-        val delegationFilter: DelegationFilter
+        val delegationFilter: DelegationFilter,
+        val wrappedTypeFactory: WrappedTypeFactory
 ) {
     // We do not need to synchronize here, because this code is used strictly from one thread
     private var classDescriptor: ClassDescriptor? = null
@@ -160,10 +167,10 @@ class LocalClassDescriptorHolder(
                         override val languageVersionSettings = this@LocalClassDescriptorHolder.languageVersionSettings
                         override val syntheticResolveExtension = this@LocalClassDescriptorHolder.syntheticResolveExtension
                         override val delegationFilter: DelegationFilter = this@LocalClassDescriptorHolder.delegationFilter
-                    }
-                    ,
+                        override val wrappedTypeFactory: WrappedTypeFactory = this@LocalClassDescriptorHolder.wrappedTypeFactory
+                    },
                     containingDeclaration,
-                    classOrObject.getNameAsSafeName(),
+                    classOrObject.nameAsSafeName,
                     KtClassInfoUtil.createClassLikeInfo(classOrObject),
                     classOrObject.hasModifier(KtTokens.EXTERNAL_KEYWORD)
             )

@@ -26,7 +26,6 @@ import kotlin.TuplesKt;
 import kotlin.collections.CollectionsKt;
 import kotlin.collections.SetsKt;
 import kotlin.jvm.functions.Function0;
-import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.FunctionTypesKt;
@@ -35,7 +34,6 @@ import org.jetbrains.kotlin.config.LanguageFeature;
 import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationSplitter;
-import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
 import org.jetbrains.kotlin.descriptors.annotations.CompositeAnnotations;
 import org.jetbrains.kotlin.descriptors.impl.*;
@@ -85,6 +83,7 @@ public class DescriptorResolver {
     private final FunctionsTypingVisitor functionsTypingVisitor;
     private final DestructuringDeclarationResolver destructuringDeclarationResolver;
     private final ModifiersChecker modifiersChecker;
+    private final WrappedTypeFactory wrappedTypeFactory;
     private final SyntheticResolveExtension syntheticResolveExtension;
 
     public DescriptorResolver(
@@ -100,6 +99,7 @@ public class DescriptorResolver {
             @NotNull FunctionsTypingVisitor functionsTypingVisitor,
             @NotNull DestructuringDeclarationResolver destructuringDeclarationResolver,
             @NotNull ModifiersChecker modifiersChecker,
+            @NotNull WrappedTypeFactory wrappedTypeFactory,
             @NotNull Project project
     ) {
         this.annotationResolver = annotationResolver;
@@ -114,6 +114,7 @@ public class DescriptorResolver {
         this.functionsTypingVisitor = functionsTypingVisitor;
         this.destructuringDeclarationResolver = destructuringDeclarationResolver;
         this.modifiersChecker = modifiersChecker;
+        this.wrappedTypeFactory = wrappedTypeFactory;
         this.syntheticResolveExtension = SyntheticResolveExtension.Companion.getInstance(project);
     }
 
@@ -124,8 +125,8 @@ public class DescriptorResolver {
             BindingTrace trace
     ) {
         List<KotlinType> supertypes = Lists.newArrayList();
-        List<KtSuperTypeListEntry> delegationSpecifiers = correspondingClassOrObject == null ? Collections.<KtSuperTypeListEntry>emptyList() :
-                                                          correspondingClassOrObject.getSuperTypeListEntries();
+        List<KtSuperTypeListEntry> delegationSpecifiers =
+                correspondingClassOrObject == null ? Collections.emptyList() : correspondingClassOrObject.getSuperTypeListEntries();
         Collection<KotlinType> declaredSupertypes = resolveSuperTypeListEntries(
                 scope,
                 delegationSpecifiers,
@@ -151,7 +152,7 @@ public class DescriptorResolver {
     }
 
     private static void addValidSupertype(List<KotlinType> supertypes, KotlinType declaredSupertype) {
-        if (!declaredSupertype.isError()) {
+        if (!KotlinTypeKt.isError(declaredSupertype)) {
             supertypes.add(declaredSupertype);
         }
     }
@@ -250,7 +251,7 @@ public class DescriptorResolver {
         }
 
         // If we have an abbreviated type (written with a type alias), it still can contain type projections in top-level arguments.
-        if (!type.isError() && SpecialTypesKt.getAbbreviatedType(type) != null && !hasProjectionsInWrittenArguments) {
+        if (!KotlinTypeKt.isError(type) && SpecialTypesKt.getAbbreviatedType(type) != null && !hasProjectionsInWrittenArguments) {
             // Only interface inheritance should be checked here.
             // Corresponding check for classes is performed for type alias constructor calls in CandidateResolver.
             if (TypeUtilsKt.isInterface(type) && TypeUtilsKt.containsTypeProjectionsInTopLevelArguments(type)) {
@@ -292,9 +293,12 @@ public class DescriptorResolver {
 
     @NotNull
     public ValueParameterDescriptorImpl resolveValueParameterDescriptor(
-            @NotNull final LexicalScope scope, @NotNull final FunctionDescriptor owner,
-            @NotNull KtParameter valueParameter, int index,
-            @NotNull final KotlinType type, @NotNull final BindingTrace trace
+            @NotNull LexicalScope scope,
+            @NotNull FunctionDescriptor owner,
+            @NotNull KtParameter valueParameter,
+            int index,
+            @NotNull KotlinType type,
+            @NotNull BindingTrace trace
     ) {
         KotlinType varargElementType = null;
         KotlinType variableType = type;
@@ -320,7 +324,7 @@ public class DescriptorResolver {
             }
         }
 
-        final KtDestructuringDeclaration destructuringDeclaration = valueParameter.getDestructuringDeclaration();
+        KtDestructuringDeclaration destructuringDeclaration = valueParameter.getDestructuringDeclaration();
 
         Function0<List<VariableDescriptor>> destructuringVariables;
         if (destructuringDeclaration != null) {
@@ -329,26 +333,23 @@ public class DescriptorResolver {
                                                            TuplesKt.to(LanguageFeature.DestructuringLambdaParameters, languageVersionSettings)));
             }
 
-            destructuringVariables = new Function0<List<VariableDescriptor>>() {
-                @Override
-                public List<VariableDescriptor> invoke() {
-                    assert owner.getDispatchReceiverParameter() == null
-                            : "Destructuring declarations are only be parsed for lambdas, and they must not have a dispatch receiver";
-                    LexicalScope scopeForDestructuring =
-                            ScopeUtilsKt.createScopeForDestructuring(scope, owner.getExtensionReceiverParameter());
+            destructuringVariables = () -> {
+                assert owner.getDispatchReceiverParameter() == null
+                        : "Destructuring declarations are only be parsed for lambdas, and they must not have a dispatch receiver";
+                LexicalScope scopeForDestructuring =
+                        ScopeUtilsKt.createScopeForDestructuring(scope, owner.getExtensionReceiverParameter());
 
-                    List<VariableDescriptor> result =
-                            destructuringDeclarationResolver.resolveLocalVariablesFromDestructuringDeclaration(
-                                    scope,
-                                    destructuringDeclaration, new TransientReceiver(type), /* initializer = */ null,
-                                    ExpressionTypingContext.newContext(
-                                            trace, scopeForDestructuring, DataFlowInfoFactory.EMPTY, TypeUtils.NO_EXPECTED_TYPE
-                                    )
-                            );
+                List<VariableDescriptor> result =
+                        destructuringDeclarationResolver.resolveLocalVariablesFromDestructuringDeclaration(
+                                scope,
+                                destructuringDeclaration, new TransientReceiver(type), /* initializer = */ null,
+                                ExpressionTypingContext.newContext(
+                                        trace, scopeForDestructuring, DataFlowInfoFactory.EMPTY, TypeUtils.NO_EXPECTED_TYPE
+                                )
+                        );
 
-                    modifiersChecker.withTrace(trace).checkModifiersForDestructuringDeclaration(destructuringDeclaration);
-                    return result;
-                }
+                modifiersChecker.withTrace(trace).checkModifiersForDestructuringDeclaration(destructuringDeclaration);
+                return result;
             };
         }
         else {
@@ -424,7 +425,7 @@ public class DescriptorResolver {
                containingDescriptor instanceof TypeAliasDescriptor
                 : "This method should be called for functions, properties, or type aliases, got " + containingDescriptor;
 
-        List<TypeParameterDescriptorImpl> result = new ArrayList<TypeParameterDescriptorImpl>();
+        List<TypeParameterDescriptorImpl> result = new ArrayList<>();
         for (int i = 0, typeParametersSize = typeParameters.size(); i < typeParametersSize; i++) {
             KtTypeParameter typeParameter = typeParameters.get(i);
             result.add(resolveTypeParameterForDescriptor(containingDescriptor, scopeForAnnotationsResolve, typeParameter, i, trace));
@@ -433,11 +434,11 @@ public class DescriptorResolver {
     }
 
     private TypeParameterDescriptorImpl resolveTypeParameterForDescriptor(
-            final DeclarationDescriptor containingDescriptor,
+            DeclarationDescriptor containingDescriptor,
             LexicalScope scopeForAnnotationsResolve,
-            final KtTypeParameter typeParameter,
+            KtTypeParameter typeParameter,
             int index,
-            final BindingTrace trace
+            BindingTrace trace
     ) {
         if (typeParameter.getVariance() != Variance.INVARIANT) {
             trace.report(VARIANCE_ON_TYPE_PARAMETER_NOT_ALLOWED.on(typeParameter));
@@ -454,17 +455,14 @@ public class DescriptorResolver {
                 KtPsiUtil.safeName(typeParameter.getName()),
                 index,
                 KotlinSourceElementKt.toSourceElement(typeParameter),
-                new Function1<KotlinType, Void>() {
-                    @Override
-                    public Void invoke(KotlinType type) {
-                        if (!(containingDescriptor instanceof TypeAliasDescriptor)) {
-                            trace.report(Errors.CYCLIC_GENERIC_UPPER_BOUND.on(typeParameter));
-                        }
-                        return null;
+                type -> {
+                    if (!(containingDescriptor instanceof TypeAliasDescriptor)) {
+                        trace.report(Errors.CYCLIC_GENERIC_UPPER_BOUND.on(typeParameter));
                     }
+                    return null;
                 },
                 supertypeLoopsResolver
-                );
+        );
         trace.record(BindingContext.TYPE_PARAMETER, typeParameter, typeParameterDescriptor);
         return typeParameterDescriptor;
     }
@@ -560,16 +558,16 @@ public class DescriptorResolver {
     public static void checkUpperBoundTypes(@NotNull BindingTrace trace, @NotNull List<UpperBoundCheckRequest> requests) {
         if (requests.isEmpty()) return;
 
-        Set<Name> classBoundEncountered = new HashSet<Name>();
-        Set<Pair<Name, TypeConstructor>> allBounds = new HashSet<Pair<Name, TypeConstructor>>();
+        Set<Name> classBoundEncountered = new HashSet<>();
+        Set<Pair<Name, TypeConstructor>> allBounds = new HashSet<>();
 
         for (UpperBoundCheckRequest request : requests) {
             Name typeParameterName = request.typeParameterName;
             KotlinType upperBound = request.upperBoundType;
             KtTypeReference upperBoundElement = request.upperBound;
 
-            if (!upperBound.isError()) {
-                if (!allBounds.add(new Pair<Name, TypeConstructor>(typeParameterName, upperBound.getConstructor()))) {
+            if (!KotlinTypeKt.isError(upperBound)) {
+                if (!allBounds.add(new Pair<>(typeParameterName, upperBound.getConstructor()))) {
                     trace.report(REPEATED_BOUND.on(upperBoundElement));
                 }
                 else {
@@ -698,7 +696,7 @@ public class DescriptorResolver {
             @NotNull DeclarationDescriptor containingDeclaration,
             @NotNull LexicalScope scope,
             @NotNull KtTypeAlias typeAlias,
-            @NotNull final BindingTrace trace
+            @NotNull BindingTrace trace
     ) {
         if (!(containingDeclaration instanceof PackageFragmentDescriptor)) {
             trace.report(TOPLEVEL_TYPEALIASES_ONLY.on(typeAlias));
@@ -708,13 +706,13 @@ public class DescriptorResolver {
         Visibility visibility = resolveVisibilityFromModifiers(typeAlias, getDefaultVisibility(typeAlias, containingDeclaration));
 
         Annotations allAnnotations = annotationResolver.resolveAnnotationsWithArguments(scope, modifierList, trace);
-        final Name name = KtPsiUtil.safeName(typeAlias.getName());
+        Name name = KtPsiUtil.safeName(typeAlias.getName());
         SourceElement sourceElement = KotlinSourceElementKt.toSourceElement(typeAlias);
-        final LazyTypeAliasDescriptor typeAliasDescriptor = LazyTypeAliasDescriptor.create(
+        LazyTypeAliasDescriptor typeAliasDescriptor = LazyTypeAliasDescriptor.create(
                 storageManager, trace, containingDeclaration, allAnnotations, name, sourceElement, visibility);
 
         List<TypeParameterDescriptorImpl> typeParameterDescriptors;
-        final LexicalScope scopeWithTypeParameters;
+        LexicalScope scopeWithTypeParameters;
         {
             List<KtTypeParameter> typeParameters = typeAlias.getTypeParameters();
             if (typeParameters.isEmpty()) {
@@ -734,7 +732,7 @@ public class DescriptorResolver {
             }
         }
 
-        final KtTypeReference typeReference = typeAlias.getTypeReference();
+        KtTypeReference typeReference = typeAlias.getTypeReference();
         if (typeReference == null) {
             typeAliasDescriptor.initialize(
                     typeParameterDescriptors,
@@ -755,21 +753,11 @@ public class DescriptorResolver {
             typeAliasDescriptor.initialize(
                     typeParameterDescriptors,
                     storageManager.createRecursionTolerantLazyValue(
-                            new Function0<SimpleType>() {
-                                @Override
-                                public SimpleType invoke() {
-                                    return typeResolver.resolveAbbreviatedType(scopeWithTypeParameters, typeReference, trace);
-                                }
-                            },
+                            () -> typeResolver.resolveAbbreviatedType(scopeWithTypeParameters, typeReference, trace),
                             ErrorUtils.createErrorType("Recursive type alias expansion for " + typeAliasDescriptor.getName().asString())
                     ),
                     storageManager.createRecursionTolerantLazyValue(
-                            new Function0<SimpleType>() {
-                                @Override
-                                public SimpleType invoke() {
-                                    return typeResolver.resolveExpandedTypeForTypeAlias(typeAliasDescriptor);
-                                }
-                            },
+                            () -> typeResolver.resolveExpandedTypeForTypeAlias(typeAliasDescriptor),
                             ErrorUtils.createErrorType("Recursive type alias expansion for " + typeAliasDescriptor.getName().asString())
                     )
             );
@@ -794,29 +782,24 @@ public class DescriptorResolver {
             @NotNull LexicalScope scopeForDeclarationResolution,
             @NotNull LexicalScope scopeForInitializerResolution,
             @NotNull KtProperty property,
-            @NotNull final BindingTrace trace,
+            @NotNull BindingTrace trace,
             @NotNull DataFlowInfo dataFlowInfo
     ) {
         KtModifierList modifierList = property.getModifierList();
         boolean isVar = property.isVar();
 
-        boolean hasBody = hasBody(property);
         Visibility visibility = resolveVisibilityFromModifiers(property, getDefaultVisibility(property, containingDeclaration));
         Modality modality = containingDeclaration instanceof ClassDescriptor
-                            ? resolveMemberModalityFromModifiers(property, getDefaultModality(containingDeclaration, visibility, hasBody),
+                            ? resolveMemberModalityFromModifiers(property, getDefaultModality(containingDeclaration, visibility, property.hasBody()),
                                                                  trace.getBindingContext(), containingDeclaration)
                             : Modality.FINAL;
 
-        final AnnotationSplitter.PropertyWrapper wrapper = new AnnotationSplitter.PropertyWrapper(property);
+        AnnotationSplitter.PropertyWrapper wrapper = new AnnotationSplitter.PropertyWrapper(property);
 
         Annotations allAnnotations = annotationResolver.resolveAnnotationsWithoutArguments(scopeForDeclarationResolution, modifierList, trace);
         AnnotationSplitter annotationSplitter =
-                new AnnotationSplitter(storageManager, allAnnotations, new Function0<Set<AnnotationUseSiteTarget>>() {
-            @Override
-            public Set<AnnotationUseSiteTarget> invoke() {
-                return AnnotationSplitter.getTargetSet(false, trace.getBindingContext(), wrapper);
-            }
-        });
+                new AnnotationSplitter(storageManager, allAnnotations,
+                                       () -> AnnotationSplitter.getTargetSet(false, trace.getBindingContext(), wrapper));
 
         Annotations propertyAnnotations = new CompositeAnnotations(CollectionsKt.listOf(
                 annotationSplitter.getAnnotationsForTargets(PROPERTY, FIELD, PROPERTY_DELEGATE_FIELD),
@@ -912,23 +895,7 @@ public class DescriptorResolver {
         return propertyDescriptor;
     }
 
-    public static boolean hasBody(KtProperty property) {
-        boolean hasBody = property.hasDelegateExpressionOrInitializer();
-        if (!hasBody) {
-            KtPropertyAccessor getter = property.getGetter();
-            if (getter != null && getter.hasBody()) {
-                hasBody = true;
-            }
-            KtPropertyAccessor setter = property.getSetter();
-            if (!hasBody && setter != null && setter.hasBody()) {
-                hasBody = true;
-            }
-        }
-        return hasBody;
-    }
-
-
-    @Nullable
+    @NotNull
     /*package*/ static KotlinType transformAnonymousTypeIfNeeded(
             @NotNull DeclarationDescriptorWithVisibility descriptor,
             @NotNull KtDeclaration declaration,
@@ -940,8 +907,7 @@ public class DescriptorResolver {
             return type;
         }
 
-        boolean definedInClass = DescriptorUtils.getParentOfType(descriptor, ClassDescriptor.class) != null;
-        if (!definedInClass || !Visibilities.isPrivate(descriptor.getVisibility())) {
+        if (!Visibilities.isPrivate(descriptor.getVisibility())) {
             if (type.getConstructor().getSupertypes().size() == 1) {
                 return type.getConstructor().getSupertypes().iterator().next();
             }
@@ -1104,23 +1070,20 @@ public class DescriptorResolver {
     }
 
     @NotNull
-    /*package*/ DeferredType inferReturnTypeFromExpressionBody(
-            @NotNull final BindingTrace trace,
-            @NotNull final LexicalScope scope,
-            @NotNull final DataFlowInfo dataFlowInfo,
-            @NotNull final KtDeclarationWithBody function,
-            @NotNull final FunctionDescriptor functionDescriptor
+    /*package*/ KotlinType inferReturnTypeFromExpressionBody(
+            @NotNull BindingTrace trace,
+            @NotNull LexicalScope scope,
+            @NotNull DataFlowInfo dataFlowInfo,
+            @NotNull KtDeclarationWithBody function,
+            @NotNull FunctionDescriptor functionDescriptor
     ) {
-        return DeferredType.createRecursionIntolerant(storageManager, trace, new Function0<KotlinType>() {
-            @Override
-            public KotlinType invoke() {
-                PreliminaryDeclarationVisitor.Companion.createForDeclaration(function, trace);
-                KotlinType type = expressionTypingServices.getBodyExpressionType(
-                        trace, scope, dataFlowInfo, function, functionDescriptor);
-                KotlinType result = transformAnonymousTypeIfNeeded(functionDescriptor, function, type, trace);
-                functionsTypingVisitor.checkTypesForReturnStatements(function, trace, result);
-                return result;
-            }
+        return wrappedTypeFactory.createRecursionIntolerantDeferredType(trace, () -> {
+            PreliminaryDeclarationVisitor.Companion.createForDeclaration(function, trace);
+            KotlinType type = expressionTypingServices.getBodyExpressionType(
+                    trace, scope, dataFlowInfo, function, functionDescriptor);
+            KotlinType result = transformAnonymousTypeIfNeeded(functionDescriptor, function, type, trace);
+            functionsTypingVisitor.checkTypesForReturnStatements(function, trace, result);
+            return result;
         });
     }
 
@@ -1129,7 +1092,8 @@ public class DescriptorResolver {
             @NotNull ClassDescriptor classDescriptor,
             @NotNull ValueParameterDescriptor valueParameter,
             @NotNull LexicalScope scope,
-            @NotNull KtParameter parameter, final BindingTrace trace
+            @NotNull KtParameter parameter,
+            BindingTrace trace
     ) {
         KotlinType type = resolveParameterType(scope, parameter, trace);
         Name name = parameter.getNameAsSafeName();
@@ -1142,15 +1106,11 @@ public class DescriptorResolver {
             }
         }
 
-        final AnnotationSplitter.PropertyWrapper propertyWrapper = new AnnotationSplitter.PropertyWrapper(parameter);
+        AnnotationSplitter.PropertyWrapper propertyWrapper = new AnnotationSplitter.PropertyWrapper(parameter);
         Annotations allAnnotations = annotationResolver.resolveAnnotationsWithoutArguments(scope, parameter.getModifierList(), trace);
         AnnotationSplitter annotationSplitter =
-                new AnnotationSplitter(storageManager, allAnnotations, new Function0<Set<AnnotationUseSiteTarget>>() {
-                    @Override
-                    public Set<AnnotationUseSiteTarget> invoke() {
-                        return AnnotationSplitter.getTargetSet(true, trace.getBindingContext(), propertyWrapper);
-                    }
-                });
+                new AnnotationSplitter(storageManager, allAnnotations,
+                                       () -> AnnotationSplitter.getTargetSet(true, trace.getBindingContext(), propertyWrapper));
 
         Annotations propertyAnnotations = new CompositeAnnotations(
                 annotationSplitter.getAnnotationsForTargets(PROPERTY, FIELD),
@@ -1173,8 +1133,9 @@ public class DescriptorResolver {
                 false
         );
         propertyWrapper.setDescriptor(propertyDescriptor);
-        propertyDescriptor.setType(type, Collections.<TypeParameterDescriptor>emptyList(),
-                                   getDispatchReceiverParameterIfNeeded(classDescriptor), (ReceiverParameterDescriptor) null);
+        propertyDescriptor.setType(
+                type, Collections.emptyList(), getDispatchReceiverParameterIfNeeded(classDescriptor), (ReceiverParameterDescriptor) null
+        );
 
         Annotations setterAnnotations = annotationSplitter.getAnnotationsForTarget(PROPERTY_SETTER);
         Annotations getterAnnotations = new CompositeAnnotations(CollectionsKt.listOf(
@@ -1193,7 +1154,7 @@ public class DescriptorResolver {
     }
 
     public static void checkBounds(@NotNull KtTypeReference typeReference, @NotNull KotlinType type, @NotNull BindingTrace trace) {
-        if (type.isError()) return;
+        if (KotlinTypeKt.isError(type)) return;
 
         KtTypeElement typeElement = typeReference.getTypeElement();
         if (typeElement == null) return;

@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.ir.util
 
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.ReceiverParameterDescriptor
 import org.jetbrains.kotlin.ir.IrElement
@@ -32,13 +33,16 @@ fun IrElement.render() = accept(RenderIrElementVisitor(), null)
 
 class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
     override fun visitElement(element: IrElement, data: Nothing?): String =
-            "? ${element.javaClass.simpleName}"
+            "? ${element::class.java.simpleName}"
 
     override fun visitDeclaration(declaration: IrDeclaration, data: Nothing?): String =
-            "? ${declaration.javaClass.simpleName} ${declaration.descriptor.ref()}"
+            "? ${declaration::class.java.simpleName} ${declaration.descriptor.ref()}"
 
     override fun visitModuleFragment(declaration: IrModuleFragment, data: Nothing?): String =
             "MODULE_FRAGMENT ${declaration.descriptor.ref()}"
+
+    override fun visitExternalPackageFragment(declaration: IrExternalPackageFragment, data: Nothing?): String =
+            "EXTERNAL_PACKAGE_FRAGMENT ${declaration.packageFragmentDescriptor.fqName}"
 
     override fun visitFile(declaration: IrFile, data: Nothing?): String =
             "FILE ${declaration.name}"
@@ -70,6 +74,12 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
     override fun visitAnonymousInitializer(declaration: IrAnonymousInitializer, data: Nothing?): String =
             "ANONYMOUS_INITIALIZER ${declaration.descriptor.ref()}"
 
+    override fun visitTypeParameter(declaration: IrTypeParameter, data: Nothing?): String =
+            "TYPE_PARAMETER ${declaration.renderDeclared()}"
+
+    override fun visitValueParameter(declaration: IrValueParameter, data: Nothing?): String =
+            "VALUE_PARAMETER ${declaration.renderDeclared()}"
+
     override fun visitLocalDelegatedProperty(declaration: IrLocalDelegatedProperty, data: Nothing?): String =
             "LOCAL_DELEGATED_PROPERTY ${declaration.renderOrigin()}${declaration.renderDeclared()}"
 
@@ -83,7 +93,7 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
             "SYNTHETIC_BODY kind=${body.kind}"
 
     override fun visitExpression(expression: IrExpression, data: Nothing?): String =
-            "? ${expression.javaClass.simpleName} type=${expression.type.render()}"
+            "? ${expression::class.java.simpleName} type=${expression.type.render()}"
 
     override fun <T> visitConst(expression: IrConst<T>, data: Nothing?): String =
             "CONST ${expression.kind} type=${expression.type.render()} value='${expression.value}'"
@@ -141,7 +151,7 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
             "STRING_CONCATENATION type=${expression.type.render()}"
 
     override fun visitTypeOperator(expression: IrTypeOperatorCall, data: Nothing?): String =
-            "TYPE_OP origin=${expression.operator} typeOperand=${expression.typeOperand.render()}"
+            "TYPE_OP type=${expression.type.render()} origin=${expression.operator} typeOperand=${expression.typeOperand.render()}"
 
     override fun visitWhen(expression: IrWhen, data: Nothing?): String =
             "WHEN type=${expression.type.render()} origin=${expression.origin}"
@@ -164,8 +174,41 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
     override fun visitThrow(expression: IrThrow, data: Nothing?): String =
             "THROW type=${expression.type.render()}"
 
-    override fun visitCallableReference(expression: IrCallableReference, data: Nothing?): String =
-            "CALLABLE_REFERENCE '${expression.descriptor.ref()}' type=${expression.type.render()} origin=${expression.origin}"
+    override fun visitFunctionReference(expression: IrFunctionReference, data: Nothing?): String  =
+            "FUNCTION_REFERENCE '${expression.descriptor.ref()}' type=${expression.type.render()} origin=${expression.origin}"
+
+    override fun visitPropertyReference(expression: IrPropertyReference, data: Nothing?): String =
+            buildString {
+                append("PROPERTY_REFERENCE ")
+                append("'${expression.descriptor.ref()}' ")
+                appendNullableAttribute("field=", expression.field) { "'${it.descriptor.ref()}'" }
+                appendNullableAttribute("getter=", expression.getter) { "'${it.descriptor.ref()}'" }
+                appendNullableAttribute("setter=", expression.setter) { "'${it.descriptor.ref()}'" }
+                append("type=${expression.type.render()} ")
+                append("origin=${expression.origin}")
+            }
+
+    private inline fun <T : Any> StringBuilder.appendNullableAttribute(prefix: String, value: T?, toString: (T) -> String) {
+        append(prefix)
+        if (value != null) {
+            append(toString(value))
+        }
+        else {
+            append("null")
+        }
+        append(" ")
+    }
+
+    override fun visitLocalDelegatedPropertyReference(expression: IrLocalDelegatedPropertyReference, data: Nothing?): String =
+            buildString {
+                append("LOCAL_DELEGATED_PROPERTY_REFERENCE ")
+                append("'${expression.descriptor.ref()}' ")
+                append("delegate='${expression.delegate.descriptor.ref()}' ")
+                append("getter='${expression.getter.descriptor.ref()}' ")
+                appendNullableAttribute("setter=", expression.setter) { "'${it.descriptor.ref()}'"}
+                append("type=${expression.type.render()} ")
+                append("origin=${expression.origin}")
+            }
 
     override fun visitClassReference(expression: IrClassReference, data: Nothing?): String =
             "CLASS_REFERENCE '${expression.descriptor.ref()}' type=${expression.type.render()}"
@@ -180,7 +223,7 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
             "CATCH parameter=${aCatch.parameter.ref()}"
 
     override fun visitErrorDeclaration(declaration: IrErrorDeclaration, data: Nothing?): String =
-            "ERROR_DECL ${declaration.descriptor.javaClass.simpleName} ${declaration.descriptor.ref()}"
+            "ERROR_DECL ${declaration.descriptor::class.java.simpleName} ${declaration.descriptor.ref()}"
 
     override fun visitErrorExpression(expression: IrErrorExpression, data: Nothing?): String =
             "ERROR_EXPR '${expression.description}' type=${expression.type.render()}"
@@ -201,16 +244,19 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
         val REFERENCE_RENDERER = DescriptorRenderer.ONLY_NAMES_WITH_SHORT_TYPES 
 
         internal fun IrDeclaration.name(): String =
-                descriptor.let { it.name.toString() }
+                descriptor.name.toString()
+
+        internal fun DescriptorRenderer.renderDescriptor(descriptor: DeclarationDescriptor): String =
+                if (descriptor is ReceiverParameterDescriptor)
+                    "this@${descriptor.containingDeclaration.name}: ${descriptor.type}"
+                else
+                    render(descriptor)
 
         internal fun IrDeclaration.renderDeclared(): String =
-                DECLARATION_RENDERER.render(this.descriptor)
-        
+                DECLARATION_RENDERER.renderDescriptor(this.descriptor)
+
         internal fun DeclarationDescriptor.ref(): String =
-                if (this is ReceiverParameterDescriptor)
-                    "<receiver: ${containingDeclaration.ref()}>"
-                else
-                    REFERENCE_RENDERER.render(this)
+                REFERENCE_RENDERER.renderDescriptor(this)
 
         internal fun KotlinType.render(): String =
                 DECLARATION_RENDERER.renderType(this)

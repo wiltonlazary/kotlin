@@ -23,10 +23,7 @@ import com.intellij.psi.search.DelegatingGlobalSearchScope
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.analyzer.AnalysisResult
 import org.jetbrains.kotlin.builtins.JvmBuiltInsPackageFragmentProvider
-import org.jetbrains.kotlin.config.CommonConfigurationKeys
-import org.jetbrains.kotlin.config.CompilerConfiguration
-import org.jetbrains.kotlin.config.JVMConfigurationKeys
-import org.jetbrains.kotlin.config.languageVersionSettings
+import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.container.ComponentProvider
 import org.jetbrains.kotlin.container.get
 import org.jetbrains.kotlin.context.ContextForNewModule
@@ -46,7 +43,6 @@ import org.jetbrains.kotlin.frontend.java.di.initialize
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.load.java.lazy.ModuleClassResolver
 import org.jetbrains.kotlin.load.java.structure.JavaClass
-import org.jetbrains.kotlin.load.java.structure.impl.JavaClassImpl
 import org.jetbrains.kotlin.load.kotlin.DeserializationComponentsForJava
 import org.jetbrains.kotlin.load.kotlin.incremental.IncrementalPackageFragmentProvider
 import org.jetbrains.kotlin.load.kotlin.incremental.IncrementalPackagePartProvider
@@ -64,6 +60,7 @@ import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory
 import org.jetbrains.kotlin.resolve.lazy.declarations.FileBasedDeclarationProviderFactory
 import org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration
 import org.jetbrains.kotlin.storage.StorageManager
+import org.jetbrains.kotlin.load.java.structure.impl.VirtualFileBoundJavaClass
 import java.util.*
 
 object TopDownAnalyzerFacadeForJVM {
@@ -135,13 +132,18 @@ object TopDownAnalyzerFacadeForJVM {
         val sourceScope = if (separateModules) sourceModuleSearchScope else GlobalSearchScope.allScope(project)
         val moduleClassResolver = SourceOrBinaryModuleClassResolver(sourceScope)
 
+        val jvmTarget = configuration.get(JVMConfigurationKeys.JVM_TARGET) ?: JvmTarget.JVM_1_6
+        val languageVersionSettings = configuration.languageVersionSettings
+
         val optionalBuiltInsModule =
                 if (configuration.getBoolean(JVMConfigurationKeys.ADD_BUILT_INS_FROM_COMPILER_TO_DEPENDENCIES)) {
                     if (createBuiltInsFromModule)
-                        JvmBuiltIns(storageManager).apply { initialize(module, configuration.languageVersionSettings) }.builtInsModule
+                        JvmBuiltIns(storageManager).apply { initialize(module, languageVersionSettings) }.builtInsModule
                     else module.builtIns.builtInsModule
                 }
                 else null
+
+        val useJavac = configuration.getBoolean(JVMConfigurationKeys.USE_JAVAC)
 
         val dependencyModule = if (separateModules) {
             val dependenciesContext = ContextForNewModule(
@@ -154,7 +156,7 @@ object TopDownAnalyzerFacadeForJVM {
 
             val dependenciesContainer = createContainerForTopDownAnalyzerForJvm(
                     dependenciesContext, trace, DeclarationProviderFactory.EMPTY, dependencyScope, lookupTracker,
-                    packagePartProvider(dependencyScope), moduleClassResolver, configuration
+                    packagePartProvider(dependencyScope), moduleClassResolver, jvmTarget, languageVersionSettings, useJavac
             )
 
             StorageComponentContainerContributor.getInstances(project).forEach { it.onContainerComposed(dependenciesContainer, null) }
@@ -181,7 +183,7 @@ object TopDownAnalyzerFacadeForJVM {
         // TODO: get rid of duplicate invocation of CodeAnalyzerInitializer#initialize, or refactor CliLightClassGenerationSupport
         val container = createContainerForTopDownAnalyzerForJvm(
                 moduleContext, trace, declarationProviderFactory(storageManager, files), sourceScope, lookupTracker,
-                partProvider, moduleClassResolver, configuration
+                partProvider, moduleClassResolver, jvmTarget, languageVersionSettings, useJavac
         ).apply {
             initJvmBuiltInsForTopDownAnalysis()
             (partProvider as? IncrementalPackagePartProvider)?.deserializationConfiguration = get<DeserializationConfiguration>()
@@ -243,7 +245,7 @@ object TopDownAnalyzerFacadeForJVM {
         lateinit var sourceCodeResolver: JavaDescriptorResolver
 
         override fun resolveClass(javaClass: JavaClass): ClassDescriptor? {
-            val resolver = if (javaClass is JavaClassImpl && javaClass.psi.containingFile.virtualFile in sourceScope)
+            val resolver = if (javaClass is VirtualFileBoundJavaClass && javaClass.isFromSourceCodeInScope(sourceScope))
                 sourceCodeResolver
             else
                 compiledCodeResolver

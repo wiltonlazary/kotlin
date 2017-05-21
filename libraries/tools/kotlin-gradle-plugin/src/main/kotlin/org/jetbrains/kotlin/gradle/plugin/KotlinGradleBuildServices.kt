@@ -22,13 +22,15 @@ import org.gradle.BuildResult
 import org.gradle.api.invocation.Gradle
 import org.gradle.api.logging.Logging
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
-import org.jetbrains.kotlin.com.intellij.openapi.util.io.ZipFileCache
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.ZipHandler
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.jar.CoreJarFileSystem
-import org.jetbrains.kotlin.gradle.utils.ParsedGradleVersion
+import org.jetbrains.kotlin.compilerRunner.DELETED_SESSION_FILE_PREFIX
+import org.jetbrains.kotlin.compilerRunner.GradleCompilerRunner
 import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompile
 import org.jetbrains.kotlin.incremental.BuildCacheStorage
 import org.jetbrains.kotlin.incremental.multiproject.ArtifactDifferenceRegistryProvider
+import org.jetbrains.kotlin.incremental.relativeToRoot
+import org.jetbrains.kotlin.incremental.stackTraceStr
 import java.io.File
 
 internal class KotlinGradleBuildServices private constructor(gradle: Gradle): BuildAdapter() {
@@ -93,6 +95,22 @@ internal class KotlinGradleBuildServices private constructor(gradle: Gradle): Bu
             log.kotlinDebug("Skipping kotlin cleanup since compiler wasn't called")
         }
 
+        val rootProject = gradle.rootProject
+        val sessionsDir = GradleCompilerRunner.sessionsDir(rootProject)
+        if (sessionsDir.exists()) {
+            val sessionFiles = sessionsDir.listFiles()
+
+            // it is expected that only one session file per build exists
+            // afaik is is not possible to run multiple gradle builds in one project since gradle locks some dirs
+            if (sessionFiles.size > 1) {
+                log.warn("w: Detected multiple Kotlin daemon sessions at ${sessionsDir.relativeToRoot(rootProject)}")
+            }
+            for (file in sessionFiles) {
+                file.delete()
+                log.kotlinDebug { DELETED_SESSION_FILE_PREFIX + file.relativeToRoot(rootProject) }
+            }
+        }
+
         if (kotlinCompilerCalled) {
             startMemory?.let { startMemoryCopy ->
                 getUsedMemoryKb()?.let { endMemory ->
@@ -103,12 +121,43 @@ internal class KotlinGradleBuildServices private constructor(gradle: Gradle): Bu
             }
         }
 
-        buildCacheStorage.flush(memoryCachesOnly = false)
-        buildCacheStorage.close()
-
+        closeArtifactDifferenceRegistry()
         gradle.removeListener(this)
         instance = null
         log.kotlinDebug(DISPOSE_MESSAGE)
+    }
+
+    private fun closeArtifactDifferenceRegistry() {
+        var caughtError = false
+        try {
+            if (workingDir.exists()) {
+                // The working directory may have been removed by the clean task.
+                // https://youtrack.jetbrains.com/issue/KT-16298
+                buildCacheStorage.flush(memoryCachesOnly = false)
+            }
+        }
+        catch (e: Throwable) {
+            log.kotlinDebug { "Error trying to flush artifact difference registry: ${e.stackTraceStr}" }
+            caughtError = true
+        }
+        finally {
+            try {
+                buildCacheStorage.close()
+            }
+            catch (e: Throwable) {
+                log.kotlinDebug { "Error trying to close artifact difference registry: ${e.stackTraceStr}" }
+                caughtError = true
+            }
+        }
+
+        if (caughtError && workingDir.exists()) {
+            try {
+                workingDir.deleteRecursively()
+            }
+            catch (e: Throwable) {
+                log.kotlinDebug { "Error trying to delete kotlin-build $workingDir: ${e.stackTraceStr}" }
+            }
+        }
     }
 
     private fun getUsedMemoryKb(): Long? {
@@ -138,29 +187,6 @@ internal class CompilerServicesCleanup() {
         }
 
         (KotlinCoreEnvironment.applicationEnvironment?.jarFileSystem as? CoreJarFileSystem)?.clearHandlersCache()
-
-        // making cleanup of static objects only on recognized versions of gradle and if version < 2.4
-        // otherwise it may cause problems e.g. with JobScheduler on subsequent runs
-        // this strategy may lead to memory leaks, but prevent crashes due to destroyed JobScheduler
-        // the reason for the strategy is the following:
-        // gradle < 2.4 has problems with plugin reuse in the daemon: new calls to the plugin are made with a new classloader
-        // for every new build. With statically initialized daemons like JobScheduler that leads to big leaks of classloaders and classes,
-        // therefore to reduce leaks JobScheduler (and deprecated ZipFileCache for now) should be stopped)
-        // It should be noted that because of this behavior there are no benefits of using daemon in these versions.
-        // Starting from 2.4 gradle using cached classloaders, that leads to effective class reusing in the daemon, but
-        // in that case premature stopping of the static daemons may lead to crashes.
-        ParsedGradleVersion.parse(gradleVersion)?.let {
-            log.kotlinDebug("detected gradle version $it")
-            if (it < ParsedGradleVersion.parse("2.4")!!) {
-                // TODO: remove ZipFileCache cleanup after switching to recent idea libs
-                stopZipFileCache()
-            }
-        }
-    }
-
-    private fun stopZipFileCache() {
-        ZipFileCache.stopBackgroundThread()
-        log.kotlinDebug("ZipFileCache finished successfully")
     }
 
     private fun cleanJarCache() {

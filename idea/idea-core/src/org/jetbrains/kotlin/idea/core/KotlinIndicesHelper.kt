@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,8 +46,9 @@ import org.jetbrains.kotlin.psi.psiUtil.contains
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.isHiddenInResolution
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
+import org.jetbrains.kotlin.resolve.scopes.SyntheticScopes
+import org.jetbrains.kotlin.resolve.scopes.collectSyntheticStaticFunctions
 import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.utils.addToStdlib.singletonOrEmptyList
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 import java.util.*
@@ -58,7 +59,8 @@ class KotlinIndicesHelper(
         visibilityFilter: (DeclarationDescriptor) -> Boolean,
         private val declarationTranslator: (KtDeclaration) -> KtDeclaration? = { it },
         applyExcludeSettings: Boolean = true,
-        private val filterOutPrivate: Boolean = true
+        private val filterOutPrivate: Boolean = true,
+        private val file: KtFile? = null
 ) {
 
     private val moduleDescriptor = resolutionFacade.moduleDescriptor
@@ -68,12 +70,12 @@ class KotlinIndicesHelper(
     private val descriptorFilter: (DeclarationDescriptor) -> Boolean = filter@ {
         if (it.isHiddenInResolution(resolutionFacade.frontendService<LanguageVersionSettings>())) return@filter false
         if (!visibilityFilter(it)) return@filter false
-        if (applyExcludeSettings && it.isExcludedFromAutoImport(project)) return@filter false
+        if (applyExcludeSettings && it.isExcludedFromAutoImport(project, file)) return@filter false
         true
     }
 
     fun getTopLevelCallablesByName(name: String): Collection<CallableDescriptor> {
-        val declarations = LinkedHashSet<KtCallableDeclaration>()
+        val declarations = LinkedHashSet<KtNamedDeclaration>()
         declarations.addTopLevelNonExtensionCallablesByName(KotlinFunctionShortNameIndex.getInstance(), name)
         declarations.addTopLevelNonExtensionCallablesByName(KotlinPropertyShortNameIndex.getInstance(), name)
         return declarations
@@ -81,11 +83,11 @@ class KotlinIndicesHelper(
                 .filter { descriptorFilter(it) }
     }
 
-    private fun MutableSet<KtCallableDeclaration>.addTopLevelNonExtensionCallablesByName(
-            index: StringStubIndexExtension<out KtCallableDeclaration>,
+    private fun MutableSet<KtNamedDeclaration>.addTopLevelNonExtensionCallablesByName(
+            index: StringStubIndexExtension<out KtNamedDeclaration>,
             name: String
     ) {
-        index.get(name, project, scope).filterTo(this) { it.parent is KtFile && it.receiverTypeReference == null }
+        index.get(name, project, scope).filterTo(this) { it.parent is KtFile && it is KtCallableDeclaration && it.receiverTypeReference == null }
     }
 
     fun getTopLevelExtensionOperatorsByName(name: String): Collection<FunctionDescriptor> {
@@ -269,7 +271,7 @@ class KotlinIndicesHelper(
         val shortNamesCache = PsiShortNamesCache.getInstance(project)
         if (shortNamesCache is CompositeShortNamesCache) {
             try {
-                fun getMyCachesField(clazz: Class<PsiShortNamesCache>): Field {
+                fun getMyCachesField(clazz: Class<out PsiShortNamesCache>): Field {
                     try {
                         return clazz.getDeclaredField("myCaches")
                     }
@@ -282,16 +284,16 @@ class KotlinIndicesHelper(
                     }
                 }
 
-                val myCachesField = getMyCachesField(shortNamesCache.javaClass)
+                val myCachesField = getMyCachesField(shortNamesCache::class.java)
                 val previousIsAccessible = myCachesField.isAccessible
                 try {
                     myCachesField.isAccessible = true
                     @Suppress("UNCHECKED_CAST")
                     return@lazy (myCachesField.get(shortNamesCache) as Array<PsiShortNamesCache>).filter {
                         it !is KotlinShortNamesCache
-                        && it.javaClass.name != "com.android.tools.idea.databinding.BrShortNamesCache"
-                        && it.javaClass.name != "com.android.tools.idea.databinding.DataBindingComponentShortNamesCache"
-                        && it.javaClass.name != "com.android.tools.idea.databinding.DataBindingShortNamesCache"
+                        && it::class.java.name != "com.android.tools.idea.databinding.BrShortNamesCache"
+                        && it::class.java.name != "com.android.tools.idea.databinding.DataBindingComponentShortNamesCache"
+                        && it::class.java.name != "com.android.tools.idea.databinding.DataBindingShortNamesCache"
                     }
                 }
                 finally {
@@ -334,11 +336,11 @@ class KotlinIndicesHelper(
 
     fun processKotlinCallablesByName(
             name: String,
-            filter: (KtCallableDeclaration) -> Boolean,
+            filter: (KtNamedDeclaration) -> Boolean,
             processor: (CallableDescriptor) -> Unit
     ) {
         val functions: Sequence<KtCallableDeclaration> = KotlinFunctionShortNameIndex.getInstance().get(name, project, scope).asSequence()
-        val properties: Sequence<KtCallableDeclaration> = KotlinPropertyShortNameIndex.getInstance().get(name, project, scope).asSequence()
+        val properties: Sequence<KtNamedDeclaration> = KotlinPropertyShortNameIndex.getInstance().get(name, project, scope).asSequence()
         val processed = HashSet<CallableDescriptor>()
         for (declaration in functions + properties) {
             ProgressManager.checkCanceled()
@@ -388,10 +390,10 @@ class KotlinIndicesHelper(
     fun processObjectMembers(
             descriptorKindFilter: DescriptorKindFilter,
             nameFilter: (String) -> Boolean,
-            filter: (KtCallableDeclaration, KtObjectDeclaration) -> Boolean,
+            filter: (KtNamedDeclaration, KtObjectDeclaration) -> Boolean,
             processor: (DeclarationDescriptor) -> Unit
     ) {
-        fun processIndex(index: StringStubIndexExtension<out KtCallableDeclaration>) {
+        fun processIndex(index: StringStubIndexExtension<out KtNamedDeclaration>) {
             for (name in index.getAllKeys(project)) {
                 ProgressManager.checkCanceled()
                 if (!nameFilter(name)) continue
@@ -441,7 +443,8 @@ class KotlinIndicesHelper(
                     processor(descriptor)
 
                     // SAM-adapter
-                    container.staticScope.getContributedFunctions(descriptor.name, NoLookupLocation.FROM_IDE)
+                    val syntheticScopes = resolutionFacade.getFrontendService(SyntheticScopes::class.java)
+                    syntheticScopes.collectSyntheticStaticFunctions(container.staticScope, descriptor.name, NoLookupLocation.FROM_IDE)
                             .filterIsInstance<SamAdapterDescriptor<*>>()
                             .firstOrNull { it.baseDescriptorForSynthetic.original == descriptor.original }
                             ?.let { processor(it) }
@@ -471,14 +474,14 @@ class KotlinIndicesHelper(
 
     private fun KtNamedDeclaration.resolveToDescriptorsWithHack(
             psiFilter: (KtDeclaration) -> Boolean): Collection<DeclarationDescriptor> {
-        if (getContainingKtFile().isCompiled) { //TODO: it's temporary while resolveToDescriptor does not work for compiled declarations
+        if (containingKtFile.isCompiled) { //TODO: it's temporary while resolveToDescriptor does not work for compiled declarations
             return resolutionFacade.resolveImportReference(moduleDescriptor, fqName!!).filterIsInstance<DeclarationDescriptor>()
         }
         else {
             val translatedDeclaration = declarationTranslator(this) ?: return emptyList()
             if (!psiFilter(translatedDeclaration)) return emptyList()
 
-            return (resolutionFacade.resolveToDescriptor(translatedDeclaration)).singletonOrEmptyList()
+            return listOfNotNull(resolutionFacade.resolveToDescriptor(translatedDeclaration))
         }
     }
 }

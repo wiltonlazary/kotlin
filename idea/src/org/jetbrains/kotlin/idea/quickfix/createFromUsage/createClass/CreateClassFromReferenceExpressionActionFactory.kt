@@ -36,13 +36,13 @@ object CreateClassFromReferenceExpressionActionFactory : CreateClassFromUsageFac
     }
 
     private fun getFullCallExpression(element: KtSimpleNameExpression): KtExpression? {
-        return element.parent?.let {
+        return element.parent.let {
             when {
                 it is KtCallExpression && it.calleeExpression == element -> return null
                 it is KtQualifiedExpression && it.selectorExpression == element -> it
                 else -> element
             }
-        } as? KtExpression
+        }
     }
 
     private fun isQualifierExpected(element: KtSimpleNameExpression) = element.isDotReceiver() || ((element.parent as? KtDotQualifiedExpression)?.isDotReceiver() ?: false)
@@ -70,7 +70,7 @@ object CreateClassFromReferenceExpressionActionFactory : CreateClassFromUsageFac
             val qualifierDescriptor = receiverSelector?.let { context[BindingContext.REFERENCE_TARGET, it] }
 
             val targetParent =
-                    getTargetParentByQualifier(element.getContainingKtFile(), receiverSelector != null, qualifierDescriptor)
+                    getTargetParentByQualifier(element.containingKtFile, receiverSelector != null, qualifierDescriptor)
                     ?: return Collections.emptyList()
 
             element.getCreatePackageFixIfApplicable(targetParent)?.let { return emptyList() }
@@ -86,6 +86,10 @@ object CreateClassFromReferenceExpressionActionFactory : CreateClassFromUsageFac
                             else -> true
                         }
                     }
+        }
+        val parent = element.parent
+        if (parent is KtClassLiteralExpression && parent.receiverExpression == element) {
+            return listOf(ClassKind.PLAIN_CLASS, ClassKind.ENUM_CLASS, ClassKind.INTERFACE, ClassKind.ANNOTATION_CLASS, ClassKind.OBJECT)
         }
 
         if (fullCallExpr.getAssignmentByLHS() != null) return Collections.emptyList()
@@ -120,7 +124,7 @@ object CreateClassFromReferenceExpressionActionFactory : CreateClassFromUsageFac
             val qualifierDescriptor = receiverSelector?.let { context[BindingContext.REFERENCE_TARGET, it] }
 
             val targetParent =
-                    getTargetParentByQualifier(element.getContainingKtFile(), receiverSelector != null, qualifierDescriptor)
+                    getTargetParentByQualifier(element.containingKtFile, receiverSelector != null, qualifierDescriptor)
                     ?: return null
 
             return ClassInfo(

@@ -22,8 +22,8 @@ import org.jetbrains.kotlin.descriptors.annotations.AnnotationWithTarget
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.descriptorUtil.annotationClass
 import org.jetbrains.kotlin.storage.StorageManager
-import org.jetbrains.kotlin.utils.toReadOnlyList
 
 class DeserializedAnnotations(
         storageManager: StorageManager,
@@ -36,15 +36,15 @@ open class DeserializedAnnotationsWithPossibleTargets(
         storageManager: StorageManager,
         compute: () -> List<AnnotationWithTarget>
 ) : Annotations {
-    private val annotations = storageManager.createLazyValue { compute().toReadOnlyList() }
+    private val annotations = storageManager.createLazyValue { compute().toList() }
 
     override fun isEmpty(): Boolean = annotations().isEmpty()
 
     override fun findAnnotation(fqName: FqName) = annotations().firstOrNull {
         annotationWithTarget ->
         if (annotationWithTarget.target != null) return@firstOrNull false
-        val descriptor = annotationWithTarget.annotation.type.constructor.declarationDescriptor
-        descriptor is ClassDescriptor && fqName.toUnsafe() == DescriptorUtils.getFqName(descriptor)
+        val descriptor = annotationWithTarget.annotation.annotationClass
+        descriptor != null && fqName.toUnsafe() == DescriptorUtils.getFqName(descriptor)
     }?.annotation
 
     override fun findExternalAnnotation(fqName: FqName) = null

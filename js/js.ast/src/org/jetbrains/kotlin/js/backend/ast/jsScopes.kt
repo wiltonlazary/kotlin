@@ -16,23 +16,26 @@
 
 package org.jetbrains.kotlin.js.backend.ast
 
-import java.util.Stack
+import java.util.*
 
 class JsObjectScope(parent: JsScope, description: String) : JsScope(parent, description)
 
 object JsDynamicScope : JsScope(null, "Scope for dynamic declarations") {
-    override fun doCreateName(name: String) = JsName(this, name, false)
+    override fun doCreateName(name: String) = JsName(name, false)
 }
 
-open class JsFunctionScope(parent: JsScope, description: String) : JsScope(parent, description) {
-
-    private val labelScopes = Stack<LabelScope>()
-    private val topLabelScope: LabelScope?
-        get() = if (labelScopes.isNotEmpty()) labelScopes.peek() else null
-
+open class JsFunctionScope(parent: JsScope, description: String) : JsDeclarationScope(parent, description) {
     override fun hasOwnName(name: String): Boolean = RESERVED_WORDS.contains(name) || super.hasOwnName(name)
 
     open fun declareNameUnsafe(identifier: String): JsName = super.declareName(identifier)
+}
+
+open class JsDeclarationScope(parent: JsScope, description: String, useParentScopeStack: Boolean = false) : JsScope(parent, description) {
+    private val labelScopes: Stack<LabelScope> =
+            if (parent is JsDeclarationScope && useParentScopeStack) parent.labelScopes else Stack<LabelScope>()
+
+    private val topLabelScope
+        get() = if (labelScopes.isNotEmpty()) labelScopes.peek() else null
 
     open fun enterLabel(label: String): JsName {
         val scope = LabelScope(topLabelScope, label)
@@ -58,7 +61,7 @@ open class JsFunctionScope(parent: JsScope, description: String) : JsScope(paren
                 else -> ident
             }
 
-            labelName = JsName(this@JsFunctionScope, freshIdent, false)
+            labelName = JsName(freshIdent, false)
         }
 
         override fun findOwnName(name: String): JsName? =
@@ -126,9 +129,6 @@ class DelegatingJsFunctionScopeWithTemporaryParent(
 
     override fun declareFreshName(suggestedName: String): JsName =
             delegatingScope.declareFreshName(suggestedName)
-
-    override fun declareTemporary(): JsName =
-            delegatingScope.declareTemporary()
 
     override fun enterLabel(label: String): JsName =
             delegatingScope.enterLabel(label)

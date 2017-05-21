@@ -30,6 +30,7 @@ import org.jetbrains.kotlin.load.java.lazy.LazyJavaResolverContext
 import org.jetbrains.kotlin.load.java.lazy.TypeParameterResolver
 import org.jetbrains.kotlin.load.java.lazy.types.JavaTypeFlexibility.*
 import org.jetbrains.kotlin.load.java.structure.*
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.platform.JavaToKotlinClassMap
 import org.jetbrains.kotlin.types.*
@@ -37,7 +38,6 @@ import org.jetbrains.kotlin.types.Variance.*
 import org.jetbrains.kotlin.types.typeUtil.createProjection
 import org.jetbrains.kotlin.types.typeUtil.replaceArgumentsWithStarProjections
 import org.jetbrains.kotlin.utils.sure
-import org.jetbrains.kotlin.utils.toReadOnlyList
 
 private val JAVA_LANG_CLASS_FQ_NAME: FqName = FqName("java.lang.Class")
 
@@ -92,7 +92,7 @@ class JavaTypeResolver(
 
         val allowFlexible = attr.allowFlexible && attr.howThisTypeIsUsed != SUPERTYPE
         val isRaw = javaType.isRaw
-        if (!javaType.isRaw && !allowFlexible) {
+        if (!isRaw && !allowFlexible) {
             return computeSimpleJavaClassifierType(javaType, attr) ?: errorType()
         }
 
@@ -139,7 +139,7 @@ class JavaTypeResolver(
     // and treat the resulting qualified name as if it references a simple top-level class.
     // Note that this makes MISSING_DEPENDENCY_CLASS diagnostic messages not as precise as they could be in some corner cases.
     private fun createNotFoundClass(javaType: JavaClassifierType): TypeConstructor {
-        val classId = parseCanonicalFqNameIgnoringTypeArguments(javaType.canonicalText)
+        val classId = ClassId.topLevel(FqName(javaType.classifierQualifiedName))
         return c.components.deserializedDescriptorResolver.components.notFoundClasses.getClass(classId, listOf(0)).typeConstructor
     }
 
@@ -148,7 +148,7 @@ class JavaTypeResolver(
             return c.components.reflectionTypes.kClass
         }
 
-        val javaToKotlin = JavaToKotlinClassMap.INSTANCE
+        val javaToKotlin = JavaToKotlinClassMap
 
         val howThisTypeIsUsedEffectively = when {
             attr.flexibility == FLEXIBLE_LOWER_BOUND -> MEMBER_SIGNATURE_COVARIANT
@@ -185,7 +185,7 @@ class JavaTypeResolver(
         fun JavaType?.isSuperWildcard(): Boolean = (this as? JavaWildcardType)?.let { it.bound != null && !it.isExtends } ?: false
 
         if (!typeArguments.lastOrNull().isSuperWildcard()) return false
-        val mutableLastParameterVariance = JavaToKotlinClassMap.INSTANCE.convertReadOnlyToMutable(readOnlyContainer)
+        val mutableLastParameterVariance = JavaToKotlinClassMap.convertReadOnlyToMutable(readOnlyContainer)
                                                    .typeConstructor.parameters.lastOrNull()?.variance ?: return false
 
         return mutableLastParameterVariance != OUT_VARIANCE
@@ -218,17 +218,19 @@ class JavaTypeResolver(
                 //   so we get A<*, *>.
                 // Summary result for upper bound of T is `A<A<*, *>, A<*, *>>..A<out A<*, *>, out A<*, *>>`
                 val erasedUpperBound =
-                        parameter.getErasedUpperBound(attr.upperBoundOfTypeParameter) {
-                            constructor.declarationDescriptor!!.defaultType.replaceArgumentsWithStarProjections()
+                        LazyWrappedType(c.storageManager) {
+                            parameter.getErasedUpperBound(attr.upperBoundOfTypeParameter) {
+                                constructor.declarationDescriptor!!.defaultType.replaceArgumentsWithStarProjections()
+                            }
                         }
 
                 RawSubstitution.computeProjection(parameter, attr, erasedUpperBound)
-            }.toReadOnlyList()
+            }.toList()
         }
 
         if (typeParameters.size != javaType.typeArguments.size) {
             // Most of the time this means there is an error in the Java code
-            return typeParameters.map { p -> TypeProjectionImpl(ErrorUtils.createErrorType(p.name.asString())) }.toReadOnlyList()
+            return typeParameters.map { p -> TypeProjectionImpl(ErrorUtils.createErrorType(p.name.asString())) }.toList()
         }
         val howTheProjectionIsUsed = if (attr.howThisTypeIsUsed == SUPERTYPE) SUPERTYPE_ARGUMENT else TYPE_ARGUMENT
         return javaType.typeArguments.withIndex().map {
@@ -241,7 +243,7 @@ class JavaTypeResolver(
 
             val parameter = typeParameters[i]
             transformToTypeProjection(javaTypeArgument, howTheProjectionIsUsed.toAttributes(), parameter)
-        }.toReadOnlyList()
+        }.toList()
     }
 
     private fun transformToTypeProjection(

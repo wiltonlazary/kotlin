@@ -122,6 +122,18 @@ public class ParsingTestGenerated extends AbstractParsingTest {
             doParsingTest(fileName);
         }
 
+        @TestMetadata("CollectionLiterals.kt")
+        public void testCollectionLiterals() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/psi/CollectionLiterals.kt");
+            doParsingTest(fileName);
+        }
+
+        @TestMetadata("CollectionLiterals_ERR.kt")
+        public void testCollectionLiterals_ERR() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/psi/CollectionLiterals_ERR.kt");
+            doParsingTest(fileName);
+        }
+
         @TestMetadata("CommentsBinding.kt")
         public void testCommentsBinding() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/psi/CommentsBinding.kt");
@@ -2302,6 +2314,18 @@ public class ParsingTestGenerated extends AbstractParsingTest {
             @TestMetadata("kt5102.kt")
             public void testKt5102() throws Exception {
                 String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/psi/recovery/kt5102.kt");
+                doParsingTest(fileName);
+            }
+
+            @TestMetadata("lambdaExpressionInString_1.kt")
+            public void testLambdaExpressionInString_1() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/psi/recovery/lambdaExpressionInString_1.kt");
+                doParsingTest(fileName);
+            }
+
+            @TestMetadata("lambdaExpressionInString_2.kt")
+            public void testLambdaExpressionInString_2() throws Exception {
+                String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/psi/recovery/lambdaExpressionInString_2.kt");
                 doParsingTest(fileName);
             }
 

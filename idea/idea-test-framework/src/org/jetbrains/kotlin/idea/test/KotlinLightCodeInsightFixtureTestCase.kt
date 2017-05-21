@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.idea.test
 
+import com.intellij.codeInsight.CodeInsightTestCase
 import com.intellij.codeInsight.daemon.impl.EditorTracker
 import com.intellij.ide.startup.impl.StartupManagerImpl
 import com.intellij.openapi.actionSystem.ActionPlaces
@@ -23,28 +24,33 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.Presentation
 import com.intellij.openapi.actionSystem.ex.ActionManagerEx
 import com.intellij.openapi.editor.ex.EditorEx
-import com.intellij.openapi.project.Project
+import com.intellij.openapi.module.Module
 import com.intellij.openapi.startup.StartupManager
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.newvfs.impl.VfsRootAccess
 import com.intellij.testFramework.LightProjectDescriptor
 import com.intellij.testFramework.LoggedErrorProcessor
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
 import org.apache.log4j.Logger
 import org.jetbrains.kotlin.idea.actions.internal.KotlinInternalMode
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.TestMetadata
 import org.jetbrains.kotlin.utils.addIfNotNull
 import org.jetbrains.kotlin.utils.rethrow
 import java.io.File
 import java.io.IOException
 import java.util.*
+import kotlin.reflect.full.findAnnotation
 
 abstract class KotlinLightCodeInsightFixtureTestCase : KotlinLightCodeInsightFixtureTestCaseBase() {
     private var kotlinInternalModeOriginalValue = false
 
     private val exceptions = ArrayList<Throwable>()
+
+    protected val module: Module get() = myFixture.module
+
+    protected open val captureExceptions = true
 
     override fun setUp() {
         super.setUp()
@@ -58,12 +64,15 @@ abstract class KotlinLightCodeInsightFixtureTestCase : KotlinLightCodeInsightFix
 
         invalidateLibraryCache(project)
 
-        LoggedErrorProcessor.setNewInstance(object : LoggedErrorProcessor() {
-            override fun processError(message: String?, t: Throwable?, details: Array<out String>?, logger: Logger) {
-                exceptions.addIfNotNull(t)
-                super.processError(message, t, details, logger)
-            }
-        })
+        if (captureExceptions) {
+            LoggedErrorProcessor.setNewInstance(object : LoggedErrorProcessor() {
+                override fun processError(message: String?, t: Throwable?, details: Array<out String>?, logger: Logger) {
+                    exceptions.addIfNotNull(t)
+                    super.processError(message, t, details, logger)
+                }
+            })
+        }
+        CodeInsightTestCase.fixTemplates()
     }
 
     override fun tearDown() {
@@ -110,7 +119,14 @@ abstract class KotlinLightCodeInsightFixtureTestCase : KotlinLightCodeInsightFix
                 else if (InTextDirectivesUtils.isDirectiveDefined(fileText, "RUNTIME_WITH_SOURCES")) {
                     return ProjectDescriptorWithStdlibSources.INSTANCE
                 }
-                else if (InTextDirectivesUtils.isDirectiveDefined(fileText, "RUNTIME")) {
+                else if (InTextDirectivesUtils.isDirectiveDefined(fileText, "RUNTIME_WITH_KOTLIN_TEST")) {
+                    return KotlinWithJdkAndRuntimeLightProjectDescriptor.INSTANCE_WITH_KOTLIN_TEST
+                }
+                else if (InTextDirectivesUtils.isDirectiveDefined(fileText, "RUNTIME_WITH_FULL_JDK")) {
+                    return KotlinWithJdkAndRuntimeLightProjectDescriptor.INSTANCE_FULL_JDK
+                }
+                else if (InTextDirectivesUtils.isDirectiveDefined(fileText, "RUNTIME") ||
+                         InTextDirectivesUtils.isDirectiveDefined(fileText, "WITH_RUNTIME")) {
                     return KotlinWithJdkAndRuntimeLightProjectDescriptor.INSTANCE
                 }
                 else if (InTextDirectivesUtils.isDirectiveDefined(fileText, "JS")) {
@@ -128,7 +144,7 @@ abstract class KotlinLightCodeInsightFixtureTestCase : KotlinLightCodeInsightFix
     protected fun isAllFilesPresentInTest(): Boolean = KotlinTestUtils.isAllFilesPresentTest(getTestName(false))
 
     protected open fun fileName(): String
-            = KotlinTestUtils.getTestDataFileName(this.javaClass, this.name) ?: (getTestName(false) + ".kt")
+            = KotlinTestUtils.getTestDataFileName(this::class.java, this.name) ?: (getTestName(false) + ".kt")
 
     protected fun performNotWriteEditorAction(actionId: String): Boolean {
         val dataContext = (myFixture.editor as EditorEx).dataContext
@@ -147,5 +163,9 @@ abstract class KotlinLightCodeInsightFixtureTestCase : KotlinLightCodeInsightFix
 
         managerEx.fireAfterActionPerformed(action, dataContext, event)
         return true
+    }
+
+    override fun getTestDataPath(): String {
+        return this::class.findAnnotation<TestMetadata>()?.value ?: super.getTestDataPath()
     }
 }

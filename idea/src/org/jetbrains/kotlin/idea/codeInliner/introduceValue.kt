@@ -20,7 +20,9 @@ import org.jetbrains.kotlin.idea.analysis.computeTypeInContext
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.core.KotlinNameSuggester
+import org.jetbrains.kotlin.idea.core.isVisible
 import org.jetbrains.kotlin.idea.core.setType
+import org.jetbrains.kotlin.idea.util.getAllAccessibleVariables
 import org.jetbrains.kotlin.idea.util.getResolutionScope
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
@@ -30,12 +32,11 @@ import org.jetbrains.kotlin.psi.psiUtil.isAncestor
 import org.jetbrains.kotlin.renderer.render
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.bindingContextUtil.getDataFlowInfoBefore
+import org.jetbrains.kotlin.resolve.descriptorUtil.isExtension
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
-import org.jetbrains.kotlin.resolve.scopes.utils.findLocalVariable
 import org.jetbrains.kotlin.types.ErrorUtils
 import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.utils.addToStdlib.check
 
 /**
  * Modifies [MutableCodeToInline] introducing a variable initialized by [value] and replacing all of [usages] with its use.
@@ -86,14 +87,12 @@ internal fun MutableCodeToInline.introduceValue(
         if (usages.isNotEmpty()) {
             val resolutionScope = expressionToBeReplaced.getResolutionScope(bindingContext, expressionToBeReplaced.getResolutionFacade())
 
-            val name = suggestName { name ->
-                resolutionScope.findLocalVariable(Name.identifier(name)) == null && !isNameUsed(name)
-            }
+            val name = suggestName { name -> !name.nameHasConflictsInScope(resolutionScope) && !isNameUsed(name) }
 
             val declaration = psiFactory.createDeclarationByPattern<KtVariableDeclaration>("val $0 = $1", name, value)
             statementsBefore.add(0, declaration)
 
-            val explicitType = valueType?.check {
+            val explicitType = valueType?.takeIf {
                 variableNeedsExplicitType(value, valueType, expressionToBeReplaced, resolutionScope, bindingContext)
             }
             if (explicitType != null) {
@@ -133,6 +132,10 @@ internal fun MutableCodeToInline.introduceValue(
         }
         statementsBefore.clear()
     }
+}
+
+fun String.nameHasConflictsInScope(lexicalScope: LexicalScope) = lexicalScope.getAllAccessibleVariables(Name.identifier(this)).any {
+    !it.isExtension && it.isVisible(lexicalScope.ownerDescriptor)
 }
 
 private fun variableNeedsExplicitType(

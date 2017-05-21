@@ -27,7 +27,6 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.rt.execution.junit.FileComparisonFailure;
-import com.intellij.util.Function;
 import com.intellij.util.ReflectionUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.hash.HashMap;
@@ -38,6 +37,7 @@ import junit.framework.TestCase;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
 import org.junit.Assert;
 
@@ -55,8 +55,8 @@ public abstract class KtUsefulTestCase extends TestCase {
 
     private static final String ORIGINAL_TEMP_DIR = FileUtil.getTempDirectory();
 
-    private static final Map<String, Long> TOTAL_SETUP_COST_MILLIS = new HashMap<String, Long>();
-    private static final Map<String, Long> TOTAL_TEARDOWN_COST_MILLIS = new HashMap<String, Long>();
+    private static final Map<String, Long> TOTAL_SETUP_COST_MILLIS = new HashMap<>();
+    private static final Map<String, Long> TOTAL_TEARDOWN_COST_MILLIS = new HashMap<>();
 
     private Application application;
 
@@ -73,7 +73,7 @@ public abstract class KtUsefulTestCase extends TestCase {
     };
 
     private static final String ourPathToKeep = null;
-    private final List<String> myPathsToKeep = new ArrayList<String>();
+    private final List<String> myPathsToKeep = new ArrayList<>();
 
     private String myTempDir;
 
@@ -95,10 +95,10 @@ public abstract class KtUsefulTestCase extends TestCase {
         testName = new File(testName).getName(); // in case the test name contains file separators
         myTempDir = new File(ORIGINAL_TEMP_DIR, TEMP_DIR_MARKER + testName).getPath();
         FileUtil.resetCanonicalTempPathCache(myTempDir);
-        boolean isPerformanceTest = isPerformanceTest();
-        ApplicationInfoImpl.setInPerformanceTest(isPerformanceTest);
+        boolean isStressTest = isStressTest();
+        ApplicationInfoImpl.setInStressTest(isStressTest);
         // turn off Disposer debugging for performance tests
-        oldDisposerDebug = Disposer.setDebugMode(Disposer.isDebugMode() && !isPerformanceTest);
+        oldDisposerDebug = Disposer.setDebugMode(Disposer.isDebugMode() && !isStressTest);
     }
 
     @Override
@@ -180,7 +180,7 @@ public abstract class KtUsefulTestCase extends TestCase {
         List<String> list;
         synchronized (DELETE_ON_EXIT_HOOK_CLASS) {
             if (DELETE_ON_EXIT_HOOK_DOT_FILES.isEmpty()) return;
-            list = new ArrayList<String>(DELETE_ON_EXIT_HOOK_DOT_FILES);
+            list = new ArrayList<>(DELETE_ON_EXIT_HOOK_DOT_FILES);
         }
         for (int i = list.size() - 1; i >= 0; i--) {
             String path = list.get(i);
@@ -207,25 +207,22 @@ public abstract class KtUsefulTestCase extends TestCase {
 
     @Override
     protected void runTest() throws Throwable {
-        final Throwable[] throwables = new Throwable[1];
+        Throwable[] throwables = new Throwable[1];
 
-        Runnable runnable = new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    KtUsefulTestCase.super.runTest();
-                }
-                catch (InvocationTargetException e) {
-                    e.fillInStackTrace();
-                    throwables[0] = e.getTargetException();
-                }
-                catch (IllegalAccessException e) {
-                    e.fillInStackTrace();
-                    throwables[0] = e;
-                }
-                catch (Throwable e) {
-                    throwables[0] = e;
-                }
+        Runnable runnable = () -> {
+            try {
+                super.runTest();
+            }
+            catch (InvocationTargetException e) {
+                e.fillInStackTrace();
+                throwables[0] = e.getTargetException();
+            }
+            catch (IllegalAccessException e) {
+                e.fillInStackTrace();
+                throwables[0] = e;
+            }
+            catch (Throwable e) {
+                throwables[0] = e;
             }
         };
 
@@ -313,7 +310,7 @@ public abstract class KtUsefulTestCase extends TestCase {
             String erroMsg,
             Iterable<? extends T> actual,
             Collection<? extends T> expected) {
-        ArrayList<T> list = new ArrayList<T>();
+        ArrayList<T> list = new ArrayList<>();
         for (T t : actual) {
             list.add(t);
         }
@@ -340,9 +337,9 @@ public abstract class KtUsefulTestCase extends TestCase {
     public static <T> void assertSameElements(String message, Collection<? extends T> collection, Collection<T> expected) {
         assertNotNull(collection);
         assertNotNull(expected);
-        if (collection.size() != expected.size() || !new HashSet<T>(expected).equals(new HashSet<T>(collection))) {
+        if (collection.size() != expected.size() || !new HashSet<>(expected).equals(new HashSet<T>(collection))) {
             Assert.assertEquals(message, toString(expected, "\n"), toString(collection, "\n"));
-            Assert.assertEquals(message, new HashSet<T>(expected), new HashSet<T>(collection));
+            Assert.assertEquals(message, new HashSet<>(expected), new HashSet<T>(collection));
         }
     }
 
@@ -351,12 +348,7 @@ public abstract class KtUsefulTestCase extends TestCase {
     }
 
     public static String toString(Collection<?> collection, String separator) {
-        List<String> list = ContainerUtil.map2List(collection, new Function<Object, String>() {
-            @Override
-            public String fun(Object o) {
-                return String.valueOf(o);
-            }
-        });
+        List<String> list = ContainerUtil.map2List(collection, String::valueOf);
         Collections.sort(list);
         StringBuilder builder = new StringBuilder();
         boolean flag = false;
@@ -458,8 +450,29 @@ public abstract class KtUsefulTestCase extends TestCase {
         }
     }
 
-    private boolean isPerformanceTest() {
-        String name = getName();
-        return name != null && name.contains("Performance") || getClass().getName().contains("Performance");
+    private static boolean isPerformanceTest(@Nullable String testName, @Nullable String className) {
+        return testName != null && testName.contains("Performance") ||
+               className != null && className.contains("Performance");
+    }
+
+    /**
+     * @return true for a test which performs A LOT of computations.
+     * Such test should typically avoid performing expensive checks, e.g. data structure consistency complex validations.
+     * If you want your test to be treated as "Stress", please mention one of these words in its name: "Stress", "Slow".
+     * For example: {@code public void testStressPSIFromDifferentThreads()}
+     */
+
+    private boolean isStressTest() {
+        return isStressTest(getName(), getClass().getName());
+    }
+
+    private static boolean isStressTest(String testName, String className) {
+        return isPerformanceTest(testName, className) ||
+               containsStressWords(testName) ||
+               containsStressWords(className);
+    }
+
+    private static boolean containsStressWords(@Nullable String name) {
+        return name != null && (name.contains("Stress") || name.contains("Slow"));
     }
 }

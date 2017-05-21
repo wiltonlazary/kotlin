@@ -44,6 +44,21 @@ class Kapt3IT : BaseGradleIT() {
     }
 
     @Test
+    fun testAnnotationProcessorAsFqName() {
+        val project = Project("annotationProcessorAsFqName", GRADLE_VERSION, directoryPrefix = "kapt2")
+
+        project.build("build") {
+            assertSuccessful()
+            assertKaptSuccessful()
+            assertContains(":compileKotlin")
+            assertContains(":compileJava")
+            assertFileExists("build/generated/source/kapt/main/example/TestClassGenerated.java")
+            assertFileExists("build/classes/main/example/TestClass.class")
+            assertFileExists("build/classes/main/example/TestClassGenerated.class")
+        }
+    }
+
+    @Test
     fun testSimple() {
         val project = Project("simple", GRADLE_VERSION, directoryPrefix = "kapt2")
 
@@ -60,6 +75,7 @@ class Kapt3IT : BaseGradleIT() {
             assertFileExists("build/classes/main/example/RuntimeAnnotatedTestClassGenerated.class")
             assertContains("example.JavaTest PASSED")
             assertClassFilesNotContain(File(project.projectDir, "build/classes"), "ExampleSourceAnnotation")
+            assertNotContains("warning: The following options were not recognized by any processor")
         }
 
         project.build("build") {
@@ -97,6 +113,8 @@ class Kapt3IT : BaseGradleIT() {
         project.build("build", options = options) {
             assertSuccessful()
             assertContains(":compileKotlin UP-TO-DATE")
+            assertContains(":kaptGenerateStubsKotlin UP-TO-DATE")
+            assertContains(":kaptKotlin UP-TO-DATE")
             assertFileExists("build/classes/main/example/TestClass.class")
             assertClassFilesNotContain(classesDir, "ExampleSourceAnnotation")
         }
@@ -109,7 +127,8 @@ class Kapt3IT : BaseGradleIT() {
             assertKaptSuccessful()
             assertContains("Options: {suffix=Customized, justColon=:, justEquals==, containsColon=a:b, " +
                     "containsEquals=a=b, startsWithColon=:a, startsWithEquals==a, endsWithColon=a:, " +
-                    "endsWithEquals=a:, withSpace=a b c}")
+                    "endsWithEquals=a:, withSpace=a b c,")
+            assertContains("-Xmaxerrs=500, -Xlint:all=-Xlint:all") // Javac options test
             assertFileExists("build/generated/source/kapt/main/example/TestClassCustomized.java")
             assertFileExists("build/classes/main/example/TestClass.class")
             assertFileExists("build/classes/main/example/TestClassCustomized.class")
@@ -260,6 +279,7 @@ class Kapt3IT : BaseGradleIT() {
 
         project.build("classes", options = options) {
             assertSuccessful()
+            assertFileExists("build/generated/source/kapt/main/foo/InternalDummyGenerated.java")
         }
 
         // remove annotation
@@ -269,6 +289,7 @@ class Kapt3IT : BaseGradleIT() {
             assertSuccessful()
             val allMainKotlinSrc = File(project.projectDir, "src/main").allKotlinFiles()
             assertCompiledKotlinSources(project.relativize(allMainKotlinSrc))
+            assertNoSuchFile("build/generated/source/kapt/main/foo/InternalDummyGenerated.java")
         }
     }
 
@@ -316,6 +337,18 @@ class Kapt3IT : BaseGradleIT() {
             val regex = "(?m)^.*Kotlin compiler args.*-P plugin:org\\.jetbrains\\.kotlin\\.kapt3.*$".toRegex()
             val kaptArgs = regex.find(output)?.value ?: error("Kapt compiler arguments are not found!")
             assert(kaptArgs.contains(arg)) { "Kapt compiler arguments should contain '$arg'" }
+        }
+    }
+
+    @Test
+    fun testOutputKotlinCode() {
+        Project("kaptOutputKotlinCode", GRADLE_VERSION, directoryPrefix = "kapt2").build("build") {
+            assertSuccessful()
+            assertKaptSuccessful()
+            assertFileExists("build/generated/source/kapt/main/example/TestClassCustomized.java")
+            assertFileExists("build/generated/source/kaptKotlin/main/TestClass.kt")
+            assertFileExists("build/classes/main/example/TestClass.class")
+            assertFileExists("build/classes/main/example/TestClassCustomized.class")
         }
     }
 }

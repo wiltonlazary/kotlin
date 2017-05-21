@@ -2826,6 +2826,8 @@ public header fun <T> Array<out T>.contentDeepHashCode(): Int
  * 
  * If any of arrays contains itself on any nesting level that reference
  * is rendered as `"[...]"` to prevent recursion.
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentDeepToString
  */
 @SinceKotlin("1.1")
 public header fun <T> Array<out T>.contentDeepToString(): String
@@ -2949,54 +2951,72 @@ public header fun CharArray.contentHashCode(): Int
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 public header fun <T> Array<out T>.contentToString(): String
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 public header fun ByteArray.contentToString(): String
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 public header fun ShortArray.contentToString(): String
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 public header fun IntArray.contentToString(): String
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 public header fun LongArray.contentToString(): String
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 public header fun FloatArray.contentToString(): String
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 public header fun DoubleArray.contentToString(): String
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 public header fun BooleanArray.contentToString(): String
 
 /**
  * Returns a string representation of the contents of the specified array as if it is [List].
+ * 
+ * @sample samples.collections.Arrays.ContentOperations.contentToString
  */
 @SinceKotlin("1.1")
 public header fun CharArray.contentToString(): String
@@ -4448,6 +4468,8 @@ public header inline fun <K, V, M : MutableMap<in K, MutableList<V>>> CharArray.
 /**
  * Creates a [Grouping] source from an array to be used later with one of group-and-fold operations
  * using the specified [keySelector] function to extract a key from each element.
+ * 
+ * @sample samples.collections.Collections.Transformations.groupingByEachCount
  */
 @SinceKotlin("1.1")
 public header inline fun <T, K> Array<out T>.groupingBy(crossinline keySelector: (T) -> K): Grouping<T, K>
@@ -7141,46 +7163,64 @@ public header fun CharArray.asIterable(): Iterable<Char>
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public header fun <T> Array<out T>.asSequence(): Sequence<T>
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public header fun ByteArray.asSequence(): Sequence<Byte>
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public header fun ShortArray.asSequence(): Sequence<Short>
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public header fun IntArray.asSequence(): Sequence<Int>
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public header fun LongArray.asSequence(): Sequence<Long>
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public header fun FloatArray.asSequence(): Sequence<Float>
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public header fun DoubleArray.asSequence(): Sequence<Double>
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public header fun BooleanArray.asSequence(): Sequence<Boolean>
 
 /**
  * Creates a [Sequence] instance that wraps the original array returning its elements when being iterated.
+ * 
+ * @sample samples.collections.Sequences.Building.sequenceFromArray
  */
 public header fun CharArray.asSequence(): Sequence<Char>
 

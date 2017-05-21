@@ -33,14 +33,15 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
 import org.jetbrains.kotlin.psi.psiUtil.getLambdaArgumentName
+import org.jetbrains.kotlin.psi.psiUtil.hasBody
 import org.jetbrains.kotlin.psi.psiUtil.visibilityModifierType
 import org.jetbrains.kotlin.psi.typeRefHelpers.setReceiverTypeReference
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.DescriptorResolver
 import org.jetbrains.kotlin.resolve.OverridingUtil
 import org.jetbrains.kotlin.resolve.calls.callUtil.getValueArgumentsInParentheses
-import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.isError
 
 @Suppress("UNCHECKED_CAST")
 inline fun <reified T: PsiElement> PsiElement.replaced(newElement: T): T {
@@ -133,7 +134,7 @@ fun PsiElement.deleteElementAndCleanParent() {
     val parent = parent
 
     deleteElementWithDelimiters(this)
-    deleteChildlessElement(parent, this.javaClass)
+    deleteChildlessElement(parent, this::class.java)
 }
 
 // Delete element if it doesn't contain children of a given type
@@ -170,7 +171,7 @@ fun PsiElement.deleteSingle() {
 }
 
 fun KtClass.getOrCreateCompanionObject() : KtObjectDeclaration {
-    getCompanionObjects().firstOrNull()?.let { return it }
+    companionObjects.firstOrNull()?.let { return it }
     return addDeclaration(KtPsiFactory(this).createCompanionObject())
 }
 
@@ -246,12 +247,7 @@ fun KtDeclaration.implicitModality(): KtModifierKeywordToken {
         }
     }
     if (klass is KtClass && klass.isInterface() && !hasModifier(KtTokens.PRIVATE_KEYWORD)) {
-        val hasBody = when (this) {
-            is KtProperty -> DescriptorResolver.hasBody(this)
-            is KtFunction -> hasBody()
-            else -> false
-        }
-        return if (hasBody) KtTokens.OPEN_KEYWORD else KtTokens.ABSTRACT_KEYWORD
+        return if (hasBody()) KtTokens.OPEN_KEYWORD else KtTokens.ABSTRACT_KEYWORD
     }
     return KtTokens.FINAL_KEYWORD
 }
@@ -318,3 +314,10 @@ fun KtCallableDeclaration.setReceiverType(type: KotlinType) {
     ShortenReferences.DEFAULT.process(receiverTypeReference!!)
 }
 
+fun KtParameter.setDefaultValue(newDefaultValue: KtExpression): PsiElement? {
+    defaultValue?.let { return it.replaced(newDefaultValue) }
+
+    val psiFactory = KtPsiFactory(this)
+    val eq = equalsToken ?: add(psiFactory.createEQ())
+    return addAfter(newDefaultValue, eq) as KtExpression
+}

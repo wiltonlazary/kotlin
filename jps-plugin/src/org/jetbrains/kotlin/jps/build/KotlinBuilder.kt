@@ -46,7 +46,7 @@ import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.*
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
-import org.jetbrains.kotlin.cli.common.messages.OutputMessageUtil
+import org.jetbrains.kotlin.cli.common.messages.MessageCollectorUtil
 import org.jetbrains.kotlin.compilerRunner.JpsCompilerEnvironment
 import org.jetbrains.kotlin.compilerRunner.JpsKotlinCompilerRunner
 import org.jetbrains.kotlin.compilerRunner.OutputItemsCollector
@@ -57,6 +57,7 @@ import org.jetbrains.kotlin.daemon.common.isDaemonEnabled
 import org.jetbrains.kotlin.incremental.*
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.jps.JpsKotlinCompilerSettings
+import org.jetbrains.kotlin.jps.build.JpsJsModuleUtils.getOutputMetaFile
 import org.jetbrains.kotlin.jps.incremental.*
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCache
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCompilationComponents
@@ -194,12 +195,7 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
         }
         catch (e: Throwable) {
             LOG.info("Caught exception: " + e)
-
-            messageCollector.report(
-                    CompilerMessageSeverity.EXCEPTION,
-                    OutputMessageUtil.renderException(e),
-                    CompilerMessageLocation.NO_LOCATION
-            )
+            MessageCollectorUtil.reportException(messageCollector, e)
             return ABORT
         }
     }
@@ -214,7 +210,7 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
     ): ModuleLevelBuilder.ExitCode {
         // Workaround for Android Studio
         if (!JavaBuilder.IS_ENABLED[context, true] && !JpsUtils.isJsKotlinModule(chunk.representativeTarget())) {
-            messageCollector.report(INFO, "Kotlin JPS plugin is disabled", CompilerMessageLocation.NO_LOCATION)
+            messageCollector.report(INFO, "Kotlin JPS plugin is disabled")
             return NOTHING_DONE
         }
 
@@ -235,11 +231,9 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
             return NOTHING_DONE
         }
 
-        messageCollector.report(INFO, "Kotlin JPS plugin version " + KotlinCompilerVersion.VERSION, CompilerMessageLocation.NO_LOCATION)
-
         val targetsWithoutOutputDir = targets.filter { it.outputDir == null }
         if (targetsWithoutOutputDir.isNotEmpty()) {
-            messageCollector.report(ERROR, "Output directory not specified for " + targetsWithoutOutputDir.joinToString(), CompilerMessageLocation.NO_LOCATION)
+            messageCollector.report(ERROR, "Output directory not specified for " + targetsWithoutOutputDir.joinToString())
             return ABORT
         }
 
@@ -252,8 +246,10 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
             return ABORT
         }
 
-        val commonArguments = compilerArgumentsForChunk(chunk)
-        commonArguments.verbose = true // Make compiler report source to output files mapping
+        val commonArguments = compilerArgumentsForChunk(chunk).apply {
+            reportOutputFiles = true
+            version = true // Always report the version to help diagnosing user issues if they submit the compiler output
+        }
 
         val allCompiledFiles = getAllCompiledFilesContainer(context)
         val filesToCompile = KotlinSourceFileCollector.getDirtySourceFiles(dirtyFilesHolder)
@@ -262,7 +258,7 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
 
         val start = System.nanoTime()
         val outputItemCollector = doCompileModuleChunk(allCompiledFiles, chunk, commonArguments, context, dirtyFilesHolder,
-                                                       environment, filesToCompile, incrementalCaches, messageCollector, project)
+                                                       environment, filesToCompile, incrementalCaches, project)
 
         statisticsLogger.registerStatistic(chunk, System.nanoTime() - start)
 
@@ -294,7 +290,7 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
         }
 
         if (JpsUtils.isJsKotlinModule(chunk.representativeTarget())) {
-            copyJsLibraryFilesIfNeeded(chunk, project)
+            copyJsLibraryFilesIfNeeded(chunk)
             return OK
         }
 
@@ -420,7 +416,7 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
             allCompiledFiles: MutableSet<File>, chunk: ModuleChunk, commonArguments: CommonCompilerArguments, context: CompileContext,
             dirtyFilesHolder: DirtyFilesHolder<JavaSourceRootDescriptor, ModuleBuildTarget>, environment: JpsCompilerEnvironment,
             filesToCompile: MultiMap<ModuleBuildTarget, File>, incrementalCaches: Map<ModuleBuildTarget, IncrementalCacheImpl<*>>,
-            messageCollector: MessageCollectorAdapter, project: JpsProject
+            project: JpsProject
     ): OutputItemsCollector? {
 
         if (JpsUtils.isJsKotlinModule(chunk.representativeTarget())) {
@@ -431,14 +427,14 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
         if (IncrementalCompilation.isEnabled()) {
             for (target in chunk.targets) {
                 val cache = incrementalCaches[target]!!
-                val removedAndDirtyFiles = filesToCompile[target] + dirtyFilesHolder.getRemovedFiles(target).map { File(it) }
+                val removedAndDirtyFiles = filesToCompile[target] + dirtyFilesHolder.getRemovedFiles(target).map(::File)
                 cache.markOutputClassesDirty(removedAndDirtyFiles)
             }
         }
 
         val representativeTarget = chunk.representativeTarget()
 
-        fun concatenate(strings: Array<String>?, cp: List<String>) = arrayOf(*(strings ?: emptyArray()), *cp.toTypedArray())
+        fun concatenate(strings: Array<String>?, cp: List<String>) = arrayOf(*strings.orEmpty(), *cp.toTypedArray())
 
         for (argumentProvider in ServiceLoader.load(KotlinJpsCompilerArgumentsProvider::class.java)) {
             // appending to pluginOptions
@@ -448,11 +444,7 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
             commonArguments.pluginClasspaths = concatenate(commonArguments.pluginClasspaths,
                                                            argumentProvider.getClasspath(representativeTarget, context))
 
-            messageCollector.report(
-                    INFO,
-                    "Plugin loaded: ${argumentProvider.javaClass.simpleName}",
-                    CompilerMessageLocation.NO_LOCATION
-            )
+            LOG.debug("Plugin loaded: ${argumentProvider::class.java.simpleName}")
         }
 
         return compileToJvm(allCompiledFiles, chunk, commonArguments, context, dirtyFilesHolder, environment, filesToCompile)
@@ -627,7 +619,7 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
     ) {
         if (!IncrementalCompilation.isExperimental()) return
 
-        if (lookupTracker !is LookupTrackerImpl) throw AssertionError("Lookup tracker is expected to be LookupTrackerImpl, got ${lookupTracker.javaClass}")
+        if (lookupTracker !is LookupTrackerImpl) throw AssertionError("Lookup tracker is expected to be LookupTrackerImpl, got ${lookupTracker::class.java}")
 
         val lookupStorage = dataManager.getStorage(KotlinDataContainerTarget, JpsLookupStorageProvider)
 
@@ -651,8 +643,7 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
                     STRONG_WARNING,
                     "Circular dependencies are not supported. The following JS modules depend on each other: "
                     + chunk.modules.map { it.name }.joinToString(", ") + ". "
-                    + "Kotlin is not compiled for these modules",
-                    CompilerMessageLocation.NO_LOCATION
+                    + "Kotlin is not compiled for these modules"
             )
             return null
         }
@@ -666,17 +657,22 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
 
         val representativeModule = representativeTarget.module
         val moduleName = representativeModule.name
-        val outputFile = JpsJsModuleUtils.getOutputFile(outputDir, moduleName)
+        val outputFile = JpsJsModuleUtils.getOutputFile(outputDir, moduleName, representativeTarget.isTests)
         val libraries = JpsJsModuleUtils.getLibraryFilesAndDependencies(representativeTarget)
         val compilerSettings = JpsKotlinCompilerSettings.getCompilerSettings(representativeModule)
         val k2JsArguments = JpsKotlinCompilerSettings.getK2JsCompilerArguments(representativeModule)
 
+        val friendPaths = KotlinBuilderModuleScriptGenerator.getProductionModulesWhichInternalsAreVisible(representativeTarget).mapNotNull {
+            val file = getOutputMetaFile(it, false)
+            if (file.exists()) file.absolutePath.toString() else null
+        }
+
         val compilerRunner = JpsKotlinCompilerRunner()
-        compilerRunner.runK2JsCompiler(commonArguments, k2JsArguments, compilerSettings, environment, sourceFiles, libraries, outputFile)
+        compilerRunner.runK2JsCompiler(commonArguments, k2JsArguments, compilerSettings, environment, sourceFiles, libraries, friendPaths, outputFile)
         return environment.outputItemsCollector
     }
 
-    private fun copyJsLibraryFilesIfNeeded(chunk: ModuleChunk, project: JpsProject) {
+    private fun copyJsLibraryFilesIfNeeded(chunk: ModuleChunk) {
         val representativeTarget = chunk.representativeTarget()
         val outputDir = KotlinBuilderModuleScriptGenerator.getOutputDirSafe(representativeTarget)
         val compilerSettings = JpsKotlinCompilerSettings.getCompilerSettings(representativeTarget.module)
@@ -702,8 +698,7 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
                     STRONG_WARNING,
                     "Circular dependencies are only partially supported. The following modules depend on each other: "
                     + chunk.modules.map { it.name }.joinToString(", ") + ". "
-                    + "Kotlin will compile them, but some strange effect may happen",
-                    CompilerMessageLocation.NO_LOCATION
+                    + "Kotlin will compile them, but some strange effect may happen"
             )
         }
 
@@ -746,20 +741,28 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
     class MessageCollectorAdapter(private val context: CompileContext) : MessageCollector {
         private var hasErrors = false
 
-        override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation) {
+        override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation?) {
             hasErrors = hasErrors or severity.isError
             var prefix = ""
             if (severity == EXCEPTION) {
                 prefix = INTERNAL_ERROR_PREFIX
             }
-            context.processMessage(CompilerMessage(
-                    CompilerRunnerConstants.KOTLIN_COMPILER_NAME,
-                    kind(severity),
-                    prefix + message + renderLocationIfNeeded(location),
-                    location.path,
-                    -1, -1, -1,
-                    location.line.toLong(), location.column.toLong()
-            ))
+            val kind = kind(severity)
+            if (kind != null) {
+                context.processMessage(CompilerMessage(
+                        CompilerRunnerConstants.KOTLIN_COMPILER_NAME,
+                        kind,
+                        prefix + message,
+                        location?.path,
+                        -1, -1, -1,
+                        location?.line?.toLong() ?: -1,
+                        location?.column?.toLong() ?: -1
+                ))
+            }
+            else {
+                val path = if (location != null) "${location.path}:${location.line}:${location.column}: " else ""
+                KotlinBuilder.LOG.debug(path + message)
+            }
         }
 
         override fun clear() {
@@ -768,22 +771,12 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
 
         override fun hasErrors(): Boolean = hasErrors
 
-        private fun renderLocationIfNeeded(location: CompilerMessageLocation): String {
-            if (location == CompilerMessageLocation.NO_LOCATION) return ""
-
-            // Sometimes we report errors in JavaScript library stubs, i.e. files like core/javautil.kt
-            // IDEA can't find these files, and does not display paths in Messages View, so we add the position information
-            // to the error message itself:
-            val pathname = "" + location.path
-            return if (File(pathname).exists()) "" else " ($location)"
-        }
-
-        private fun kind(severity: CompilerMessageSeverity): BuildMessage.Kind {
+        private fun kind(severity: CompilerMessageSeverity): BuildMessage.Kind? {
             return when (severity) {
                 INFO -> BuildMessage.Kind.INFO
                 ERROR, EXCEPTION -> BuildMessage.Kind.ERROR
                 WARNING, STRONG_WARNING -> BuildMessage.Kind.WARNING
-                LOGGING -> BuildMessage.Kind.PROGRESS
+                LOGGING -> null
                 else -> throw IllegalArgumentException("Unsupported severity: " + severity)
             }
         }

@@ -17,19 +17,23 @@
 package org.jetbrains.kotlin.resolve.jvm;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.builtins.PrimitiveType;
 import org.jetbrains.org.objectweb.asm.Type;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class AsmTypes {
-    private static final Map<Class<?>, Type> TYPES_MAP = new HashMap<Class<?>, Type>();
+    private static final Map<Class<?>, Type> TYPES_MAP = new HashMap<>();
 
     public static final Type OBJECT_TYPE = getType(Object.class);
     public static final Type JAVA_STRING_TYPE = getType(String.class);
     public static final Type JAVA_THROWABLE_TYPE = getType(Throwable.class);
     public static final Type JAVA_CLASS_TYPE = getType(Class.class);
     public static final Type ENUM_TYPE = getType(Enum.class);
+    public static final Type NUMBER_TYPE = getType(Number.class);
+    public static final Type BOOLEAN_WRAPPER_TYPE = getType(Boolean.class);
+    public static final Type CHARACTER_WRAPPER_TYPE = getType(Character.class);
 
     public static final Type UNIT_TYPE = Type.getObjectType("kotlin/Unit");
 
@@ -80,14 +84,43 @@ public class AsmTypes {
         return Type.getObjectType("kotlin/reflect/" + className);
     }
 
+    public static boolean isSharedVarType(@NotNull Type type) {
+        return type.getSort() == Type.OBJECT && type.getInternalName().startsWith(REF_TYPE_PREFIX);
+    }
+
+    @NotNull
+    public static Type sharedTypeForPrimitive(@NotNull PrimitiveType primitiveType) {
+        String typeName = primitiveType.getTypeName().getIdentifier();
+        return Type.getObjectType(REF_TYPE_PREFIX + typeName + "Ref");
+    }
+
+    @NotNull
+    public static Type valueTypeForPrimitive(PrimitiveType primitiveType) {
+        switch (primitiveType) {
+            case BOOLEAN:
+                return Type.BOOLEAN_TYPE;
+            case CHAR:
+                return Type.CHAR_TYPE;
+            case BYTE:
+                return Type.BYTE_TYPE;
+            case SHORT:
+                return Type.SHORT_TYPE;
+            case INT:
+                return Type.INT_TYPE;
+            case FLOAT:
+                return Type.FLOAT_TYPE;
+            case LONG:
+                return Type.LONG_TYPE;
+            case DOUBLE:
+                return Type.DOUBLE_TYPE;
+            default:
+                throw new UnsupportedOperationException();
+        }
+    }
+
     @NotNull
     public static Type getType(@NotNull Class<?> javaClass) {
-        Type type = TYPES_MAP.get(javaClass);
-        if (type == null) {
-            type = Type.getType(javaClass);
-            TYPES_MAP.put(javaClass, type);
-        }
-        return type;
+        return TYPES_MAP.computeIfAbsent(javaClass, k -> Type.getType(javaClass));
     }
 
     private AsmTypes() {

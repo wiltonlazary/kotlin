@@ -44,12 +44,10 @@ import org.jetbrains.kotlin.idea.actions.internal.KotlinInternalMode
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeFullyAndGetResult
 import org.jetbrains.kotlin.idea.quickfix.QuickFixes
 import org.jetbrains.kotlin.idea.references.mainReference
-import org.jetbrains.kotlin.idea.util.ProjectRootsUtil
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics
 import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.utils.singletonOrEmptyList
 import java.lang.reflect.*
 import java.util.*
 
@@ -69,7 +67,7 @@ open class KotlinPsiChecker : Annotator, HighlightRangeExtension {
 
         getAfterAnalysisVisitor(holder, bindingContext).forEach { visitor -> element.accept(visitor) }
 
-        annotateElement(element, holder, bindingContext.getDiagnostics())
+        annotateElement(element, holder, bindingContext.diagnostics)
     }
 
     override fun isForceHighlightParents(file: PsiFile): Boolean {
@@ -102,7 +100,7 @@ open class KotlinPsiChecker : Annotator, HighlightRangeExtension {
         )
 
         fun createQuickFixes(diagnostic: Diagnostic): Collection<IntentionAction> =
-                createQuickFixes(diagnostic.singletonOrEmptyList())[diagnostic]
+                createQuickFixes(listOfNotNull(diagnostic))[diagnostic]
 
         private val UNRESOLVED_KEY = Key<Unit>("KotlinPsiChecker.UNRESOLVED_KEY")
 
@@ -133,7 +131,7 @@ private fun createQuickFixes(similarDiagnostics: Collection<Diagnostic>): MultiM
         actions.putValues(diagnostic, QuickFixes.getInstance().getActions(diagnostic.factory))
     }
 
-    actions.values().forEach { NoDeclarationDescriptorsChecker.check(it.javaClass) }
+    actions.values().forEach { NoDeclarationDescriptorsChecker.check(it::class.java) }
 
     return actions
 }
@@ -240,14 +238,19 @@ private class ElementAnnotator(private val element: PsiElement,
 
                 AnnotationPresentationInfo(
                         ranges,
-                        textAttributes = if (factory == Errors.DEPRECATION) CodeInsightColors.DEPRECATED_ATTRIBUTES else null,
-                        highlightType = if (factory in Errors.UNUSED_ELEMENT_DIAGNOSTICS)
-                            ProblemHighlightType.LIKE_UNUSED_SYMBOL
-                        else
-                            null
+                        textAttributes = when (factory) {
+                            Errors.DEPRECATION -> CodeInsightColors.DEPRECATED_ATTRIBUTES
+                            Errors.UNUSED_ANONYMOUS_PARAMETER -> CodeInsightColors.WEAK_WARNING_ATTRIBUTES
+                            else -> null
+                        },
+                        highlightType = when (factory) {
+                            in Errors.UNUSED_ELEMENT_DIAGNOSTICS -> ProblemHighlightType.LIKE_UNUSED_SYMBOL
+                            Errors.UNUSED_ANONYMOUS_PARAMETER -> ProblemHighlightType.WEAK_WARNING
+                            else -> null
+                        }
                 )
             }
-            Severity.INFO -> return // Do nothing
+            Severity.INFO -> AnnotationPresentationInfo(ranges, highlightType = ProblemHighlightType.INFORMATION)
         }
 
         setUpAnnotations(diagnostics, presentationInfo)
@@ -279,15 +282,23 @@ private class AnnotationPresentationInfo(
         val ranges: List<TextRange>,
         val nonDefaultMessage: String? = null,
         val highlightType: ProblemHighlightType? = null,
-        val textAttributes: TextAttributesKey? = null) {
+        val textAttributes: TextAttributesKey? = null
+) {
 
     fun create(diagnostic: Diagnostic, range: TextRange, holder: AnnotationHolder): Annotation {
         val defaultMessage = nonDefaultMessage ?: getDefaultMessage(diagnostic)
 
         val annotation = when (diagnostic.severity) {
             Severity.ERROR -> holder.createErrorAnnotation(range, defaultMessage)
-            Severity.WARNING -> holder.createWarningAnnotation(range, defaultMessage)
-            else -> throw IllegalArgumentException("Only ERROR and WARNING diagnostics are supported")
+            Severity.WARNING -> {
+                if (highlightType == ProblemHighlightType.WEAK_WARNING) {
+                    holder.createWeakWarningAnnotation(range, defaultMessage)
+                }
+                else {
+                    holder.createWarningAnnotation(range, defaultMessage)
+                }
+            }
+            Severity.INFO -> holder.createInfoAnnotation(range, defaultMessage)
         }
 
         annotation.tooltip = getMessage(diagnostic)

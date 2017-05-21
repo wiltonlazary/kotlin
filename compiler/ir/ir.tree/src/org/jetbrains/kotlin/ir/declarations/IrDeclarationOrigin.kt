@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.ir.declarations
 
 interface IrDeclarationOrigin {
     object DEFINED : IrDeclarationOriginImpl("DEFINED")
+    object FAKE_OVERRIDE : IrDeclarationOriginImpl("FAKE_OVERRIDE")
     object PROPERTY_BACKING_FIELD : IrDeclarationOriginImpl("PROPERTY_BACKING_FIELD")
     object DEFAULT_PROPERTY_ACCESSOR : IrDeclarationOriginImpl("DEFAULT_PROPERTY_ACCESSOR")
     object DELEGATE : IrDeclarationOriginImpl("DELEGATE")
@@ -26,7 +27,12 @@ interface IrDeclarationOrigin {
     object ENUM_CLASS_SPECIAL_MEMBER : IrDeclarationOriginImpl("ENUM_CLASS_SPECIAL_MEMBER")
     object GENERATED_DATA_CLASS_MEMBER : IrDeclarationOriginImpl("GENERATED_DATA_CLASS_MEMBER")
     object LOCAL_FUNCTION_FOR_LAMBDA : IrDeclarationOriginImpl("LOCAL_FUNCTION_FOR_LAMBDA")
+    object CATCH_PARAMETER : IrDeclarationOriginImpl("CATCH_PARAMETER")
+    object INSTANCE_RECEIVER : IrDeclarationOriginImpl("INSTANCE_RECEIVER")
+    object PRIMARY_CONSTRUCTOR_PARAMETER : IrDeclarationOriginImpl("PRIMARY_CONSTRUCTOR_PARAMETER")
     object IR_TEMPORARY_VARIABLE : IrDeclarationOriginImpl("IR_TEMPORARY_VARIABLE")
+    object IR_EXTERNAL_DECLARATION_STUB : IrDeclarationOriginImpl("IR_EXTERNAL_DECLARATION_STUB")
+    object IR_BUILTINS_STUB : IrDeclarationOriginImpl("IR_BUILTINS_STUB")
 }
 
 abstract class IrDeclarationOriginImpl(val name: String): IrDeclarationOrigin {

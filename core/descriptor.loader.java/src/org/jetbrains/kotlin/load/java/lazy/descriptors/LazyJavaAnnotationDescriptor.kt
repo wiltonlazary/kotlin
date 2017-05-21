@@ -34,6 +34,7 @@ import org.jetbrains.kotlin.platform.JavaToKotlinClassMap
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.resolve.constants.ConstantValue
 import org.jetbrains.kotlin.resolve.constants.ConstantValueFactory
+import org.jetbrains.kotlin.resolve.descriptorUtil.annotationClass
 import org.jetbrains.kotlin.resolve.descriptorUtil.resolveTopLevelClass
 import org.jetbrains.kotlin.serialization.deserialization.findNonGenericClassAcrossDependencies
 import org.jetbrains.kotlin.types.*
@@ -50,7 +51,7 @@ class LazyJavaAnnotationDescriptor(
 
     private val type = c.storageManager.createLazyValue {
         val fqName = fqName() ?: return@createLazyValue ErrorUtils.createErrorType("No fqName: $javaAnnotation")
-        val annotationClass = JavaToKotlinClassMap.INSTANCE.mapJavaToKotlin(fqName, c.module.builtIns)
+        val annotationClass = JavaToKotlinClassMap.mapJavaToKotlin(fqName, c.module.builtIns)
                               ?: javaAnnotation.resolve()?.let { javaClass -> c.components.moduleClassResolver.resolveClass(javaClass) }
                               ?: createTypeForMissingDependencies(fqName)
         annotationClass.defaultType
@@ -77,8 +78,8 @@ class LazyJavaAnnotationDescriptor(
         val nameToArg = javaAnnotation.arguments.associateBy { it.name }
 
         return constructors.first().valueParameters.keysToMapExceptNulls { valueParameter ->
-            var javaAnnotationArgument = nameToArg[valueParameter.getName()]
-            if (javaAnnotationArgument == null && valueParameter.getName() == DEFAULT_ANNOTATION_MEMBER_NAME) {
+            var javaAnnotationArgument = nameToArg[valueParameter.name]
+            if (javaAnnotationArgument == null && valueParameter.name == DEFAULT_ANNOTATION_MEMBER_NAME) {
                 javaAnnotationArgument = nameToArg[null]
             }
 
@@ -86,7 +87,7 @@ class LazyJavaAnnotationDescriptor(
         }
     }
 
-    private fun getAnnotationClass() = getType().constructor.declarationDescriptor as ClassDescriptor
+    private fun getAnnotationClass() = annotationClass!!
 
     private fun resolveAnnotationArgument(argument: JavaAnnotationArgument?): ConstantValue<*>? {
         return when (argument) {

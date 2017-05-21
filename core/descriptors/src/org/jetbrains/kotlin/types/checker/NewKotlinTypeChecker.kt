@@ -27,7 +27,6 @@ import org.jetbrains.kotlin.types.checker.TypeCheckerContext.SupertypesPolicy
 import org.jetbrains.kotlin.types.typeUtil.asTypeProjection
 import org.jetbrains.kotlin.types.typeUtil.makeNullable
 import org.jetbrains.kotlin.utils.SmartList
-import org.jetbrains.kotlin.utils.addToStdlib.check
 
 object StrictEqualityTypeChecker {
     /**
@@ -79,9 +78,10 @@ object ErrorTypesAreEqualToAnything : KotlinTypeChecker {
 
 object NewKotlinTypeChecker : KotlinTypeChecker {
     override fun isSubtypeOf(subtype: KotlinType, supertype: KotlinType): Boolean =
-            TypeCheckerContext(true).run { isSubtypeOf(subtype.unwrap(), supertype.unwrap()) } // todo fix flag errorTypeEqualsToAnything
+            TypeCheckerContext(true).isSubtypeOf(subtype.unwrap(), supertype.unwrap()) // todo fix flag errorTypeEqualsToAnything
+
     override fun equalTypes(a: KotlinType, b: KotlinType): Boolean =
-            TypeCheckerContext(false).run { equalTypes(a.unwrap(), b.unwrap()) }
+            TypeCheckerContext(false).equalTypes(a.unwrap(), b.unwrap())
 
     fun TypeCheckerContext.equalTypes(a: UnwrappedType, b: UnwrappedType): Boolean {
         if (a === b) return true
@@ -106,7 +106,7 @@ object NewKotlinTypeChecker : KotlinTypeChecker {
         when (constructor) {
             // Type itself can be just SimpleTypeImpl, not CapturedType. see KT-16147
             is CapturedTypeConstructor -> {
-                val lowerType = constructor.typeProjection.check { it.projectionKind == Variance.IN_VARIANCE }?.type?.unwrap()
+                val lowerType = constructor.typeProjection.takeIf { it.projectionKind == Variance.IN_VARIANCE }?.type?.unwrap()
 
                 // it is incorrect calculate this type directly because of recursive star projections
                 if (constructor.newTypeConstructor == null) {
@@ -177,8 +177,12 @@ object NewKotlinTypeChecker : KotlinTypeChecker {
         }
 
     private fun TypeCheckerContext.isSubtypeOfForSingleClassifierType(subType: SimpleType, superType: SimpleType): Boolean {
-        assert(subType.isSingleClassifierType || subType.isIntersectionType) { "Not singleClassifierType and not intersection subType: $subType" }
-        assert(superType.isSingleClassifierType) { "Not singleClassifierType superType: $superType" }
+        assert(subType.isSingleClassifierType || subType.isIntersectionType || subType.isAllowedTypeVariable) {
+            "Not singleClassifierType and not intersection subType: $subType"
+        }
+        assert(superType.isSingleClassifierType || superType.isAllowedTypeVariable) {
+            "Not singleClassifierType superType: $superType"
+        }
 
         if (!NullabilityChecker.isPossibleSubtype(this, subType, superType)) return false
 
@@ -191,9 +195,9 @@ object NewKotlinTypeChecker : KotlinTypeChecker {
             else -> { // at least 2 supertypes with same constructors. Such case is rare
                 if (supertypesWithSameConstructor.any { isSubtypeForSameConstructor(it.arguments, superType) }) return true
 
-                val newArguments = superConstructor.parameters.mapIndexed { index, parameterDescriptor ->
+                val newArguments = superConstructor.parameters.mapIndexed { index, _ ->
                     val allProjections = supertypesWithSameConstructor.map {
-                        it.arguments.getOrNull(index)?.check { it.projectionKind == Variance.INVARIANT }?.type?.unwrap()
+                        it.arguments.getOrNull(index)?.takeIf { it.projectionKind == Variance.INVARIANT }?.type?.unwrap()
                         ?: error("Incorrect type: $it, subType: $subType, superType: $superType")
                     }
 
@@ -248,7 +252,7 @@ object NewKotlinTypeChecker : KotlinTypeChecker {
         anySupertype(baseType, { false }) {
             val current = captureFromArguments(it, CaptureStatus.FOR_SUBTYPING)
 
-            if (current.constructor == constructor) {
+            if (areEqualTypeConstructors(current.constructor, constructor)) {
                 if (result == null) {
                     result = SmartList()
                 }
@@ -342,8 +346,12 @@ object NullabilityChecker {
 
     private fun TypeCheckerContext.runIsPossibleSubtype(subType: SimpleType, superType: SimpleType): Boolean {
         // it makes for case String? & Any <: String
-        assert(subType.isIntersectionType || subType.isSingleClassifierType) {"Not singleClassifierType superType: $superType"}
-        assert(superType.isSingleClassifierType) {"Not singleClassifierType superType: $superType"}
+        assert(subType.isIntersectionType || subType.isSingleClassifierType || subType.isAllowedTypeVariable) {
+            "Not singleClassifierType superType: $superType"
+        }
+        assert(superType.isSingleClassifierType || subType.isAllowedTypeVariable) {
+            "Not singleClassifierType superType: $superType"
+        }
 
         // superType is actually nullable
         if (superType.isMarkedNullable) return true

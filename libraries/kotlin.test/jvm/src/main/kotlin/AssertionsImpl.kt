@@ -33,25 +33,17 @@ private fun <T : Throwable> assertFailsWithImpl(exceptionClass: Class<T>, messag
         }
 
         @Suppress("INVISIBLE_MEMBER")
-        asserter.fail(messagePrefix(message) + "Expected an exception of type $exceptionClass to be thrown, but was $e")
+        asserter.fail(messagePrefix(message) + "Expected an exception of $exceptionClass to be thrown, but was $e")
     }
 
     @Suppress("INVISIBLE_MEMBER")
     val msg = messagePrefix(message)
-    asserter.fail(msg + "Expected an exception of type $exceptionClass to be thrown, but was completed successfully.")
+    asserter.fail(msg + "Expected an exception of $exceptionClass to be thrown, but was completed successfully.")
 }
 
-/** Asserts that a [block] fails with a specific exception of type [exceptionClass] being thrown. */
-fun <T : Throwable> assertFailsWith(exceptionClass: KClass<T>, block: () -> Unit): T = assertFailsWith(exceptionClass, null, block)
 
 /** Asserts that a [block] fails with a specific exception of type [exceptionClass] being thrown. */
-fun <T : Throwable> assertFailsWith(exceptionClass: KClass<T>, message: String?, block: () -> Unit): T = assertFailsWithImpl(exceptionClass.java, message, block)
-
-/** Asserts that a [block] fails with a specific exception of type [T] being thrown.
- *  Since inline method doesn't allow to trace where it was invoked, it is required to pass a [message] to distinguish this method call from others.
- */
-@InlineOnly
-inline fun <reified T : Throwable> assertFailsWith(message: String? = null, noinline block: () -> Unit): T = assertFailsWith(T::class, message, block)
+impl fun <T : Throwable> assertFailsWith(exceptionClass: KClass<T>, message: String?, block: () -> Unit): T = assertFailsWithImpl(exceptionClass.java, message, block)
 
 
 /**
@@ -59,7 +51,7 @@ inline fun <reified T : Throwable> assertFailsWith(message: String? = null, noin
  * to implement in your unit test output
  */
 @InlineOnly
-inline fun todo(@Suppress("UNUSED_PARAMETER") block: () -> Unit) {
+impl inline fun todo(@Suppress("UNUSED_PARAMETER") block: () -> Unit) {
     System.out.println("TODO at " + currentStackTrace()[0])
 }
 

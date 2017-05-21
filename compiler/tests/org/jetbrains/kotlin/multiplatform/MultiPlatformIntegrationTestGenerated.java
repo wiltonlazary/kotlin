@@ -42,6 +42,12 @@ public class MultiPlatformIntegrationTestGenerated extends AbstractMultiPlatform
         doTest(fileName);
     }
 
+    @TestMetadata("createImplClassInPlatformModule")
+    public void testCreateImplClassInPlatformModule() throws Exception {
+        String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/multiplatform/createImplClassInPlatformModule/");
+        doTest(fileName);
+    }
+
     @TestMetadata("genericDeclarations")
     public void testGenericDeclarations() throws Exception {
         String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/multiplatform/genericDeclarations/");
@@ -139,7 +145,6 @@ public class MultiPlatformIntegrationTestGenerated extends AbstractMultiPlatform
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/multiplatform/classScopes/simple/");
             doTest(fileName);
         }
-
     }
 
     @TestMetadata("compiler/testData/multiplatform/implTypeAlias")
@@ -161,7 +166,20 @@ public class MultiPlatformIntegrationTestGenerated extends AbstractMultiPlatform
             String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/multiplatform/implTypeAlias/nestedClassesViaTypeAlias/");
             doTest(fileName);
         }
-
     }
 
+    @TestMetadata("compiler/testData/multiplatform/regressions")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class Regressions extends AbstractMultiPlatformIntegrationTest {
+        public void testAllFilesPresentInRegressions() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/multiplatform/regressions"), Pattern.compile("^([^\\.]+)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("kt17001")
+        public void testKt17001() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("compiler/testData/multiplatform/regressions/kt17001/");
+            doTest(fileName);
+        }
+    }
 }

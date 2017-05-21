@@ -23,12 +23,12 @@ import org.jetbrains.uast.kotlin.kinds.KotlinSpecialExpressionKinds
 
 class KotlinUSwitchExpression(
         override val psi: KtWhenExpression,
-        override val containingElement: UElement?
+        override val uastParent: UElement?
 ) : KotlinAbstractUExpression(), USwitchExpression, KotlinUElementWithType {
     override val expression by lz { KotlinConverter.convertOrNull(psi.subjectExpression, this) }
 
     override val body: UExpressionList by lz {
-        object : KotlinUExpressionList(psi, KotlinSpecialExpressionKinds.WHEN, this) {
+        object : KotlinUExpressionList(psi, KotlinSpecialExpressionKinds.WHEN, this@KotlinUSwitchExpression) {
             override fun asRenderString() = expressions.joinToString("\n") { it.asRenderString().withMargin }
         }.apply {
             expressions = this@KotlinUSwitchExpression.psi.entries.map { KotlinUSwitchEntry(it, this) }
@@ -48,7 +48,7 @@ class KotlinUSwitchExpression(
 
 class KotlinUSwitchEntry(
         override val psi: KtWhenEntry,
-        override val containingElement: UExpression
+        override val uastParent: UExpression
 ) : KotlinAbstractUExpression(), USwitchClauseExpressionWithBody {
     override val caseValues by lz {
         psi.conditions.map { when (it) {
@@ -77,7 +77,7 @@ class KotlinUSwitchEntry(
     }
 
     override val body: UExpressionList by lz {
-        object : KotlinUExpressionList(psi, KotlinSpecialExpressionKinds.WHEN_ENTRY, this) {
+        object : KotlinUExpressionList(psi, KotlinSpecialExpressionKinds.WHEN_ENTRY, this@KotlinUSwitchEntry) {
             override fun asRenderString() = buildString {
                 appendln("{")
                 expressions.forEach { appendln(it.asRenderString().withMargin) }
@@ -89,13 +89,12 @@ class KotlinUSwitchEntry(
                 is KtBlockExpression -> exprPsi.statements.map { KotlinConverter.convertOrEmpty(it, this) }
                 else -> listOf(KotlinConverter.convertOrEmpty(exprPsi, this))
             }
-            containingElement
             expressions = userExpressions + object : UBreakExpression {
                 override val psi: PsiElement?
                     get() = null
                 override val label: String?
                     get() = null
-                override val containingElement: UElement?
+                override val uastParent: UElement?
                     get() = this@KotlinUSwitchEntry
                 override val annotations: List<UAnnotation>
                     get() = emptyList()

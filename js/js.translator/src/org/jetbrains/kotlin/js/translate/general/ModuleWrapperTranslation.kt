@@ -18,17 +18,16 @@ package org.jetbrains.kotlin.js.translate.general
 
 import org.jetbrains.kotlin.js.backend.ast.*
 import org.jetbrains.kotlin.js.translate.context.Namer
-import org.jetbrains.kotlin.js.translate.context.StaticContext
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 import org.jetbrains.kotlin.serialization.js.ModuleKind
 
 object ModuleWrapperTranslation {
     @JvmStatic fun wrapIfNecessary(
-            moduleId: String, function: JsExpression, importedModules: List<StaticContext.ImportedModule>,
+            moduleId: String, function: JsExpression, importedModules: List<JsImportedModule>,
             program: JsProgram, kind: ModuleKind
     ): List<JsStatement> {
         return when (kind) {
-            ModuleKind.AMD -> wrapAmd(moduleId, function, importedModules, program)
+            ModuleKind.AMD -> wrapAmd(function, importedModules, program)
             ModuleKind.COMMON_JS -> wrapCommonJs(function, importedModules, program)
             ModuleKind.UMD -> wrapUmd(moduleId, function, importedModules, program)
             ModuleKind.PLAIN -> wrapPlain(moduleId, function, importedModules, program)
@@ -37,7 +36,7 @@ object ModuleWrapperTranslation {
 
     private fun wrapUmd(
             moduleId: String, function: JsExpression,
-            importedModules: List<StaticContext.ImportedModule>, program: JsProgram
+            importedModules: List<JsImportedModule>, program: JsProgram
     ): List<JsStatement> {
         val scope = program.scope
         val defineName = scope.declareName("define")
@@ -54,7 +53,7 @@ object ModuleWrapperTranslation {
                                      JsNameRef("amd", defineName.makeRef()))
         val commonJsTest = JsAstUtils.typeOfIs(exportsName.makeRef(), program.getStringLiteral("object"))
 
-        val amdBody = JsBlock(wrapAmd(moduleId, factoryName.makeRef(), importedModules, program))
+        val amdBody = JsBlock(wrapAmd(factoryName.makeRef(), importedModules, program))
         val commonJsBody = JsBlock(wrapCommonJs(factoryName.makeRef(), importedModules, program))
         val plainInvocation = makePlainInvocation(moduleId, factoryName.makeRef(), importedModules, program)
 
@@ -78,13 +77,12 @@ object ModuleWrapperTranslation {
     }
 
     private fun wrapAmd(
-            moduleId: String, function: JsExpression,
-            importedModules: List<StaticContext.ImportedModule>, program: JsProgram
+            function: JsExpression,
+            importedModules: List<JsImportedModule>, program: JsProgram
     ): List<JsStatement> {
         val scope = program.scope
         val defineName = scope.declareName("define")
         val invocationArgs = listOf(
-                program.getStringLiteral(moduleId),
                 JsArrayLiteral(listOf(program.getStringLiteral("exports")) + importedModules.map { program.getStringLiteral(it.externalName) }),
                 function
         )
@@ -95,7 +93,7 @@ object ModuleWrapperTranslation {
 
     private fun wrapCommonJs(
             function: JsExpression,
-            importedModules: List<StaticContext.ImportedModule>,
+            importedModules: List<JsImportedModule>,
             program: JsProgram
     ): List<JsStatement> {
         val scope = program.scope
@@ -109,7 +107,7 @@ object ModuleWrapperTranslation {
 
     private fun wrapPlain(
             moduleId: String, function: JsExpression,
-            importedModules: List<StaticContext.ImportedModule>, program: JsProgram
+            importedModules: List<JsImportedModule>, program: JsProgram
     ): List<JsStatement> {
         val invocation = makePlainInvocation(moduleId, function, importedModules, program)
         val statements = mutableListOf<JsStatement>()
@@ -131,7 +129,7 @@ object ModuleWrapperTranslation {
     private fun addModuleValidation(
             currentModuleId: String,
             program: JsProgram,
-            module: StaticContext.ImportedModule
+            module: JsImportedModule
     ): JsStatement {
         val moduleRef = makePlainModuleRef(module, program)
         val moduleExistsCond = JsAstUtils.typeOfIs(moduleRef, program.getStringLiteral("undefined"))
@@ -145,7 +143,7 @@ object ModuleWrapperTranslation {
     private fun makePlainInvocation(
             moduleId: String,
             function: JsExpression,
-            importedModules: List<StaticContext.ImportedModule>,
+            importedModules: List<JsImportedModule>,
             program: JsProgram
     ): JsInvocation {
         val invocationArgs = importedModules.map { makePlainModuleRef(it, program) }
@@ -156,7 +154,7 @@ object ModuleWrapperTranslation {
         return JsInvocation(function, listOf(selfArg) + invocationArgs)
     }
 
-    private fun makePlainModuleRef(module: StaticContext.ImportedModule, program: JsProgram): JsExpression {
+    private fun makePlainModuleRef(module: JsImportedModule, program: JsProgram): JsExpression {
         return module.plainReference ?: makePlainModuleRef(module.externalName, program)
     }
 

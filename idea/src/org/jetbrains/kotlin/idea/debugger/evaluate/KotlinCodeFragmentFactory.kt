@@ -57,11 +57,10 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getElementTextWithContext
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.typeUtil.makeNullable
-import org.jetbrains.kotlin.utils.addToStdlib.check
 import java.util.concurrent.atomic.AtomicReference
 
 class KotlinCodeFragmentFactory: CodeFragmentFactory() {
-    private val LOG = Logger.getInstance(this.javaClass)
+    private val LOG = Logger.getInstance(this::class.java)
 
     override fun createCodeFragment(item: TextWithImports, context: PsiElement?, project: Project): JavaCodeFragment {
         val contextElement = getWrappedContextElement(project, context)
@@ -310,20 +309,18 @@ class KotlinCodeFragmentFactory: CodeFragmentFactory() {
                 elementAt.textOffset
             }
 
-            var result = PsiTreeUtil.findElementOfClassAtOffset(containingFile, lineStartOffset, KtExpression::class.java, false)
-            if (result.check()) {
-                return CodeInsightUtils.getTopmostElementAtOffset(result!!, lineStartOffset, KtExpression::class.java)
-            }
+            fun KtElement.takeIfAcceptedAsCodeFragmentContext() = takeIf { KotlinEditorTextProvider.isAcceptedAsCodeFragmentContext(it) }
 
-            result = KotlinEditorTextProvider.findExpressionInner(elementAt, true)
-            if (result.check()) {
-                return result
-            }
+            PsiTreeUtil.findElementOfClassAtOffset(containingFile, lineStartOffset, KtExpression::class.java, false)
+                    ?.takeIfAcceptedAsCodeFragmentContext()
+                    ?.let { return CodeInsightUtils.getTopmostElementAtOffset(it, lineStartOffset, KtExpression::class.java) }
+
+            KotlinEditorTextProvider.findExpressionInner(elementAt, true)
+                    ?.takeIfAcceptedAsCodeFragmentContext()
+                    ?.let { return it }
 
             return containingFile
         }
-
-        private fun KtElement?.check(): Boolean = this != null && this.check { KotlinEditorTextProvider.isAcceptedAsCodeFragmentContext(it) } != null
 
         //internal for tests
         fun createCodeFragmentForLabeledObjects(project: Project, markupMap: Map<*, ValueMarkup>): Pair<String, Map<String, Value>> {
@@ -398,7 +395,7 @@ class KotlinCodeFragmentFactory: CodeFragmentFactory() {
 
         val sb = StringBuilder()
 
-        javaFile?.packageName?.check { !it.isBlank() }?.let {
+        javaFile?.packageName?.takeUnless { it.isBlank() }?.let {
             sb.append("package ").append(it.quoteIfNeeded()).append("\n")
         }
 

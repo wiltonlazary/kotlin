@@ -410,6 +410,12 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
             doTest(fileName);
         }
 
+        @TestMetadata("charElvis.kt")
+        public void testCharElvis() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/char/charElvis.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("charEquals.kt")
         public void testCharEquals() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/char/charEquals.kt");
@@ -3435,6 +3441,63 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
         }
     }
 
+    @TestMetadata("js/js.translator/testData/box/incremental")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class Incremental extends AbstractBoxJsTest {
+        public void testAllFilesPresentInIncremental() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("js/js.translator/testData/box/incremental"), Pattern.compile("^([^_](.+))\\.kt$"), TargetBackend.JS, true);
+        }
+
+        @TestMetadata("catchScope.kt")
+        public void testCatchScope() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/incremental/catchScope.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("coroutines.kt")
+        public void testCoroutines() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/incremental/coroutines.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("defaultArguments.kt")
+        public void testDefaultArguments() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/incremental/defaultArguments.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("exportedPackage.kt")
+        public void testExportedPackage() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/incremental/exportedPackage.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("inline.kt")
+        public void testInline() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/incremental/inline.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("multipleExport.kt")
+        public void testMultipleExport() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/incremental/multipleExport.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("simple.kt")
+        public void testSimple() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/incremental/simple.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("syntheticStatement.kt")
+        public void testSyntheticStatement() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/incremental/syntheticStatement.kt");
+            doTest(fileName);
+        }
+    }
+
     @TestMetadata("js/js.translator/testData/box/inheritance")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -4055,6 +4118,12 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("js/js.translator/testData/box/inlineEvaluationOrder"), Pattern.compile("^([^_](.+))\\.kt$"), TargetBackend.JS, true);
         }
 
+        @TestMetadata("alsoWithReassingment.kt")
+        public void testAlsoWithReassingment() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/inlineEvaluationOrder/alsoWithReassingment.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("argumentOfCall.kt")
         public void testArgumentOfCall() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/inlineEvaluationOrder/argumentOfCall.kt");
@@ -4362,6 +4431,12 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
     public static class InlineMultiFile extends AbstractBoxJsTest {
         public void testAllFilesPresentInInlineMultiFile() throws Exception {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("js/js.translator/testData/box/inlineMultiFile"), Pattern.compile("^([^_](.+))\\.kt$"), TargetBackend.JS, true);
+        }
+
+        @TestMetadata("anonymousObjectInSimilarFunctions.kt")
+        public void testAnonymousObjectInSimilarFunctions() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/inlineMultiFile/anonymousObjectInSimilarFunctions.kt");
+            doTest(fileName);
         }
 
         @TestMetadata("anonymousObjectOnCallSite.kt")
@@ -5048,6 +5123,12 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
         @TestMetadata("literal.kt")
         public void testLiteral() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/jsCode/literal.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("numberLiteralOverflow.kt")
+        public void testNumberLiteralOverflow() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/jsCode/numberLiteralOverflow.kt");
             doTest(fileName);
         }
 
@@ -6002,6 +6083,12 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
             doTest(fileName);
         }
 
+        @TestMetadata("privateExternal.kt")
+        public void testPrivateExternal() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/native/privateExternal.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("safeCastToNativeInterface.kt")
         public void testSafeCastToNativeInterface() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/native/safeCastToNativeInterface.kt");
@@ -6197,6 +6284,12 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
         @TestMetadata("doubleConversions.kt")
         public void testDoubleConversions() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/number/doubleConversions.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("hashCode.kt")
+        public void testHashCode() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/number/hashCode.kt");
             doTest(fileName);
         }
 
@@ -6531,6 +6624,45 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
         }
     }
 
+    @TestMetadata("js/js.translator/testData/box/package")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class Package extends AbstractBoxJsTest {
+        public void testAllFilesPresentInPackage() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("js/js.translator/testData/box/package"), Pattern.compile("^([^_](.+))\\.kt$"), TargetBackend.JS, true);
+        }
+
+        @TestMetadata("classCreatedInDeeplyNestedPackage.kt")
+        public void testClassCreatedInDeeplyNestedPackage() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/package/classCreatedInDeeplyNestedPackage.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("deeplyNestedPackage.kt")
+        public void testDeeplyNestedPackage() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/package/deeplyNestedPackage.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("deeplyNestedPackageFunctionCalled.kt")
+        public void testDeeplyNestedPackageFunctionCalled() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/package/deeplyNestedPackageFunctionCalled.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("initializersOfNestedPackagesExecute.kt")
+        public void testInitializersOfNestedPackagesExecute() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/package/initializersOfNestedPackagesExecute.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("nestedPackage.kt")
+        public void testNestedPackage() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/package/nestedPackage.kt");
+            doTest(fileName);
+        }
+    }
+
     @TestMetadata("js/js.translator/testData/box/propertyAccess")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -6818,6 +6950,12 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("js/js.translator/testData/box/reflection"), Pattern.compile("^([^_](.+))\\.kt$"), TargetBackend.JS, true);
         }
 
+        @TestMetadata("external.kt")
+        public void testExternal() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/reflection/external.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("jsClass.kt")
         public void testJsClass() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/reflection/jsClass.kt");
@@ -6881,6 +7019,12 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
         @TestMetadata("kClassToAndFromJsClass.kt")
         public void testKClassToAndFromJsClass() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/reflection/kClassToAndFromJsClass.kt");
+            doTest(fileName);
+        }
+
+        @TestMetadata("primitives.kt")
+        public void testPrimitives() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/reflection/primitives.kt");
             doTest(fileName);
         }
     }

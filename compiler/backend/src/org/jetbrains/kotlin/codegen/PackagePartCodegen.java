@@ -18,8 +18,6 @@ package org.jetbrains.kotlin.codegen;
 
 import com.intellij.util.ArrayUtil;
 import kotlin.Unit;
-import kotlin.jvm.functions.Function0;
-import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.codegen.annotation.AnnotatedSimple;
 import org.jetbrains.kotlin.codegen.context.FieldOwnerContext;
@@ -38,7 +36,6 @@ import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.serialization.DescriptorSerializer;
 import org.jetbrains.kotlin.serialization.ProtoBuf;
-import org.jetbrains.org.objectweb.asm.AnnotationVisitor;
 import org.jetbrains.org.objectweb.asm.Type;
 
 import java.util.ArrayList;
@@ -78,7 +75,7 @@ public class PackagePartCodegen extends MemberCodegen<KtFile> {
     }
 
     private void generateAnnotationsForPartClass() {
-        List<AnnotationDescriptor> fileAnnotationDescriptors = new ArrayList<AnnotationDescriptor>();
+        List<AnnotationDescriptor> fileAnnotationDescriptors = new ArrayList<>();
         for (KtAnnotationEntry annotationEntry : element.getAnnotationEntries()) {
             AnnotationDescriptor annotationDescriptor = state.getBindingContext().get(BindingContext.ANNOTATION, annotationEntry);
             if (annotationDescriptor != null) {
@@ -100,18 +97,13 @@ public class PackagePartCodegen extends MemberCodegen<KtFile> {
         }
 
         if (state.getClassBuilderMode().generateBodies) {
-            generateInitializers(new Function0<ExpressionCodegen>() {
-                @Override
-                public ExpressionCodegen invoke() {
-                    return createOrGetClInitCodegen();
-                }
-            });
+            generateInitializers(this::createOrGetClInitCodegen);
         }
     }
 
     @Override
     protected void generateKotlinMetadataAnnotation() {
-        List<DeclarationDescriptor> members = new ArrayList<DeclarationDescriptor>();
+        List<DeclarationDescriptor> members = new ArrayList<>();
         for (KtDeclaration declaration : element.getDeclarations()) {
             if (declaration instanceof KtNamedFunction) {
                 SimpleFunctionDescriptor functionDescriptor = bindingContext.get(BindingContext.FUNCTION, declaration);
@@ -127,16 +119,13 @@ public class PackagePartCodegen extends MemberCodegen<KtFile> {
             }
         }
 
-        final DescriptorSerializer serializer =
+        DescriptorSerializer serializer =
                 DescriptorSerializer.createTopLevel(new JvmSerializerExtension(v.getSerializationBindings(), state));
-        final ProtoBuf.Package packageProto = serializer.packagePartProto(members).build();
+        ProtoBuf.Package packageProto = serializer.packagePartProto(element.getPackageFqName(), members).build();
 
-        WriteAnnotationUtilKt.writeKotlinMetadata(v, state, KotlinClassHeader.Kind.FILE_FACADE, 0, new Function1<AnnotationVisitor, Unit>() {
-            @Override
-            public Unit invoke(AnnotationVisitor av) {
-                writeAnnotationData(av, serializer, packageProto);
-                return Unit.INSTANCE;
-            }
+        WriteAnnotationUtilKt.writeKotlinMetadata(v, state, KotlinClassHeader.Kind.FILE_FACADE, 0, av -> {
+            writeAnnotationData(av, serializer, packageProto);
+            return Unit.INSTANCE;
         });
     }
 

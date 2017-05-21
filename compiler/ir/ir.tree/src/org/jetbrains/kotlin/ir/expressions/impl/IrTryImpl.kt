@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.ir.expressions.impl
 
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
 import org.jetbrains.kotlin.ir.IrElementBase
+import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.expressions.IrCatch
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrTry
@@ -62,19 +63,35 @@ class IrTryImpl(startOffset: Int, endOffset: Int, type: KotlinType) :
     }
 }
 
-class IrCatchImpl(startOffset: Int, endOffset: Int,
-                  override val parameter: VariableDescriptor,
-                  override var result: IrExpression
-) : IrCatch, IrElementBase(startOffset, endOffset) {
+class IrCatchImpl(startOffset: Int, endOffset: Int)
+    : IrCatch, IrElementBase(startOffset, endOffset)
+{
+    constructor(startOffset: Int, endOffset: Int, catchParameter: IrVariable)
+            : this(startOffset, endOffset) {
+        this.catchParameter = catchParameter
+    }
+
+    constructor(startOffset: Int, endOffset: Int, catchParameter: IrVariable, result: IrExpression)
+            : this(startOffset, endOffset, catchParameter) {
+        this.result = result
+    }
+
+    override lateinit var catchParameter: IrVariable
+    override lateinit var result: IrExpression
+
+    override val parameter: VariableDescriptor get() = catchParameter.descriptor
+
     override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R {
         return visitor.visitCatch(this, data)
     }
 
     override fun <D> acceptChildren(visitor: IrElementVisitor<Unit, D>, data: D) {
+        catchParameter.accept(visitor, data)
         result.accept(visitor, data)
     }
 
     override fun <D> transformChildren(transformer: IrElementTransformer<D>, data: D) {
+        catchParameter = catchParameter.transform(transformer, data) as IrVariable
         result = result.transform(transformer, data)
     }
 }

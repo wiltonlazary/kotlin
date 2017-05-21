@@ -34,7 +34,7 @@ private abstract class BaseOutput {
 /** JsName used to make the declaration available outside of module to test it */
 @JsName("NodeJsOutput")
 private class NodeJsOutput(val outputStream: dynamic) : BaseOutput() {
-    override fun print(message: Any?) = outputStream.write(message)
+    override fun print(message: Any?) = outputStream.write(String(message))
 }
 
 /** JsName used to make the declaration available outside of module to test it */
@@ -49,7 +49,7 @@ private class OutputToConsoleLog : BaseOutput() {
     }
 
     override fun println() {
-        console.log()
+        console.log("")
     }
 }
 
@@ -94,6 +94,7 @@ private var output = run {
     if (isNode) NodeJsOutput(js("process.stdout")) else BufferedOutputToConsoleLog()
 }
 
+@kotlin.internal.InlineOnly
 private inline fun String(value: Any?): String = js("String")(value)
 
 /** Prints a newline to the standard output stream. */

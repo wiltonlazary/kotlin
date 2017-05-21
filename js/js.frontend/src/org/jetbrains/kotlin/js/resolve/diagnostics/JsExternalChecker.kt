@@ -32,7 +32,6 @@ import org.jetbrains.kotlin.resolve.checkers.SimpleDeclarationChecker
 import org.jetbrains.kotlin.resolve.descriptorUtil.*
 import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.types.TypeUtils
-import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
 object JsExternalChecker : SimpleDeclarationChecker {
     val DEFINED_EXTERNALLY_PROPERTY_NAMES = setOf(FqNameUnsafe("kotlin.js.noImpl"), FqNameUnsafe("kotlin.js.definedExternally"))
@@ -79,7 +78,7 @@ object JsExternalChecker : SimpleDeclarationChecker {
         }
 
         if (descriptor is ClassDescriptor && descriptor.kind != ClassKind.ANNOTATION_CLASS) {
-            val superClasses = (descriptor.getSuperClassNotAny().singletonOrEmptyList() + descriptor.getSuperInterfaces()).toMutableSet()
+            val superClasses = (listOfNotNull(descriptor.getSuperClassNotAny()) + descriptor.getSuperInterfaces()).toMutableSet()
             if (descriptor.kind == ClassKind.ENUM_CLASS || descriptor.kind == ClassKind.ENUM_ENTRY) {
                 superClasses.removeAll { it.fqNameUnsafe == KotlinBuiltIns.FQ_NAMES._enum }
             }
@@ -146,7 +145,7 @@ object JsExternalChecker : SimpleDeclarationChecker {
     }
 
     private fun checkDelegation(declaration: KtDeclaration, descriptor: DeclarationDescriptor, diagnosticHolder: DiagnosticSink) {
-        if (descriptor !is MemberDescriptor || !DescriptorUtils.isEffectivelyExternal(descriptor)) return
+        if (descriptor !is MemberDescriptor || !descriptor.isEffectivelyExternal()) return
 
         if (declaration is KtClassOrObject) {
             for (superTypeEntry in declaration.superTypeListEntries) {

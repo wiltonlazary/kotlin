@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -99,20 +99,16 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
     }
 
     data class DiagnosticTestLanguageVersionSettings(
-            private val languageFeatures: Map<LanguageFeature, Boolean>,
+            private val languageFeatures: Map<LanguageFeature, LanguageFeature.State>,
             override val apiVersion: ApiVersion,
             override val languageVersion: LanguageVersion
     ) : LanguageVersionSettings {
         private val delegate = LanguageVersionSettingsImpl(languageVersion, apiVersion)
 
-        override fun supportsFeature(feature: LanguageFeature): Boolean =
-                languageFeatures[feature] ?: delegate.supportsFeature(feature)
+        override fun getFeatureSupport(feature: LanguageFeature): LanguageFeature.State =
+                languageFeatures[feature] ?: delegate.getFeatureSupport(feature)
 
-        override val additionalFeatures: Collection<LanguageFeature>
-            get() = error("Must not be called")
-
-        override val isApiVersionExplicit: Boolean
-            get() = error("Must not be called")
+        override fun isFlagEnabled(flag: AnalysisFlag): Boolean = false
     }
 
     inner class TestFile(
@@ -134,10 +130,10 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
         val dynamicCallDescriptors: List<DeclarationDescriptor> = ArrayList()
 
         init {
-            this.whatDiagnosticsToConsider = parseDiagnosticFilterDirective(directives)
+            this.declareCheckType = CHECK_TYPE_DIRECTIVE in directives
+            this.whatDiagnosticsToConsider = parseDiagnosticFilterDirective(directives, declareCheckType)
             this.customLanguageVersionSettings = parseLanguageVersionSettings(directives)
             this.checkLazyLog = CHECK_LAZY_LOG_DIRECTIVE in directives || CHECK_LAZY_LOG_DEFAULT
-            this.declareCheckType = CHECK_TYPE_DIRECTIVE in directives
             this.declareFlexibleType = EXPLICIT_FLEXIBLE_TYPES_DIRECTIVE in directives
             this.markDynamicCalls = MARK_DYNAMIC_CALLS_DIRECTIVE in directives
             if (fileName.endsWith(".java")) {
@@ -283,11 +279,10 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
         )
 
         val LANGUAGE_DIRECTIVE = "LANGUAGE"
-        val LANGUAGE_VERSION = "LANGUAGE_VERSION"
-        private val LANGUAGE_PATTERN = Pattern.compile("([\\+\\-])(\\w+)\\s*")
+        private val LANGUAGE_PATTERN = Pattern.compile("(\\+|\\-|warn:)(\\w+)\\s*")
 
-        val DEFAULT_DIAGNOSTIC_TESTS_FEATURES = listOf(
-                LanguageFeature.DoNotWarnOnCoroutines
+        val DEFAULT_DIAGNOSTIC_TESTS_FEATURES = mapOf(
+                LanguageFeature.Coroutines to LanguageFeature.State.ENABLED
         )
 
         val API_VERSION_DIRECTIVE = "API_VERSION"
@@ -315,40 +310,42 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
         private fun parseLanguageVersionSettings(directiveMap: Map<String, String>): LanguageVersionSettings? {
             val apiVersionString = directiveMap[API_VERSION_DIRECTIVE]
             val directives = directiveMap[LANGUAGE_DIRECTIVE]
-            val languageVersionDirective = directiveMap[LANGUAGE_VERSION]
-            if (apiVersionString == null && directives == null && languageVersionDirective == null) return null
+            if (apiVersionString == null && directives == null) return null
 
-            val apiVersion = (if (apiVersionString != null) ApiVersion.parse(apiVersionString) else ApiVersion.LATEST)
+            val apiVersion = (if (apiVersionString != null) ApiVersion.parse(apiVersionString) else ApiVersion.LATEST_STABLE)
                              ?: error("Unknown API version: $apiVersionString")
 
             val languageFeatures = directives?.let(this::collectLanguageFeatureMap).orEmpty()
 
-            val languageVersion: LanguageVersion = languageVersionDirective?.let { LanguageVersion.fromVersionString(it) } ?: LanguageVersion.LATEST
-
-            return DiagnosticTestLanguageVersionSettings(languageFeatures, apiVersion, languageVersion)
+            return DiagnosticTestLanguageVersionSettings(languageFeatures, apiVersion, LanguageVersion.LATEST_STABLE)
         }
 
-        private fun collectLanguageFeatureMap(directives: String): Map<LanguageFeature, Boolean> {
+        private fun collectLanguageFeatureMap(directives: String): Map<LanguageFeature, LanguageFeature.State> {
             val matcher = LANGUAGE_PATTERN.matcher(directives)
             if (!matcher.find()) {
                 Assert.fail(
                         "Wrong syntax in the '// !$LANGUAGE_DIRECTIVE: ...' directive:\n" +
                         "found: '$directives'\n" +
-                        "Must be '([+-]LanguageFeatureName)+'\n" +
-                        "where '+' means 'enable' and '-' means 'disable'\n" +
+                        "Must be '((+|-|warn:)LanguageFeatureName)+'\n" +
+                        "where '+' means 'enable', '-' means 'disable', 'warn:' means 'enable with warning'\n" +
                         "and language feature names are names of enum entries in LanguageFeature enum class"
                 )
             }
 
-            val values = HashMap<LanguageFeature, Boolean>()
+            val values = HashMap<LanguageFeature, LanguageFeature.State>()
             do {
-                val enable = matcher.group(1) == "+"
+                val mode = when (matcher.group(1)) {
+                    "+" -> LanguageFeature.State.ENABLED
+                    "-" -> LanguageFeature.State.DISABLED
+                    "warn:" -> LanguageFeature.State.ENABLED_WITH_WARNING
+                    else -> error("Unknown mode for language feature: ${matcher.group(1)}")
+                }
                 val name = matcher.group(2)
                 val feature = LanguageFeature.fromString(name) ?: throw AssertionError(
                         "Language feature not found, please check spelling: $name\n" +
                         "Known features:\n    ${LanguageFeature.values().joinToString("\n    ")}"
                 )
-                if (values.put(feature, enable) != null) {
+                if (values.put(feature, mode) != null) {
                     Assert.fail("Duplicate entry for the language feature: $name")
                 }
             }
@@ -357,18 +354,26 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
             return values
         }
 
-        private fun parseDiagnosticFilterDirective(directiveMap: Map<String, String>): Condition<Diagnostic> {
+        private fun parseDiagnosticFilterDirective(directiveMap: Map<String, String>, allowUnderscoreUsage: Boolean): Condition<Diagnostic> {
             val directives = directiveMap[DIAGNOSTICS_DIRECTIVE]
+            val initialCondition =
+                    if (allowUnderscoreUsage)
+                        Condition<Diagnostic> { it.factory.name != "UNDERSCORE_USAGE_WITHOUT_BACKTICKS" }
+                    else
+                        Conditions.alwaysTrue()
+
             if (directives == null) {
                 // If "!API_VERSION" is present, disable the NEWER_VERSION_IN_SINCE_KOTLIN diagnostic.
                 // Otherwise it would be reported in any non-trivial test on the @SinceKotlin value.
                 if (API_VERSION_DIRECTIVE in directiveMap) {
-                    return Condition { diagnostic -> diagnostic.factory !== Errors.NEWER_VERSION_IN_SINCE_KOTLIN }
+                    return Conditions.and(initialCondition, Condition {
+                        diagnostic -> diagnostic.factory !== Errors.NEWER_VERSION_IN_SINCE_KOTLIN
+                    })
                 }
-                return Conditions.alwaysTrue()
+                return initialCondition
             }
 
-            var condition = Conditions.alwaysTrue<Diagnostic>()
+            var condition = initialCondition
             val matcher = DIAGNOSTICS_PATTERN.matcher(directives)
             if (!matcher.find()) {
                 Assert.fail("Wrong syntax in the '// !$DIAGNOSTICS_DIRECTIVE: ...' directive:\n" +

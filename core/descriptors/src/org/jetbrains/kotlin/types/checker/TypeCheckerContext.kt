@@ -18,10 +18,9 @@ package org.jetbrains.kotlin.types.checker
 
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.utils.SmartSet
-import org.jetbrains.kotlin.utils.addToStdlib.check
 import java.util.*
 
-open class TypeCheckerContext(val errorTypeEqualsToAnything: Boolean) {
+open class TypeCheckerContext(val errorTypeEqualsToAnything: Boolean, val allowedTypeVariable: Boolean = true) {
     protected var argumentsDepth = 0
 
     private var supertypesLocked = false
@@ -30,7 +29,11 @@ open class TypeCheckerContext(val errorTypeEqualsToAnything: Boolean) {
 
     open fun addSubtypeConstraint(subType: UnwrappedType, superType: UnwrappedType): Boolean? = null
 
-    inline fun <T> runWithArgumentsSettings(subArgument: UnwrappedType, f: TypeCheckerContext.() -> T): T {
+    open fun areEqualTypeConstructors(a: TypeConstructor, b: TypeConstructor): Boolean {
+        return a == b
+    }
+
+    internal inline fun <T> runWithArgumentsSettings(subArgument: UnwrappedType, f: TypeCheckerContext.() -> T): T {
         if (argumentsDepth > 100) {
             error("Arguments depth is too high. Some related argument: $subArgument")
         }
@@ -85,7 +88,7 @@ open class TypeCheckerContext(val errorTypeEqualsToAnything: Boolean) {
                 return true
             }
 
-            val policy = supertypesPolicy(current).check { it != SupertypesPolicy.None } ?: continue
+            val policy = supertypesPolicy(current).takeIf { it != SupertypesPolicy.None } ?: continue
             for (supertype in current.constructor.supertypes) deque.add(policy.transformType(supertype))
         }
 
@@ -113,4 +116,6 @@ open class TypeCheckerContext(val errorTypeEqualsToAnything: Boolean) {
                     substitutor.safeSubstitute(type.lowerIfFlexible(), Variance.INVARIANT).asSimpleType()
         }
     }
+
+    val UnwrappedType.isAllowedTypeVariable: Boolean get() = allowedTypeVariable && constructor is NewTypeVariableConstructor
 }

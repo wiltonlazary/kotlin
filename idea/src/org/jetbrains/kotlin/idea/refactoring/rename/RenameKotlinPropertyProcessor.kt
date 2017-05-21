@@ -34,7 +34,7 @@ import com.intellij.usageView.UsageInfo
 import com.intellij.usageView.UsageViewUtil
 import org.jetbrains.kotlin.asJava.*
 import org.jetbrains.kotlin.asJava.classes.KtLightClass
-import org.jetbrains.kotlin.asJava.elements.KtLightElement
+import org.jetbrains.kotlin.asJava.elements.KtLightDeclaration
 import org.jetbrains.kotlin.asJava.elements.KtLightMethod
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
@@ -64,7 +64,6 @@ import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.util.findCallableMemberBySignature
 import org.jetbrains.kotlin.utils.DFS
 import org.jetbrains.kotlin.utils.SmartList
-import org.jetbrains.kotlin.utils.singletonOrEmptyList
 
 class RenameKotlinPropertyProcessor : RenameKotlinPsiProcessor() {
     override fun canProcessElement(element: PsiElement): Boolean {
@@ -101,7 +100,7 @@ class RenameKotlinPropertyProcessor : RenameKotlinPsiProcessor() {
                 || (getterJvmName == null && (it.resolve() as? PsiNamedElement)?.name != setterJvmName)
                 || (setterJvmName == null && (it.resolve() as? PsiNamedElement)?.name != getterJvmName)
             }
-            element is KtLightElement<*, *> -> {
+            element is KtLightDeclaration<*, *> -> {
                 val name = element.name
                 if (name == getterJvmName || name == setterJvmName) allReferences.filterNot { it is KtReference } else allReferences
             }
@@ -279,7 +278,7 @@ class RenameKotlinPropertyProcessor : RenameKotlinPsiProcessor() {
             return preprocessAndPass(callableDeclaration)
         }
 
-        val superPsiMethods = deepestSuperDeclaration.getRepresentativeLightMethod().singletonOrEmptyList()
+        val superPsiMethods = listOfNotNull(deepestSuperDeclaration.getRepresentativeLightMethod())
         checkSuperMethodsWithPopup(callableDeclaration, superPsiMethods, "Rename", editor) {
             preprocessAndPass(if (it.size > 1) deepestSuperDeclaration else callableDeclaration)
         }
@@ -445,7 +444,6 @@ class RenameKotlinPropertyProcessor : RenameKotlinPsiProcessor() {
                     }
                 }
             }
-            true
         }
     }
 

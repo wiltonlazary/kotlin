@@ -113,7 +113,7 @@ object KotlinEvaluationBuilder : EvaluatorBuilder {
                                       attachmentByPsiFile(codeFragment),
                                       Attachment("breakpoint.info", "line: ${position.line}"))
 
-            LOG.error("Trying to evaluate ${codeFragment.javaClass} with context ${codeFragment.context?.javaClass}", mergeAttachments(*attachments))
+            LOG.error("Trying to evaluate ${codeFragment::class.java} with context ${codeFragment.context?.javaClass}", mergeAttachments(*attachments))
             throw EvaluateExceptionUtil.createEvaluateException("Couldn't evaluate kotlin expression in this context")
         }
 
@@ -384,9 +384,9 @@ class KotlinEvaluator(val codeFragment: KtCodeFragment, val sourcePosition: Sour
                 val (bindingContext, moduleDescriptor, files) = fileForDebugger.checkForErrors(true, codeFragment.getContextContainingFile())
 
                 val generateClassFilter = object : GenerationState.GenerateClassFilter() {
-                    override fun shouldGeneratePackagePart(jetFile: KtFile) = jetFile == fileForDebugger
+                    override fun shouldGeneratePackagePart(ktFile: KtFile) = ktFile == fileForDebugger
                     override fun shouldAnnotateClass(processingClassOrObject: KtClassOrObject) = true
-                    override fun shouldGenerateClass(processingClassOrObject: KtClassOrObject) = processingClassOrObject.getContainingKtFile() == fileForDebugger
+                    override fun shouldGenerateClass(processingClassOrObject: KtClassOrObject) = processingClassOrObject.containingKtFile == fileForDebugger
                     override fun shouldGenerateScript(script: KtScript) = false
                 }
 
@@ -533,7 +533,7 @@ private fun createFileForDebugger(codeFragment: KtCodeFragment,
 }
 
 private fun PsiElement.createKtFile(fileName: String, fileText: String): KtFile {
-    // Not using KtPsiFactory because we need a virtual file attached to the JetFile
+    // Not using KtPsiFactory because we need a virtual file attached to the KtFile
     val virtualFile = LightVirtualFile(fileName, KotlinLanguage.INSTANCE, fileText)
     virtualFile.charset = CharsetToolkit.UTF8_CHARSET
     val jetFile = (PsiFileFactory.getInstance(project) as PsiFileFactoryImpl)
@@ -552,7 +552,7 @@ fun Type.getClassDescriptor(scope: GlobalSearchScope): ClassDescriptor? {
     val jvmName = JvmClassName.byInternalName(internalName).fqNameForClassNameWithoutDollars
 
     // TODO: use the correct built-ins from the module instead of DefaultBuiltIns here
-    JavaToKotlinClassMap.INSTANCE.mapJavaToKotlin(jvmName)?.let(
+    JavaToKotlinClassMap.mapJavaToKotlin(jvmName)?.let(
             DefaultBuiltIns.Instance.builtInsModule::findClassAcrossModuleDependencies
     )?.let { return it }
 

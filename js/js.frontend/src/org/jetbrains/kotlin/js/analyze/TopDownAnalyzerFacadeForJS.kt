@@ -16,11 +16,13 @@
 
 package org.jetbrains.kotlin.js.analyze
 
+import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.context.ContextForNewModule
 import org.jetbrains.kotlin.context.ModuleContext
 import org.jetbrains.kotlin.context.ProjectContext
 import org.jetbrains.kotlin.frontend.js.di.createTopDownAnalyzerForJs
 import org.jetbrains.kotlin.js.analyzer.JsAnalysisResult
+import org.jetbrains.kotlin.js.config.JSConfigurationKeys
 import org.jetbrains.kotlin.js.config.JsConfig
 import org.jetbrains.kotlin.js.resolve.JsPlatform
 import org.jetbrains.kotlin.js.resolve.MODULE_KIND
@@ -28,6 +30,8 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.lazy.declarations.FileBasedDeclarationProviderFactory
+import org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration
+import org.jetbrains.kotlin.serialization.js.KotlinJavascriptSerializationUtil
 
 object TopDownAnalyzerFacadeForJS {
     @JvmStatic
@@ -35,10 +39,11 @@ object TopDownAnalyzerFacadeForJS {
         val context = ContextForNewModule(
                 ProjectContext(config.project), Name.special("<${config.moduleId}>"), JsPlatform.builtIns, null
         )
-        context.setDependencies(
+        context.module.setDependencies(
                 listOf(context.module) +
                 config.moduleDescriptors.map { it.data } +
-                listOf(JsPlatform.builtIns.builtInsModule)
+                listOf(JsPlatform.builtIns.builtInsModule),
+                config.friendModuleDescriptors.map { it.data }.toSet()
         )
         val trace = BindingTraceContext()
         trace.record(MODULE_KIND, context.module, config.moduleKind)
@@ -52,10 +57,15 @@ object TopDownAnalyzerFacadeForJS {
             moduleContext: ModuleContext,
             config: JsConfig
     ): JsAnalysisResult {
+        val packageFragment = config.configuration[JSConfigurationKeys.FALLBACK_METADATA]?.let {
+            KotlinJavascriptSerializationUtil.readDescriptors(it, moduleContext.storageManager, moduleContext.module,
+                                                              DeserializationConfiguration.Default)
+        }
         val analyzerForJs = createTopDownAnalyzerForJs(
                 moduleContext, trace,
                 FileBasedDeclarationProviderFactory(moduleContext.storageManager, files),
-                config.configuration
+                config.configuration.languageVersionSettings,
+                packageFragment
         )
         analyzerForJs.analyzeDeclarations(TopDownAnalysisMode.TopLevelDeclarations, files)
         return JsAnalysisResult.success(trace, moduleContext.module)

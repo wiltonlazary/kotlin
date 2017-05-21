@@ -22,7 +22,6 @@ import com.intellij.psi.tree.TokenSet;
 import com.intellij.util.containers.Stack;
 import kotlin.Pair;
 import kotlin.collections.CollectionsKt;
-import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.ReflectionTypes;
@@ -71,10 +70,10 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
             TokenSet.create(PLUS, MINUS, MUL, DIV, PERC, RANGE, LT, GT, LTEQ, GTEQ, IDENTIFIER)
     );
 
-    private final Map<String, Integer> anonymousSubclassesCount = new HashMap<String, Integer>();
+    private final Map<String, Integer> anonymousSubclassesCount = new HashMap<>();
 
-    private final Stack<ClassDescriptor> classStack = new Stack<ClassDescriptor>();
-    private final Stack<String> nameStack = new Stack<String>();
+    private final Stack<ClassDescriptor> classStack = new Stack<>();
+    private final Stack<String> nameStack = new Stack<>();
 
     private final BindingTrace bindingTrace;
     private final BindingContext bindingContext;
@@ -102,6 +101,20 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
             @NotNull String name
     ) {
         return recordClassForCallable(element, callableDescriptor, supertypes, name, null);
+    }
+
+    @NotNull
+    private ClassDescriptor recordClassForFunction(
+            @NotNull KtElement element,
+            @NotNull FunctionDescriptor functionDescriptor,
+            @NotNull String name,
+            @Nullable DeclarationDescriptor customContainer
+    ) {
+        return recordClassForCallable(
+                element, functionDescriptor,
+                runtimeTypes.getSupertypesForClosure(functionDescriptor),
+                name, customContainer
+        );
     }
 
     @NotNull
@@ -455,18 +468,23 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
                     jvmSuspendFunctionView
             );
 
-            if (CoroutineCodegenUtilKt.containsNonTailSuspensionCalls(functionDescriptor, bindingContext)) {
-                if (nameForClassOrPackageMember != null) {
-                    nameStack.push(nameForClassOrPackageMember);
-                }
-
-                processNamedFunctionWithClosure(function, functionDescriptor, functionDescriptor).setSuspend(true);
-
-                if (nameForClassOrPackageMember != null) {
-                    nameStack.pop();
-                }
-                return;
+            if (nameForClassOrPackageMember != null) {
+                nameStack.push(nameForClassOrPackageMember);
             }
+
+            String name = inventAnonymousClassName();
+            ClassDescriptor classDescriptor =
+                    recordClassForFunction(function, functionDescriptor, name, functionDescriptor);
+            MutableClosure closure = recordClosure(classDescriptor, name);
+            closure.setSuspend(true);
+
+            super.visitNamedFunction(function);
+
+            if (nameForClassOrPackageMember != null) {
+                nameStack.pop();
+            }
+
+            return;
         }
 
         if (nameForClassOrPackageMember != null) {
@@ -475,27 +493,16 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
             nameStack.pop();
         }
         else {
-            processNamedFunctionWithClosure(function, functionDescriptor, null);
+            String name = inventAnonymousClassName();
+            ClassDescriptor classDescriptor = recordClassForFunction(function, functionDescriptor, name, null);
+            recordClosure(classDescriptor, name);
+
+            classStack.push(classDescriptor);
+            nameStack.push(name);
+            super.visitNamedFunction(function);
+            nameStack.pop();
+            classStack.pop();
         }
-    }
-
-    private MutableClosure processNamedFunctionWithClosure(
-            @NotNull KtNamedFunction function,
-            @NotNull FunctionDescriptor functionDescriptor,
-            @Nullable DeclarationDescriptor customContainer
-    ) {
-        String name = inventAnonymousClassName();
-        Collection<KotlinType> supertypes = runtimeTypes.getSupertypesForClosure(functionDescriptor);
-        ClassDescriptor classDescriptor = recordClassForCallable(function, functionDescriptor, supertypes, name, customContainer);
-        MutableClosure closure = recordClosure(classDescriptor, name);
-
-        classStack.push(classDescriptor);
-        nameStack.push(name);
-        super.visitNamedFunction(function);
-        nameStack.pop();
-        classStack.pop();
-
-        return closure;
     }
 
     @Nullable
@@ -639,7 +646,7 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         String currentClassName = getCurrentTopLevelClassOrPackagePartInternalName(expression.getContainingKtFile());
 
         if (bindingContext.get(MAPPINGS_FOR_WHENS_BY_ENUM_IN_CLASS_FILE, currentClassName) == null) {
-            bindingTrace.record(MAPPINGS_FOR_WHENS_BY_ENUM_IN_CLASS_FILE, currentClassName, new ArrayList<WhenByEnumsMapping>(1));
+            bindingTrace.record(MAPPINGS_FOR_WHENS_BY_ENUM_IN_CLASS_FILE, currentClassName, new ArrayList<>(1));
         }
 
         List<WhenByEnumsMapping> mappings = bindingContext.get(MAPPINGS_FOR_WHENS_BY_ENUM_IN_CLASS_FILE, currentClassName);
@@ -675,12 +682,7 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
                        expression,
                        bindingContext,
                        shouldInlineConstVals,
-                       new Function1<ConstantValue<?>, Boolean>() {
-                           @Override
-                           public Boolean invoke(@NotNull ConstantValue<?> constant) {
-                               return constant instanceof EnumValue || constant instanceof NullValue;
-                           }
-                       }
+                       constant -> constant instanceof EnumValue || constant instanceof NullValue
                );
     }
 

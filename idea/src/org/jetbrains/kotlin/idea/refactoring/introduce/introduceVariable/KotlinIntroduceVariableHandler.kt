@@ -69,7 +69,6 @@ import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
 import org.jetbrains.kotlin.utils.addIfNotNull
-import org.jetbrains.kotlin.utils.addToStdlib.singletonList
 import org.jetbrains.kotlin.utils.ifEmpty
 import org.jetbrains.kotlin.utils.sure
 import java.util.*
@@ -566,7 +565,7 @@ object KotlinIntroduceVariableHandler : RefactoringActionHandler {
                                                                         substringInfo?.type,
                                                                         bindingContext,
                                                                         validator,
-                                                                        "value").singletonList()
+                                                                        "value").let(::listOf)
                 }
 
                 val introduceVariableContext = IntroduceVariableContext(
@@ -648,7 +647,7 @@ object KotlinIntroduceVariableHandler : RefactoringActionHandler {
         val physicalExpression = substringContextOrThis
         val contentRange = extractableSubstringInfo?.contentRange
 
-        val file = physicalExpression.getContainingKtFile()
+        val file = physicalExpression.containingKtFile
 
         val references = physicalExpression
                 .collectDescendantsOfType<KtReferenceExpression> { contentRange == null || contentRange.contains(it.textRange) }

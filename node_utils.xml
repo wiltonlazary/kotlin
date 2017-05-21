@@ -48,6 +48,7 @@
 
         <sequential if:set="isWindows">
             <get src="${url.node.exe}" dest="${node.exe}" usetimestamp="true"/>
+            <delete file="${node.executable}"/>
         </sequential>
     </target>
 
@@ -119,5 +120,12 @@
     <!-- Used on TeamCity-->
     <target name="unzip-jslib.jar">
         <unzip src="${output}/kotlinc/lib/kotlin-stdlib-js.jar" dest="${js.stdlib.output.dir}"/>
+    </target>
+
+    <target name="run-nodejs-tests" description="Run JS backend tests in node.js" depends="download-nodejs-and-npm">
+        <npm command="install" dir="js/js.translator/testData" />
+        <npm command="run" dir="js/js.translator/testData">
+            <arg value="test"/>
+        </npm>
     </target>
 </project>

@@ -33,7 +33,6 @@ import org.jetbrains.kotlin.resolve.scopes.MemberScopeImpl
 import org.jetbrains.kotlin.storage.MemoizedFunctionToNotNull
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.utils.Printer
-import org.jetbrains.kotlin.utils.toReadOnlyList
 import java.util.*
 
 abstract class AbstractLazyMemberScope<out D : DeclarationDescriptor, out DP : DeclarationProvider>
@@ -61,15 +60,21 @@ protected constructor(
             }
         }
         getNonDeclaredClasses(name, result)
-        return result.toReadOnlyList()
+        return result.toList()
     }
 
     override fun getContributedClassifier(name: Name, location: LookupLocation): ClassifierDescriptor? {
         recordLookup(name, location)
         // NB we should resolve type alias descriptors even if a class descriptor with corresponding name is present
-        val firstClassDescriptor = classDescriptors(name).firstOrNull()
-        val firstTypeAliasDescriptor = typeAliasDescriptors(name).firstOrNull()
-        return firstClassDescriptor ?: firstTypeAliasDescriptor
+        val classes = classDescriptors(name)
+        val typeAliases = typeAliasDescriptors(name)
+        var resultingClass: ClassDescriptor? = null
+        for (klass in classes) {
+            // See getFirstClassifierDiscriminateHeaders()
+            if (!klass.isHeader) return klass
+            if (resultingClass == null) resultingClass = klass
+        }
+        return resultingClass ?: typeAliases.firstOrNull()
     }
 
     override fun getContributedFunctions(name: Name, location: LookupLocation): Collection<SimpleFunctionDescriptor> {
@@ -92,7 +97,7 @@ protected constructor(
 
         getNonDeclaredFunctions(name, result)
 
-        return result.toReadOnlyList()
+        return result.toList()
     }
 
     protected abstract fun getScopeForMemberDeclarationResolution(declaration: KtDeclaration): LexicalScope
@@ -125,7 +130,7 @@ protected constructor(
 
         getNonDeclaredProperties(name, result)
 
-        return result.toReadOnlyList()
+        return result.toList()
     }
 
     protected abstract fun getNonDeclaredProperties(name: Name, result: MutableSet<PropertyDescriptor>)
@@ -142,7 +147,7 @@ protected constructor(
                         getScopeForMemberDeclarationResolution(ktTypeAlias),
                         ktTypeAlias,
                         trace)
-            }.toReadOnlyList()
+            }.toList()
 
     protected fun computeDescriptorsFromDeclaredElements(
             kindFilter: DescriptorKindFilter,
@@ -193,7 +198,7 @@ protected constructor(
             }
             else throw IllegalArgumentException("Unsupported declaration kind: " + declaration)
         }
-        return result.toReadOnlyList()
+        return result.toList()
     }
 
     abstract fun recordLookup(name: Name, from: LookupLocation)
@@ -204,7 +209,7 @@ protected constructor(
     abstract override fun toString(): String
 
     override fun printScopeStructure(p: Printer) {
-        p.println(javaClass.simpleName, " {")
+        p.println(this::class.java.simpleName, " {")
         p.pushIndent()
 
         p.println("thisDescriptor = ", thisDescriptor)

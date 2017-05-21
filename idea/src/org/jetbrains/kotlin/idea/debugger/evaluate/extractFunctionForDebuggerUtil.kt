@@ -24,7 +24,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.util.ExceptionUtil
 import org.jetbrains.kotlin.idea.actions.internal.KotlinInternalMode
-import org.jetbrains.kotlin.idea.caches.resolve.analyzeFullyAndGetResult
+import org.jetbrains.kotlin.idea.caches.resolve.analyzeFully
 import org.jetbrains.kotlin.idea.codeInsight.CodeInsightUtils
 import org.jetbrains.kotlin.idea.core.replaced
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine.*
@@ -84,7 +84,7 @@ fun getFunctionForExtractedFragment(
 
         val newDebugExpressions = addDebugExpressionIntoTmpFileForExtractFunction(originalFile, codeFragment, breakpointLine)
         if (newDebugExpressions.isEmpty()) return null
-        val tmpFile = newDebugExpressions.first().getContainingKtFile()
+        val tmpFile = newDebugExpressions.first().containingKtFile
 
         if (LOG.isDebugEnabled) {
             LOG.debug("TMP_FILE:\n${runReadAction { tmpFile.text }}")
@@ -154,7 +154,7 @@ private fun KtFile.findContextElement(): KtElement? {
 private var PsiElement.DEBUG_SMART_CAST: PsiElement? by CopyableUserDataProperty(Key.create("DEBUG_SMART_CAST"))
 
 private fun KtCodeFragment.markSmartCasts() {
-    val bindingContext = runInReadActionWithWriteActionPriority { analyzeFullyAndGetResult() }.bindingContext
+    val bindingContext = runInReadActionWithWriteActionPriority { analyzeFully() }
     val factory = KtPsiFactory(project)
 
     getContentElement()?.forEachDescendantOfType<KtExpression> { expression ->
@@ -235,8 +235,7 @@ private fun getExpressionToAddDebugExpressionBefore(tmpFile: KtFile, contextElem
 private fun addDebugExpressionBeforeContextElement(codeFragment: KtCodeFragment, contextElement: PsiElement): List<KtExpression> {
     val elementBefore = findElementBefore(contextElement)
 
-    val parent = elementBefore?.parent
-    if (parent == null || elementBefore == null) return emptyList()
+    val parent = elementBefore?.parent ?: return emptyList()
 
     val psiFactory = KtPsiFactory(codeFragment)
 
@@ -244,7 +243,7 @@ private fun addDebugExpressionBeforeContextElement(codeFragment: KtCodeFragment,
 
     fun insertExpression(expr: KtElement?): List<KtExpression> {
         when (expr) {
-            is KtBlockExpression -> return expr.statements.flatMap { insertExpression(it) }
+            is KtBlockExpression -> return expr.statements.flatMap(::insertExpression)
             is KtExpression -> {
                 val newDebugExpression = parent.addBefore(expr, elementBefore)
                 if (newDebugExpression == null) {

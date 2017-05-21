@@ -24,8 +24,9 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.PsiWhiteSpace
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.psi.KtEnumEntry
+import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.nextLeaf
+import org.jetbrains.kotlin.psi.psiUtil.prevLeaf
 
 class RedundantSemicolonInspection : AbstractKotlinInspection(), CleanupLocalInspectionTool {
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean, session: LocalInspectionToolSession): PsiElementVisitor {
@@ -46,9 +47,20 @@ class RedundantSemicolonInspection : AbstractKotlinInspection(), CleanupLocalIns
     private fun isRedundant(semicolon: PsiElement): Boolean {
         val nextLeaf = semicolon.nextLeaf { it !is PsiWhiteSpace && it !is PsiComment || it.isLineBreak()  }
         val isAtEndOfLine = nextLeaf == null || nextLeaf.isLineBreak()
-        if (!isAtEndOfLine) return false
+        if (!isAtEndOfLine) {
+            //when there is no imports parser generates empty import list with no spaces
+            if (semicolon.parent is KtPackageDirective && (nextLeaf as? KtImportList)?.imports?.isEmpty() ?: false) {
+                return true
+            }
+            return false
+        }
 
         if (semicolon.parent is KtEnumEntry) return false
+
+        (semicolon.prevLeaf()?.parent as? KtLoopExpression)?.let {
+            if (it !is KtDoWhileExpression && it.body == null)
+                return false
+        }
 
         if (nextLeaf?.nextLeaf { it !is PsiComment }?.node?.elementType == KtTokens.LBRACE) {
             return false // case with statement starting with '{' and call on the previous line

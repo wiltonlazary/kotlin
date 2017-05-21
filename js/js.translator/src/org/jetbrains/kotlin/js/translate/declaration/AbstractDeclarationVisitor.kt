@@ -21,12 +21,12 @@ import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.descriptors.isOverridable
 import org.jetbrains.kotlin.js.backend.ast.JsExpression
+import org.jetbrains.kotlin.js.backend.ast.JsName
 import org.jetbrains.kotlin.js.translate.context.TranslationContext
 import org.jetbrains.kotlin.js.translate.expression.translateAndAliasParameters
 import org.jetbrains.kotlin.js.translate.expression.translateFunction
 import org.jetbrains.kotlin.js.translate.expression.wrapWithInlineMetadata
 import org.jetbrains.kotlin.js.translate.general.TranslatorVisitor
-import org.jetbrains.kotlin.js.translate.reference.ReferenceTranslator
 import org.jetbrains.kotlin.js.translate.utils.*
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExtensionProperty
@@ -34,8 +34,11 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.isExtensionProperty
 abstract class AbstractDeclarationVisitor : TranslatorVisitor<Unit>()  {
     override fun emptyResult(context: TranslationContext) { }
 
+    open val enumInitializerName: JsName?
+        get() = null
+
     override fun visitClassOrObject(classOrObject: KtClassOrObject, context: TranslationContext) {
-        ClassTranslator.translate(classOrObject, context)
+        ClassTranslator.translate(classOrObject, context, enumInitializerName)
         val descriptor = BindingUtils.getClassDescriptor(context.bindingContext(), classOrObject)
         context.export(descriptor)
     }
@@ -95,26 +98,19 @@ abstract class AbstractDeclarationVisitor : TranslatorVisitor<Unit>()  {
             context: TranslationContext
     ): JsExpression {
         val function = context.getFunctionObject(descriptor)
-        var innerContext = context.newDeclaration(descriptor).translateAndAliasParameters(descriptor, function.parameters)
+        val innerContext = context.newDeclaration(descriptor).translateAndAliasParameters(descriptor, function.parameters)
 
         if (descriptor.isSuspend) {
             if (descriptor.requiresStateMachineTransformation(context)) {
-                function.fillCoroutineMetadata(context, descriptor, hasController = false, isLambda = false)
-                innerContext = innerContext.innerContextWithAliased(descriptor, JsAstUtils.stateMachineReceiver())
-            }
-            else {
-                val continuationRef = ReferenceTranslator.translateAsValueReference(
-                        innerContext.continuationParameterDescriptor!!, innerContext)
-                innerContext = innerContext.innerContextWithAliased(descriptor, continuationRef)
+                function.fillCoroutineMetadata(context, descriptor, hasController = false)
             }
         }
 
-        innerContext.getInnerNameForDescriptor(descriptor)
         if (!descriptor.isOverridable) {
             function.body.statements += FunctionBodyTranslator.setDefaultValueForArguments(descriptor, innerContext)
         }
         innerContext.translateFunction(expression, function)
-        return innerContext.wrapWithInlineMetadata(function, descriptor)
+        return innerContext.wrapWithInlineMetadata(function, descriptor, context.config)
     }
 
     protected abstract fun addFunction(
