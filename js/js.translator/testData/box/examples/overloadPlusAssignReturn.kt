@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1380
 
 class ArrayWrapper<T>() {
     val contents = ArrayList<T>()

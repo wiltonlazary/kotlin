@@ -285,16 +285,18 @@ private object DebugTextBuildingVisitor : KtVisitor<String, Unit>() {
 
     fun render(element: KtElementImplStub<*>, vararg relevantChildren: KtElement?): String? {
         if (element.stub == null) return element.text
-        return relevantChildren.filterNotNull().map { it.getDebugText() }.joinToString("", "", "")
+        return relevantChildren.filterNotNull().joinToString("", "", "") { it.getDebugText() }
     }
 }
 
 private fun StringBuilder.appendInn(target: Any?, prefix: String = "", suffix: String = "") {
     if (target == null) return
     append(prefix)
-    append(when (target) {
-               is KtElement -> target.getDebugText()
-               else -> target.toString()
-           })
+    append(
+        when (target) {
+            is KtElement -> target.getDebugText()
+            else -> target.toString()
+        }
+    )
     append(suffix)
 }

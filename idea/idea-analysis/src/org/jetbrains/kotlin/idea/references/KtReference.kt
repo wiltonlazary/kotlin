@@ -78,7 +78,7 @@ abstract class AbstractKtReference<T : KtElement>(element: T) : PsiPolyVariantRe
             class KotlinResolveResult(element: PsiElement) : PsiElementResolveResult(element)
 
             private fun resolveToPsiElements(ref: AbstractKtReference<KtElement>): Collection<PsiElement> {
-                val bindingContext = ref.expression.analyze(BodyResolveMode.PARTIAL_WITH_DIAGNOSTICS)
+                val bindingContext = ref.expression.analyze(BodyResolveMode.PARTIAL)
                 return resolveToPsiElements(ref, bindingContext, ref.getTargetDescriptors(bindingContext))
             }
 
@@ -96,13 +96,13 @@ abstract class AbstractKtReference<T : KtElement>(element: T) : PsiPolyVariantRe
             }
 
             private fun resolveToPsiElements(ref: AbstractKtReference<KtElement>, targetDescriptor: DeclarationDescriptor): Collection<PsiElement> {
-                if (targetDescriptor is PackageViewDescriptor) {
+                return if (targetDescriptor is PackageViewDescriptor) {
                     val psiFacade = JavaPsiFacade.getInstance(ref.expression.project)
                     val fqName = targetDescriptor.fqName.asString()
-                    return listOfNotNull(psiFacade.findPackage(fqName))
+                    listOfNotNull(psiFacade.findPackage(fqName))
                 }
                 else {
-                    return DescriptorToSourceUtilsIde.getAllDeclarations(ref.expression.project, targetDescriptor, ref.expression.resolveScope)
+                    DescriptorToSourceUtilsIde.getAllDeclarations(ref.expression.project, targetDescriptor, ref.expression.resolveScope)
                 }
             }
 

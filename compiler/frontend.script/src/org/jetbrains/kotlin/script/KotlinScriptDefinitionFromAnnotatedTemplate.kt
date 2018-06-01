@@ -14,18 +14,13 @@
  * limitations under the License.
  */
 
+@file:Suppress("DEPRECATION")
+
 package org.jetbrains.kotlin.script
 
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.StandardFileSystems
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiManager
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.name.NameUtils
-import org.jetbrains.kotlin.psi.KtAnnotationEntry
-import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtScript
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import java.io.File
@@ -34,148 +29,138 @@ import kotlin.reflect.KFunction
 import kotlin.reflect.KParameter
 import kotlin.reflect.full.memberFunctions
 import kotlin.reflect.full.primaryConstructor
-import kotlin.script.dependencies.BasicScriptDependenciesResolver
-import kotlin.script.dependencies.KotlinScriptExternalDependencies
-import kotlin.script.dependencies.ScriptContents
 import kotlin.script.dependencies.ScriptDependenciesResolver
-import kotlin.script.templates.AcceptedAnnotations
+import kotlin.script.experimental.dependencies.AsyncDependenciesResolver
+import kotlin.script.experimental.dependencies.DependenciesResolver
+import kotlin.script.experimental.location.ScriptExpectedLocations
+import kotlin.script.experimental.location.ScriptExpectedLocation
+import kotlin.script.templates.*
 
 open class KotlinScriptDefinitionFromAnnotatedTemplate(
         template: KClass<out Any>,
-        providedResolver: ScriptDependenciesResolver? = null,
-        providedScriptFilePattern: String? = null,
-        val environment: Map<String, Any?>? = null
+        val environment: Map<String, Any?>? = null,
+        val templateClasspath: List<File> = emptyList()
 ) : KotlinScriptDefinition(template) {
-
-    val scriptFilePattern by lazy {
-        providedScriptFilePattern
-        ?: takeUnlessError { template.annotations.firstIsInstanceOrNull<kotlin.script.templates.ScriptTemplateDefinition>()?.scriptFilePattern }
-        ?: takeUnlessError { template.annotations.firstIsInstanceOrNull<org.jetbrains.kotlin.script.ScriptTemplateDefinition>()?.scriptFilePattern }
-        ?: DEFAULT_SCRIPT_FILE_PATTERN
+    val scriptFilePattern by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        val pattern =
+            takeUnlessError {
+                val ann = template.annotations.firstIsInstanceOrNull<kotlin.script.templates.ScriptTemplateDefinition>()
+                ann?.scriptFilePattern
+            }
+                    ?: takeUnlessError { template.annotations.firstIsInstanceOrNull<ScriptTemplateDefinition>()?.scriptFilePattern }
+                    ?: DEFAULT_SCRIPT_FILE_PATTERN
+        Regex(pattern)
     }
 
-    val resolver: ScriptDependenciesResolver? by lazy {
-        val defAnn by lazy { takeUnlessError { template.annotations.firstIsInstanceOrNull<kotlin.script.templates.ScriptTemplateDefinition>() } }
-        val legacyDefAnn by lazy { takeUnlessError { template.annotations.firstIsInstanceOrNull<org.jetbrains.kotlin.script.ScriptTemplateDefinition>() } }
-        when {
-            providedResolver != null -> providedResolver
-            // TODO: logScriptDefMessage missing or invalid constructor
-            defAnn != null ->
-                try {
-                    defAnn.resolver.primaryConstructor?.call() ?: null.apply {
-                        log.warn("[kts] No default constructor found for ${defAnn.resolver.qualifiedName}")
-                    }
-                }
-                catch (ex: ClassCastException) {
-                    log.warn("[kts] Script def error ${ex.message}")
-                    null
-                }
-            legacyDefAnn != null ->
-                try {
-                    log.warn("[kts] Deprecated annotations on the script template are used, please update the provider")
-                    legacyDefAnn.resolver.primaryConstructor?.call()?.let {
-                        LegacyScriptDependenciesResolverWrapper(it)
-                    }
-                    ?: null.apply {
-                        log.warn("[kts] No default constructor found for ${legacyDefAnn.resolver.qualifiedName}")
-                    }
-                }
-                catch (ex: ClassCastException) {
-                    log.warn("[kts] Script def error ${ex.message}")
-                    null
-                }
-            else -> BasicScriptDependenciesResolver()
+    override val dependencyResolver: DependenciesResolver by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        resolverFromAnnotation(template) ?:
+        resolverFromLegacyAnnotation(template) ?:
+        DependenciesResolver.NoDependencies
+    }
+
+    private fun resolverFromLegacyAnnotation(template: KClass<out Any>): DependenciesResolver? {
+        val legacyDefAnn = takeUnlessError {
+            template.annotations.firstIsInstanceOrNull<ScriptTemplateDefinition>()
+        } ?: return null
+
+        log.warn("[kts] Deprecated annotations on the script template are used, please update the provider")
+
+        return instantiateResolver(legacyDefAnn.resolver)?.let(::LegacyPackageDependencyResolverWrapper)
+    }
+
+    private fun resolverFromAnnotation(template: KClass<out Any>): DependenciesResolver? {
+        val defAnn = takeUnlessError {
+            template.annotations.firstIsInstanceOrNull<kotlin.script.templates.ScriptTemplateDefinition>()
+        } ?: return null
+
+        val resolver = instantiateResolver(defAnn.resolver)
+        return when (resolver) {
+            is AsyncDependenciesResolver -> AsyncDependencyResolverWrapper(resolver)
+            is DependenciesResolver -> resolver
+            else -> resolver?.let(::ApiChangeDependencyResolverWrapper)
         }
     }
 
-    val samWithReceiverAnnotations: List<String>? by lazy {
+    private fun <T : Any> instantiateResolver(resolverClass: KClass<T>): T? {
+        try {
+            resolverClass.objectInstance?.let {
+                return it
+            }
+            val constructorWithoutParameters = resolverClass.constructors.find { it.parameters.all { it.isOptional } }
+            if (constructorWithoutParameters == null) {
+                log.warn("[kts] ${resolverClass.qualifiedName} must have a constructor without required parameters")
+                return null
+            }
+            return constructorWithoutParameters.callBy(emptyMap())
+        }
+        catch (ex: ClassCastException) {
+            log.warn("[kts] Script def error ${ex.message}")
+            return null
+        }
+    }
+
+    private val samWithReceiverAnnotations: List<String>? by lazy(LazyThreadSafetyMode.PUBLICATION) {
         takeUnlessError { template.annotations.firstIsInstanceOrNull<kotlin.script.extensions.SamWithReceiverAnnotations>()?.annotations?.toList() }
         ?: takeUnlessError { template.annotations.firstIsInstanceOrNull<org.jetbrains.kotlin.script.SamWithReceiverAnnotations>()?.annotations?.toList() }
     }
 
-    private val acceptedAnnotations: List<KClass<out Annotation>> by lazy {
+    override val acceptedAnnotations: List<KClass<out Annotation>> by lazy(LazyThreadSafetyMode.PUBLICATION) {
 
         fun sameSignature(left: KFunction<*>, right: KFunction<*>): Boolean =
+                left.name == right.name &&
                 left.parameters.size == right.parameters.size &&
                 left.parameters.zip(right.parameters).all {
                     it.first.kind == KParameter.Kind.INSTANCE ||
                     it.first.type == it.second.type
                 }
 
-        val resolveMethod = ScriptDependenciesResolver::resolve
-        val resolverMethodAnnotations =
-                resolver?.let { it::class }?.memberFunctions?.find { function ->
-                    function.name == resolveMethod.name &&
-                    sameSignature(function, resolveMethod)
-                }?.annotations?.filterIsInstance<AcceptedAnnotations>()
-        resolverMethodAnnotations?.flatMap {
-            it.supportedAnnotationClasses.toList()
+        val resolveFunctions = getResolveFunctions()
+
+        dependencyResolver.unwrap()::class.memberFunctions
+                .filter { function -> resolveFunctions.any { sameSignature(function, it) } }
+                .flatMap { it.annotations }
+                .filterIsInstance<AcceptedAnnotations>()
+                .flatMap { it.supportedAnnotationClasses.toList() }
+                .distinctBy { it.qualifiedName }
+    }
+
+    private fun getResolveFunctions(): List<KFunction<*>> {
+        // DependenciesResolver::resolve, ScriptDependenciesResolver::resolve, AsyncDependenciesResolver::resolveAsync
+        return AsyncDependenciesResolver::class.memberFunctions.filter { it.name == "resolve" || it.name == "resolveAsync" }.also {
+            assert(it.size == 3) {
+                AsyncDependenciesResolver::class.memberFunctions
+                        .joinToString(prefix = "${AsyncDependenciesResolver::class.qualifiedName} api changed, fix this code") { it.name }
+            }
         }
-        ?: emptyList()
+    }
+
+    override val scriptExpectedLocations: List<ScriptExpectedLocation> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        takeUnlessError {
+            template.annotations.firstIsInstanceOrNull<ScriptExpectedLocations>()
+        }?.value?.toList() ?: super.scriptExpectedLocations
     }
 
     override val name = template.simpleName!!
 
-    override fun <TF: Any> isScript(file: TF): Boolean =
-            scriptFilePattern.let { Regex(it).matches(getFileName(file)) }
+    override fun isScript(fileName: String): Boolean =
+        scriptFilePattern.matches(fileName)
 
     // TODO: implement other strategy - e.g. try to extract something from match with ScriptFilePattern
     override fun getScriptName(script: KtScript): Name = NameUtils.getScriptNameForFile(script.containingKtFile.name)
-
-    override fun <TF: Any> getDependenciesFor(file: TF, project: Project, previousDependencies: KotlinScriptExternalDependencies?): KotlinScriptExternalDependencies? {
-
-        fun makeScriptContents() = BasicScriptContents(file, getAnnotations = {
-            val classLoader = template.java.classLoader
-            takeUnlessError(reportError = false) {
-                getAnnotationEntries(file, project)
-                        .mapNotNull { psiAnn ->
-                            // TODO: consider advanced matching using semantic similar to actual resolving
-                            acceptedAnnotations.find { ann ->
-                                psiAnn.typeName.let { it == ann.simpleName || it == ann.qualifiedName }
-                            }?.let { constructAnnotation(psiAnn, classLoader.loadClass(it.qualifiedName).kotlin as KClass<out Annotation>) }
-                        }
-            }
-            ?: emptyList()
-        })
-
-        return takeUnlessError(reportError = false) {
-            val fileDeps = resolver?.resolve(makeScriptContents(), environment, ::logScriptDefMessage, previousDependencies)
-            // TODO: use it as a Future
-            fileDeps?.get()
-        }
-    }
-
-    private fun <TF: Any> getAnnotationEntries(file: TF, project: Project): Iterable<KtAnnotationEntry> = when (file) {
-        is PsiFile -> getAnnotationEntriesFromPsiFile(file)
-        is VirtualFile -> getAnnotationEntriesFromVirtualFile(file, project)
-        is File -> {
-            val virtualFile = (StandardFileSystems.local().findFileByPath(file.canonicalPath)
-                               ?: throw IllegalArgumentException("Unable to find file ${file.canonicalPath}"))
-            getAnnotationEntriesFromVirtualFile(virtualFile, project)
-        }
-        else -> throw IllegalArgumentException("Unsupported file type $file")
-    }
-
-    private fun getAnnotationEntriesFromPsiFile(file: PsiFile) =
-            (file as? KtFile)?.annotationEntries
-            ?: throw IllegalArgumentException("Unable to extract kotlin annotations from ${file.name} (${file.fileType})")
-
-    private fun getAnnotationEntriesFromVirtualFile(file: VirtualFile, project: Project): Iterable<KtAnnotationEntry> {
-        val psiFile: PsiFile = PsiManager.getInstance(project).findFile(file)
-                               ?: throw IllegalArgumentException("Unable to load PSI from ${file.canonicalPath}")
-        return getAnnotationEntriesFromPsiFile(psiFile)
-    }
-
-    class BasicScriptContents<out TF: Any>(myFile: TF, getAnnotations: () -> Iterable<Annotation>) : ScriptContents {
-        override val file: File? by lazy { getFile(myFile) }
-        override val annotations: Iterable<Annotation> by lazy { getAnnotations() }
-        override val text: CharSequence? by lazy { getFileContents(myFile) }
-    }
 
     override fun toString(): String = "KotlinScriptDefinitionFromAnnotatedTemplate - ${template.simpleName}"
 
     override val annotationsForSamWithReceivers: List<String>
         get() = samWithReceiverAnnotations ?: super.annotationsForSamWithReceivers
+
+    override val additionalCompilerArguments: Iterable<String>? by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        takeUnlessError {
+            template.annotations.firstIsInstanceOrNull<kotlin.script.templates.ScriptTemplateAdditionalCompilerArguments>()?.let {
+                val res = it.provider.primaryConstructor?.call(it.arguments.asIterable())
+                res
+            }
+        }?.getAdditionalCompilerArguments(environment)
+    }
 
     private inline fun<T> takeUnlessError(reportError: Boolean = true, body: () -> T?): T? =
             try {
@@ -196,19 +181,10 @@ open class KotlinScriptDefinitionFromAnnotatedTemplate(
     }
 }
 
-internal fun logScriptDefMessage(reportSeverity: ScriptDependenciesResolver.ReportSeverity, s: String, position: ScriptContents.Position?): Unit {
-    val msg = (position?.run { "[at $line:$col]" } ?: "") + s
-    when (reportSeverity) {
-        ScriptDependenciesResolver.ReportSeverity.ERROR -> KotlinScriptDefinitionFromAnnotatedTemplate.log.error(msg)
-        ScriptDependenciesResolver.ReportSeverity.WARNING -> KotlinScriptDefinitionFromAnnotatedTemplate.log.warn(msg)
-        ScriptDependenciesResolver.ReportSeverity.INFO -> KotlinScriptDefinitionFromAnnotatedTemplate.log.info(msg)
-        ScriptDependenciesResolver.ReportSeverity.DEBUG -> KotlinScriptDefinitionFromAnnotatedTemplate.log.debug(msg)
-    }
+interface DependencyResolverWrapper<T : ScriptDependenciesResolver> {
+    val delegate: T
 }
 
-internal fun sameSignature(left: KFunction<*>, right: KFunction<*>): Boolean =
-        left.parameters.size == right.parameters.size &&
-        left.parameters.zip(right.parameters).all {
-            it.first.kind == KParameter.Kind.INSTANCE ||
-            it.first.type == it.second.type
-        }
+fun ScriptDependenciesResolver.unwrap(): ScriptDependenciesResolver {
+    return if (this is DependencyResolverWrapper<*>) delegate.unwrap() else this
+}

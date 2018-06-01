@@ -16,6 +16,7 @@
 
 package org.jetbrains.uast.kotlin
 
+import com.intellij.psi.PsiType
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.uast.UBlockExpression
 import org.jetbrains.uast.UElement
@@ -25,13 +26,16 @@ import org.jetbrains.uast.withMargin
 
 class KotlinULambdaExpression(
         override val psi: KtLambdaExpression,
-        override val uastParent: UElement?
-) : KotlinAbstractUExpression(), ULambdaExpression, KotlinUElementWithType {
+        givenParent: UElement?
+) : KotlinAbstractUExpression(givenParent), ULambdaExpression, KotlinUElementWithType {
+    override val functionalInterfaceType: PsiType?
+        get() = getFunctionalInterfaceType()
+
     override val body by lz { KotlinConverter.convertOrEmpty(psi.bodyExpression, this) }
     
     override val valueParameters by lz {
         psi.valueParameters.mapIndexed { i, p ->
-            KotlinUParameter(UastKotlinPsiParameter.create(p, psi, this, i), this)
+            KotlinUParameter(UastKotlinPsiParameter.create(p, psi, this, i), psi, this)
         }
     }
     
@@ -43,6 +47,6 @@ class KotlinULambdaExpression(
         val expressions = (body as? UBlockExpression)?.expressions
                                   ?.joinToString("\n") { it.asRenderString().withMargin } ?: body.asRenderString()
 
-        return "{ " + renderedValueParameters + "\n" + expressions + "\n}"
+        return "{ $renderedValueParameters\n$expressions\n}"
     }
 }

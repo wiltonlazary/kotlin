@@ -31,6 +31,7 @@ import org.jetbrains.kotlin.idea.references.KtDestructuringDeclarationReference
 import org.jetbrains.kotlin.idea.references.KtSimpleNameReference
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.references.resolveMainReferenceToDescriptors
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExtension
@@ -38,8 +39,8 @@ import org.jetbrains.kotlin.resolve.source.getPsi
 
 class KotlinTargetElementEvaluator : TargetElementEvaluatorEx, TargetElementUtilExtender {
     companion object {
-        val DO_NOT_UNWRAP_LABELED_EXPRESSION = 0x100
-        val BYPASS_IMPORT_ALIAS = 0x200
+        const val DO_NOT_UNWRAP_LABELED_EXPRESSION = 0x100
+        const val BYPASS_IMPORT_ALIAS = 0x200
 
         // Place caret after the open curly brace in lambda for generated 'it'
         fun findLambdaOpenLBraceForGeneratedIt(ref: PsiReference): PsiElement? {
@@ -104,15 +105,18 @@ class KotlinTargetElementEvaluator : TargetElementEvaluatorEx, TargetElementUtil
         }
 
         if (BitUtil.isSet(flags, TargetElementUtil.REFERENCED_ELEMENT_ACCEPTED)) {
-            return findLambdaOpenLBraceForGeneratedIt(ref) ?:
-                   findReceiverForThisInExtensionFunction(ref)
+            return findLambdaOpenLBraceForGeneratedIt(ref)
+                    ?: findReceiverForThisInExtensionFunction(ref)
         }
 
         return null
     }
 
     override fun isIdentifierPart(file: PsiFile, text: CharSequence?, offset: Int): Boolean {
+        val elementAtCaret = file.findElementAt(offset)
+
+        if (elementAtCaret?.node?.elementType == KtTokens.IDENTIFIER) return true
         // '(' is considered identifier part if it belongs to primary constructor without 'constructor' keyword
-        return file.findElementAt(offset)?.getNonStrictParentOfType<KtPrimaryConstructor>()?.textOffset == offset
+        return elementAtCaret?.getNonStrictParentOfType<KtPrimaryConstructor>()?.textOffset == offset
     }
 }

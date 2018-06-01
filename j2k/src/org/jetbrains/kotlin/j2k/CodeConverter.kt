@@ -17,7 +17,6 @@
 package org.jetbrains.kotlin.j2k
 
 import com.intellij.psi.*
-import com.intellij.psi.CommonClassNames.*
 import org.jetbrains.kotlin.j2k.ast.*
 
 class CodeConverter(
@@ -83,7 +82,7 @@ class CodeConverter(
         val explicitType = type.takeIf { settings.specifyLocalVariableTypeByDefault || converter.shouldDeclareVariableType(variable, type, isVal) }
         return LocalVariable(variable.declarationIdentifier(),
                              converter.convertAnnotations(variable),
-                             converter.convertModifiers(variable, false),
+                             converter.convertModifiers(variable, false, false),
                              explicitType,
                              convertExpression(variable.initializer, variable.type),
                              isVal).assignPrototype(variable)
@@ -112,10 +111,15 @@ class CodeConverter(
             convertedExpression = BangBangExpression.surroundIfNullable(convertedExpression)
         }
 
-        if (needConversion(actualType, expectedType)) {
+        if (actualType.needTypeConversion(expectedType)) {
             val expectedTypeStr = expectedType.canonicalText
             if (expression is PsiLiteralExpression) {
-                if (expectedTypeStr == "float" || expectedTypeStr == "double") {
+                if (actualType.canonicalText == "char" && expression.parent !is PsiExpressionList) {
+                    expression.getTypeConversionMethod(expectedType)?.also {
+                        convertedExpression = MethodCallExpression.buildNonNull(convertedExpression, it)
+                    }
+                }
+                else if (expectedTypeStr == "float" || expectedTypeStr == "double") {
                     var text = convertedExpression.canonicalCode()
                     if (text.last() in setOf('f', 'L')) {
                         text = text.substring(0, text.length - 1)
@@ -129,6 +133,11 @@ class CodeConverter(
                         }
                     }
                     convertedExpression = LiteralExpression(text)
+                }
+                else if (expectedTypeStr == "long") {
+                    if (expression.parent is PsiBinaryExpression) {
+                        convertedExpression = LiteralExpression("${convertedExpression.canonicalCode()}L")
+                    }
                 }
                 else if (expectedTypeStr == "char") {
                     convertedExpression = MethodCallExpression.buildNonNull(convertedExpression, "toChar")
@@ -150,50 +159,35 @@ class CodeConverter(
     }
 
     fun convertedExpressionType(expression: PsiExpression, expectedType: PsiType): Type {
-        val convertedExpression = convertExpression(expression)
-        val actualType = expression.type ?: return ErrorType()
-        var resultType = typeConverter.convertType(actualType, if (convertedExpression.isNullable) Nullability.Nullable else Nullability.NotNull)
+        with(converter.codeConverterForType) {
+            val convertedExpression = convertExpression(expression)
+            val actualType = expression.type ?: return ErrorType()
+            var resultType = typeConverter.convertType(actualType, if (convertedExpression.isNullable) Nullability.Nullable else Nullability.NotNull)
 
-        if (actualType is PsiPrimitiveType && resultType.isNullable ||
-            expectedType is PsiPrimitiveType && actualType is PsiClassType) {
-            resultType = resultType.toNotNullType()
-        }
-
-        if (needConversion(actualType, expectedType)) {
-            val expectedTypeStr = expectedType.canonicalText
-
-            val willConvert = if (convertedExpression is LiteralExpression
-                                  || expression is PsiPrefixExpression && expression.isLiteralWithSign() )
-                expectedTypeStr == "float" || expectedTypeStr == "double"
-            else
-                PRIMITIVE_TYPE_CONVERSIONS[expectedTypeStr] != null
-
-            if (willConvert) {
-                resultType = typeConverter.convertType(expectedType, Nullability.NotNull)
+            if (actualType is PsiPrimitiveType && resultType.isNullable ||
+                expectedType is PsiPrimitiveType && actualType is PsiClassType) {
+                resultType = resultType.toNotNullType()
             }
-        }
 
-        return resultType
+            if (actualType.needTypeConversion(expectedType)) {
+                val expectedTypeStr = expectedType.canonicalText
+
+                val willConvert = if (convertedExpression is LiteralExpression
+                                      || expression is PsiPrefixExpression && expression.isLiteralWithSign())
+                    expectedTypeStr == "float" || expectedTypeStr == "double"
+                else
+                    PRIMITIVE_TYPE_CONVERSIONS[expectedTypeStr] != null
+
+                if (willConvert) {
+                    resultType = typeConverter.convertType(expectedType, Nullability.NotNull)
+                }
+            }
+
+            return resultType
+        }
     }
 
     private fun PsiPrefixExpression.isLiteralWithSign()
             = operand is PsiLiteralExpression && operationTokenType in setOf(JavaTokenType.PLUS, JavaTokenType.MINUS)
 
-    private fun needConversion(actual: PsiType, expected: PsiType): Boolean {
-        val expectedStr = expected.canonicalText
-        val actualStr = actual.canonicalText
-        return expectedStr != actualStr &&
-               expectedStr != typeConversionMap[actualStr] &&
-               actualStr != typeConversionMap[expectedStr]
-    }
-
-    private val typeConversionMap: Map<String, String> = mapOf(
-            JAVA_LANG_BYTE to "byte",
-            JAVA_LANG_SHORT to "short",
-            JAVA_LANG_INTEGER to "int",
-            JAVA_LANG_LONG to "long",
-            JAVA_LANG_FLOAT to "float",
-            JAVA_LANG_DOUBLE to "double",
-            JAVA_LANG_CHARACTER to "char"
-    )
 }

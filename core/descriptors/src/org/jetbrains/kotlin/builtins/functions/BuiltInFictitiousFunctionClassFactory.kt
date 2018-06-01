@@ -20,10 +20,10 @@ import org.jetbrains.kotlin.builtins.BuiltInsPackageFragment
 import org.jetbrains.kotlin.builtins.functions.FunctionClassDescriptor.Kind
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
+import org.jetbrains.kotlin.descriptors.deserialization.ClassDescriptorFactory
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.serialization.deserialization.ClassDescriptorFactory
 import org.jetbrains.kotlin.storage.StorageManager
 
 /**
@@ -48,17 +48,9 @@ class BuiltInFictitiousFunctionClassFactory(
             return KindWithArity(kind, arity)
         }
 
-        @JvmStatic fun getFunctionalClassKind(className: String, packageFqName: FqName) =
+        @JvmStatic
+        fun getFunctionalClassKind(className: String, packageFqName: FqName) =
                 parseClassName(className, packageFqName)?.kind
-
-        @JvmStatic fun getFunctionalClassArity(className: String, packageFqName: FqName) =
-                parseClassName(className, packageFqName)?.arity
-
-        @JvmStatic fun isFunctionClassName(className: String, packageFqName: FqName) =
-                getFunctionalClassKind(className, packageFqName) == Kind.Function
-
-        @JvmStatic fun isSuspendFunctionClassName(className: String, packageFqName: FqName) =
-                getFunctionalClassKind(className, packageFqName) == Kind.SuspendFunction
 
         private fun toInt(s: String): Int? {
             if (s.isEmpty()) return null

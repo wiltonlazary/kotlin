@@ -63,7 +63,8 @@ fun getReceiverTypePredicate(resolvedCall: ResolvedCall<*>, receiverValue: Recei
         resolvedCall.dispatchReceiver -> {
             val rootCallableDescriptors = callableDescriptor.findTopMostOverriddenDescriptors()
             return or(rootCallableDescriptors.mapNotNull {
-                it.dispatchReceiverParameter?.type?.let { TypeUtils.makeNullableIfNeeded(it, resolvedCall.call.isSafeCall()) }?.getSubtypesPredicate()
+                it.dispatchReceiverParameter?.type?.let { TypeUtils.makeNullableIfNeeded(it, resolvedCall.call.isSafeCall()) }
+                    ?.getSubtypesPredicate()
             })
         }
     }
@@ -72,9 +73,9 @@ fun getReceiverTypePredicate(resolvedCall: ResolvedCall<*>, receiverValue: Recei
 }
 
 fun getExpectedTypePredicate(
-        value: PseudoValue,
-        bindingContext: BindingContext,
-        builtIns: KotlinBuiltIns
+    value: PseudoValue,
+    bindingContext: BindingContext,
+    builtIns: KotlinBuiltIns
 ): TypePredicate {
     val pseudocode = value.createdAt?.owner ?: return AllTypes
     val typePredicates = LinkedHashSet<TypePredicate?>()
@@ -92,8 +93,8 @@ fun getExpectedTypePredicate(
         val callee = call.calleeExpression ?: return null
 
         val candidates = callee.getReferenceTargets(bindingContext)
-                .filterIsInstance<FunctionDescriptor>()
-                .sortedBy { DescriptorRenderer.FQ_NAMES_IN_TYPES.render(it) }
+            .filterIsInstance<FunctionDescriptor>()
+            .sortedBy { DescriptorRenderer.FQ_NAMES_IN_TYPES.render(it) }
         if (candidates.isEmpty()) return null
 
         val explicitReceiver = call.explicitReceiver
@@ -103,17 +104,17 @@ fun getExpectedTypePredicate(
 
         for (candidate in candidates) {
             val resolutionCandidate = ResolutionCandidate.create(
-                    call,
-                    candidate,
-                    null,
-                    ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
-                    null
+                call,
+                candidate,
+                null,
+                ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
+                null
             )
             val candidateCall = ResolvedCallImpl.create(
-                    resolutionCandidate,
-                    DelegatingBindingTrace(bindingContext, "Compute type predicates for unresolved call arguments"),
-                    TracingStrategy.EMPTY,
-                    DataFlowInfoForArgumentsImpl(DataFlowInfo.EMPTY, call)
+                resolutionCandidate,
+                DelegatingBindingTrace(bindingContext, "Compute type predicates for unresolved call arguments"),
+                TracingStrategy.EMPTY,
+                DataFlowInfoForArgumentsImpl(DataFlowInfo.EMPTY, call)
             )
             val status = ValueArgumentsToParametersMapper.mapValueArgumentsToParameters(call, TracingStrategy.EMPTY, candidateCall)
             if (!status.isSuccess) continue
@@ -123,11 +124,10 @@ fun getExpectedTypePredicate(
             val i = inputValueIndex - argValueOffset
             if (i < 0 || i >= callArguments.size) continue
 
-            val mapping = candidateCall.getArgumentMapping(callArguments.get(i))
-            if (mapping !is ArgumentMatch) continue
+            val mapping = candidateCall.getArgumentMapping(callArguments[i]) as? ArgumentMatch ?: continue
 
             val candidateParameter = mapping.valueParameter
-            val resolvedArgument = candidateArgumentMap.get(candidateParameter)
+            val resolvedArgument = candidateArgumentMap[candidateParameter]
             val expectedType = if (resolvedArgument is VarargValueArgument)
                 candidateParameter.varargElementType
             else
@@ -144,7 +144,7 @@ fun getExpectedTypePredicate(
             when (it) {
                 is ReturnValueInstruction -> {
                     val returnElement = it.element
-                    val functionDescriptor = when(returnElement) {
+                    val functionDescriptor = when (returnElement) {
                         is KtReturnExpression -> returnElement.getTargetFunctionDescriptor(bindingContext)
                         else -> bindingContext[DECLARATION_TO_DESCRIPTOR, pseudocode.correspondingElement]
                     }
@@ -165,8 +165,7 @@ fun getExpectedTypePredicate(
                     val receiverValue = it.receiverValues[value]
                     if (receiverValue != null) {
                         typePredicates.add(getReceiverTypePredicate((accessTarget as AccessTarget.Call).resolvedCall, receiverValue))
-                    }
-                    else {
+                    } else {
                         val expectedType = when (accessTarget) {
                             is AccessTarget.Call ->
                                 (accessTarget.resolvedCall.resultingDescriptor as? VariableDescriptor)?.type
@@ -183,8 +182,7 @@ fun getExpectedTypePredicate(
                     val receiverValue = it.receiverValues[value]
                     if (receiverValue != null) {
                         typePredicates.add(getReceiverTypePredicate(it.resolvedCall, receiverValue))
-                    }
-                    else {
+                    } else {
                         it.arguments[value]?.let { parameter ->
                             val expectedType = when (it.resolvedCall.valueArguments[parameter]) {
                                 is VarargValueArgument ->
@@ -206,19 +204,15 @@ fun getExpectedTypePredicate(
 
                     VALUE_CONSUMER -> {
                         val element = it.element
-                        when {
-                            element.getStrictParentOfType<KtWhileExpression>()?.condition == element ->
-                                addSubtypesOf(builtIns.booleanType)
-
-                            element is KtProperty -> {
+                        when (element) {
+                            element.getStrictParentOfType<KtWhileExpression>()?.condition -> addSubtypesOf(builtIns.booleanType)
+                            is KtProperty -> {
                                 val propertyDescriptor = bindingContext[DECLARATION_TO_DESCRIPTOR, element] as? PropertyDescriptor
                                 propertyDescriptor?.accessors?.map {
                                     addByExplicitReceiver(bindingContext[DELEGATED_PROPERTY_RESOLVED_CALL, it])
                                 }
                             }
-
-                            element is KtDelegatedSuperTypeEntry ->
-                                addSubtypesOf(bindingContext[TYPE, element.typeReference])
+                            is KtDelegatedSuperTypeEntry -> addSubtypesOf(bindingContext[TYPE, element.typeReference])
                         }
                     }
 
@@ -247,7 +241,7 @@ val Instruction.sideEffectFree: Boolean
 
 fun Instruction.calcSideEffectFree(): Boolean {
     if (this !is InstructionWithValue) return false
-    if (!inputValues.all { it.createdAt?.sideEffectFree ?: false }) return false
+    if (!inputValues.all { it.createdAt?.sideEffectFree == true }) return false
 
     return when (this) {
         is ReadValueInstruction -> target.let {
@@ -286,8 +280,8 @@ fun Pseudocode.getElementValuesRecursively(element: KtElement): List<PseudoValue
 }
 
 val KtElement.containingDeclarationForPseudocode: KtDeclaration?
-        get() = PsiTreeUtil.getParentOfType(this, KtDeclarationWithBody::class.java, KtClassOrObject::class.java, KtScript::class.java)
-                ?: getNonStrictParentOfType<KtProperty>()
+    get() = PsiTreeUtil.getParentOfType(this, KtDeclarationWithBody::class.java, KtClassOrObject::class.java, KtScript::class.java)
+            ?: getNonStrictParentOfType<KtProperty>()
 
 fun KtDeclaration.getContainingPseudocode(context: BindingContext): Pseudocode? {
     val enclosingPseudocodeDeclaration = (this as? KtFunctionLiteral)?.let {

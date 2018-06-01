@@ -78,6 +78,9 @@ interface CompileService : Remote {
     fun getDaemonOptions(): CallResult<DaemonOptions>
 
     @Throws(RemoteException::class)
+    fun getDaemonInfo(): CallResult<String>
+
+    @Throws(RemoteException::class)
     fun getDaemonJVMOptions(): CallResult<DaemonJVMOptions>
 
     @Throws(RemoteException::class)
@@ -136,6 +139,12 @@ interface CompileService : Remote {
             servicesFacade: CompilerServicesFacadeBase,
             compilationResults: CompilationResults?
     ): CallResult<Int>
+
+    @Throws(RemoteException::class)
+    fun classesFqNamesByFiles(
+        sessionId: Int,
+        sourceFiles: Set<File>
+    ): CallResult<Set<String>>
 
     @Throws(RemoteException::class)
     fun clearJarCache()

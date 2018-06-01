@@ -16,18 +16,36 @@
 
 package org.jetbrains.uast.kotlin
 
+import com.intellij.openapi.diagnostic.Attachment
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiType
+import com.intellij.psi.impl.light.LightPsiClassBuilder
+import org.jetbrains.kotlin.asJava.classes.KtLightClass
 import org.jetbrains.kotlin.asJava.toLightClass
 import org.jetbrains.kotlin.psi.KtObjectLiteralExpression
 import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
+import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.uast.*
 
 class KotlinUObjectLiteralExpression(
         override val psi: KtObjectLiteralExpression,
-        override val uastParent: UElement?
-) : KotlinAbstractUExpression(), UObjectLiteralExpression, KotlinUElementWithType {
-    override val declaration by lz { getLanguagePlugin().convert<UClass>(psi.objectDeclaration.toLightClass()!!, this) }
+        givenParent: UElement?
+) : KotlinAbstractUExpression(givenParent), UObjectLiteralExpression, UCallExpressionEx, KotlinUElementWithType {
+
+    override val declaration: UClass by lz {
+        val lightClass: KtLightClass? = psi.objectDeclaration.toLightClass()
+        if (lightClass != null) {
+            getLanguagePlugin().convert<UClass>(lightClass, this)
+        }
+        else {
+            logger.error(
+                    "Failed to create light class for object declaration",
+                    Attachment(psi.containingFile.virtualFile?.path ?: "<no path>", psi.containingFile.text))
+
+            getLanguagePlugin().convert(LightPsiClassBuilder(psi, "<unnamed>"), this)
+        }
+    }
     
     override fun getExpressionType() = psi.objectDeclaration.toPsiType()
 
@@ -54,11 +72,18 @@ class KotlinUObjectLiteralExpression(
     }
 
     override fun resolve() = superClassConstructorCall?.resolveCallToDeclaration(this) as? PsiMethod
-    
+
+    override fun getArgumentForParameter(i: Int): UExpression? =
+        superClassConstructorCall?.let { it.getResolvedCall(it.analyze()) }?.let { getArgumentExpressionByIndex(i, it, this) }
+
     private class ObjectLiteralClassReference(
             override val psi: KtSuperTypeCallEntry,
-            override val uastParent: UElement?
-    ) : KotlinAbstractUElement(), USimpleNameReferenceExpression {
+            givenParent: UElement?
+    ) : KotlinAbstractUElement(givenParent), USimpleNameReferenceExpression {
+
+        override val javaPsi = null
+        override val sourcePsi = psi
+
         override fun resolve() = (psi.resolveCallToDeclaration(this) as? PsiMethod)?.containingClass
 
         override val annotations: List<UAnnotation>
@@ -69,5 +94,9 @@ class KotlinUObjectLiteralExpression(
         
         override val identifier: String
             get() = psi.name ?: "<error>"
-    } 
+    }
+
+    companion object {
+        val logger by lz { Logger.getInstance(KotlinUObjectLiteralExpression::class.java) }
+    }
 }

@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.psi2ir.generators
 
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.backend.common.DataClassMethodGenerator
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.builders.*
@@ -29,6 +30,7 @@ import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl
 import org.jetbrains.kotlin.ir.expressions.mapValueParameters
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
+import org.jetbrains.kotlin.ir.util.declareSimpleFunctionWithOverrides
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi2ir.containsNull
@@ -47,16 +49,16 @@ class DataClassMembersGenerator(declarationGenerator: DeclarationGenerator) : De
     }
 
     private fun declareSimpleFunction(startOffset: Int, endOffset: Int, origin: IrDeclarationOrigin, function: FunctionDescriptor) =
-            context.symbolTable.declareSimpleFunction(startOffset, endOffset, origin, function)
+        context.symbolTable.declareSimpleFunctionWithOverrides(startOffset, endOffset, origin, function)
 
     private inner class MemberFunctionBuilder(
-            val irClass: IrClass,
-            val function: FunctionDescriptor,
-            val origin: IrDeclarationOrigin,
-            startOffset: Int = UNDEFINED_OFFSET,
-            endOffset: Int = UNDEFINED_OFFSET,
-            val irFunction: IrFunction = declareSimpleFunction(startOffset, endOffset, origin, function)
-    ) : IrBlockBodyBuilder(context, Scope(irFunction.symbol), startOffset, endOffset)  {
+        val irClass: IrClass,
+        val function: FunctionDescriptor,
+        val origin: IrDeclarationOrigin,
+        startOffset: Int = UNDEFINED_OFFSET,
+        endOffset: Int = UNDEFINED_OFFSET,
+        val irFunction: IrFunction = declareSimpleFunction(startOffset, endOffset, origin, function)
+    ) : IrBlockBodyBuilder(context, Scope(irFunction.symbol), startOffset, endOffset) {
         inline fun addToClass(builder: MemberFunctionBuilder.(IrFunction) -> Unit): IrFunction {
             irFunction.buildWithScope {
                 builder(irFunction)
@@ -72,24 +74,24 @@ class DataClassMembersGenerator(declarationGenerator: DeclarationGenerator) : De
         }
 
         fun irThis(): IrExpression =
-                IrGetValueImpl(startOffset, endOffset, irFunction.dispatchReceiverParameter!!.symbol)
+            IrGetValueImpl(startOffset, endOffset, irFunction.dispatchReceiverParameter!!.symbol)
 
         fun irOther(): IrExpression =
-                IrGetValueImpl(startOffset, endOffset, irFunction.valueParameters[0].symbol)
+            IrGetValueImpl(startOffset, endOffset, irFunction.valueParameters[0].symbol)
     }
 
     private inner class MyDataClassMethodGenerator(
-            ktClassOrObject: KtClassOrObject,
-            val irClass: IrClass
+        ktClassOrObject: KtClassOrObject,
+        val irClass: IrClass
     ) : DataClassMethodGenerator(ktClassOrObject, declarationGenerator.context.bindingContext) {
         private inline fun buildMember(
-                function: FunctionDescriptor,
-                psiElement: PsiElement? = null,
-                body: MemberFunctionBuilder.(IrFunction) -> Unit
+            function: FunctionDescriptor,
+            psiElement: PsiElement? = null,
+            body: MemberFunctionBuilder.(IrFunction) -> Unit
         ) {
             MemberFunctionBuilder(
-                    irClass, function, IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER,
-                    psiElement.startOffsetOrUndefined, psiElement.endOffsetOrUndefined
+                irClass, function, IrDeclarationOrigin.GENERATED_DATA_CLASS_MEMBER,
+                psiElement.startOffsetOrUndefined, psiElement.endOffsetOrUndefined
             ).addToClass { irFunction ->
                 irFunction.buildWithScope {
                     FunctionGenerator(declarationGenerator).generateSyntheticFunctionParameterDeclarations(irFunction)
@@ -99,8 +101,8 @@ class DataClassMembersGenerator(declarationGenerator: DeclarationGenerator) : De
         }
 
         override fun generateComponentFunction(function: FunctionDescriptor, parameter: ValueParameterDescriptor) {
-            val ktParameter = DescriptorToSourceUtils.descriptorToDeclaration(parameter) ?:
-                              throw AssertionError("No definition for data class constructor parameter $parameter")
+            val ktParameter = DescriptorToSourceUtils.descriptorToDeclaration(parameter)
+                    ?: throw AssertionError("No definition for data class constructor parameter $parameter")
 
             buildMember(function, ktParameter) {
                 +irReturn(irGet(irThis(), getPropertyGetterSymbol(parameter)))
@@ -113,32 +115,38 @@ class DataClassMembersGenerator(declarationGenerator: DeclarationGenerator) : De
         }
 
         private fun getPropertyGetterSymbol(property: PropertyDescriptor) =
-                context.symbolTable.referenceFunction(property.getter!!)
+            context.symbolTable.referenceFunction(property.getter!!)
 
         override fun generateCopyFunction(function: FunctionDescriptor, constructorParameters: List<KtParameter>) {
-            val dataClassConstructor = classDescriptor.unsubstitutedPrimaryConstructor ?:
-                                       throw AssertionError("Data class should have a primary constructor: $classDescriptor")
+            val dataClassConstructor = classDescriptor.unsubstitutedPrimaryConstructor
+                    ?: throw AssertionError("Data class should have a primary constructor: $classDescriptor")
             val constructorSymbol = context.symbolTable.referenceConstructor(dataClassConstructor)
 
-            buildMember(function) { irFunction ->
+            buildMember(function, declaration) { irFunction ->
                 function.valueParameters.forEach { parameter ->
                     putDefault(parameter, irGet(irThis(), getPropertyGetterSymbol(parameter)))
                 }
-                +irReturn(irCall(constructorSymbol, dataClassConstructor.returnType).mapValueParameters {
-                    irGet(irFunction.valueParameters[it.index].symbol)
-                })
+                +irReturn(
+                    irCall(
+                        constructorSymbol,
+                        dataClassConstructor.returnType,
+                        dataClassConstructor.typeParameters.associate { it to it.defaultType }
+                    ).mapValueParameters {
+                        irGet(irFunction.valueParameters[it.index].symbol)
+                    }
+                )
             }
         }
 
         override fun generateEqualsMethod(function: FunctionDescriptor, properties: List<PropertyDescriptor>) {
-            buildMember(function) {
+            buildMember(function, declaration) {
                 +irIfThenReturnTrue(irEqeqeq(irThis(), irOther()))
-                +irIfThenReturnFalse(irNotIs(irOther(), classDescriptor.defaultType))
-                val otherWithCast = irTemporary(irAs(irOther(), classDescriptor.defaultType), "other_with_cast")
+                +irIfThenReturnFalse(irNotIs(irOther(), classDescriptor.defaultType, irClass.symbol))
+                val otherWithCast = irTemporary(irAs(irOther(), classDescriptor.defaultType, irClass.symbol), "other_with_cast")
                 for (property in properties) {
-                    +irIfThenReturnFalse(
-                            irNotEquals(irGet(irThis(), getPropertyGetterSymbol(property)),
-                                        irGet(irGet(otherWithCast.symbol), getPropertyGetterSymbol(property))))
+                    val arg1 = irGet(irThis(), getPropertyGetterSymbol(property))
+                    val arg2 = irGet(irGet(otherWithCast.symbol), getPropertyGetterSymbol(property))
+                    +irIfThenReturnFalse(irNotEquals(arg1, arg2))
                 }
                 +irReturnTrue()
             }
@@ -148,23 +156,26 @@ class DataClassMembersGenerator(declarationGenerator: DeclarationGenerator) : De
         private val intType = context.builtIns.intType
 
         private val intTimes =
-                intClass.findFirstFunction("times") { KotlinTypeChecker.DEFAULT.equalTypes(it.valueParameters[0].type, intType) }
-                        .let { context.symbolTable.referenceFunction(it) }
+            intClass.findFirstFunction("times") { KotlinTypeChecker.DEFAULT.equalTypes(it.valueParameters[0].type, intType) }
+                .let { context.symbolTable.referenceFunction(it) }
 
         private val intPlus =
-                intClass.findFirstFunction("plus") { KotlinTypeChecker.DEFAULT.equalTypes(it.valueParameters[0].type, intType) }
-                        .let { context.symbolTable.referenceFunction(it) }
+            intClass.findFirstFunction("plus") { KotlinTypeChecker.DEFAULT.equalTypes(it.valueParameters[0].type, intType) }
+                .let { context.symbolTable.referenceFunction(it) }
 
 
-        private fun getHashCodeFunction(type: KotlinType): IrFunctionSymbol {
+        private fun getHashCodeFunction(type: KotlinType): FunctionDescriptor {
             val typeConstructorDescriptor = type.constructor.declarationDescriptor
             return when (typeConstructorDescriptor) {
-                is ClassDescriptor -> {
-                    val hashCodeDescriptor: CallableDescriptor = typeConstructorDescriptor.findFirstFunction("hashCode") { it.valueParameters.isEmpty() }
-                    context.symbolTable.referenceFunction(hashCodeDescriptor)
-                }
+                is ClassDescriptor ->
+                    if (KotlinBuiltIns.isArrayOrPrimitiveArray(typeConstructorDescriptor))
+                        context.irBuiltIns.dataClassArrayMemberHashCodeSymbol.descriptor
+                    else
+                        type.memberScope.findFirstFunction("hashCode") { it.valueParameters.isEmpty() }
+
                 is TypeParameterDescriptor ->
                     getHashCodeFunction(context.builtIns.anyType) // TODO
+
                 else ->
                     throw AssertionError("Unexpected type: $type")
             }
@@ -172,14 +183,14 @@ class DataClassMembersGenerator(declarationGenerator: DeclarationGenerator) : De
         }
 
         override fun generateHashCodeMethod(function: FunctionDescriptor, properties: List<PropertyDescriptor>) {
-            buildMember(function) {
+            buildMember(function, declaration) {
                 val result = irTemporaryVar(irInt(0), "result").symbol
                 var first = true
                 for (property in properties) {
                     val hashCodeOfProperty = getHashCodeOfProperty(irThis(), property)
                     val irNewValue =
-                            if (first) hashCodeOfProperty
-                            else irCallOp(intPlus, irCallOp(intTimes, irGet(result), irInt(31)), hashCodeOfProperty)
+                        if (first) hashCodeOfProperty
+                        else irCallOp(intPlus, irCallOp(intTimes, irGet(result), irInt(31)), hashCodeOfProperty)
                     +irSetVar(result, irNewValue)
                     first = false
                 }
@@ -199,18 +210,38 @@ class DataClassMembersGenerator(declarationGenerator: DeclarationGenerator) : De
             }
         }
 
-        private fun MemberFunctionBuilder.getHashCodeOf(irValue: IrExpression): IrExpression =
-                irCall(getHashCodeFunction(irValue.type), intType).apply { dispatchReceiver = irValue }
+        private fun MemberFunctionBuilder.getHashCodeOf(irValue: IrExpression): IrExpression {
+            val hashCodeFunctionDescriptor = getHashCodeFunction(irValue.type)
+            val hashCodeFunctionSymbol = declarationGenerator.context.symbolTable.referenceFunction(hashCodeFunctionDescriptor.original)
+            return irCall(hashCodeFunctionSymbol, hashCodeFunctionDescriptor).apply {
+                if (descriptor.dispatchReceiverParameter != null) {
+                    dispatchReceiver = irValue
+                } else {
+                    putValueArgument(0, irValue)
+                }
+            }
+        }
 
         override fun generateToStringMethod(function: FunctionDescriptor, properties: List<PropertyDescriptor>) {
-            buildMember(function) {
+            buildMember(function, declaration) {
                 val irConcat = irConcat()
                 irConcat.addArgument(irString(classDescriptor.name.asString() + "("))
                 var first = true
                 for (property in properties) {
                     if (!first) irConcat.addArgument(irString(", "))
                     irConcat.addArgument(irString(property.name.asString() + "="))
-                    irConcat.addArgument(irGet(irThis(), getPropertyGetterSymbol(property)))
+                    val irPropertyValue = irGet(irThis(), getPropertyGetterSymbol(property))
+                    val typeConstructorDescriptor = property.type.constructor.declarationDescriptor
+                    val irPropertyStringValue =
+                        if (typeConstructorDescriptor is ClassDescriptor &&
+                            KotlinBuiltIns.isArrayOrPrimitiveArray(typeConstructorDescriptor)
+                        )
+                            irCall(context.irBuiltIns.dataClassArrayMemberToStringSymbol).apply {
+                                putValueArgument(0, irPropertyValue)
+                            }
+                        else
+                            irPropertyValue
+                    irConcat.addArgument(irPropertyStringValue)
                     first = false
                 }
                 irConcat.addArgument(irString(")"))

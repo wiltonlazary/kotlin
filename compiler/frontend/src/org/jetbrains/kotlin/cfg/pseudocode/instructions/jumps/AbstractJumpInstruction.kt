@@ -24,9 +24,9 @@ import org.jetbrains.kotlin.cfg.pseudocode.instructions.InstructionImpl
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.Instruction
 
 abstract class AbstractJumpInstruction(
-        element: KtElement,
-        val targetLabel: Label,
-        blockScope: BlockScope
+    element: KtElement,
+    val targetLabel: Label,
+    blockScope: BlockScope
 ) : KtElementInstructionImpl(element, blockScope), JumpInstruction {
     var resolvedTarget: Instruction? = null
         set(value) {
@@ -35,13 +35,9 @@ abstract class AbstractJumpInstruction(
 
     protected abstract fun createCopy(newLabel: Label, blockScope: BlockScope): AbstractJumpInstruction
 
-    fun copy(newLabel: Label): Instruction {
-        return updateCopyInfo(createCopy(newLabel, blockScope))
-    }
+    fun copy(newLabel: Label): Instruction = updateCopyInfo(createCopy(newLabel, blockScope))
 
-    override fun createCopy(): InstructionImpl {
-        return createCopy(targetLabel, blockScope)
-    }
+    override fun createCopy(): InstructionImpl = createCopy(targetLabel, blockScope)
 
     override val nextInstructions: Collection<Instruction>
         get() = listOfNotNull(resolvedTarget)

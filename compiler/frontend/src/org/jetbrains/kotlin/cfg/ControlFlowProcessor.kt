@@ -16,7 +16,6 @@
 
 package org.jetbrains.kotlin.cfg
 
-import com.google.common.collect.Lists
 import com.intellij.psi.PsiElement
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.util.PsiTreeUtil
@@ -31,6 +30,9 @@ import org.jetbrains.kotlin.cfg.pseudocode.PseudocodeImpl
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.eval.AccessTarget
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.eval.InstructionWithValue
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.eval.MagicKind
+import org.jetbrains.kotlin.contracts.description.InvocationKind
+import org.jetbrains.kotlin.contracts.description.canBeRevisited
+import org.jetbrains.kotlin.contracts.description.isDefinitelyVisited
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.AnonymousFunctionDescriptor
 import org.jetbrains.kotlin.diagnostics.Errors.*
@@ -59,18 +61,20 @@ import org.jetbrains.kotlin.types.expressions.OperatorConventions
 import org.jetbrains.kotlin.util.slicedMap.ReadOnlySlice
 import java.util.*
 
+typealias DeferredGenerator = (ControlFlowBuilder) -> Unit
+
 class ControlFlowProcessor(private val trace: BindingTrace) {
 
     private val builder: ControlFlowBuilder = ControlFlowInstructionsGenerator()
 
     fun generatePseudocode(subroutine: KtElement): Pseudocode {
-        val pseudocode = generate(subroutine)
+        val pseudocode = generate(subroutine, null)
         (pseudocode as PseudocodeImpl).postProcess()
         return pseudocode
     }
 
-    private fun generate(subroutine: KtElement): Pseudocode {
-        builder.enterSubroutine(subroutine)
+    private fun generate(subroutine: KtElement, invocationKind: InvocationKind? = null): Pseudocode {
+        builder.enterSubroutine(subroutine, invocationKind)
         val cfpVisitor = CFPVisitor(builder)
         if (subroutine is KtDeclarationWithBody && subroutine !is KtSecondaryConstructor) {
             val valueParameters = subroutine.valueParameters
@@ -84,11 +88,10 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                     generateImplicitReturnValue(bodyExpression, subroutine)
                 }
             }
-        }
-        else {
+        } else {
             cfpVisitor.generateInstructions(subroutine)
         }
-        return builder.exitSubroutine(subroutine)
+        return builder.exitSubroutine(subroutine, invocationKind)
     }
 
     private fun generateImplicitReturnValue(bodyExpression: KtExpression, subroutine: KtElement) {
@@ -106,7 +109,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
         val afterDeclaration = builder.createUnboundLabel("after local declaration")
 
         builder.nondeterministicJump(afterDeclaration, subroutine, null)
-        generate(subroutine)
+        generate(subroutine, null)
         builder.bindLabel(afterDeclaration)
     }
 
@@ -116,11 +119,17 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
 
         private val catchFinallyStack = Stack<CatchFinallyLabels>()
 
+        // Some language constructs (e.g. inlined lambdas) should be partially processed before call
+        // (to provide argument for call itself), and partially - after (in case of inlined lambdas,
+        // their body should be generated after call). To do so, we store deferred generators, which
+        // will be called after call instruction is emitted.
+        // Stack is necessary to store generators across nested calls
+        private val deferredGeneratorsStack = Stack<MutableList<DeferredGenerator>>()
+
         private val conditionVisitor = object : KtVisitorVoid() {
 
-            private fun getSubjectExpression(condition: KtWhenCondition): KtExpression? {
-                return condition.getStrictParentOfType<KtWhenExpression>()?.subjectExpression
-            }
+            private fun getSubjectExpression(condition: KtWhenCondition): KtExpression? =
+                condition.getStrictParentOfType<KtWhenExpression>()?.subjectExpression
 
             override fun visitWhenConditionInRange(condition: KtWhenConditionInRange) {
                 if (!generateCall(condition.operationReference)) {
@@ -145,8 +154,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                 if (subjectExpression != null) {
                     // todo: this can be replaced by equals() invocation (when corresponding resolved call is recorded)
                     createNonSyntheticValue(condition, MagicKind.EQUALS_IN_WHEN_CONDITION, subjectExpression, expression)
-                }
-                else {
+                } else {
                     copyValue(expression, condition)
                 }
             }
@@ -182,17 +190,14 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             }
         }
 
-        private fun createSyntheticValue(instructionElement: KtElement, kind: MagicKind, vararg from: KtElement): PseudoValue {
-            return builder.magic(instructionElement, null, elementsToValues(from.asList()), kind).outputValue
-        }
+        private fun createSyntheticValue(instructionElement: KtElement, kind: MagicKind, vararg from: KtElement): PseudoValue =
+            builder.magic(instructionElement, null, elementsToValues(from.asList()), kind).outputValue
 
-        private fun createNonSyntheticValue(to: KtElement, from: List<KtElement?>, kind: MagicKind): PseudoValue {
-            return builder.magic(to, to, elementsToValues(from), kind).outputValue
-        }
+        private fun createNonSyntheticValue(to: KtElement, from: List<KtElement?>, kind: MagicKind): PseudoValue =
+            builder.magic(to, to, elementsToValues(from), kind).outputValue
 
-        private fun createNonSyntheticValue(to: KtElement, kind: MagicKind, vararg from: KtElement?): PseudoValue {
-            return createNonSyntheticValue(to, from.asList(), kind)
-        }
+        private fun createNonSyntheticValue(to: KtElement, kind: MagicKind, vararg from: KtElement?): PseudoValue =
+            createNonSyntheticValue(to, from.asList(), kind)
 
         private fun mergeValues(from: List<KtExpression>, to: KtExpression) {
             builder.merge(to, elementsToValues(from))
@@ -209,18 +214,16 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             return if (value != null || element is KtDeclaration) value else builder.newValue(element)
         }
 
-        private fun elementsToValues(from: List<KtElement?>): List<PseudoValue> {
-            return from.mapNotNull { element -> getBoundOrUnreachableValue(element) }
-        }
+        private fun elementsToValues(from: List<KtElement?>): List<PseudoValue> =
+            from.mapNotNull { element -> getBoundOrUnreachableValue(element) }
 
         private fun generateInitializer(declaration: KtDeclaration, initValue: PseudoValue) {
             builder.write(declaration, declaration, initValue, getDeclarationAccessTarget(declaration), emptyMap())
         }
 
-        private fun getResolvedCallAccessTarget(element: KtElement?): AccessTarget {
-            return element.getResolvedCall(trace.bindingContext)?.let { AccessTarget.Call(it) }
-                   ?: AccessTarget.BlackBox
-        }
+        private fun getResolvedCallAccessTarget(element: KtElement?): AccessTarget =
+            element.getResolvedCall(trace.bindingContext)?.let { AccessTarget.Call(it) }
+                    ?: AccessTarget.BlackBox
 
         private fun getDeclarationAccessTarget(element: KtElement): AccessTarget {
             val descriptor = trace.get(BindingContext.DECLARATION_TO_DESCRIPTOR, element)
@@ -271,8 +274,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             val resolvedCall = expression.getResolvedCall(trace.bindingContext)
             if (resolvedCall is VariableAsFunctionResolvedCall) {
                 generateCall(resolvedCall.variableCall)
-            }
-            else {
+            } else {
                 if (resolvedCall == null) {
                     val qualifier = trace.bindingContext[BindingContext.QUALIFIER, expression]
                     if (qualifier != null && generateQualifier(expression, qualifier)) return
@@ -300,11 +302,9 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             val right = expression.right
             if (operationType === ANDAND || operationType === OROR) {
                 generateBooleanOperation(expression)
-            }
-            else if (operationType === EQ) {
+            } else if (operationType === EQ) {
                 visitAssignment(left, getDeferredValue(right), expression)
-            }
-            else if (OperatorConventions.ASSIGNMENT_OPERATIONS.containsKey(operationType)) {
+            } else if (OperatorConventions.ASSIGNMENT_OPERATIONS.containsKey(operationType)) {
                 val resolvedCall = expression.getResolvedCall(trace.bindingContext)
                 if (resolvedCall != null) {
                     val rhsValue = generateCall(resolvedCall).outputValue
@@ -316,12 +316,10 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                          */
                         visitAssignment(left, getValueAsFunction(rhsValue), expression)
                     }
-                }
-                else {
+                } else {
                     generateBothArgumentsAndMark(expression)
                 }
-            }
-            else if (operationType === ELVIS) {
+            } else if (operationType === ELVIS) {
                 generateInstructions(left)
                 mark(expression)
                 val afterElvis = builder.createUnboundLabel("after elvis operator")
@@ -329,8 +327,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                 generateInstructions(right)
                 builder.bindLabel(afterElvis)
                 mergeValues(listOf(left, right).filterNotNull(), expression)
-            }
-            else {
+            } else {
                 if (!generateCall(expression)) {
                     generateBothArgumentsAndMark(expression)
                 }
@@ -346,8 +343,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             generateInstructions(left)
             if (operationType === ANDAND) {
                 builder.jumpOnFalse(resultLabel, expression, builder.getBoundValue(left))
-            }
-            else {
+            } else {
                 builder.jumpOnTrue(resultLabel, expression, builder.getBoundValue(left))
             }
             generateInstructions(right)
@@ -377,9 +373,9 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
         }
 
         private fun visitAssignment(
-                lhs: KtExpression?,
-                rhsDeferredValue: () -> PseudoValue?,
-                parentExpression: KtExpression
+            lhs: KtExpression?,
+            rhsDeferredValue: () -> PseudoValue?,
+            parentExpression: KtExpression
         ) {
             val left = KtPsiUtil.deparenthesize(lhs)
             if (left == null) {
@@ -400,8 +396,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                 if (accessTarget is AccessTarget.Call) {
                     receiverValues = getReceiverValues(accessTarget.resolvedCall)
                 }
-            }
-            else if (left is KtProperty) {
+            } else if (left is KtProperty) {
                 accessTarget = getDeclarationAccessTarget(left)
             }
 
@@ -416,9 +411,9 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
         }
 
         private fun generateArrayAssignment(
-                lhs: KtArrayAccessExpression,
-                rhsDeferredValue: () -> PseudoValue?,
-                parentExpression: KtExpression
+            lhs: KtArrayAccessExpression,
+            rhsDeferredValue: () -> PseudoValue?,
+            parentExpression: KtExpression
         ) {
             val setResolvedCall = trace.get(BindingContext.INDEXED_LVALUE_SET, lhs)
 
@@ -451,11 +446,11 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
         *  we first generate instructions for 1 and 2 whereas 3 is replaced by pseudo-value corresponding to "a.get(1) + 3"
         */
         private fun getArraySetterArguments(
-                rhsDeferredValue: () -> PseudoValue?,
-                setResolvedCall: ResolvedCall<FunctionDescriptor>
+            rhsDeferredValue: () -> PseudoValue?,
+            setResolvedCall: ResolvedCall<FunctionDescriptor>
         ): SmartFMap<PseudoValue, ValueParameterDescriptor> {
             val valueArguments = setResolvedCall.resultingDescriptor.valueParameters.flatMapTo(
-                    ArrayList<ValueArgument>()
+                ArrayList<ValueArgument>()
             ) { descriptor -> setResolvedCall.valueArguments[descriptor]?.arguments ?: emptyList() }
 
             val rhsArgument = valueArguments.lastOrNull()
@@ -465,8 +460,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                 val parameterDescriptor = argumentMapping.valueParameter
                 if (valueArgument !== rhsArgument) {
                     argumentValues = generateValueArgument(valueArgument, parameterDescriptor, argumentValues)
-                }
-                else {
+                } else {
                     val rhsValue = rhsDeferredValue.invoke()
                     if (rhsValue != null) {
                         argumentValues = argumentValues.plus(rhsValue, parameterDescriptor)
@@ -518,13 +512,11 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             val incrementOrDecrement = isIncrementOrDecrement(operationType)
             val resolvedCall = expression.getResolvedCall(trace.bindingContext)
 
-            val rhsValue: PseudoValue?
-            if (resolvedCall != null) {
-                rhsValue = generateCall(resolvedCall).outputValue
-            }
-            else {
+            val rhsValue: PseudoValue? = if (resolvedCall != null) {
+                generateCall(resolvedCall).outputValue
+            } else {
                 generateInstructions(baseExpression)
-                rhsValue = createNonSyntheticValue(expression, MagicKind.UNRESOLVED_CALL, baseExpression)
+                createNonSyntheticValue(expression, MagicKind.UNRESOLVED_CALL, baseExpression)
             }
 
             if (incrementOrDecrement) {
@@ -535,9 +527,8 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             }
         }
 
-        private fun isIncrementOrDecrement(operationType: IElementType): Boolean {
-            return operationType === KtTokens.PLUSPLUS || operationType === KtTokens.MINUSMINUS
-        }
+        private fun isIncrementOrDecrement(operationType: IElementType): Boolean =
+            operationType === KtTokens.PLUSPLUS || operationType === KtTokens.MINUSMINUS
 
         override fun visitIfExpression(expression: KtIfExpression) {
             mark(expression)
@@ -550,8 +541,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             if (thenBranch != null) {
                 branches.add(thenBranch)
                 generateInstructions(thenBranch)
-            }
-            else {
+            } else {
                 builder.loadUnit(expression)
             }
             val resultLabel = builder.createUnboundLabel("'if' expression result")
@@ -561,8 +551,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             if (elseBranch != null) {
                 branches.add(elseBranch)
                 generateInstructions(elseBranch)
-            }
-            else {
+            } else {
                 builder.loadUnit(expression)
             }
             builder.bindLabel(resultLabel)
@@ -668,9 +657,9 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                 builder.jump(afterCatches, expression)
 
                 builder.bindLabel(onException)
-                val catchLabels = Lists.newLinkedList<Label>()
+                val catchLabels = LinkedList<Label>()
                 val catchClausesSize = catchClauses.size
-                for (i in 0..catchClausesSize - 1 - 1) {
+                for (i in 0 until catchClausesSize - 1) {
                     catchLabels.add(builder.createUnboundLabel("catch " + i))
                 }
                 if (!catchLabels.isEmpty()) {
@@ -681,8 +670,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                     builder.enterBlockScope(catchClause)
                     if (!isFirst) {
                         builder.bindLabel(catchLabels.remove())
-                    }
-                    else {
+                    } else {
                         isFirst = false
                     }
                     val catchParameter = catchClause.catchParameter
@@ -710,8 +698,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             mark(expression)
             if (!CompileTimeConstantUtils.canBeReducedToBooleanConstant(condition, trace.bindingContext, true)) {
                 builder.jumpOnFalse(loopInfo.exitPoint, expression, builder.getBoundValue(condition))
-            }
-            else {
+            } else {
                 assert(condition != null) { "Invalid while condition: " + expression.text }
                 createSyntheticValue(condition!!, MagicKind.VALUE_CONSUMER, condition)
             }
@@ -738,8 +725,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             builder.exitBlockScope(expression)
             if (!CompileTimeConstantUtils.canBeReducedToBooleanConstant(condition, trace.bindingContext, true)) {
                 builder.jumpOnTrue(loopInfo.entryPoint, expression, builder.getBoundValue(expression.condition))
-            }
-            else {
+            } else {
                 assert(condition != null) { "Invalid do / while condition: " + expression.text }
                 createSyntheticValue(condition!!, MagicKind.VALUE_CONSUMER, condition)
                 builder.jump(loopInfo.entryPoint, expression)
@@ -778,8 +764,8 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
         }
 
         private fun generateLoopConventionCall(
-                loopRange: KtExpression?,
-                callSlice: ReadOnlySlice<KtExpression, ResolvedCall<FunctionDescriptor>>
+            loopRange: KtExpression?,
+            callSlice: ReadOnlySlice<KtExpression, ResolvedCall<FunctionDescriptor>>
         ) {
             if (loopRange == null) return
             val resolvedCall = trace.bindingContext[callSlice, loopRange] ?: return
@@ -792,8 +778,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                 val destructuringDeclaration = loopParameter.destructuringDeclaration
                 if (destructuringDeclaration != null) {
                     visitDestructuringDeclaration(destructuringDeclaration, false)
-                }
-                else {
+                } else {
                     builder.declareParameter(loopParameter)
                 }
             }
@@ -804,10 +789,10 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             val loopRange = expression.loopRange
 
             val value = builder.magic(
-                    loopRange ?: expression,
-                    null,
-                    ContainerUtil.createMaybeSingletonList(builder.getBoundValue(loopRange)),
-                    MagicKind.LOOP_RANGE_ITERATION
+                loopRange ?: expression,
+                null,
+                ContainerUtil.createMaybeSingletonList(builder.getBoundValue(loopRange)),
+                MagicKind.LOOP_RANGE_ITERATION
             ).outputValue
 
             if (loopParameter != null) {
@@ -816,8 +801,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                     for (entry in destructuringDeclaration.entries) {
                         generateInitializer(entry, value)
                     }
-                }
-                else {
+                } else {
                     generateInitializer(loopParameter, value)
                 }
             }
@@ -854,8 +838,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             val parentBody = parentLoop.body
             return if (parentBody != null && parentBody.textRange.contains(expression.textRange)) {
                 parentLoop
-            }
-            else {
+            } else {
                 getNearestLoopExpression(parentLoop)
             }
         }
@@ -866,22 +849,21 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             if (labelName != null) {
                 val targetLabel = expression.getTargetLabel()!!
                 val labeledElement = trace.get(BindingContext.LABEL_TARGET, targetLabel)
-                if (labeledElement is KtLoopExpression) {
-                    loop = labeledElement
-                }
-                else {
+                loop = if (labeledElement is KtLoopExpression) {
+                    labeledElement
+                } else {
                     trace.report(NOT_A_LOOP_LABEL.on(expression, targetLabel.text))
-                    loop = null
+                    null
                 }
-            }
-            else {
+            } else {
                 loop = getCorrespondingLoopWithoutLabel(expression)
                 if (loop == null) {
                     trace.report(BREAK_OR_CONTINUE_OUTSIDE_A_LOOP.on(expression))
-                }
-                else {
-                    val whenExpression = PsiTreeUtil.getParentOfType(expression, KtWhenExpression::class.java, true,
-                                                                     KtLoopExpression::class.java)
+                } else {
+                    val whenExpression = PsiTreeUtil.getParentOfType(
+                        expression, KtWhenExpression::class.java, true,
+                        KtLoopExpression::class.java
+                    )
                     if (whenExpression != null) {
                         trace.report(BREAK_OR_CONTINUE_IN_WHEN.on(expression))
                     }
@@ -904,14 +886,13 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
 
         private fun jumpCrossesTryCatchBoundary(jumpExpression: KtExpressionWithLabel, jumpTarget: PsiElement): Boolean {
             var current = jumpExpression.parent
-            while (current != null) {
+            while (true) {
                 when (current) {
                     jumpTarget -> return false
                     is KtTryExpression -> return true
                     else -> current = current.parent
                 }
             }
-            return false
         }
 
         private fun jumpDoesNotCrossFunctionBoundary(jumpExpression: KtExpressionWithLabel, jumpTarget: KtLoopExpression): Boolean {
@@ -929,8 +910,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                     trace.report(BREAK_OR_CONTINUE_JUMPS_ACROSS_FUNCTION_BOUNDARY.on(jumpExpression))
                 }
                 false
-            }
-            else {
+            } else {
                 true
             }
         }
@@ -946,18 +926,16 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             val labelElement = expression.getTargetLabel()
             val subroutine: KtElement?
             val labelName = expression.getLabelName()
-            if (labelElement != null && labelName != null) {
+            subroutine = if (labelElement != null && labelName != null) {
                 val labeledElement = trace.get(BindingContext.LABEL_TARGET, labelElement)
                 if (labeledElement != null) {
                     assert(labeledElement is KtElement)
-                    subroutine = labeledElement as KtElement?
+                    labeledElement as KtElement?
+                } else {
+                    null
                 }
-                else {
-                    subroutine = null
-                }
-            }
-            else {
-                subroutine = builder.returnSubroutine
+            } else {
+                builder.returnSubroutine
                 // TODO : a context check
             }
 
@@ -965,12 +943,10 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                 val returnValue = if (returnedExpression != null) builder.getBoundValue(returnedExpression) else null
                 if (returnValue == null) {
                     builder.returnNoValue(expression, subroutine)
-                }
-                else {
+                } else {
                     builder.returnValue(expression, returnValue, subroutine)
                 }
-            }
-            else {
+            } else {
                 createNonSyntheticValue(expression, MagicKind.UNSUPPORTED_ELEMENT, returnedExpression)
             }
         }
@@ -994,7 +970,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
         private fun computePseudoValueForParameter(parameter: KtParameter): PseudoValue {
             val syntheticValue = createSyntheticValue(parameter, MagicKind.FAKE_INITIALIZER)
             val defaultValue = builder.getBoundValue(parameter.defaultValue) ?: return syntheticValue
-            return builder.merge(parameter, Lists.newArrayList(defaultValue, syntheticValue)).outputValue
+            return builder.merge(parameter, arrayListOf(defaultValue, syntheticValue)).outputValue
         }
 
         override fun visitBlockExpression(expression: KtBlockExpression) {
@@ -1016,8 +992,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             }
             if (statements.isEmpty()) {
                 builder.loadUnit(expression)
-            }
-            else {
+            } else {
                 copyValue(statements.lastOrNull(), expression)
             }
             if (declareBlockScope) {
@@ -1030,12 +1005,39 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             return parent.parent is KtDoWhileExpression
         }
 
-        private fun visitFunction(function: KtFunction) {
-            processLocalDeclaration(function)
+        private fun visitFunction(function: KtFunction, invocationKind: InvocationKind? = null) {
+            if (invocationKind == null) {
+                processLocalDeclaration(function)
+            } else {
+                visitInlinedFunction(function, invocationKind)
+            }
+
             val isAnonymousFunction = function is KtFunctionLiteral || function.name == null
             if (isAnonymousFunction || function.isLocal && function.parent !is KtBlockExpression) {
                 builder.createLambda(function)
             }
+        }
+
+        private fun visitInlinedFunction(lambdaFunctionLiteral: KtFunction, invocationKind: InvocationKind) {
+            // Defer emitting of inlined declaration
+            deferredGeneratorsStack.peek().add({ builder ->
+                                                   val beforeDeclaration = builder.createUnboundLabel("before inlined declaration")
+                                                   val afterDeclaration = builder.createUnboundLabel("after inlined declaration")
+
+                                                   builder.bindLabel(beforeDeclaration)
+
+                                                   if (!invocationKind.isDefinitelyVisited()) {
+                                                       builder.nondeterministicJump(afterDeclaration, lambdaFunctionLiteral, null)
+                                                   }
+
+                                                   generate(lambdaFunctionLiteral, invocationKind)
+
+                                                   if (invocationKind.canBeRevisited()) {
+                                                       builder.nondeterministicJump(beforeDeclaration, lambdaFunctionLiteral, null)
+                                                   }
+
+                                                   builder.bindLabel(afterDeclaration)
+                                               })
         }
 
         override fun visitNamedFunction(function: KtNamedFunction) {
@@ -1045,7 +1047,11 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
         override fun visitLambdaExpression(lambdaExpression: KtLambdaExpression) {
             mark(lambdaExpression)
             val functionLiteral = lambdaExpression.functionLiteral
-            visitFunction(functionLiteral)
+
+            // NB. Behaviour here is implicitly controlled by the LanguageFeature 'UseCallsInPlaceEffect'
+            // If this feature is turned off, then slice LAMBDA_INVOCATIONS is never written and invocationKind
+            // in all subsequent calls always 'null', resulting in falling back to old behaviour
+            visitFunction(functionLiteral, trace[BindingContext.LAMBDA_INVOCATIONS, lambdaExpression])
             copyValue(functionLiteral, lambdaExpression)
         }
 
@@ -1059,16 +1065,14 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             if (selectorExpression is KtCallExpression || selectorExpression is KtSimpleNameExpression) {
                 if (!safe) {
                     generateInstructions(selectorExpression)
-                }
-                else {
+                } else {
                     val resultLabel = builder.createUnboundLabel("result of call")
                     builder.jumpOnFalse(resultLabel, expression, null)
                     generateInstructions(selectorExpression)
                     builder.bindLabel(resultLabel)
                 }
                 copyValue(selectorExpression, expression)
-            }
-            else {
+            } else {
                 generateInstructions(receiverExpression)
                 createNonSyntheticValue(expression, MagicKind.UNSUPPORTED_ELEMENT, receiverExpression)
             }
@@ -1097,8 +1101,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
         }
 
         private fun generateAndGetReceiverIfAny(expression: KtExpression): KtExpression? {
-            val parent = expression.parent
-            if (parent !is KtQualifiedExpression) return null
+            val parent = expression.parent as? KtQualifiedExpression ?: return null
 
             if (parent.selectorExpression !== expression) return null
 
@@ -1120,7 +1123,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                 visitAssignment(property, getDeferredValue(null), property)
                 generateInstructions(delegate)
                 if (property.isLocal) {
-                    generateInitializer(property, createSyntheticValue(property, MagicKind.FAKE_INITIALIZER));
+                    generateInitializer(property, createSyntheticValue(property, MagicKind.FAKE_INITIALIZER))
                 }
                 if (builder.getBoundValue(delegate) != null) {
                     createSyntheticValue(property, MagicKind.VALUE_CONSUMER, delegate)
@@ -1147,15 +1150,15 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                 val resolvedCall = trace.get(BindingContext.COMPONENT_RESOLVED_CALL, entry)
 
                 val writtenValue: PseudoValue?
-                if (resolvedCall != null) {
-                    writtenValue = builder.call(
-                            entry,
-                            resolvedCall,
-                            getReceiverValues(resolvedCall),
-                            emptyMap<PseudoValue, ValueParameterDescriptor>()).outputValue
-                }
-                else {
-                    writtenValue = initializer?.let { createSyntheticValue(entry, MagicKind.UNRESOLVED_CALL, it) }
+                writtenValue = if (resolvedCall != null) {
+                    builder.call(
+                        entry,
+                        resolvedCall,
+                        getReceiverValues(resolvedCall),
+                        emptyMap()
+                    ).outputValue
+                } else {
+                    initializer?.let { createSyntheticValue(entry, MagicKind.UNRESOLVED_CALL, it) }
                 }
 
                 if (generateWriteForEntries) {
@@ -1178,8 +1181,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                 if (getBoundOrUnreachableValue(left) != null) {
                     createNonSyntheticValue(expression, MagicKind.CAST, left)
                 }
-            }
-            else {
+            } else {
                 visitKtElement(expression)
                 createNonSyntheticValue(expression, MagicKind.UNSUPPORTED_ELEMENT, left)
             }
@@ -1277,7 +1279,7 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                     // For the last entry of exhaustive when,
                     // attempt to jump further should lead to error, not to "done"
                     if (!iterator.hasNext() && WhenChecker.isWhenExhaustive(expression, trace)) {
-                        builder.magic(expression, null, emptyList<PseudoValue>(), MagicKind.EXHAUSTIVE_WHEN_ELSE)
+                        builder.magic(expression, null, emptyList(), MagicKind.EXHAUSTIVE_WHEN_ELSE)
                     }
                 }
             }
@@ -1343,8 +1345,10 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             val classDescriptor = trace[BindingContext.DECLARATION_TO_DESCRIPTOR, entryOrObject]
             if (classDescriptor is ClassDescriptor) {
                 builder.declareEntryOrObject(entryOrObject)
-                builder.write(entryOrObject, entryOrObject, createSyntheticValue(entryOrObject, MagicKind.FAKE_INITIALIZER),
-                              AccessTarget.Declaration(FakeCallableDescriptorForObject(classDescriptor)), emptyMap())
+                builder.write(
+                    entryOrObject, entryOrObject, createSyntheticValue(entryOrObject, MagicKind.FAKE_INITIALIZER),
+                    AccessTarget.Declaration(FakeCallableDescriptorForObject(classDescriptor)), emptyMap()
+                )
                 generateInstructions(entryOrObject)
             }
         }
@@ -1398,7 +1402,8 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
         }
 
         override fun visitSecondaryConstructor(constructor: KtSecondaryConstructor) {
-            val classOrObject = PsiTreeUtil.getParentOfType(constructor, KtClassOrObject::class.java) ?: error("Guaranteed by parsing contract")
+            val classOrObject =
+                PsiTreeUtil.getParentOfType(constructor, KtClassOrObject::class.java) ?: error("Guaranteed by parsing contract")
 
             processParameters(constructor.valueParameters)
             generateCallOrMarkUnresolved(constructor.getDelegationCall())
@@ -1412,6 +1417,10 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
 
         override fun visitSuperTypeCallEntry(call: KtSuperTypeCallEntry) {
             generateCallOrMarkUnresolved(call)
+        }
+
+        override fun visitInitializerList(list: KtInitializerList) {
+            list.acceptChildren(this)
         }
 
         private fun generateCallOrMarkUnresolved(call: KtCallElement) {
@@ -1454,11 +1463,9 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             val receiverExpression = expression.receiverExpression
             if (receiverExpression != null &&
                 trace.bindingContext.get(BindingContext.DOUBLE_COLON_LHS, receiverExpression) is DoubleColonLHS.Expression) {
-                // TODO: UNUSED_EXPRESSION is not reported on the whole expression, see KT-12551
                 generateInstructions(receiverExpression)
-                createSyntheticValue(expression, MagicKind.BOUND_CALLABLE_REFERENCE, receiverExpression)
-            }
-            else {
+                createNonSyntheticValue(expression, MagicKind.BOUND_CALLABLE_REFERENCE, receiverExpression)
+            } else {
                 createNonSyntheticValue(expression, MagicKind.UNBOUND_CALLABLE_REFERENCE)
             }
         }
@@ -1497,14 +1504,15 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
 
             val receivers = getReceiverValues(resolvedCall)
 
+            deferredGeneratorsStack.push(mutableListOf())
+
             var parameterValues = SmartFMap.emptyMap<PseudoValue, ValueParameterDescriptor>()
             for (argument in resolvedCall.call.valueArguments) {
                 val argumentMapping = resolvedCall.getArgumentMapping(argument)
                 val argumentExpression = argument.getArgumentExpression()
                 if (argumentMapping is ArgumentMatch) {
                     parameterValues = generateValueArgument(argument, argumentMapping.valueParameter, parameterValues)
-                }
-                else if (argumentExpression != null) {
+                } else if (argumentExpression != null) {
                     generateInstructions(argumentExpression)
                     createSyntheticValue(argumentExpression, MagicKind.VALUE_CONSUMER, argumentExpression)
                 }
@@ -1513,13 +1521,17 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
             if (resolvedCall.resultingDescriptor is VariableDescriptor) {
                 // If a callee of the call is just a variable (without 'invoke'), 'read variable' is generated.
                 // todo : process arguments for such a case (KT-5387)
-                val callExpression = callElement as? KtExpression ?: error("Variable-based call without callee expression: " + callElement.text)
+                val callExpression =
+                    callElement as? KtExpression ?: error("Variable-based call without callee expression: " + callElement.text)
                 assert(parameterValues.isEmpty()) { "Variable-based call with non-empty argument list: " + callElement.text }
                 return builder.readVariable(callExpression, resolvedCall, receivers)
             }
 
             mark(resolvedCall.call.callElement)
-            return builder.call(callElement, resolvedCall, receivers, parameterValues)
+            val callInstruction = builder.call(callElement, resolvedCall, receivers, parameterValues)
+            val deferredGeneratorsForCall = deferredGeneratorsStack.pop()
+            deferredGeneratorsForCall.forEach { it.invoke(builder) }
+            return callInstruction
         }
 
         private fun getReceiverValues(resolvedCall: ResolvedCall<*>): Map<PseudoValue, ReceiverValue> {
@@ -1532,8 +1544,10 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
                 //noinspection EnumSwitchStatementWhichMissesCases
                 when (kind) {
                     ExplicitReceiverKind.DISPATCH_RECEIVER -> explicitReceiver = resolvedCall.dispatchReceiver
-                    ExplicitReceiverKind.EXTENSION_RECEIVER, ExplicitReceiverKind.BOTH_RECEIVERS -> explicitReceiver = resolvedCall.extensionReceiver
-                    ExplicitReceiverKind.NO_EXPLICIT_RECEIVER -> {}
+                    ExplicitReceiverKind.EXTENSION_RECEIVER, ExplicitReceiverKind.BOTH_RECEIVERS -> explicitReceiver =
+                            resolvedCall.extensionReceiver
+                    ExplicitReceiverKind.NO_EXPLICIT_RECEIVER -> {
+                    }
                 }
             }
 
@@ -1548,9 +1562,9 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
         }
 
         private fun getReceiverValues(
-                callElement: KtElement,
-                receiver: ReceiverValue?,
-                receiverValuesArg: SmartFMap<PseudoValue, ReceiverValue>
+            callElement: KtElement,
+            receiver: ReceiverValue?,
+            receiverValuesArg: SmartFMap<PseudoValue, ReceiverValue>
         ): SmartFMap<PseudoValue, ReceiverValue> {
             var receiverValues = receiverValuesArg
             if (receiver == null || receiverValues.containsValue(receiver)) return receiverValues
@@ -1592,9 +1606,9 @@ class ControlFlowProcessor(private val trace: BindingTrace) {
         }
 
         private fun generateValueArgument(
-                valueArgument: ValueArgument,
-                parameterDescriptor: ValueParameterDescriptor,
-                parameterValuesArg: SmartFMap<PseudoValue, ValueParameterDescriptor>
+            valueArgument: ValueArgument,
+            parameterDescriptor: ValueParameterDescriptor,
+            parameterValuesArg: SmartFMap<PseudoValue, ValueParameterDescriptor>
         ): SmartFMap<PseudoValue, ValueParameterDescriptor> {
             var parameterValues = parameterValuesArg
             val expression = valueArgument.getArgumentExpression()

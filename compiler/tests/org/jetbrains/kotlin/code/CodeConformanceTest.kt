@@ -28,22 +28,50 @@ class CodeConformanceTest : TestCase() {
         private val SOURCES_FILE_PATTERN = Pattern.compile("(.+\\.java|.+\\.kt|.+\\.js)")
         private val EXCLUDED_FILES_AND_DIRS = listOf(
                 "android.tests.dependencies",
+                "buildSrc",
                 "core/reflection.jvm/src/kotlin/reflect/jvm/internal/pcollections",
-                "libraries/tools/kotlin-reflect/build",
-                "libraries/tools/kotlin-reflect/target/copied-sources",
+                "js/js.tests/.gradle",
+                "js/js.translator/testData/node_modules",
+                "libraries/kotlin.test/js/it/.gradle",
+                "libraries/kotlin.test/js/it/node_modules",
+                "libraries/stdlib/js/.gradle",
+                "libraries/stdlib/js/build",
+                "libraries/reflect/build",
+                "libraries/reflect/api/src/java9/java/kotlin/reflect/jvm/internal/impl",
                 "libraries/tools/binary-compatibility-validator/src/main/kotlin/org.jetbrains.kotlin.tools",
                 "dependencies",
                 "js/js.translator/qunit/qunit.js",
                 "libraries/tools/kotlin-js-tests/src/test/web/qunit.js",
                 "out",
                 "dist",
-                "ideaSDK",
                 "libraries/tools/kotlin-gradle-plugin-core/gradle_api_jar/build/tmp",
                 "libraries/tools/kotlin-maven-plugin/target",
+                "libraries/tools/kotlinp/src",
                 "compiler/testData/psi/kdoc",
                 "compiler/tests/org/jetbrains/kotlin/code/CodeConformanceTest.kt",
                 "compiler/util/src/org/jetbrains/kotlin/config/MavenComparableVersion.java"
         ).map(::File)
+
+        private val COPYRIGHT_EXCLUDED_FILES_AND_DIRS = listOf(
+                "dependencies",
+                "out",
+                "dist",
+                "custom-dependencies/android-sdk/build",
+                "compiler/tests/org/jetbrains/kotlin/code/CodeConformanceTest.kt",
+                "idea/idea-jvm/src/org/jetbrains/kotlin/idea/copyright",
+                "js/js.tests/.gradle",
+                "js/js.translator/testData/node_modules",
+                "libraries/stdlib/common/build",
+                "libraries/stdlib/js/.gradle",
+                "libraries/stdlib/js/build",
+                "libraries/kotlin.test/js/it/.gradle",
+                "libraries/kotlin.test/js/it/node_modules",
+                "libraries/stdlib/js/node_modules",
+                "libraries/tools/kotlin-maven-plugin-test/target",
+                "libraries/tools/kotlin-gradle-plugin-integration-tests/build",
+                "buildSrc/prepare-deps/android-dx/build",
+                "buildSrc/prepare-deps/intellij-sdk/build"
+        )
     }
 
     fun testParserCode() {
@@ -131,4 +159,41 @@ class CodeConformanceTest : TestCase() {
             })
         }
     }
+
+    fun testThirdPartyCopyrights() {
+        val filesWithUnlistedCopyrights = mutableListOf<String>()
+        val root = File(".").absoluteFile
+        val knownThirdPartyCode = loadKnownThirdPartyCodeList()
+        val copyrightRegex = Regex("""\bCopyright\b""")
+        for (sourceFile in FileUtil.findFilesByMask(SOURCES_FILE_PATTERN, root)) {
+            val relativePath = FileUtil.toSystemIndependentName(sourceFile.toRelativeString(root))
+            if (COPYRIGHT_EXCLUDED_FILES_AND_DIRS.any { relativePath.startsWith(it) } ||
+                    knownThirdPartyCode.any { relativePath.startsWith(it)}) continue
+
+            sourceFile.useLines { lineSequence ->
+                for (line in lineSequence) {
+                    if (copyrightRegex in line && "JetBrains" !in line) {
+                        filesWithUnlistedCopyrights.add("$relativePath: $line")
+                    }
+                }
+            }
+        }
+        if (filesWithUnlistedCopyrights.isNotEmpty()) {
+            fail("The following files contain third-party copyrights and no license information. " +
+                 "Please update license/README.md accordingly:\n${filesWithUnlistedCopyrights.joinToString("\n")}")
+        }
+    }
+
+    private fun loadKnownThirdPartyCodeList(): List<String> {
+        File("license/README.md").useLines { lineSequence ->
+            return lineSequence
+                    .filter { it.startsWith(" - Path: ") }
+                    .map { it.removePrefix(" - Path: ").trim().ensureFileOrEndsWithSlash() }
+                    .toList()
+
+        }
+    }
 }
+
+private fun String.ensureFileOrEndsWithSlash() =
+        if (endsWith("/") || "." in substringAfterLast('/')) this else this + "/"

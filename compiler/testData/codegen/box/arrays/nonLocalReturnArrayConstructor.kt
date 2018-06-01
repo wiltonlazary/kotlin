@@ -1,5 +1,15 @@
+typealias ArrayS = Array<String>
+
 fun testArray() {
     Array<String>(5) { i ->
+        if (i == 3) return
+        i.toString()
+    }
+    throw AssertionError()
+}
+
+fun testArrayAlias() {
+    ArrayS(5) { i ->
         if (i == 3) return
         i.toString()
     }
@@ -46,12 +56,22 @@ fun testFloatArray() {
     throw AssertionError()
 }
 
+fun testDoubleArray() {
+    DoubleArray(5) { i ->
+        if (i == 3) return
+        i.toDouble()
+    }
+    throw AssertionError()
+}
+
 fun box(): String {
     testArray()
+    testArrayAlias()
     testIntArray()
     testLongArray()
     testBooleanArray()
     testCharArray()
     testFloatArray()
+    testDoubleArray()
     return "OK"
 }

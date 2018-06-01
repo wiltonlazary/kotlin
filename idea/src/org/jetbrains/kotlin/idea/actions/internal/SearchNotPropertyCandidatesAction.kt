@@ -20,6 +20,7 @@ package org.jetbrains.kotlin.idea.actions.internal
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.ProgressManager.progress
 import com.intellij.openapi.project.Project
@@ -29,6 +30,7 @@ import com.intellij.psi.PsiModifier
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.idea.caches.resolve.findModuleDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
+import org.jetbrains.kotlin.idea.util.application.progressIndicatorNullable
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.load.java.isFromJava
 import org.jetbrains.kotlin.name.FqName
@@ -54,7 +56,7 @@ class SearchNotPropertyCandidatesAction : AnAction() {
         ProgressManager.getInstance().runProcessWithProgressSynchronously(
                 {
                     runReadAction {
-                        ProgressManager.getInstance().progressIndicator.isIndeterminate = true
+                        ProgressManager.getInstance().progressIndicatorNullable!!.isIndeterminate = true
                         processAllDescriptors(packageDesc, project)
                     }
                 },
@@ -64,7 +66,7 @@ class SearchNotPropertyCandidatesAction : AnAction() {
     }
 
 
-    fun processAllDescriptors(desc: DeclarationDescriptor, project: Project) {
+    private fun processAllDescriptors(desc: DeclarationDescriptor, project: Project) {
         val processed = mutableSetOf<DeclarationDescriptor>()
         var pFunctions = 0
         val matchedDescriptors = mutableSetOf<FunctionDescriptor>()
@@ -107,10 +109,7 @@ class SearchNotPropertyCandidatesAction : AnAction() {
             val t = this.text
             val s = t.indexOf('{')
             val e = t.lastIndexOf('}')
-            if (s != e && s != -1) {
-                return t.substring(s, e).lines().size <= 3
-            }
-            else return true
+            return if (s != e && s != -1) t.substring(s, e).lines().size <= 3 else true
         }
 
 
@@ -154,7 +153,7 @@ class SearchNotPropertyCandidatesAction : AnAction() {
     }
 
     override fun update(e: AnActionEvent) {
-        if (!KotlinInternalMode.enabled) {
+        if (!ApplicationManager.getApplication().isInternal) {
             e.presentation.isVisible = false
             e.presentation.isEnabled = false
         }

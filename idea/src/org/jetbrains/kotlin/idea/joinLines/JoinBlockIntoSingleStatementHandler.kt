@@ -19,9 +19,11 @@ package org.jetbrains.kotlin.idea.joinLines
 import com.intellij.codeInsight.editorActions.JoinRawLinesHandlerDelegate
 import com.intellij.openapi.editor.Document
 import com.intellij.psi.PsiFile
+import org.jetbrains.kotlin.idea.inspections.UseExpressionBodyInspection
 import org.jetbrains.kotlin.idea.intentions.MergeIfsIntention
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.startOffset
 
 class JoinBlockIntoSingleStatementHandler : JoinRawLinesHandlerDelegate {
     override fun tryJoinRawLines(document: Document, file: PsiFile, start: Int, end: Int): Int {
@@ -36,23 +38,44 @@ class JoinBlockIntoSingleStatementHandler : JoinRawLinesHandlerDelegate {
 
         val block = brace.parent as? KtBlockExpression ?: return -1
         val statement = block.statements.singleOrNull() ?: return -1
+
         val parent = block.parent
-        if (parent !is KtContainerNode && parent !is KtWhenEntry) return -1
+        val useExpressionBodyInspection = UseExpressionBodyInspection(convertEmptyToUnit = false)
+        val oneLineReturnFunction = (parent as? KtDeclarationWithBody)?.takeIf { useExpressionBodyInspection.isActiveFor(it) }
+        if (parent !is KtContainerNode && parent !is KtWhenEntry && oneLineReturnFunction == null) return -1
+
         if (block.node.getChildren(KtTokens.COMMENTS).isNotEmpty()) return -1 // otherwise we will loose comments
 
         // handle nested if's
         val pparent = parent.parent
-        if (pparent is KtIfExpression && block == pparent.then && statement is KtIfExpression && statement.`else` == null) {
-            // if outer if has else-branch and inner does not have it, do not remove braces otherwise else-branch will belong to different if!
-            if (pparent.`else` != null) return -1
+        if (pparent is KtIfExpression) {
+            if (block == pparent.then && statement is KtIfExpression && statement.`else` == null) {
+                // if outer if has else-branch and inner does not have it, do not remove braces otherwise else-branch will belong to different if!
+                if (pparent.`else` != null) return -1
 
-            return MergeIfsIntention.applyTo(pparent)
+                return MergeIfsIntention.applyTo(pparent)
+            }
+
+            if (block == pparent.`else`) {
+                val ifParent = pparent.parent
+                if (!(
+                        ifParent is KtBlockExpression ||
+                        ifParent is KtDeclaration ||
+                        KtPsiUtil.isAssignment(ifParent))) {
+                    return -1
+                }
+            }
         }
 
-        val newStatement = block.replace(statement)
-        return newStatement.textRange!!.startOffset
+        return if (oneLineReturnFunction != null) {
+            useExpressionBodyInspection.simplify(oneLineReturnFunction, false)
+            oneLineReturnFunction.bodyExpression!!.startOffset
+        }
+        else {
+            val newStatement = block.replace(statement)
+            newStatement.textRange!!.startOffset
+        }
     }
 
-    override fun tryJoinLines(document: Document, file: PsiFile, start: Int, end: Int)
-            = - 1
+    override fun tryJoinLines(document: Document, file: PsiFile, start: Int, end: Int) = -1
 }

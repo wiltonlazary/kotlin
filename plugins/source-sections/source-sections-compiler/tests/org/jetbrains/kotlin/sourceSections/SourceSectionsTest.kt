@@ -18,8 +18,8 @@ package org.jetbrains.kotlin.sourceSections
 
 import com.intellij.openapi.vfs.StandardFileSystems
 import junit.framework.TestCase
-import org.jetbrains.kotlin.cli.common.CLICompiler
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
+import org.jetbrains.kotlin.cli.common.CLITool
 import org.jetbrains.kotlin.cli.common.messages.*
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
@@ -53,13 +53,13 @@ class SourceSectionsTest : TestCaseWithTmpdir() {
     }
 
     private val kotlinPaths: KotlinPaths by lazy {
-        val paths = PathUtil.getKotlinPathsForDistDirectory()
+        val paths = PathUtil.kotlinPathsForDistDirectory
         TestCase.assertTrue("Lib directory doesn't exist. Run 'ant dist'", paths.libPath.absoluteFile.isDirectory)
         paths
     }
 
     val compilerClassPath = listOf(kotlinPaths.compilerPath)
-    val scriptRuntimeClassPath = listOf( kotlinPaths.runtimePath, kotlinPaths.scriptRuntimePath)
+    val scriptRuntimeClassPath = listOf( kotlinPaths.stdlibPath, kotlinPaths.scriptRuntimePath)
     val sourceSectionsPluginJar = File(kotlinPaths.libPath, "kotlin-source-sections-compiler-plugin.jar")
     val compilerId by lazy(LazyThreadSafetyMode.NONE) { CompilerId.makeCompilerId(compilerClassPath) }
 
@@ -179,7 +179,7 @@ class SourceSectionsTest : TestCaseWithTmpdir() {
                                "-Xplugin=${sourceSectionsPluginJar.canonicalPath}",
                                "-P", TEST_ALLOWED_SECTIONS.joinToString(",") { "plugin:${SourceSectionsCommandLineProcessor.PLUGIN_ID}:${SourceSectionsCommandLineProcessor.SECTIONS_OPTION.name}=$it" })
             val (output, code) = captureOut {
-                CLICompiler.doMainNoExit(K2JVMCompiler(), args)
+                CLITool.doMainNoExit(K2JVMCompiler(), args)
             }
 
             TestCase.assertEquals("Compilation failed:\n$output", 0, code.code)
@@ -196,12 +196,12 @@ class SourceSectionsTest : TestCaseWithTmpdir() {
         withFlagFile("sourceSections", ".alive") { aliveFile ->
 
             val daemonOptions = DaemonOptions(runFilesPath = File(tmpdir, getTestName(true)).absolutePath, verbose = true, reportPerf = true)
-            val daemonJVMOptions = configureDaemonJVMOptions(inheritMemoryLimits = false, inheritAdditionalProperties = false)
+            val daemonJVMOptions = configureDaemonJVMOptions(inheritMemoryLimits = false, inheritOtherJvmOptions = false, inheritAdditionalProperties = false)
             val messageCollector = TestMessageCollector()
 
             val daemonWithSession = KotlinCompilerClient.connectAndLease(compilerId, aliveFile, daemonJVMOptions, daemonOptions,
                                                                          DaemonReportingTargets(messageCollector = messageCollector), autostart = true, leaseSession = true)
-            assertNotNull("failed to connect daemon", daemonWithSession)
+            assertNotNull("failed to connect daemon:\ncompiler id: $compilerId\ndaemon opts: $daemonOptions\njvm opts: $daemonJVMOptions\nalive file: $aliveFile\n", daemonWithSession)
 
             try {
 

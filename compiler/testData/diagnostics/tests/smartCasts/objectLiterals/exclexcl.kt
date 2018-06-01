@@ -1,3 +1,4 @@
+// !WITH_NEW_INFERENCE
 abstract class Runnable {
     abstract fun run()
 }
@@ -15,7 +16,7 @@ fun foo(): Int {
         k.run()
         val d: Int = <!DEBUG_INFO_SMARTCAST!>c<!>
         // a is not null because of k constructor, but we do not know it
-        return a <!UNSAFE_INFIX_CALL!>+<!> d
+        return a <!UNSAFE_OPERATOR_CALL!>+<!> d
     }
     else return -1
 }

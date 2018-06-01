@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1520
 /*
  * Copy of JVM-backend test
  * Found at: compiler/testData/codegen/boxInline/builders/buildersAndLambdaCapturing.1.kt

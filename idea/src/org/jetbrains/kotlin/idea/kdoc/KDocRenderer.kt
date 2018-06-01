@@ -86,7 +86,7 @@ object KDocRenderer {
 
         val lines = text.split('\n')
         val minIndent = lines.filter { it.trim().isNotEmpty() }.map(String::leadingIndent).min() ?: 0
-        return lines.map { it.drop(minIndent) }.joinToString("\n")
+        return lines.joinToString("\n") { it.drop(minIndent) }
     }
 
 
@@ -161,12 +161,14 @@ object KDocRenderer {
         val markdownNode = MarkdownNode(markdownTree, null, markdown)
 
         // Avoid wrapping the entire converted contents in a <p> tag if it's just a single paragraph
-        val maybeSingleParagraph = markdownNode.children.filter { it.type != MarkdownTokenTypes.EOL }.singleOrNull()
-        if (maybeSingleParagraph != null && !allowSingleParagraph) {
-            return maybeSingleParagraph.children.joinToString("") { it.toHtml() }
+        val maybeSingleParagraph = markdownNode.children.singleOrNull { it.type != MarkdownTokenTypes.EOL }
+        return if (maybeSingleParagraph != null && !allowSingleParagraph) {
+            maybeSingleParagraph.children.joinToString("") {
+                if (it.text == "\n") " " else it.toHtml()
+            }
         }
         else {
-            return markdownNode.toHtml()
+            markdownNode.toHtml()
         }
     }
 
@@ -179,7 +181,7 @@ object KDocRenderer {
         fun child(type: IElementType): MarkdownNode? = children.firstOrNull { it.type == type }
     }
 
-    fun MarkdownNode.visit(action: (MarkdownNode, () -> Unit) -> Unit) {
+    private fun MarkdownNode.visit(action: (MarkdownNode, () -> Unit) -> Unit) {
         action(this) {
             for (child in children) {
                 child.visit(action)
@@ -187,7 +189,7 @@ object KDocRenderer {
         }
     }
 
-    fun MarkdownNode.toHtml(): String {
+    private fun MarkdownNode.toHtml(): String {
         if (node.type == MarkdownTokenTypes.WHITE_SPACE) {
             return text   // do not trim trailing whitespace
         }
@@ -311,11 +313,11 @@ object KDocRenderer {
         return sb.toString().trimEnd()
     }
 
-    fun StringBuilder.trimEnd() {
+    private fun StringBuilder.trimEnd() {
         while (length > 0 && this[length - 1] == ' ') {
             deleteCharAt(length - 1)
         }
     }
 
-    fun String.htmlEscape(): String = replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    private fun String.htmlEscape(): String = replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 }

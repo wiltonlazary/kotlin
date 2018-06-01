@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.renderer
@@ -20,6 +9,7 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationWithTarget
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.FqNameUnsafe
 import org.jetbrains.kotlin.name.Name
@@ -106,6 +96,12 @@ abstract class DescriptorRenderer {
             modifiers = emptySet()
         }
 
+        @JvmField val COMPACT_WITHOUT_SUPERTYPES: DescriptorRenderer = withOptions {
+            withDefinedIn = false
+            modifiers = emptySet()
+            withoutSuperTypes = true
+        }
+
         @JvmField val COMPACT_WITH_SHORT_TYPES: DescriptorRenderer = withOptions {
             modifiers = emptySet()
             classifierNamePolicy = ClassifierNamePolicy.SHORT
@@ -178,6 +174,7 @@ enum class AnnotationArgumentsRenderingPolicy(
 interface DescriptorRendererOptions {
     var classifierNamePolicy: ClassifierNamePolicy
     var withDefinedIn: Boolean
+    var withSourceFileForTopLevel: Boolean
     var modifiers: Set<DescriptorRendererModifier>
     var startFromName: Boolean
     var startFromDeclarationKeyword: Boolean
@@ -187,13 +184,14 @@ interface DescriptorRendererOptions {
     var unitReturnType: Boolean
     var withoutReturnType: Boolean
     var normalizedVisibilities: Boolean
-    var showInternalKeyword: Boolean
+    var renderDefaultVisibility: Boolean
     var uninferredTypeParameterAsName: Boolean
     var overrideRenderingPolicy: OverrideRenderingPolicy
     var valueParametersHandler: DescriptorRenderer.ValueParametersHandler
     var textFormat: RenderingFormat
     var excludedAnnotationClasses: Set<FqName>
     var excludedTypeAnnotationClasses: Set<FqName>
+    var annotationFilter: ((AnnotationDescriptor) -> Boolean)?
 
     var annotationArgumentsRenderingPolicy: AnnotationArgumentsRenderingPolicy
     val includeAnnotationArguments: Boolean get() = annotationArgumentsRenderingPolicy.includeAnnotationArguments
@@ -206,7 +204,7 @@ interface DescriptorRendererOptions {
     var renderCompanionObjectName: Boolean
     var withoutSuperTypes: Boolean
     var typeNormalizer: (KotlinType) -> KotlinType
-    var renderDefaultValues: Boolean
+    var defaultParameterValueRenderer: ((ValueParameterDescriptor) -> String)?
     var secondaryConstructorsAsPrimary: Boolean
     var renderAccessors: Boolean
     var renderDefaultAnnotationArguments: Boolean
@@ -215,34 +213,10 @@ interface DescriptorRendererOptions {
     var renderUnabbreviatedType: Boolean
     var includeAdditionalModifiers: Boolean
     var parameterNamesInFunctionalTypes: Boolean
+    var renderFunctionContracts: Boolean
 }
 
 object ExcludedTypeAnnotations {
-    val annotationsForNullabilityAndMutability = setOf(
-            FqName("org.jetbrains.annotations.ReadOnly"),
-            FqName("org.jetbrains.annotations.Mutable"),
-            FqName("org.jetbrains.annotations.NotNull"),
-            FqName("org.jetbrains.annotations.Nullable"),
-            FqName("android.support.annotation.Nullable"),
-            FqName("android.support.annotation.NonNull"),
-            FqName("com.android.annotations.Nullable"),
-            FqName("com.android.annotations.NonNull"),
-            FqName("org.eclipse.jdt.annotation.Nullable"),
-            FqName("org.eclipse.jdt.annotation.NonNull"),
-            FqName("org.checkerframework.checker.nullness.qual.Nullable"),
-            FqName("org.checkerframework.checker.nullness.qual.NonNull"),
-            FqName("javax.annotation.Nonnull"),
-            FqName("javax.annotation.Nullable"),
-            FqName("javax.annotation.CheckForNull"),
-            FqName("edu.umd.cs.findbugs.annotations.NonNull"),
-            FqName("edu.umd.cs.findbugs.annotations.CheckForNull"),
-            FqName("edu.umd.cs.findbugs.annotations.Nullable"),
-            FqName("edu.umd.cs.findbugs.annotations.PossiblyNull"),
-            FqName("lombok.NonNull"),
-            FqName("io.reactivex.annotations.Nullable"),
-            FqName("io.reactivex.annotations.NonNull")
-    )
-
     val internalAnnotationsForResolve = setOf(
             FqName("kotlin.internal.NoInfer"),
             FqName("kotlin.internal.Exact")
@@ -251,7 +225,7 @@ object ExcludedTypeAnnotations {
 
 enum class RenderingFormat {
     PLAIN {
-        override fun escape(string: String) = string;
+        override fun escape(string: String) = string
     },
     HTML {
         override fun escape(string: String) = string.replace("<", "&lt;").replace(">", "&gt;")
@@ -280,8 +254,9 @@ enum class DescriptorRendererModifier(val includeByDefault: Boolean) {
     INNER(true),
     MEMBER_KIND(true),
     DATA(true),
-    HEADER(true),
-    IMPL(true),
+    INLINE(true),
+    EXPECT(true),
+    ACTUAL(true),
     ;
 
     companion object {

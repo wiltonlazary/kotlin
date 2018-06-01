@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.idea.references
 
+import com.intellij.ide.scratch.ScratchUtil
 import com.intellij.psi.*
 import org.jetbrains.kotlin.asJava.unwrapped
 import org.jetbrains.kotlin.builtins.isExtensionFunctionType
@@ -24,7 +25,7 @@ import org.jetbrains.kotlin.descriptors.DeclarationDescriptorWithSource
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveImportReference
-import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
 import org.jetbrains.kotlin.idea.imports.canBeReferencedViaImport
 import org.jetbrains.kotlin.idea.intentions.OperatorToFunctionIntention
 import org.jetbrains.kotlin.idea.kdoc.KDocReference
@@ -34,7 +35,9 @@ import org.jetbrains.kotlin.kdoc.psi.impl.KDocName
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
+import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.isReallySuccess
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExtension
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
@@ -69,6 +72,7 @@ fun PsiReference.canBeReferenceTo(candidateTarget: PsiElement): Boolean {
     // optimization
     return element.containingFile == candidateTarget.containingFile
            || ProjectRootsUtil.isInProjectOrLibSource(element)
+           || ScratchUtil.isScratch(element.containingFile.virtualFile)
 }
 
 fun PsiReference.matchesTarget(candidateTarget: PsiElement): Boolean {
@@ -219,7 +223,9 @@ enum class ReferenceAccess(val isRead: Boolean, val isWrite: Boolean) {
     READ(true, false), WRITE(false, true), READ_WRITE(true, true)
 }
 
-fun KtExpression.readWriteAccess(useResolveForReadWrite: Boolean): ReferenceAccess {
+fun KtExpression.readWriteAccess(useResolveForReadWrite: Boolean) = readWriteAccessWithFullExpression(useResolveForReadWrite).first
+
+fun KtExpression.readWriteAccessWithFullExpression(useResolveForReadWrite: Boolean): Pair<ReferenceAccess, KtExpression> {
     var expression = getQualifiedExpressionForSelectorOrThis()
     loop@ while (true) {
         val parent = expression.parent
@@ -232,29 +238,29 @@ fun KtExpression.readWriteAccess(useResolveForReadWrite: Boolean): ReferenceAcce
     val assignment = expression.getAssignmentByLHS()
     if (assignment != null) {
         when (assignment.operationToken) {
-            KtTokens.EQ -> return ReferenceAccess.WRITE
+            KtTokens.EQ -> return ReferenceAccess.WRITE to assignment
 
             else -> {
-                if (!useResolveForReadWrite) return ReferenceAccess.READ_WRITE
+                if (!useResolveForReadWrite) return ReferenceAccess.READ_WRITE to assignment
 
-                val bindingContext = assignment.analyze(BodyResolveMode.PARTIAL)
-                val resolvedCall = assignment.getResolvedCall(bindingContext) ?: return ReferenceAccess.READ_WRITE
-                if (!resolvedCall.isReallySuccess()) return ReferenceAccess.READ_WRITE
+                val resolvedCall = assignment.resolveToCall() ?: return ReferenceAccess.READ_WRITE to assignment
+                if (!resolvedCall.isReallySuccess()) return ReferenceAccess.READ_WRITE to assignment
                 return if (resolvedCall.resultingDescriptor.name in OperatorConventions.ASSIGNMENT_OPERATIONS.values)
-                    ReferenceAccess.READ
+                    ReferenceAccess.READ to assignment
                 else
-                    ReferenceAccess.READ_WRITE
+                    ReferenceAccess.READ_WRITE to assignment
             }
         }
     }
 
-    return if ((expression.parent as? KtUnaryExpression)?.operationToken in constant { setOf(KtTokens.PLUSPLUS, KtTokens.MINUSMINUS) })
-        ReferenceAccess.READ_WRITE
+    val unaryExpression = expression.parent as? KtUnaryExpression
+    return if (unaryExpression != null && unaryExpression.operationToken in constant { setOf(KtTokens.PLUSPLUS, KtTokens.MINUSMINUS) })
+        ReferenceAccess.READ_WRITE to unaryExpression
     else
-        ReferenceAccess.READ
+        ReferenceAccess.READ to expression
 }
 
-fun KtReference.canBeResolvedViaImport(target: DeclarationDescriptor): Boolean {
+fun KtReference.canBeResolvedViaImport(target: DeclarationDescriptor, bindingContext: BindingContext): Boolean {
     if (!target.canBeReferencedViaImport()) return false
 
     if (this is KDocReference) return element.getQualifiedName().size == 1
@@ -267,6 +273,10 @@ fun KtReference.canBeResolvedViaImport(target: DeclarationDescriptor): Boolean {
     if (callTypeAndReceiver.receiver != null) {
         if (target !is PropertyDescriptor || !target.type.isExtensionFunctionType) return false
         if (callTypeAndReceiver !is CallTypeAndReceiver.DOT && callTypeAndReceiver !is CallTypeAndReceiver.SAFE) return false
+
+        val resolvedCall = bindingContext[BindingContext.CALL, referenceExpression].getResolvedCall(bindingContext)
+                                   as? VariableAsFunctionResolvedCall ?: return false
+        if (resolvedCall.variableCall.explicitReceiverKind.isDispatchReceiver) return false
     }
 
     if (element.parent is KtThisExpression || element.parent is KtSuperExpression) return false // TODO: it's a bad design of PSI tree, we should change it

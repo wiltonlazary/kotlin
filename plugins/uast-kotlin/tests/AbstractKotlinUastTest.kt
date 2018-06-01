@@ -11,14 +11,13 @@ import com.intellij.util.io.URLUtil
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector
-import org.jetbrains.kotlin.cli.jvm.compiler.CliLightClassGenerationSupport
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
-import org.jetbrains.kotlin.cli.jvm.compiler.JvmPackagePartProvider
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
+import org.jetbrains.kotlin.cli.jvm.compiler.NoScopeRecordCliBindingTrace
+import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.addKotlinSourceRoot
-import org.jetbrains.kotlin.resolve.jvm.TopDownAnalyzerFacadeForJVM
 import org.jetbrains.kotlin.resolve.jvm.extensions.AnalysisHandlerExtension
 import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.KotlinTestUtils
@@ -44,29 +43,23 @@ abstract class AbstractKotlinUastTest : AbstractUastTest() {
     private var kotlinCoreEnvironment: KotlinCoreEnvironment? = null
 
     override fun getVirtualFile(testName: String): VirtualFile {
-        val projectDir = TEST_KOTLIN_MODEL_DIR
-        val testFile = File(TEST_KOTLIN_MODEL_DIR, testName.substringBefore('/') + ".kt")
+        val testFile = TEST_KOTLIN_MODEL_DIR.listFiles { pathname -> pathname.nameWithoutExtension == testName }.first()
 
         super.initializeEnvironment(testFile)
 
         initializeKotlinEnvironment()
 
-        val trace = CliLightClassGenerationSupport.NoScopeRecordCliBindingTrace()
+        val trace = NoScopeRecordCliBindingTrace()
 
-        val kotlinCoreEnvironment = kotlinCoreEnvironment!!
-
+        val environment = kotlinCoreEnvironment!!
         TopDownAnalyzerFacadeForJVM.analyzeFilesWithJavaIntegration(
-                project,
-                kotlinCoreEnvironment.getSourceFiles(),
-                trace,
-                compilerConfiguration,
-                { scope -> JvmPackagePartProvider(kotlinCoreEnvironment, scope) }
+                project, environment.getSourceFiles(), trace, compilerConfiguration, environment::createPackagePartProvider
         )
 
         val vfs = VirtualFileManager.getInstance().getFileSystem(URLUtil.FILE_PROTOCOL)
 
         val ideaProject = project
-        ideaProject.baseDir = vfs.findFileByPath(projectDir.canonicalPath)
+        ideaProject.baseDir = vfs.findFileByPath(TEST_KOTLIN_MODEL_DIR.canonicalPath)
 
         return vfs.findFileByPath(testFile.canonicalPath)!!
     }

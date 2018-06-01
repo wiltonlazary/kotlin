@@ -22,7 +22,7 @@ import org.jetbrains.kotlin.j2k.append
 
 abstract class Member(var annotations: Annotations, val modifiers: Modifiers) : Element()
 
-class ClassBody (
+class ClassBody(
         val primaryConstructor: PrimaryConstructor?,
         val primaryConstructorSignature: PrimaryConstructorSignature?,
         val baseClassParams: List<DeferredElement<Expression>>?,
@@ -39,7 +39,7 @@ class ClassBody (
         builder append " " append lBrace append "\n"
 
         if (!classKind.isEnum()) {
-            builder.append(membersFiltered, "\n")
+            builder.append(membersFiltered.sortedByDescending { it is Property }, "\n")
         }
         else {
             val (constants, otherMembers) = membersFiltered.partition { it is EnumConstant }
@@ -50,7 +50,7 @@ class ClassBody (
                 builder.append(";\n")
             }
 
-            builder.append(otherMembers, "\n")
+            builder.append(otherMembers.sortedByDescending { it is Property }, "\n")
         }
 
         appendCompanionObject(builder, membersFiltered.isNotEmpty())

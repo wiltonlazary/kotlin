@@ -26,11 +26,19 @@ import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.expressions.typeInfoFactory.createTypeInfo
 import org.jetbrains.kotlin.util.slicedMap.*
 
-open class DelegatingBindingTrace(private val parentContext: BindingContext,
-                                  private val name: String,
-                                  withParentDiagnostics: Boolean = true,
-                                  private val filter: BindingTraceFilter = BindingTraceFilter.ACCEPT_ALL) : BindingTrace {
-    private val map = if (BindingTraceContext.TRACK_REWRITES) TrackingSlicedMap(BindingTraceContext.TRACK_WITH_STACK_TRACES) else SlicedMapImpl.create()
+open class DelegatingBindingTrace(
+    private val parentContext: BindingContext,
+    private val name: String,
+    withParentDiagnostics: Boolean = true,
+    private val filter: BindingTraceFilter = BindingTraceFilter.ACCEPT_ALL,
+    allowSliceRewrite: Boolean = false
+) : BindingTrace {
+
+    private val map = if (BindingTraceContext.TRACK_REWRITES && !allowSliceRewrite)
+        TrackingSlicedMap(BindingTraceContext.TRACK_WITH_STACK_TRACES)
+    else
+        SlicedMapImpl(allowSliceRewrite)
+
     private val mutableDiagnostics: MutableDiagnosticsWithSuppression?
 
     private inner class MyBindingContext : BindingContext {
@@ -61,21 +69,25 @@ open class DelegatingBindingTrace(private val parentContext: BindingContext,
     private val bindingContext = MyBindingContext()
 
     init {
-        this.mutableDiagnostics = if (filter.ignoreDiagnostics)
-            null
-        else if (withParentDiagnostics)
-            MutableDiagnosticsWithSuppression(bindingContext, parentContext.diagnostics)
-        else
-            MutableDiagnosticsWithSuppression(bindingContext)
+        this.mutableDiagnostics = when {
+            filter.ignoreDiagnostics -> null
+            withParentDiagnostics -> MutableDiagnosticsWithSuppression(bindingContext, parentContext.diagnostics)
+            else -> MutableDiagnosticsWithSuppression(bindingContext)
+        }
     }
 
-    constructor(parentContext: BindingContext,
-                debugName: String,
-                resolutionSubjectForMessage: Any?,
-                filter: BindingTraceFilter = BindingTraceFilter.ACCEPT_ALL)
-        : this(parentContext,
-               AnalyzingUtils.formDebugNameForBindingTrace(debugName, resolutionSubjectForMessage),
-               filter = filter)
+    constructor(
+        parentContext: BindingContext,
+        debugName: String,
+        resolutionSubjectForMessage: Any?,
+        filter: BindingTraceFilter = BindingTraceFilter.ACCEPT_ALL,
+        allowSliceRewrite: Boolean = false
+    ) : this(
+        parentContext,
+        AnalyzingUtils.formDebugNameForBindingTrace(debugName, resolutionSubjectForMessage),
+        filter = filter,
+        allowSliceRewrite = allowSliceRewrite
+    )
 
     override fun getBindingContext(): BindingContext = bindingContext
 
@@ -92,8 +104,7 @@ open class DelegatingBindingTrace(private val parentContext: BindingContext,
         if (slice is SetSlice<*>) {
             assert(value != null)
             if (value != SetSlice.DEFAULT) return value
-        }
-        else if (value != null) {
+        } else if (value != null) {
             return value
         }
 
@@ -118,8 +129,7 @@ open class DelegatingBindingTrace(private val parentContext: BindingContext,
         var typeInfo = get(BindingContext.EXPRESSION_TYPE_INFO, expression)
         if (typeInfo == null) {
             typeInfo = createTypeInfo(type)
-        }
-        else {
+        } else {
             typeInfo = typeInfo.replaceType(type)
         }
         record(BindingContext.EXPRESSION_TYPE_INFO, expression, typeInfo)
@@ -130,7 +140,8 @@ open class DelegatingBindingTrace(private val parentContext: BindingContext,
         clear()
     }
 
-    @JvmOverloads fun addOwnDataTo(trace: BindingTrace, filter: TraceEntryFilter? = null, commitDiagnostics: Boolean = true) {
+    @JvmOverloads
+    fun addOwnDataTo(trace: BindingTrace, filter: TraceEntryFilter? = null, commitDiagnostics: Boolean = true) {
         BindingContextUtils.addOwnDataTo(trace, filter, commitDiagnostics, map, mutableDiagnostics)
     }
 

@@ -1,4 +1,5 @@
 // WITH_RUNTIME
+// INVOKE_INITIALIZERS
 
 annotation class NoArg
 

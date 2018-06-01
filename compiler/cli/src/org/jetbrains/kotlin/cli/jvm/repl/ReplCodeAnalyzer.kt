@@ -22,19 +22,21 @@ import org.jetbrains.kotlin.cli.common.repl.CompiledReplCodeLine
 import org.jetbrains.kotlin.cli.common.repl.ILineId
 import org.jetbrains.kotlin.cli.common.repl.ReplCodeLine
 import org.jetbrains.kotlin.cli.common.repl.ReplHistory
-import org.jetbrains.kotlin.cli.jvm.compiler.CliLightClassGenerationSupport
-import org.jetbrains.kotlin.cli.jvm.compiler.JvmPackagePartProvider
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
+import org.jetbrains.kotlin.cli.jvm.compiler.NoScopeRecordCliBindingTrace
+import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM
 import org.jetbrains.kotlin.container.get
 import org.jetbrains.kotlin.descriptors.ScriptDescriptor
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
 import org.jetbrains.kotlin.diagnostics.Severity
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.resolve.*
+import org.jetbrains.kotlin.resolve.BindingTraceContext
+import org.jetbrains.kotlin.resolve.LazyTopDownAnalyzer
+import org.jetbrains.kotlin.resolve.TopDownAnalysisContext
+import org.jetbrains.kotlin.resolve.TopDownAnalysisMode
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfoFactory
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics
-import org.jetbrains.kotlin.resolve.jvm.TopDownAnalyzerFacadeForJVM
 import org.jetbrains.kotlin.resolve.lazy.*
 import org.jetbrains.kotlin.resolve.lazy.data.KtClassLikeInfo
 import org.jetbrains.kotlin.resolve.lazy.declarations.*
@@ -54,7 +56,7 @@ class ReplCodeAnalyzer(environment: KotlinCoreEnvironment) {
 
     val module: ModuleDescriptorImpl
 
-    val trace: BindingTraceContext = CliLightClassGenerationSupport.NoScopeRecordCliBindingTrace()
+    val trace: BindingTraceContext = NoScopeRecordCliBindingTrace()
 
     init {
         // Module source scope is empty because all binary classes are in the dependency module, and all source classes are guaranteed
@@ -65,15 +67,15 @@ class ReplCodeAnalyzer(environment: KotlinCoreEnvironment) {
                 emptyList(),
                 trace,
                 environment.configuration,
-                { scope -> JvmPackagePartProvider(environment, scope) },
-                { storageManager, files -> ScriptMutableDeclarationProviderFactory() }
+                environment::createPackagePartProvider,
+                { _, _ -> ScriptMutableDeclarationProviderFactory() }
         )
 
         this.module = container.get<ModuleDescriptorImpl>()
         this.scriptDeclarationFactory = container.get<ScriptMutableDeclarationProviderFactory>()
         this.resolveSession = container.get<ResolveSession>()
         this.topDownAnalysisContext = TopDownAnalysisContext(
-                TopDownAnalysisMode.LocalDeclarations, DataFlowInfoFactory.EMPTY, resolveSession.declarationScopeProvider
+                TopDownAnalysisMode.TopLevelDeclarations, DataFlowInfoFactory.EMPTY, resolveSession.declarationScopeProvider
         )
         this.topDownAnalyzer = container.get<LazyTopDownAnalyzer>()
     }
@@ -108,20 +110,16 @@ class ReplCodeAnalyzer(environment: KotlinCoreEnvironment) {
 
         val context = topDownAnalyzer.analyzeDeclarations(topDownAnalysisContext.topDownAnalysisMode, listOf(linePsi))
 
-        if (trace.get(BindingContext.FILE_TO_PACKAGE_FRAGMENT, linePsi) == null) {
-            trace.record(BindingContext.FILE_TO_PACKAGE_FRAGMENT, linePsi, resolveSession.getPackageFragment(FqName.ROOT))
-        }
-
         val diagnostics = trace.bindingContext.diagnostics
         val hasErrors = diagnostics.any { it.severity == Severity.ERROR }
-        if (hasErrors) {
+        return if (hasErrors) {
             replState.lineFailure(linePsi, codeLine)
-            return ReplLineAnalysisResult.WithErrors(diagnostics)
+            ReplLineAnalysisResult.WithErrors(diagnostics)
         }
         else {
             val scriptDescriptor = context.scripts[linePsi.script]!!
             replState.lineSuccess(linePsi, codeLine, scriptDescriptor)
-            return ReplLineAnalysisResult.Successful(scriptDescriptor, diagnostics)
+            ReplLineAnalysisResult.Successful(scriptDescriptor, diagnostics)
         }
 
     }
@@ -154,8 +152,8 @@ class ReplCodeAnalyzer(environment: KotlinCoreEnvironment) {
             return delegateFactory.getPackageMemberDeclarationProvider(packageFqName)
         }
 
-        override fun diagnoseMissingPackageFragment(file: KtFile) {
-            delegateFactory.diagnoseMissingPackageFragment(file)
+        override fun diagnoseMissingPackageFragment(fqName: FqName, file: KtFile?) {
+            delegateFactory.diagnoseMissingPackageFragment(fqName, file)
         }
 
         class AdaptablePackageMemberDeclarationProvider(

@@ -23,7 +23,7 @@ import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.analysis.BasicValue
 
 class NotNullBasicValue(type: Type?) : StrictBasicValue(type) {
-    override fun equals(other: Any?): Boolean = other is NotNullBasicValue
+    override fun equals(other: Any?): Boolean = other is NotNullBasicValue && other.type == type
     // We do not differ not-nullable values, so we should always return the same hashCode
     // Actually it doesn't really matter because analyzer is not supposed to store values in hashtables
     override fun hashCode() = 0
@@ -37,14 +37,15 @@ object NullBasicValue : StrictBasicValue(AsmTypes.OBJECT_TYPE)
 
 enum class Nullability {
     NULL, NOT_NULL, NULLABLE;
+
     fun isNull() = this == NULL
     fun isNotNull() = this == NOT_NULL
 }
 
 fun BasicValue.getNullability(): Nullability =
-        when (this) {
-            is NullBasicValue -> Nullability.NULL
-            is NotNullBasicValue -> Nullability.NOT_NULL
-            is ProgressionIteratorBasicValue -> Nullability.NOT_NULL
-            else -> Nullability.NULLABLE
-        }
+    when (this) {
+        is NullBasicValue -> Nullability.NULL
+        is NotNullBasicValue -> Nullability.NOT_NULL
+        is ProgressionIteratorBasicValue -> Nullability.NOT_NULL
+        else -> Nullability.NULLABLE
+    }

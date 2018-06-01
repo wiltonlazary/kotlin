@@ -37,7 +37,7 @@ import org.jetbrains.kotlin.psi.Call
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.renderer.render
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.descriptorUtil.hasDefaultValue
+import org.jetbrains.kotlin.resolve.calls.components.hasDefaultValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExtension
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.resolve.scopes.utils.findVariable
@@ -58,8 +58,8 @@ class MultipleArgumentsItemProvider(
         val added = HashSet<String>()
         for (expectedInfo in expectedInfos) {
             val additionalData = expectedInfo.additionalData
-            if (additionalData is ArgumentPositionData.Positional && additionalData.argumentIndex == 0) {
-                val parameters = additionalData.function.valueParameters
+            if (additionalData is ArgumentPositionData.Positional) {
+                val parameters = additionalData.function.valueParameters.drop(additionalData.argumentIndex)
                 if (parameters.size > 1) {
                     val tail = when (additionalData.callType) {
                         Call.CallType.ARRAY_GET_METHOD, Call.CallType.ARRAY_SET_METHOD -> Tail.RBRACKET
@@ -89,7 +89,7 @@ class MultipleArgumentsItemProvider(
         compoundIcon.setIcon(firstIcon, 1, 0, 0)
 
         return LookupElementBuilder
-                .create(variables.map { it.name.render() }.joinToString(", ")) //TODO: use code formatting settings
+                .create(variables.joinToString(", ") { it.name.render() }) //TODO: use code formatting settings
                 .withInsertHandler { context, _ ->
                     if (context.completionChar == Lookup.REPLACE_SELECT_CHAR) {
                         val offset = context.offsetMap.tryGetOffset(SmartCompletion.MULTIPLE_ARGUMENTS_REPLACEMENT_OFFSET)

@@ -18,17 +18,19 @@ package org.jetbrains.kotlin.android.synthetic.idea
 
 import com.intellij.psi.PsiElement
 import com.intellij.psi.xml.XmlAttributeValue
-import org.jetbrains.android.dom.wrappers.ValueResourceElementWrapper
-import org.jetbrains.android.util.AndroidResourceUtil
+import com.intellij.psi.xml.XmlFile
+import org.jetbrains.kotlin.android.model.AndroidModuleInfoProvider
 import org.jetbrains.kotlin.android.synthetic.AndroidConst
 import org.jetbrains.kotlin.android.synthetic.androidIdToName
 import org.jetbrains.kotlin.idea.references.KtSimpleNameReference
 import org.jetbrains.kotlin.plugin.references.SimpleNameReferenceExtension
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
-import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPsiFactory
 
 class AndroidSimpleNameReferenceExtension : SimpleNameReferenceExtension {
+
+    override fun isReferenceTo(reference: KtSimpleNameReference, element: PsiElement): Boolean =
+            element is XmlFile && reference.isReferenceToXmlFile(element)
 
     private fun isLayoutPackageIdentifier(reference: KtSimpleNameReference): Boolean {
         val probablyVariant = reference.element?.parent as? KtDotQualifiedExpression ?: return false
@@ -38,14 +40,36 @@ class AndroidSimpleNameReferenceExtension : SimpleNameReferenceExtension {
 
     override fun handleElementRename(reference: KtSimpleNameReference, psiFactory: KtPsiFactory, newElementName: String): PsiElement? {
         val resolvedElement = reference.resolve()
-        if (resolvedElement is XmlAttributeValue && AndroidResourceUtil.isIdDeclaration(resolvedElement)) {
+        if (resolvedElement is XmlAttributeValue && isIdDeclaration(resolvedElement)) {
             val newSyntheticPropertyName = androidIdToName(newElementName) ?: return null
             return psiFactory.createNameIdentifier(newSyntheticPropertyName.name)
         }
         else if (isLayoutPackageIdentifier(reference)) {
-            return psiFactory.createSimpleName(newElementName.substringBeforeLast(".xml")).getIdentifier()
+            return psiFactory.createSimpleName(newElementName.removeSuffix(".xml")).getIdentifier()
         }
 
         return null
+    }
+
+    private fun isIdDeclaration(declaration: XmlAttributeValue) = declaration.value?.startsWith("@+id/") ?: false
+
+    private fun KtSimpleNameReference.isReferenceToXmlFile(xmlFile: XmlFile): Boolean {
+        if (!isLayoutPackageIdentifier(this)) {
+            return false
+        }
+
+        if (xmlFile.name.removeSuffix(".xml") != element.getReferencedName()) {
+            return false
+        }
+
+        val virtualFile = xmlFile.virtualFile ?: return false
+        val layoutDir = virtualFile.parent
+        if (layoutDir.name != "layout" && !layoutDir.name.startsWith("layout-")) {
+            return false
+        }
+
+        val resourceDirectories = AndroidModuleInfoProvider.getInstance(element)?.getAllResourceDirectories() ?: return false
+        val resourceDirectory = virtualFile.parent?.parent ?: return false
+        return resourceDirectories.any { it == resourceDirectory }
     }
 }

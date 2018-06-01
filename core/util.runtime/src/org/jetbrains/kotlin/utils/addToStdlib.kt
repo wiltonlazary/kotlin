@@ -125,3 +125,24 @@ inline fun <T> Iterable<T>.sumByLong(selector: (T) -> Long): Long {
 inline fun <T, C : Collection<T>, O> C.ifNotEmpty(body: C.() -> O?): O? = if (isNotEmpty()) this.body() else null
 
 inline fun <T, O> Array<out T>.ifNotEmpty(body: Array<out T>.() -> O?): O? = if (isNotEmpty()) this.body() else null
+
+inline fun <T> measureTimeMillisWithResult(block: () -> T) : Pair<Long, T> {
+    val start = System.currentTimeMillis()
+    val result = block()
+    return Pair(System.currentTimeMillis() - start, result)
+}
+
+fun <T, C : MutableCollection<in T>> Iterable<Iterable<T>>.flattenTo(c: C): C {
+    for (element in this) {
+        c.addAll(element)
+    }
+    return c
+}
+
+inline fun <T, R, C : MutableCollection<in R>> Iterable<T>.flatMapToNullable(destination: C, transform: (T) -> Iterable<R>?): C? {
+    for (element in this) {
+        val list = transform(element) ?: return null
+        destination.addAll(list)
+    }
+    return destination
+}

@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1131
 package foo
 
 class FromAny : Any()

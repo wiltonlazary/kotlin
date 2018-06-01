@@ -62,7 +62,7 @@ class PropertyReferenceCodegen(
 
     private val isLocalDelegatedProperty = target is LocalVariableDescriptor
 
-    val getFunction =
+    private val getFunction =
             if (isLocalDelegatedProperty)
                 (localVariableDescriptorForReference as VariableDescriptorWithAccessors).getter!!
             else
@@ -116,10 +116,11 @@ class PropertyReferenceCodegen(
             generateCallableReferenceSignature(this, target, state)
         }
 
+        generateMethod("property reference getOwner", ACC_PUBLIC, method("getOwner", K_DECLARATION_CONTAINER_TYPE)) {
+            ClosureCodegen.generateCallableReferenceDeclarationContainer(this, target, state)
+        }
+
         if (!isLocalDelegatedProperty) {
-            generateMethod("property reference getOwner", ACC_PUBLIC, method("getOwner", K_DECLARATION_CONTAINER_TYPE)) {
-                ClosureCodegen.generateCallableReferenceDeclarationContainer(this, target, state)
-            }
             generateAccessors()
         }
     }
@@ -164,7 +165,7 @@ class PropertyReferenceCodegen(
         writeSyntheticClassMetadata(v, state)
     }
 
-    fun putInstanceOnStack(receiverValue: (() -> Unit)?): StackValue {
+    fun putInstanceOnStack(receiverValue: StackValue?): StackValue {
         return StackValue.operation(wrapperMethod.returnType) { iv ->
             if (JvmCodegenUtil.isConst(closure)) {
                 assert(receiverValue == null) { "No receiver expected for unbound property reference: $classDescriptor" }
@@ -174,7 +175,7 @@ class PropertyReferenceCodegen(
                 assert(receiverValue != null) { "Receiver expected for bound property reference: $classDescriptor" }
                 iv.anew(asmType)
                 iv.dup()
-                receiverValue!!()
+                receiverValue!!.put(receiverValue.type, iv)
                 iv.invokespecial(asmType.internalName, "<init>", constructor.descriptor, false)
             }
         }
@@ -194,6 +195,17 @@ class PropertyReferenceCodegen(
 
         @JvmStatic
         fun generateCallableReferenceSignature(iv: InstructionAdapter, callable: CallableDescriptor, state: GenerationState) {
+            if (callable is LocalVariableDescriptor) {
+                val asmType = state.bindingContext.get(CodegenBinding.DELEGATED_PROPERTY_METADATA_OWNER, callable)
+                val allDelegatedProperties = state.bindingContext.get(CodegenBinding.DELEGATED_PROPERTIES, asmType)
+                val index = allDelegatedProperties?.indexOf(callable) ?: -1
+                if (index < 0) {
+                    throw AssertionError("Local delegated property is not found in $asmType: $callable")
+                }
+                iv.aconst("<v#$index>") // v = "variable"
+                return
+            }
+
             val accessor = when (callable) {
                 is FunctionDescriptor -> callable
                 is VariableDescriptorWithAccessors ->
@@ -238,13 +250,13 @@ class PropertyReferenceCodegen(
 
     class PropertyReferenceGenerationStrategy(
             val isGetter: Boolean,
-            val originalFunctionDesc: FunctionDescriptor,
+            private val originalFunctionDesc: FunctionDescriptor,
             val target: VariableDescriptor,
             val asmType: Type,
             val receiverType: Type?,
             val expression: KtElement,
             state: GenerationState,
-            val isInliningStrategy: Boolean
+            private val isInliningStrategy: Boolean
     ) :
             FunctionGenerationStrategy.CodegenBased(state) {
         override fun doGenerateBody(codegen: ExpressionCodegen, signature: JvmMethodSignature) {

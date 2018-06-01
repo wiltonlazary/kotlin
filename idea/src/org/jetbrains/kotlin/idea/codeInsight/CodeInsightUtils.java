@@ -25,6 +25,7 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.refactoring.util.CommonRefactoringUtil;
 import com.intellij.util.text.CharArrayUtil;
+import kotlin.collections.ArraysKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.descriptors.ClassKind;
@@ -292,7 +293,7 @@ public class CodeInsightUtils {
             @NotNull String message, @NotNull String title,
             @Nullable String helpId
     ) {
-        if (ApplicationManager.getApplication().isUnitTestMode()) throw new RuntimeException(message);
+        if (ApplicationManager.getApplication().isUnitTestMode()) throw new CommonRefactoringUtil.RefactoringErrorHintException(message);
         CommonRefactoringUtil.showErrorHint(project, editor, message, title, helpId);
     }
 
@@ -325,7 +326,7 @@ public class CodeInsightUtils {
         return CharArrayUtil.shiftBackward(document.getCharsSequence(), lineStartOffset, " \t");
     }
 
-    @Nullable
+    @NotNull
     public static PsiElement getTopmostElementAtOffset(@NotNull PsiElement element, int offset) {
         do {
             PsiElement parent = element.getParent();
@@ -339,10 +340,31 @@ public class CodeInsightUtils {
         return element;
     }
 
+    @NotNull
+    public static PsiElement getTopParentWithEndOffset(@NotNull PsiElement element, @NotNull Class<?> stopAt) {
+        int endOffset = element.getTextOffset() + element.getTextLength();
+
+        do {
+            PsiElement parent = element.getParent();
+            if (parent == null || (parent.getTextOffset() + parent.getTextLength()) != endOffset) {
+                break;
+            }
+            element = parent;
+
+            if (stopAt.isInstance(element)) {
+                break;
+            }
+        }
+        while(true);
+
+        return element;
+    }
+
+
     @Nullable
-    public static <T> T getTopmostElementAtOffset(@NotNull PsiElement element, int offset, @NotNull Class<T> klass) {
+    public static <T> T getTopmostElementAtOffset(@NotNull PsiElement element, int offset, @NotNull Class<? extends T>... classes) {
         T lastElementOfType = null;
-        if (klass.isInstance(element)) {
+        if (anyIsInstance(element, classes)) {
             lastElementOfType = (T) element;
         }
         do {
@@ -350,7 +372,7 @@ public class CodeInsightUtils {
             if (parent == null || (parent.getTextOffset() < offset) || parent instanceof KtBlockExpression) {
                 break;
             }
-            if (klass.isInstance(parent)) {
+            if (anyIsInstance(parent, classes)) {
                 lastElementOfType = (T) parent;
             }
             element = parent;
@@ -358,5 +380,9 @@ public class CodeInsightUtils {
         while(true);
 
         return lastElementOfType;
+    }
+
+    private static <T> boolean anyIsInstance(PsiElement finalElement, @NotNull Class<? extends T>[] klass) {
+        return ArraysKt.any(klass, aClass -> aClass.isInstance(finalElement));
     }
 }

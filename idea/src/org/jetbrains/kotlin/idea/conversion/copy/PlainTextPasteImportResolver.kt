@@ -19,11 +19,16 @@ package org.jetbrains.kotlin.idea.conversion.copy
 import com.intellij.psi.*
 import com.intellij.psi.search.PsiShortNamesCache
 import com.intellij.psi.util.PsiTreeUtil
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptorWithVisibility
-import org.jetbrains.kotlin.idea.caches.resolve.*
+import org.jetbrains.kotlin.idea.caches.project.getNullableModuleInfo
+import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
+import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
+import org.jetbrains.kotlin.idea.caches.resolve.util.getJavaMemberDescriptor
 import org.jetbrains.kotlin.idea.core.isVisible
 import org.jetbrains.kotlin.idea.imports.canBeReferencedViaImport
 import org.jetbrains.kotlin.idea.references.mainReference
+import org.jetbrains.kotlin.idea.util.ProjectRootsUtil
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.platform.JavaToKotlinClassMap
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
@@ -41,15 +46,15 @@ class PlainTextPasteImportResolver(val dataForConversion: DataForConversion, val
     private val importList = file.importList!!
     private val psiElementFactory = PsiElementFactory.SERVICE.getInstance(project)
 
-    private val bindingContext by lazy { targetFile.analyzeFully() }
+    private val bindingContext by lazy { targetFile.analyzeWithContent() }
     private val resolutionFacade = targetFile.getResolutionFacade()
 
     private val shortNameCache = PsiShortNamesCache.getInstance(project)
     private val scope = file.resolveScope
 
-    val failedToResolveReferenceNames = HashSet<String>()
-    var ambiguityInResolution = false
-    var couldNotResolve = false
+    private val failedToResolveReferenceNames = HashSet<String>()
+    private var ambiguityInResolution = false
+    private var couldNotResolve = false
 
     val addedImports = ArrayList<PsiImportStatementBase>()
 
@@ -116,10 +121,18 @@ class PlainTextPasteImportResolver(val dataForConversion: DataForConversion, val
 
         fun tryResolveReference(reference: PsiQualifiedReference): Boolean {
             if (reference.resolve() != null) return true
-            val referenceName = reference.referenceName!!
+            val referenceName = reference.referenceName ?: return false
             if (referenceName in failedToResolveReferenceNames) return false
             val classes = shortNameCache.getClassesByName(referenceName, scope)
-                    .map { it to it.resolveToDescriptor(resolutionFacade) }
+                    .mapNotNull { psiClass ->
+                        val containingFile = psiClass.containingFile
+                        if (ProjectRootsUtil.isInProjectOrLibraryContent(containingFile)) {
+                            psiClass to psiClass.getJavaMemberDescriptor() as? ClassDescriptor
+                        }
+                        else {
+                            null
+                        }
+                    }
                     .filter { canBeImported(it.second) }
 
             classes.find { (_, descriptor) -> JavaToKotlinClassMap.mapPlatformClass(descriptor!!).isNotEmpty() }

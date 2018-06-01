@@ -18,29 +18,32 @@ package org.jetbrains.kotlin.cli.common.messages
 
 import com.intellij.openapi.util.io.FileUtil.toSystemDependentName
 import com.intellij.openapi.util.text.StringUtil
-import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiErrorElement
-import com.intellij.psi.PsiModifierListOwner
+import com.intellij.psi.*
 import com.intellij.psi.util.PsiFormatUtil
 import org.jetbrains.kotlin.analyzer.AnalysisResult
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.*
 import org.jetbrains.kotlin.codegen.state.IncompatibleClassTrackerImpl
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.diagnostics.*
 import org.jetbrains.kotlin.diagnostics.DiagnosticUtils.sortedDiagnostics
 import org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages
-import org.jetbrains.kotlin.load.java.JvmBytecodeBinaryVersion
 import org.jetbrains.kotlin.load.java.components.TraceBasedErrorReporter
+import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmBytecodeBinaryVersion
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.AnalyzingUtils
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.checkers.ExperimentalUsageChecker
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics
 import org.jetbrains.kotlin.resolve.jvm.JvmBindingContextSlices
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
 import org.jetbrains.kotlin.serialization.deserialization.IncompatibleVersionErrorData
 
-class AnalyzerWithCompilerReport(private val messageCollector: MessageCollector) {
+class AnalyzerWithCompilerReport(
+    private val messageCollector: MessageCollector,
+    private val languageVersionSettings: LanguageVersionSettings
+) {
     lateinit var analysisResult: AnalysisResult
 
     private fun reportIncompleteHierarchies() {
@@ -94,19 +97,14 @@ class AnalyzerWithCompilerReport(private val messageCollector: MessageCollector)
         return messageCollector.hasErrors()
     }
 
-    interface Analyzer {
-        fun analyze(): AnalysisResult
-
-        fun reportEnvironmentErrors() {
-        }
-    }
-
-    fun analyzeAndReport(files: Collection<KtFile>, analyzer: Analyzer) {
-        analysisResult = analyzer.analyze()
+    fun analyzeAndReport(files: Collection<KtFile>, analyze: () -> AnalysisResult) {
+        analysisResult = analyze()
+        ExperimentalUsageChecker.checkCompilerArguments(
+            analysisResult.moduleDescriptor, languageVersionSettings,
+            reportError = { message -> messageCollector.report(ERROR, message) },
+            reportWarning = { message -> messageCollector.report(WARNING, message) }
+        )
         reportSyntaxErrors(files)
-        if (analysisResult.bindingContext.diagnostics.any { it.isValid && it.severity == Severity.ERROR }) {
-            analyzer.reportEnvironmentErrors()
-        }
         reportDiagnostics(analysisResult.bindingContext.diagnostics, messageCollector)
         reportIncompleteHierarchies()
         reportAlternativeSignatureErrors()
@@ -170,9 +168,7 @@ class AnalyzerWithCompilerReport(private val messageCollector: MessageCollector)
             return hasErrors
         }
 
-        fun reportSyntaxErrors(
-                file: PsiElement,
-                reporter: DiagnosticMessageReporter): SyntaxErrorReport {
+        fun reportSyntaxErrors(file: PsiElement, reporter: DiagnosticMessageReporter): SyntaxErrorReport {
             class ErrorReportingVisitor : AnalyzingUtils.PsiErrorElementVisitor() {
                 var hasErrors = false
                 var allErrorsAtEof = true
@@ -180,10 +176,18 @@ class AnalyzerWithCompilerReport(private val messageCollector: MessageCollector)
                 private fun <E : PsiElement> reportDiagnostic(element: E, factory: DiagnosticFactory0<E>, message: String) {
                     val diagnostic = MyDiagnostic(element, factory, message)
                     AnalyzerWithCompilerReport.reportDiagnostic(diagnostic, reporter)
-                    if (element.textRange.startOffset != file.textRange.endOffset) {
+                    if (allErrorsAtEof && !element.isAtEof()) {
                         allErrorsAtEof = false
                     }
                     hasErrors = true
+                }
+
+                private fun PsiElement.isAtEof(): Boolean {
+                    var element = this
+                    while (true) {
+                        element = element.nextSibling ?: return true
+                        if (element !is PsiWhiteSpace || element !is PsiComment) return false
+                    }
                 }
 
                 override fun visitErrorElement(element: PsiErrorElement) {

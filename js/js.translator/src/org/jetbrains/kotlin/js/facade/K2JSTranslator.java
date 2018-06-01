@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,14 @@
 
 package org.jetbrains.kotlin.js.facade;
 
+import com.intellij.openapi.vfs.VfsUtilCore;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.config.CommonConfigurationKeysKt;
+import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
+import org.jetbrains.kotlin.incremental.js.IncrementalResultsConsumer;
 import org.jetbrains.kotlin.js.analyze.TopDownAnalyzerFacadeForJS;
 import org.jetbrains.kotlin.js.analyzer.JsAnalysisResult;
 import org.jetbrains.kotlin.js.backend.ast.JsImportedModule;
@@ -30,25 +34,26 @@ import org.jetbrains.kotlin.js.coroutine.CoroutineTransformer;
 import org.jetbrains.kotlin.js.facade.exceptions.TranslationException;
 import org.jetbrains.kotlin.js.inline.JsInliner;
 import org.jetbrains.kotlin.js.inline.clean.LabeledBlockToDoWhileTransformation;
+import org.jetbrains.kotlin.js.inline.clean.RemoveDuplicateImportsKt;
 import org.jetbrains.kotlin.js.inline.clean.RemoveUnusedImportsKt;
 import org.jetbrains.kotlin.js.inline.clean.ResolveTemporaryNamesKt;
+import org.jetbrains.kotlin.js.sourceMap.SourceFilePathResolver;
 import org.jetbrains.kotlin.js.translate.general.AstGenerationResult;
-import org.jetbrains.kotlin.js.translate.general.FileTranslationResult;
 import org.jetbrains.kotlin.js.translate.general.Translation;
 import org.jetbrains.kotlin.js.translate.utils.ExpandIsCallsKt;
+import org.jetbrains.kotlin.metadata.ProtoBuf;
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.resolve.BindingTrace;
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics;
-import org.jetbrains.kotlin.serialization.ProtoBuf;
 import org.jetbrains.kotlin.serialization.js.KotlinJavascriptSerializationUtil;
 import org.jetbrains.kotlin.serialization.js.ast.JsAstSerializer;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.jetbrains.kotlin.diagnostics.DiagnosticUtils.hasError;
 
@@ -60,46 +65,54 @@ public final class K2JSTranslator {
     @NotNull
     private final JsConfig config;
 
+    @Nullable
+    private final IncrementalResultsConsumer incrementalResults;
+
     public K2JSTranslator(@NotNull JsConfig config) {
         this.config = config;
+        this.incrementalResults = config.getConfiguration().get(JSConfigurationKeys.INCREMENTAL_RESULTS_CONSUMER);
     }
 
     @NotNull
     public TranslationResult translate(
+            @NotNull JsConfig.Reporter reporter,
             @NotNull List<KtFile> files,
             @NotNull MainCallParameters mainCallParameters
     ) throws TranslationException {
-        return translate(files, mainCallParameters, null);
+        return translate(reporter, files, mainCallParameters, null);
     }
 
     @NotNull
     public TranslationResult translate(
+            @NotNull JsConfig.Reporter reporter,
             @NotNull List<KtFile> files,
             @NotNull MainCallParameters mainCallParameters,
             @Nullable JsAnalysisResult analysisResult
     ) throws TranslationException {
-        List<TranslationUnit> units = new ArrayList<TranslationUnit>();
+        List<TranslationUnit> units = new ArrayList<>();
         for (KtFile file : files) {
             units.add(new TranslationUnit.SourceFile(file));
         }
-        return translateUnits(units, mainCallParameters, analysisResult);
+        return translateUnits(reporter, units, mainCallParameters, analysisResult);
     }
 
     @NotNull
     public TranslationResult translateUnits(
+            @NotNull JsConfig.Reporter reporter,
             @NotNull List<TranslationUnit> units,
             @NotNull MainCallParameters mainCallParameters
     ) throws TranslationException {
-        return translateUnits(units, mainCallParameters, null);
+        return translateUnits(reporter, units, mainCallParameters, null);
     }
 
     @NotNull
     public TranslationResult translateUnits(
+            @NotNull JsConfig.Reporter reporter,
             @NotNull List<TranslationUnit> units,
             @NotNull MainCallParameters mainCallParameters,
             @Nullable JsAnalysisResult analysisResult
     ) throws TranslationException {
-        List<KtFile> files = new ArrayList<KtFile>();
+        List<KtFile> files = new ArrayList<>();
         for (TranslationUnit unit : units) {
             if (unit instanceof TranslationUnit.SourceFile) {
                 files.add(((TranslationUnit.SourceFile) unit).getFile());
@@ -116,18 +129,22 @@ public final class K2JSTranslator {
         ModuleDescriptor moduleDescriptor = analysisResult.getModuleDescriptor();
         Diagnostics diagnostics = bindingTrace.getBindingContext().getDiagnostics();
 
-        AstGenerationResult translationResult = Translation.generateAst(bindingTrace, units, mainCallParameters, moduleDescriptor, config);
+        SourceFilePathResolver pathResolver = SourceFilePathResolver.create(config);
+
+        AstGenerationResult translationResult = Translation.generateAst(
+                bindingTrace, units, mainCallParameters, moduleDescriptor, config, pathResolver);
         ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
         if (hasError(diagnostics)) return new TranslationResult.Fail(diagnostics);
 
-        List<JsProgramFragment> newFragments = new ArrayList<JsProgramFragment>(translationResult.getNewFragments());
-        List<JsProgramFragment> allFragments = new ArrayList<JsProgramFragment>(translationResult.getFragments());
+        List<JsProgramFragment> newFragments = new ArrayList<>(translationResult.getNewFragments());
+        List<JsProgramFragment> allFragments = new ArrayList<>(translationResult.getFragments());
 
-        JsInliner.process(config, analysisResult.getBindingTrace(), translationResult.getInnerModuleName(), allFragments, newFragments);
+        JsInliner.process(reporter, config, analysisResult.getBindingTrace(), translationResult.getInnerModuleName(),
+                          allFragments, newFragments, translationResult.getImportStatements());
 
         LabeledBlockToDoWhileTransformation.INSTANCE.apply(newFragments);
 
-        CoroutineTransformer coroutineTransformer = new CoroutineTransformer(translationResult.getProgram());
+        CoroutineTransformer coroutineTransformer = new CoroutineTransformer();
         for (JsProgramFragment fragment : newFragments) {
             coroutineTransformer.accept(fragment.getDeclarationBlock());
             coroutineTransformer.accept(fragment.getInitializerBlock());
@@ -138,37 +155,39 @@ public final class K2JSTranslator {
 
         ExpandIsCallsKt.expandIsCalls(newFragments);
         ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
+        JsAstSerializer serializer = new JsAstSerializer(file -> {
+            try {
+                return pathResolver.getPathRelativeToSourceRoots(file);
+            }
+            catch (IOException e) {
+                throw new RuntimeException("IO error occurred resolving path to source file", e);
+            }
+        });
 
-        Map<KtFile, FileTranslationResult> fileMap = new HashMap<KtFile, FileTranslationResult>();
-        JsAstSerializer serializer = new JsAstSerializer();
-        byte[] metadataHeader = null;
-        boolean serializeFragments = config.getConfiguration().get(JSConfigurationKeys.SERIALIZE_FRAGMENTS, false);
-        for (KtFile file : files) {
-            List<DeclarationDescriptor> scope = translationResult.getFileMemberScopes().get(file);
-            byte[] binaryAst = null;
-            byte[] binaryMetadata = null;
-            if (serializeFragments) {
+        if (incrementalResults != null) {
+            KotlinJavascriptSerializationUtil serializationUtil = KotlinJavascriptSerializationUtil.INSTANCE;
+
+            for (KtFile file : files) {
                 JsProgramFragment fragment = translationResult.getFragmentMap().get(file);
-                if (fragment != null) {
-                    ByteArrayOutputStream output = new ByteArrayOutputStream();
-                    serializer.serialize(fragment, output);
-                    binaryAst = output.toByteArray();
-                }
+                assert fragment != null : "Could not find AST for file: " + file;
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                serializer.serialize(fragment, output);
+                byte[] binaryAst = output.toByteArray();
 
-                if (scope != null) {
-                    ProtoBuf.PackageFragment part = KotlinJavascriptSerializationUtil.INSTANCE.serializeDescriptors(
-                            bindingTrace.getBindingContext(), moduleDescriptor, scope, file.getPackageFqName());
-                    binaryMetadata = part.toByteArray();
-                }
+                List<DeclarationDescriptor> scope = translationResult.getFileMemberScopes().get(file);
+                assert scope != null : "Could not find descriptors for file: " + file;
+                ProtoBuf.PackageFragment packagePart = serializationUtil.serializeDescriptors(
+                        bindingTrace.getBindingContext(), moduleDescriptor, scope, file.getPackageFqName());
+
+                File ioFile = VfsUtilCore.virtualToIoFile(file.getVirtualFile());
+                incrementalResults.processPackagePart(ioFile, packagePart.toByteArray(), binaryAst);
             }
 
-            fileMap.put(file, new FileTranslationResult(file, binaryMetadata, binaryAst));
+            LanguageVersionSettings settings = CommonConfigurationKeysKt.getLanguageVersionSettings(config.getConfiguration());
+            incrementalResults.processHeader(serializationUtil.serializeHeader(moduleDescriptor, null, settings).toByteArray());
         }
 
-        if (serializeFragments) {
-            metadataHeader = KotlinJavascriptSerializationUtil.INSTANCE.serializeHeader(null).toByteArray();
-        }
-
+        RemoveDuplicateImportsKt.removeDuplicateImports(translationResult.getProgram());
         ResolveTemporaryNamesKt.resolveTemporaryNames(translationResult.getProgram());
         ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
         if (hasError(diagnostics)) return new TranslationResult.Fail(diagnostics);
@@ -179,6 +198,6 @@ public final class K2JSTranslator {
         }
 
         return new TranslationResult.Success(config, files, translationResult.getProgram(), diagnostics, importedModules,
-                                             moduleDescriptor, bindingTrace.getBindingContext(), metadataHeader, fileMap);
+                                             moduleDescriptor, bindingTrace.getBindingContext());
     }
 }

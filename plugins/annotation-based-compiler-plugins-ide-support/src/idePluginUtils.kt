@@ -16,18 +16,30 @@
 
 package org.jetbrains.kotlin.annotation.plugin.ide
 
+import com.intellij.openapi.module.Module
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
 import org.jetbrains.kotlin.idea.facet.KotlinFacet
 import java.io.File
 
-internal class AnnotationBasedCompilerPluginSetup(val annotationFqNames: List<String>, val classpath: List<String>)
+fun Module.getSpecialAnnotations(prefix: String): List<String> {
+    val kotlinFacet = org.jetbrains.kotlin.idea.facet.KotlinFacet.get(this) ?: return emptyList()
+    val commonArgs = kotlinFacet.configuration.settings.compilerArguments ?: return emptyList()
+
+    return commonArgs.pluginOptions
+            ?.filter { it.startsWith(prefix) }
+            ?.map { it.substring(prefix.length) }
+    ?: emptyList()
+}
+
+class AnnotationBasedCompilerPluginSetup(val options: List<PluginOption>, val classpath: List<String>) {
+    class PluginOption(val key: String, val value: String)
+}
 
 internal fun modifyCompilerArgumentsForPlugin(
         facet: KotlinFacet,
         setup: AnnotationBasedCompilerPluginSetup?,
         compilerPluginId: String,
-        pluginName: String,
-        annotationOptionName: String
+        pluginName: String
 ) {
     val facetSettings = facet.configuration.settings
 
@@ -35,10 +47,10 @@ internal fun modifyCompilerArgumentsForPlugin(
     val commonArguments = facetSettings.compilerArguments ?: CommonCompilerArguments.DummyImpl()
 
     /** See [CommonCompilerArguments.PLUGIN_OPTION_FORMAT] **/
-    val annotationOptions = setup?.annotationFqNames?.map { "plugin:$compilerPluginId:$annotationOptionName=$it" } ?: emptyList()
+    val newOptionsForPlugin = setup?.options?.map { "plugin:$compilerPluginId:${it.key}=${it.value}" } ?: emptyList()
 
-    val oldPluginOptions = (commonArguments.pluginOptions ?: emptyArray()).filterTo(mutableListOf()) { !it.startsWith("plugin:$compilerPluginId:") }
-    val newPluginOptions = oldPluginOptions + annotationOptions
+    val oldAllPluginOptions = (commonArguments.pluginOptions ?: emptyArray()).filterTo(mutableListOf()) { !it.startsWith("plugin:$compilerPluginId:") }
+    val newAllPluginOptions = oldAllPluginOptions + newOptionsForPlugin
 
     val oldPluginClasspaths = (commonArguments.pluginClasspaths ?: emptyArray()).filterTo(mutableListOf()) {
         val lastIndexOfFile = it.lastIndexOfAny(charArrayOf('/', File.separatorChar))
@@ -50,7 +62,7 @@ internal fun modifyCompilerArgumentsForPlugin(
 
     val newPluginClasspaths = oldPluginClasspaths + (setup?.classpath ?: emptyList())
 
-    commonArguments.pluginOptions = newPluginOptions.toTypedArray()
+    commonArguments.pluginOptions = newAllPluginOptions.toTypedArray()
     commonArguments.pluginClasspaths = newPluginClasspaths.toTypedArray()
 
     facetSettings.compilerArguments = commonArguments

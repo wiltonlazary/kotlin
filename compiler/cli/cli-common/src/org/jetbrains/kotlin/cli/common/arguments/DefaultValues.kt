@@ -28,8 +28,10 @@ open class DefaultValues(val defaultValue: String, val possibleValues: List<Stri
 
     object StringNullDefault : DefaultValues("null")
 
+    object ListEmptyDefault : DefaultValues("<empty list>")
+
     object LanguageVersions : DefaultValues(
-            "\"" + LanguageVersion.LATEST_STABLE.versionString + "\"",
+            "null",
             LanguageVersion.values().map { "\"${it.description}\"" }
     )
 
@@ -46,6 +48,15 @@ open class DefaultValues(val defaultValue: String, val possibleValues: List<Stri
     object JsModuleKinds : DefaultValues(
             "\"plain\"",
             listOf("\"plain\"", "\"amd\"", "\"commonjs\"", "\"umd\"")
+    )
+
+    object JsSourceMapContentModes : DefaultValues(
+            "null",
+            listOf(
+                    K2JsArgumentConstants.SOURCE_MAP_SOURCE_CONTENT_NEVER,
+                    K2JsArgumentConstants.SOURCE_MAP_SOURCE_CONTENT_ALWAYS,
+                    K2JsArgumentConstants.SOURCE_MAP_SOURCE_CONTENT_INLINING
+            ).map { "\"$it\""}
     )
 
     object JsMain : DefaultValues(

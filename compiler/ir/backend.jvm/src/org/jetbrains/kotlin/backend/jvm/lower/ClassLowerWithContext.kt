@@ -17,7 +17,7 @@
 package org.jetbrains.kotlin.backend.jvm.lower
 
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
-import org.jetbrains.kotlin.backend.jvm.descriptors.FileClassDescriptor
+import org.jetbrains.kotlin.codegen.descriptors.FileClassDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.IrClass
@@ -33,7 +33,7 @@ abstract class ClassLowerWithContext : FileLoweringPass, IrElementTransformer<Ir
     private val irClass2Context = hashMapOf<IrClass, IrClassContext>()
 
     override fun lower(irFile: IrFile) {
-        val packageIr = irFile.declarations.filter { it.descriptor is FileClassDescriptor }.singleOrNull()
+        val packageIr = irFile.declarations.singleOrNull { it.descriptor is FileClassDescriptor }
         if (packageIr != null) {
             visitClass(packageIr as IrClass, null)
             irFile.declarations.filterNot { it == packageIr }.forEach { it.accept(this, irClass2Context[packageIr]!!) }

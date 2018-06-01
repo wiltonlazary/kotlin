@@ -16,11 +16,9 @@
 
 package org.jetbrains.kotlin.types.expressions.typeInfoFactory
 
-import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.resolve.calls.context.ResolutionContext
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo
 import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.expressions.DataFlowAnalyzer
 import org.jetbrains.kotlin.types.expressions.KotlinTypeInfo
 
 /*
@@ -30,7 +28,7 @@ import org.jetbrains.kotlin.types.expressions.KotlinTypeInfo
 fun createTypeInfo(type: KotlinType?, dataFlowInfo: DataFlowInfo): KotlinTypeInfo = KotlinTypeInfo(type, dataFlowInfo)
 
 fun createTypeInfo(type: KotlinType?, dataFlowInfo: DataFlowInfo, jumpPossible: Boolean, jumpFlowInfo: DataFlowInfo): KotlinTypeInfo =
-        KotlinTypeInfo(type, dataFlowInfo, jumpPossible, jumpFlowInfo)
+    KotlinTypeInfo(type, dataFlowInfo, jumpPossible, jumpFlowInfo)
 
 fun createTypeInfo(type: KotlinType?): KotlinTypeInfo = createTypeInfo(type, DataFlowInfo.EMPTY)
 

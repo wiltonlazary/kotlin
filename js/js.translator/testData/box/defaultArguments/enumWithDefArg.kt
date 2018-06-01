@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1135
 package foo
 
 enum class A(val a: Int = 1) {

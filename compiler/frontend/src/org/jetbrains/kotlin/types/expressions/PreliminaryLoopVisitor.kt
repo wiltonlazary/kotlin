@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.types.expressions
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor
 import org.jetbrains.kotlin.psi.KtLoopExpression
+import org.jetbrains.kotlin.psi.KtTryExpression
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValue
 import org.jetbrains.kotlin.resolve.calls.smartcasts.IdentifierInfo
@@ -30,8 +31,10 @@ import java.util.*
  */
 class PreliminaryLoopVisitor private constructor() : AssignedVariablesSearcher() {
 
-    fun clearDataFlowInfoForAssignedLocalVariables(dataFlowInfo: DataFlowInfo,
-                                                   languageVersionSettings: LanguageVersionSettings): DataFlowInfo {
+    fun clearDataFlowInfoForAssignedLocalVariables(
+        dataFlowInfo: DataFlowInfo,
+        languageVersionSettings: LanguageVersionSettings
+    ): DataFlowInfo {
         var resultFlowInfo = dataFlowInfo
         val nullabilityMap = resultFlowInfo.completeNullabilityInfo
         val valueSetToClear = LinkedHashSet<DataFlowValue>()
@@ -57,6 +60,13 @@ class PreliminaryLoopVisitor private constructor() : AssignedVariablesSearcher()
         fun visitLoop(loopExpression: KtLoopExpression): PreliminaryLoopVisitor {
             val visitor = PreliminaryLoopVisitor()
             loopExpression.accept(visitor, null)
+            return visitor
+        }
+
+        @JvmStatic
+        fun visitTryBlock(tryExpression: KtTryExpression): PreliminaryLoopVisitor {
+            val visitor = PreliminaryLoopVisitor()
+            tryExpression.tryBlock.accept(visitor, null)
             return visitor
         }
     }

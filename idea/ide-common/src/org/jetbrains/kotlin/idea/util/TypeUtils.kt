@@ -23,8 +23,6 @@ import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.idea.imports.canBeReferencedViaImport
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
-import org.jetbrains.kotlin.load.java.JvmAnnotationNames.*
-import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.platform.JavaToKotlinClassMap
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
@@ -56,7 +54,7 @@ private fun KotlinType.approximateNonDynamicFlexibleTypes(
         // Foo<Bar!>! -> Foo<Bar>?
         var approximation =
                 if (isCollection)
-                    (if (isAnnotatedReadOnly()) flexible.upperBound else flexible.lowerBound).makeNullableAsSpecified(!preferNotNull)
+                    flexible.lowerBound.makeNullableAsSpecified(!preferNotNull)
                 else
                     if (this is RawType && preferStarForRaw) flexible.upperBound.makeNullableAsSpecified(!preferNotNull)
                 else
@@ -76,23 +74,20 @@ private fun KotlinType.approximateNonDynamicFlexibleTypes(
     (unwrap() as? AbbreviatedType)?.let {
         return AbbreviatedType(it.expandedType, it.abbreviation.approximateNonDynamicFlexibleTypes(preferNotNull))
     }
-    return KotlinTypeFactory.simpleType(annotations,
-                                        constructor,
-                                        arguments.map { it.substitute { type -> type.approximateFlexibleTypes(preferNotNull = true) } },
-                                        isMarkedNullable,
-                                        ErrorUtils.createErrorScope("This type is not supposed to be used in member resolution", true)
+    return KotlinTypeFactory.simpleTypeWithNonTrivialMemberScope(annotations,
+                                                                 constructor,
+                                                                 arguments.map { it.substitute { type -> type.approximateFlexibleTypes(preferNotNull = true) } },
+                                                                 isMarkedNullable,
+                                                                 ErrorUtils.createErrorScope("This type is not supposed to be used in member resolution", true)
     )
 }
 
-fun KotlinType.isAnnotatedReadOnly(): Boolean = hasAnnotationMaybeExternal(JETBRAINS_READONLY_ANNOTATION)
-fun KotlinType.isAnnotatedNotNull(): Boolean = hasAnnotationMaybeExternal(JETBRAINS_NOT_NULL_ANNOTATION)
-fun KotlinType.isAnnotatedNullable(): Boolean = hasAnnotationMaybeExternal(JETBRAINS_NULLABLE_ANNOTATION)
+fun KotlinType.isResolvableInScope(scope: LexicalScope?, checkTypeParameters: Boolean, allowIntersections: Boolean = false): Boolean {
+    if (constructor is IntersectionTypeConstructor) {
+        if (!allowIntersections) return false
+        return constructor.supertypes.all { it.isResolvableInScope(scope, checkTypeParameters, allowIntersections) }
+    }
 
-private fun KotlinType.hasAnnotationMaybeExternal(fqName: FqName) = with (annotations) {
-    findAnnotation(fqName) ?: findExternalAnnotation(fqName)
-} != null
-
-fun KotlinType.isResolvableInScope(scope: LexicalScope?, checkTypeParameters: Boolean): Boolean {
     if (canBeReferencedViaImport()) return true
 
     val descriptor = constructor.declarationDescriptor
@@ -116,10 +111,14 @@ fun KotlinType.anonymousObjectSuperTypeOrNull(): KotlinType? {
     return null
 }
 
-fun KotlinType.getResolvableApproximations(scope: LexicalScope?, checkTypeParameters: Boolean): Sequence<KotlinType> {
+fun KotlinType.getResolvableApproximations(
+        scope: LexicalScope?,
+        checkTypeParameters: Boolean,
+        allowIntersections: Boolean = false
+): Sequence<KotlinType> {
     return (listOf(this) + TypeUtils.getAllSupertypes(this))
             .asSequence()
-            .filter { it.isResolvableInScope(scope, checkTypeParameters) }
+            .filter { it.isResolvableInScope(scope, checkTypeParameters, allowIntersections) }
             .mapNotNull mapArgs@ {
                 val resolvableArgs = it.arguments.filterTo(SmartSet.create()) { it.type.isResolvableInScope(scope, checkTypeParameters) }
                 if (resolvableArgs.containsAll(it.arguments)) return@mapArgs it

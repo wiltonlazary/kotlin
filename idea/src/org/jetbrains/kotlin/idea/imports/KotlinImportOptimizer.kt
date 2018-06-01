@@ -21,9 +21,9 @@ import com.intellij.openapi.progress.ProgressIndicatorProvider
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.idea.caches.resolve.ModuleSourceInfo
+import org.jetbrains.kotlin.idea.caches.project.ModuleSourceInfo
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
-import org.jetbrains.kotlin.idea.caches.resolve.getNullableModuleInfo
+import org.jetbrains.kotlin.idea.caches.project.getNullableModuleInfo
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.core.formatter.KotlinCodeStyleSettings
 import org.jetbrains.kotlin.idea.references.KtInvokeFunctionReference
@@ -104,7 +104,7 @@ class KotlinImportOptimizer : ImportOptimizer {
                     if (target is PackageViewDescriptor && parentFqName == FqName.ROOT) continue // no need to import top-level packages
                     if (target !is PackageViewDescriptor && parentFqName == currentPackageName) continue
 
-                    if (!reference.canBeResolvedViaImport(target)) continue
+                    if (!reference.canBeResolvedViaImport(target, bindingContext)) continue
 
                     if (isAccessibleAsMember(importableDescriptor, element, bindingContext)) continue
 
@@ -128,6 +128,7 @@ class KotlinImportOptimizer : ImportOptimizer {
 
                     is ClassDescriptor ->
                         scope.findClassifier(target.name, NoLookupLocation.FROM_IDE) == target
+                            && bindingContext[BindingContext.DEPRECATED_SHORT_NAME_ACCESS, place] != true
 
                     else -> false
                 }

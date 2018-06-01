@@ -41,7 +41,9 @@ class AllOpenCommandLineProcessor : CommandLineProcessor {
                 "org.springframework.stereotype.Component",
                 "org.springframework.transaction.annotation.Transactional",
                 "org.springframework.scheduling.annotation.Async",
-                "org.springframework.cache.annotation.Cacheable"))
+                "org.springframework.cache.annotation.Cacheable",
+                "org.springframework.boot.test.context.SpringBootTest",
+                "org.springframework.validation.annotation.Validated"))
 
         val ANNOTATION_OPTION = CliOption("annotation", "<fqname>", "Annotation qualified names",
                                           required = false, allowMultipleOccurrences = true)

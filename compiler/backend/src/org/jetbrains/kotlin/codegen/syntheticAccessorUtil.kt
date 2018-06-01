@@ -17,27 +17,33 @@
 package org.jetbrains.kotlin.codegen
 
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.resolve.DescriptorUtils
 
-enum class FieldAccessorKind(val suffix: String) {
+enum class AccessorKind(val suffix: String) {
     NORMAL("p"),
     IN_CLASS_COMPANION("cp"),
-    FIELD_FROM_LOCAL("lp");
-
-    override fun toString() = suffix
+    FIELD_FROM_LOCAL("lp"),
+    LATEINIT_INTRINSIC("li"),
+    JVM_DEFAULT_COMPATIBILITY("jd")
 }
 
-fun getAccessorNameSuffix(descriptor: CallableMemberDescriptor, superCallDescriptor: ClassDescriptor?,
-                          accessorKind: FieldAccessorKind): String {
+private fun CallableMemberDescriptor.getJvmName() =
+    DescriptorUtils.getJvmName(this) ?: name.asString()
+
+fun getAccessorNameSuffix(
+    descriptor: CallableMemberDescriptor, superCallDescriptor: ClassDescriptor?, accessorKind: AccessorKind
+): String {
+    if (accessorKind == AccessorKind.JVM_DEFAULT_COMPATIBILITY) return descriptor.getJvmName() + "$" + AccessorKind.JVM_DEFAULT_COMPATIBILITY.suffix
+
     val suffix = when (descriptor) {
         is ConstructorDescriptor ->
             return "will be ignored"
         is SimpleFunctionDescriptor ->
-            descriptor.name.asString()
+            descriptor.getJvmName()
         is PropertyDescriptor ->
-            descriptor.name.asString() + "$" + accessorKind
+            descriptor.getJvmName() + "$" + accessorKind.suffix
         else ->
-            throw UnsupportedOperationException("Do not know how to create accessor for descriptor " + descriptor)
+            throw UnsupportedOperationException("Do not know how to create accessor for descriptor $descriptor")
     }
-
     return if (superCallDescriptor == null) suffix else "$suffix\$s${superCallDescriptor.name.asString().hashCode()}"
 }

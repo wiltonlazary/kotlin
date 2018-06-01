@@ -42,12 +42,11 @@ import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.CharsetToolkit
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiManager
 import com.intellij.psi.impl.PsiFileFactoryImpl
 import com.intellij.testFramework.LightVirtualFile
+import com.intellij.util.containers.ContainerUtil
 import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.console.actions.BuildAndRestartConsoleAction
 import org.jetbrains.kotlin.console.actions.KtExecuteCommandAction
@@ -56,19 +55,23 @@ import org.jetbrains.kotlin.console.gutter.ConsoleIndicatorRenderer
 import org.jetbrains.kotlin.console.gutter.IconWithTooltip
 import org.jetbrains.kotlin.console.gutter.ReplIcons
 import org.jetbrains.kotlin.idea.KotlinLanguage
-import org.jetbrains.kotlin.idea.caches.resolve.ModuleTestSourceInfo
-import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
+import org.jetbrains.kotlin.idea.caches.project.NotUnderContentRootModuleInfo
+import org.jetbrains.kotlin.idea.caches.project.moduleInfo
+import org.jetbrains.kotlin.idea.caches.project.productionSourceInfo
+import org.jetbrains.kotlin.idea.caches.project.testSourceInfo
+import org.jetbrains.kotlin.idea.caches.resolve.*
+import org.jetbrains.kotlin.idea.core.script.ScriptDefinitionContributor
+import org.jetbrains.kotlin.idea.core.script.ScriptDefinitionsManager
+import org.jetbrains.kotlin.idea.project.KOTLIN_CONSOLE_KEY
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.parsing.KotlinParserDefinition
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtScript
-import org.jetbrains.kotlin.psi.moduleInfo
 import org.jetbrains.kotlin.resolve.lazy.ForceResolveUtil
 import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyScriptDescriptor
 import org.jetbrains.kotlin.resolve.repl.ReplState
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
-import org.jetbrains.kotlin.script.KotlinScriptDefinitionProvider
 import java.awt.Color
 import java.awt.Font
 import java.util.concurrent.CountDownLatch
@@ -91,7 +94,9 @@ class KotlinConsoleRunner(
 
     override fun finishConsole() {
         KotlinConsoleKeeper.getInstance(project).removeConsole(consoleView.virtualFile)
-        KotlinScriptDefinitionProvider.getInstance(project)!!.removeScriptDefinition(consoleScriptDefinition)
+        val consoleContributor = ScriptDefinitionContributor.find<ConsoleScriptDefinitionContributor>(project)!!
+        consoleContributor.unregisterDefinition(consoleScriptDefinition)
+        ScriptDefinitionsManager.getInstance(project).reloadDefinitionsBy(consoleContributor)
 
         if (ApplicationManager.getApplication().isUnitTestMode) {
             consoleTerminated.countDown()
@@ -126,13 +131,8 @@ class KotlinConsoleRunner(
 
     private val consoleScriptDefinition = object : KotlinScriptDefinition(Any::class) {
         override val name = "Kotlin REPL"
-        override fun <TF: Any> isScript(file: TF): Boolean {
-            val vf = when (file) {
-                is PsiFile -> file.originalFile.virtualFile
-                is VirtualFile -> file
-                else -> return false
-            }
-            return vf == consoleView.virtualFile
+        override fun isScript(fileName: String): Boolean {
+            return fileName == consoleView.virtualFile.name
         }
         override fun getScriptName(script: KtScript) = Name.identifier("REPL")
     }
@@ -143,6 +143,7 @@ class KotlinConsoleRunner(
         val builder = LanguageConsoleBuilder()
 
         val consoleView = builder.gutterContentProvider(ConsoleGutterContentProvider()).build(project, KotlinLanguage.INSTANCE)
+        consoleView.virtualFile.putUserData(KOTLIN_CONSOLE_KEY, true)
 
 
         consoleView.prompt = null
@@ -157,7 +158,10 @@ class KotlinConsoleRunner(
         val executeAction = KtExecuteCommandAction(consoleView.virtualFile)
         executeAction.registerCustomShortcutSet(CommonShortcuts.CTRL_ENTER, consoleView.consoleEditor.component)
 
-        KotlinScriptDefinitionProvider.getInstance(project)!!.addScriptDefinition(consoleScriptDefinition)
+        val consoleContributor = ScriptDefinitionContributor.find<ConsoleScriptDefinitionContributor>(project)!!
+        consoleContributor.registerDefinition(consoleScriptDefinition)
+        ScriptDefinitionsManager.getInstance(project).reloadDefinitionsBy(consoleContributor)
+
         enableCompletion(consoleView)
 
         return consoleView
@@ -165,7 +169,7 @@ class KotlinConsoleRunner(
 
     private fun enableCompletion(consoleView: LanguageConsoleView) {
         val consoleKtFile = PsiManager.getInstance(project).findFile(consoleView.virtualFile) as? KtFile ?: return
-        consoleKtFile.moduleInfo = ModuleTestSourceInfo(module)
+        configureFileDependencies(consoleKtFile)
     }
 
     override fun createProcessHandler(process: Process): OSProcessHandler {
@@ -267,13 +271,14 @@ class KotlinConsoleRunner(
             val virtualFile =
                     LightVirtualFile("line$lineNumber${KotlinParserDefinition.STD_SCRIPT_EXT}", KotlinLanguage.INSTANCE, text).apply {
                         charset = CharsetToolkit.UTF8_CHARSET
+                        isWritable = false
                     }
             val psiFile = (PsiFileFactory.getInstance(project) as PsiFileFactoryImpl).trySetupPsiForFile(virtualFile, KotlinLanguage.INSTANCE, true, false) as KtFile?
                           ?: error("Failed to setup PSI for file:\n$text")
 
             replState.submitLine(psiFile)
-            psiFile.moduleInfo = ModuleTestSourceInfo(module)
-            val scriptDescriptor = psiFile.script!!.resolveToDescriptor() as? LazyScriptDescriptor ?: error("Failed to analyze line:\n$text")
+            configureFileDependencies(psiFile)
+            val scriptDescriptor = psiFile.script!!.unsafeResolveToDescriptor() as? LazyScriptDescriptor ?: error("Failed to analyze line:\n$text")
             ForceResolveUtil.forceResolveAllContents(scriptDescriptor)
             replState.lineSuccess(psiFile, scriptDescriptor)
 
@@ -286,4 +291,27 @@ class KotlinConsoleRunner(
             val consoleFile = consoleView.virtualFile
             return PsiManager.getInstance(project).findFile(consoleFile) as KtFile
         }
+
+    private fun configureFileDependencies(psiFile: KtFile) {
+        psiFile.moduleInfo = module.testSourceInfo() ?: module.productionSourceInfo() ?:
+                NotUnderContentRootModuleInfo
+    }
+}
+
+class ConsoleScriptDefinitionContributor: ScriptDefinitionContributor {
+    private val definitions = ContainerUtil.newConcurrentSet<KotlinScriptDefinition>()
+
+    override val id: String = "IDEA Console"
+
+    override fun getDefinitions(): List<KotlinScriptDefinition> {
+        return definitions.toList()
+    }
+
+    fun registerDefinition(definition: KotlinScriptDefinition) {
+        definitions.add(definition)
+    }
+
+    fun unregisterDefinition(definition: KotlinScriptDefinition) {
+        definitions.remove(definition)
+    }
 }

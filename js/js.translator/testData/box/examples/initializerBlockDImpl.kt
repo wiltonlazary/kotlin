@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1378
 
 class World() {
     public val items: ArrayList<Item> = ArrayList<Item>()

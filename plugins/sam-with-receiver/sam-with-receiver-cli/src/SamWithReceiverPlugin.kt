@@ -17,28 +17,38 @@
 package org.jetbrains.kotlin.samWithReceiver
 
 import com.intellij.mock.MockProject
-import org.jetbrains.kotlin.analyzer.ModuleInfo
 import org.jetbrains.kotlin.compiler.plugin.CliOption
 import org.jetbrains.kotlin.compiler.plugin.CliOptionProcessingException
 import org.jetbrains.kotlin.compiler.plugin.CommandLineProcessor
 import org.jetbrains.kotlin.compiler.plugin.ComponentRegistrar
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.CompilerConfigurationKey
-import org.jetbrains.kotlin.container.ComponentProvider
-import org.jetbrains.kotlin.container.get
+import org.jetbrains.kotlin.container.StorageComponentContainer
+import org.jetbrains.kotlin.container.useInstance
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.extensions.StorageComponentContainerContributor
-import org.jetbrains.kotlin.load.java.sam.SamWithReceiverResolver
+import org.jetbrains.kotlin.resolve.TargetPlatform
+import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
+import org.jetbrains.kotlin.samWithReceiver.SamWithReceiverCommandLineProcessor.Companion.SUPPORTED_PRESETS
 import org.jetbrains.kotlin.samWithReceiver.SamWithReceiverConfigurationKeys.ANNOTATION
+import org.jetbrains.kotlin.samWithReceiver.SamWithReceiverConfigurationKeys.PRESET
 
 object SamWithReceiverConfigurationKeys {
     val ANNOTATION: CompilerConfigurationKey<List<String>> =
             CompilerConfigurationKey.create("annotation qualified name")
+
+    val PRESET: CompilerConfigurationKey<List<String>> = CompilerConfigurationKey.create("annotation preset")
 }
 
 class SamWithReceiverCommandLineProcessor : CommandLineProcessor {
     companion object {
+        val SUPPORTED_PRESETS = emptyMap<String, List<String>>()
+
         val ANNOTATION_OPTION = CliOption("annotation", "<fqname>", "Annotation qualified names",
                                           required = false, allowMultipleOccurrences = true)
+
+        val PRESET_OPTION = CliOption("preset", "<name>", "Preset name (${SUPPORTED_PRESETS.keys.joinToString()})",
+                                      required = false, allowMultipleOccurrences = true)
 
         val PLUGIN_ID = "org.jetbrains.kotlin.samWithReceiver"
     }
@@ -48,13 +58,17 @@ class SamWithReceiverCommandLineProcessor : CommandLineProcessor {
 
     override fun processOption(option: CliOption, value: String, configuration: CompilerConfiguration) = when (option) {
         ANNOTATION_OPTION -> configuration.appendList(ANNOTATION, value)
+        PRESET_OPTION -> configuration.appendList(PRESET, value)
         else -> throw CliOptionProcessingException("Unknown option: ${option.name}")
     }
 }
 
 class SamWithReceiverComponentRegistrar : ComponentRegistrar {
     override fun registerProjectComponents(project: MockProject, configuration: CompilerConfiguration) {
-        val annotations = configuration.get(SamWithReceiverConfigurationKeys.ANNOTATION) ?: return
+        val annotations = configuration.get(ANNOTATION)?.toMutableList() ?: mutableListOf()
+        configuration.get(PRESET)?.forEach { preset ->
+            SUPPORTED_PRESETS[preset]?.let { annotations += it }
+        }
         if (annotations.isEmpty()) return
 
         StorageComponentContainerContributor.registerExtension(project, CliSamWithReceiverComponentContributor(annotations))
@@ -62,7 +76,9 @@ class SamWithReceiverComponentRegistrar : ComponentRegistrar {
 }
 
 class CliSamWithReceiverComponentContributor(val annotations: List<String>): StorageComponentContainerContributor {
-    override fun onContainerComposed(container: ComponentProvider, moduleInfo: ModuleInfo?) {
-        container.get<SamWithReceiverResolver>().registerExtension(SamWithReceiverResolverExtension(annotations))
+    override fun registerModuleComponents(container: StorageComponentContainer, platform: TargetPlatform, moduleDescriptor: ModuleDescriptor) {
+        if (platform != JvmPlatform) return
+
+        container.useInstance(SamWithReceiverResolverExtension(annotations))
     }
 }

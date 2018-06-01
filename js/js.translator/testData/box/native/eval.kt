@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// SKIP_MINIFICATION
 package foo
 
 val top = "TOP LEVEL"

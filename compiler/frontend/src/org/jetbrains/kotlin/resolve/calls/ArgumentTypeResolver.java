@@ -29,6 +29,7 @@ import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.name.SpecialNames;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.resolve.BindingTrace;
+import org.jetbrains.kotlin.resolve.StatementFilter;
 import org.jetbrains.kotlin.resolve.TemporaryBindingTrace;
 import org.jetbrains.kotlin.resolve.TypeResolver;
 import org.jetbrains.kotlin.resolve.calls.callResolverUtil.ResolveArgumentsMode;
@@ -58,7 +59,6 @@ import java.util.List;
 
 import static org.jetbrains.kotlin.psi.KtPsiUtil.getLastElementDeparenthesized;
 import static org.jetbrains.kotlin.resolve.BindingContextUtils.getRecordedTypeInfo;
-import static org.jetbrains.kotlin.resolve.calls.callResolverUtil.ResolveArgumentsMode.RESOLVE_FUNCTION_ARGUMENTS;
 import static org.jetbrains.kotlin.resolve.calls.callResolverUtil.ResolveArgumentsMode.SHAPE_FUNCTION_ARGUMENTS;
 import static org.jetbrains.kotlin.resolve.calls.context.ContextDependency.DEPENDENT;
 import static org.jetbrains.kotlin.resolve.calls.context.ContextDependency.INDEPENDENT;
@@ -108,13 +108,8 @@ public class ArgumentTypeResolver {
         return KotlinTypeChecker.DEFAULT.isSubtypeOf(actualType, expectedType);
     }
 
-    public void checkTypesWithNoCallee(@NotNull CallResolutionContext<?> context) {
-        checkTypesWithNoCallee(context, SHAPE_FUNCTION_ARGUMENTS);
-    }
-
     public void checkTypesWithNoCallee(
-            @NotNull CallResolutionContext<?> context,
-            @NotNull ResolveArgumentsMode resolveFunctionArgumentBodies
+            @NotNull CallResolutionContext<?> context
     ) {
         if (context.checkArguments != CheckArgumentTypesMode.CHECK_VALUE_ARGUMENTS) return;
 
@@ -125,9 +120,7 @@ public class ArgumentTypeResolver {
             }
         }
 
-        if (resolveFunctionArgumentBodies == RESOLVE_FUNCTION_ARGUMENTS) {
-            checkTypesForFunctionArgumentsWithNoCallee(context);
-        }
+        checkTypesForFunctionArgumentsWithNoCallee(context);
 
         for (KtTypeProjection typeProjection : context.call.getTypeArguments()) {
             KtTypeReference typeReference = typeProjection.getTypeReference();
@@ -140,7 +133,7 @@ public class ArgumentTypeResolver {
         }
     }
 
-    public void checkTypesForFunctionArgumentsWithNoCallee(@NotNull CallResolutionContext<?> context) {
+    private void checkTypesForFunctionArgumentsWithNoCallee(@NotNull CallResolutionContext<?> context) {
         if (context.checkArguments != CheckArgumentTypesMode.CHECK_VALUE_ARGUMENTS) return;
 
         for (ValueArgument valueArgument : context.call.getValueArguments()) {
@@ -162,13 +155,16 @@ public class ArgumentTypeResolver {
         return getFunctionLiteralArgumentIfAny(expression, context) != null;
     }
 
-    @NotNull
-    public static KtFunction getFunctionLiteralArgument(
+    public static boolean isCallableReferenceArgument(
             @NotNull KtExpression expression, @NotNull ResolutionContext context
     ) {
-        assert isFunctionLiteralArgument(expression, context);
-        //noinspection ConstantConditions
-        return getFunctionLiteralArgumentIfAny(expression, context);
+        return getCallableReferenceExpressionIfAny(expression, context) != null;
+    }
+
+    public static boolean isFunctionLiteralOrCallableReference(
+            @NotNull KtExpression expression, @NotNull ResolutionContext context
+    ) {
+        return isFunctionLiteralArgument(expression, context) || isCallableReferenceArgument(expression, context);
     }
 
     @Nullable
@@ -188,7 +184,7 @@ public class ArgumentTypeResolver {
     @Nullable
     public static KtCallableReferenceExpression getCallableReferenceExpressionIfAny(
             @NotNull KtExpression expression,
-            @NotNull CallResolutionContext<?> context
+            @NotNull ResolutionContext context
     ) {
         KtExpression deparenthesizedExpression = getLastElementDeparenthesized(expression, context.statementFilter);
         if (deparenthesizedExpression instanceof KtCallableReferenceExpression) {
@@ -267,8 +263,7 @@ public class ArgumentTypeResolver {
         if (overloadResolutionResults == null) return null;
 
         if (isSingleAndPossibleTransformToSuccess(overloadResolutionResults)) {
-            ResolvedCall<?> resolvedCall =
-                    OverloadResolutionResultsUtil.getResultingCall(overloadResolutionResults, context.contextDependency);
+            ResolvedCall<?> resolvedCall = OverloadResolutionResultsUtil.getResultingCall(overloadResolutionResults, context);
             if (resolvedCall == null) return null;
 
             return DoubleColonExpressionResolver.Companion.createKCallableTypeForReference(
@@ -386,12 +381,22 @@ public class ArgumentTypeResolver {
             @NotNull ResolutionContext context,
             @NotNull KtExpression expression
     ) {
-        KotlinType type = context.trace.getType(expression);
+        return updateResultArgumentTypeIfNotDenotable(context.trace, context.statementFilter, context.expectedType, expression);
+    }
+
+    @Nullable
+    public KotlinType updateResultArgumentTypeIfNotDenotable(
+            @NotNull BindingTrace trace,
+            @NotNull StatementFilter statementFilter,
+            @NotNull KotlinType expectedType,
+            @NotNull KtExpression expression
+    ) {
+        KotlinType type = trace.getType(expression);
         if (type != null && !type.getConstructor().isDenotable()) {
             if (type.getConstructor() instanceof IntegerValueTypeConstructor) {
                 IntegerValueTypeConstructor constructor = (IntegerValueTypeConstructor) type.getConstructor();
-                KotlinType primitiveType = TypeUtils.getPrimitiveNumberType(constructor, context.expectedType);
-                constantExpressionEvaluator.updateNumberType(primitiveType, expression, context.statementFilter, context.trace);
+                KotlinType primitiveType = TypeUtils.getPrimitiveNumberType(constructor, expectedType);
+                constantExpressionEvaluator.updateNumberType(primitiveType, expression, statementFilter, trace);
                 return primitiveType;
             }
         }

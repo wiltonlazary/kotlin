@@ -1,5 +1,6 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1108
 package foo
-
 
 fun box(): String {
     val s = StringBuilder()

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.js.inline.util.rewriters
 
 import org.jetbrains.kotlin.js.backend.ast.*
 import org.jetbrains.kotlin.js.backend.ast.metadata.*
+import org.jetbrains.kotlin.js.coroutine.isStateMachineResult
 import org.jetbrains.kotlin.js.translate.context.Namer
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 
@@ -43,17 +44,16 @@ class ReturnReplacingVisitor(
 
         ctx.removeMe()
 
-        val returnExpression = x.expression
         val returnReplacement = getReturnReplacement(x.expression)
         if (returnReplacement != null) {
-            if (returnExpression != null && returnExpression.isTailCallSuspend) {
-                returnReplacement.isSuspend = true
+            if (returnReplacement.source == null) {
+                returnReplacement.source = x.source
             }
             ctx.addNext(JsExpressionStatement(returnReplacement))
         }
 
         if (breakLabel != null) {
-            ctx.addNext(JsBreak(breakLabel))
+            ctx.addNext(JsBreak(breakLabel).apply { source = x.source })
         }
     }
 
@@ -70,9 +70,8 @@ class ReturnReplacingVisitor(
         }
     }
 
-    fun processCoroutineResult(expression: JsExpression?): JsExpression? {
-        if (!isSuspend) return expression
-        if (expression != null && expression.isTailCallSuspend) return expression
+    private fun processCoroutineResult(expression: JsExpression?): JsExpression? {
+        if (!isSuspend || expression.isStateMachineResult()) return expression
         val lhs = JsNameRef("\$\$coroutineResult\$\$", JsAstUtils.stateMachineReceiver()).apply { coroutineResult = true }
         return JsAstUtils.assignment(lhs, expression ?: Namer.getUndefinedExpression())
     }

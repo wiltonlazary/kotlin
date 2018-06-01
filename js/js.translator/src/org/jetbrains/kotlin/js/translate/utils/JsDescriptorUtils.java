@@ -125,7 +125,8 @@ public final class JsDescriptorUtils {
     }
 
     private static boolean isDefaultAccessor(@Nullable PropertyAccessorDescriptor accessorDescriptor) {
-        return accessorDescriptor == null || accessorDescriptor.isDefault();
+        return accessorDescriptor == null || accessorDescriptor.isDefault() &&
+               !(accessorDescriptor instanceof PropertySetterDescriptor && accessorDescriptor.getCorrespondingProperty().isLateInit());
     }
 
     public static boolean sideEffectsPossibleOnRead(@NotNull PropertyDescriptor property) {
@@ -169,12 +170,12 @@ public final class JsDescriptorUtils {
     }
 
     @Nullable
-    private static FunctionDescriptor findRealDeclaration(FunctionDescriptor descriptor) {
+    public static CallableMemberDescriptor findRealDeclaration(@NotNull CallableMemberDescriptor descriptor) {
         if (descriptor.getModality() == Modality.ABSTRACT) return null;
         if (descriptor.getKind().isReal()) return descriptor;
 
-        for (FunctionDescriptor o : descriptor.getOverriddenDescriptors()) {
-            FunctionDescriptor child = findRealDeclaration(o);
+        for (CallableMemberDescriptor o : descriptor.getOverriddenDescriptors()) {
+            CallableMemberDescriptor child = findRealDeclaration(o);
             if (child != null) {
                 return child;
             }
@@ -185,7 +186,7 @@ public final class JsDescriptorUtils {
     public static boolean isImmediateSubtypeOfError(@NotNull ClassDescriptor descriptor) {
         if (!isExceptionClass(descriptor)) return false;
         ClassDescriptor superClass = DescriptorUtilsKt.getSuperClassOrAny(descriptor);
-        return TypeUtilsKt.isThrowable(superClass.getDefaultType()) || AnnotationsUtils.isNativeObject(superClass);
+        return TypeUtilsKt.isNotNullThrowable(superClass.getDefaultType()) || AnnotationsUtils.isNativeObject(superClass);
     }
 
     public static boolean isExceptionClass(@NotNull ClassDescriptor descriptor) {

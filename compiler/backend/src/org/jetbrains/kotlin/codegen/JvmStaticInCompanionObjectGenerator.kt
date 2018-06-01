@@ -25,9 +25,9 @@ import org.jetbrains.kotlin.resolve.jvm.diagnostics.Synthetic
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
 
 class JvmStaticInCompanionObjectGenerator(
-        val descriptor: FunctionDescriptor,
-        val declarationOrigin: JvmDeclarationOrigin,
-        val state: GenerationState,
+        private val descriptor: FunctionDescriptor,
+        private val declarationOrigin: JvmDeclarationOrigin,
+        private val state: GenerationState,
         parentBodyCodegen: ImplementationBodyCodegen
 ) : Function2<ImplementationBodyCodegen, ClassBuilder, Unit> {
     private val typeMapper = state.typeMapper
@@ -44,6 +44,8 @@ class JvmStaticInCompanionObjectGenerator(
                 Synthetic(originElement, staticFunctionDescriptor),
                 staticFunctionDescriptor,
                 object : FunctionGenerationStrategy.CodegenBased(state) {
+                    override fun skipNotNullAssertionsForParameters(): Boolean = true
+
                     override fun doGenerateBody(codegen: ExpressionCodegen, signature: JvmMethodSignature) {
                         val iv = codegen.v
                         val classDescriptor = descriptor.containingDeclaration as ClassDescriptor
@@ -94,8 +96,7 @@ class JvmStaticInCompanionObjectGenerator(
                     CallableMemberDescriptor.Kind.SYNTHESIZED,
                     false
             )
-            val staticFunctionDescriptor = copies[descriptor]!!
-            return staticFunctionDescriptor
+            return copies[descriptor]!!
         }
     }
 }

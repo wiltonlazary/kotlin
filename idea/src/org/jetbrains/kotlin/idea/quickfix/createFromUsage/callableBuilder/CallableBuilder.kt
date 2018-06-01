@@ -27,10 +27,12 @@ import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.util.UnfairTextRange
 import com.intellij.psi.*
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.codeStyle.JavaCodeStyleManager
 import com.intellij.psi.util.PsiTreeUtil
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.functions.FunctionClassDescriptor
 import org.jetbrains.kotlin.cfg.pseudocode.Pseudocode
 import org.jetbrains.kotlin.cfg.pseudocode.getContainingPseudocode
@@ -39,8 +41,10 @@ import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.MutablePackageFragmentDescriptor
 import org.jetbrains.kotlin.descriptors.impl.SimpleFunctionDescriptorImpl
 import org.jetbrains.kotlin.descriptors.impl.TypeParameterDescriptorImpl
-import org.jetbrains.kotlin.idea.caches.resolve.analyzeFullyAndGetResult
-import org.jetbrains.kotlin.idea.caches.resolve.getJavaClassDescriptor
+import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithAllCompilerChecks
+import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.caches.resolve.util.getJavaClassDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.CodeInsightUtils
 import org.jetbrains.kotlin.idea.core.*
 import org.jetbrains.kotlin.idea.imports.importableFqName
@@ -68,10 +72,12 @@ import org.jetbrains.kotlin.resolve.scopes.utils.findClassifier
 import org.jetbrains.kotlin.resolve.scopes.utils.memberScopeAsImportingScope
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeProjectionImpl
+import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
 import org.jetbrains.kotlin.types.typeUtil.isAnyOrNullableAny
 import org.jetbrains.kotlin.types.typeUtil.isUnit
+import org.jetbrains.kotlin.types.typeUtil.makeNullable
 import java.lang.AssertionError
 import java.lang.IllegalArgumentException
 import java.lang.IllegalStateException
@@ -82,13 +88,13 @@ import java.util.*
  */
 class TypeCandidate(val theType: KotlinType, scope: HierarchicalScope? = null) {
     val typeParameters: Array<TypeParameterDescriptor>
-    var renderedType: String? = null
+    var renderedTypes: List<String> = emptyList()
         private set
     var renderedTypeParameters: List<RenderedTypeParameter>? = null
         private set
 
     fun render(typeParameterNameMap: Map<TypeParameterDescriptor, String>, fakeFunction: FunctionDescriptor?) {
-        renderedType = theType.renderShort(typeParameterNameMap)
+        renderedTypes = theType.renderShort(typeParameterNameMap)
         renderedTypeParameters = typeParameters.map {
             RenderedTypeParameter(it, it.containingDeclaration == fakeFunction, typeParameterNameMap[it]!!)
         }
@@ -98,7 +104,7 @@ class TypeCandidate(val theType: KotlinType, scope: HierarchicalScope? = null) {
         val typeParametersInType = theType.getTypeParameters()
         if (scope == null) {
             typeParameters = typeParametersInType.toTypedArray()
-            renderedType = theType.renderShort(Collections.emptyMap())
+            renderedTypes = theType.renderShort(Collections.emptyMap())
         }
         else {
             typeParameters = getTypeParameterNamesNotInScope(typeParametersInType, scope).toTypedArray()
@@ -114,8 +120,8 @@ data class RenderedTypeParameter(
         val text: String
 )
 
-fun List<TypeCandidate>.getTypeByRenderedType(renderedType: String): KotlinType? =
-        firstOrNull { it.renderedType == renderedType }?.theType
+fun List<TypeCandidate>.getTypeByRenderedType(renderedTypes: List<String>): KotlinType? =
+        firstOrNull { it.renderedTypes == renderedTypes }?.theType
 
 class CallableBuilderConfiguration(
         val callableInfos: List<CallableInfo>,
@@ -134,13 +140,19 @@ sealed class CallablePlacement {
 class CallableBuilder(val config: CallableBuilderConfiguration) {
     private var finished: Boolean = false
 
-    val currentFileContext: BindingContext
+    val currentFileContext = config.currentFile.analyzeWithContent()
+
+    private lateinit var _currentFileModule: ModuleDescriptor
     val currentFileModule: ModuleDescriptor
+        get() {
+            if (!_currentFileModule.isValid) {
+                updateCurrentModule()
+            }
+            return _currentFileModule
+        }
 
     init {
-        val result = config.currentFile.analyzeFullyAndGetResult()
-        currentFileContext = result.bindingContext
-        currentFileModule = result.moduleDescriptor
+        updateCurrentModule()
     }
 
     val pseudocode: Pseudocode? by lazy { config.originalElement.getContainingPseudocode(currentFileContext) }
@@ -150,6 +162,10 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
     var placement: CallablePlacement? = null
 
     private val elementsToShorten = ArrayList<KtElement>()
+
+    private fun updateCurrentModule() {
+        _currentFileModule = config.currentFile.analyzeWithAllCompilerChecks().moduleDescriptor
+    }
 
     fun computeTypeCandidates(typeInfo: TypeInfo): List<TypeCandidate> =
             typeCandidates.getOrPut(typeInfo) { typeInfo.getPossibleTypes(this).map { TypeCandidate(it) } }
@@ -199,7 +215,7 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
         }
     }
 
-    fun build() {
+    fun build(onFinish: () -> Unit = {}) {
         try {
             assert(config.currentEditor != null) { "Can't run build() without editor" }
             if (finished) throw IllegalStateException("Current builder has already finished")
@@ -207,6 +223,7 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
         }
         finally {
             finished = true
+            onFinish()
         }
     }
 
@@ -227,6 +244,7 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
             // gather relevant information
 
             val placement = placement
+            var nullableReceiver = false
             when (placement) {
                 is CallablePlacement.NoReceiver -> {
                     containingElement = placement.containingElement
@@ -239,14 +257,17 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                     }
                 }
                 is CallablePlacement.WithReceiver -> {
-                    receiverClassDescriptor =
-                            placement.receiverTypeCandidate.theType.constructor.declarationDescriptor
+                    val theType = placement.receiverTypeCandidate.theType
+                    nullableReceiver = theType.isMarkedNullable
+                    receiverClassDescriptor = theType.constructor.declarationDescriptor
                     val classDeclaration = receiverClassDescriptor?.let { DescriptorToSourceUtils.getSourceFromDescriptor(it) }
                     containingElement = if (!config.isExtension && classDeclaration != null) classDeclaration else config.currentFile
                 }
                 else -> throw IllegalArgumentException("Placement wan't initialized")
             }
-            val receiverType = receiverClassDescriptor?.defaultType
+            val receiverType = receiverClassDescriptor?.defaultType?.let {
+                if (nullableReceiver) it.makeNullable() else it
+            }
 
             val project = config.currentFile.project
 
@@ -254,15 +275,15 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                 NavigationUtil.activateFileWithPsiElement(containingElement)
             }
 
-            if (containingElement is KtElement) {
+            dialogWithEditor = if (containingElement is KtElement) {
                 jetFileToEdit = containingElement.containingKtFile
-                if (jetFileToEdit != config.currentFile) {
-                    containingFileEditor = FileEditorManager.getInstance(project).selectedTextEditor!!
+                containingFileEditor = if (jetFileToEdit != config.currentFile) {
+                    FileEditorManager.getInstance(project).selectedTextEditor!!
                 }
                 else {
-                    containingFileEditor = config.currentEditor!!
+                    config.currentEditor!!
                 }
-                dialogWithEditor = null
+                null
             } else {
                 val dialog = object: DialogWithEditor(project, "Create from usage", "") {
                     override fun doOKAction() {
@@ -279,7 +300,7 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                 }
                 jetFileToEdit = PsiDocumentManager.getInstance(project).getPsiFile(containingFileEditor.document) as KtFile
                 jetFileToEdit.analysisContext = config.currentFile
-                dialogWithEditor = dialog
+                dialog
             }
 
             val scope = getDeclarationScope()
@@ -318,7 +339,7 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                     returnTypeCandidate?.theType?.isUnit() ?: false
                 CallableKind.CLASS_WITH_PRIMARY_CONSTRUCTOR ->
                     callableInfo.returnTypeInfo == TypeInfo.Empty || returnTypeCandidate?.theType?.isAnyOrNullableAny() ?: false
-                CallableKind.SECONDARY_CONSTRUCTOR -> true
+                CallableKind.CONSTRUCTOR -> true
                 CallableKind.PROPERTY -> containingElement is KtBlockExpression
             }
 
@@ -409,6 +430,11 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
             typeCandidates[typeInfo]?.forEach { it.render(typeParameterNameMap, fakeFunction) }
         }
 
+        private fun isInsideInnerOrLocalClass(): Boolean {
+            val classOrObject = containingElement.getNonStrictParentOfType<KtClassOrObject>()
+            return classOrObject is KtClass && (classOrObject.isInner() || classOrObject.isLocal)
+        }
+
         private fun createDeclarationSkeleton(): KtNamedDeclaration {
             with (config) {
                 val assignmentToReplace =
@@ -418,23 +444,23 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                         else null
 
                 val ownerTypeString = if (isExtension) {
-                    val renderedType = receiverTypeCandidate!!.renderedType!!
+                    val renderedType = receiverTypeCandidate!!.renderedTypes.first()
                     val isFunctionType = receiverTypeCandidate.theType.constructor.declarationDescriptor is FunctionClassDescriptor
                     if (isFunctionType) "($renderedType)." else "$renderedType."
                 } else ""
 
-                val classKind = (callableInfo as? PrimaryConstructorInfo)?.classInfo?.kind
+                val classKind = (callableInfo as? ClassWithPrimaryConstructorInfo)?.classInfo?.kind
 
                 fun renderParamList(): String {
                     val prefix = if (classKind == ClassKind.ANNOTATION_CLASS) "val " else ""
-                    val list = callableInfo.parameterInfos.indices.map { i -> "${prefix}p$i: Any" }.joinToString(", ")
+                    val list = callableInfo.parameterInfos.indices.joinToString(", ") { i -> "${prefix}p$i: Any" }
                     return if (callableInfo.parameterInfos.isNotEmpty()
                                || callableInfo.kind == CallableKind.FUNCTION
-                               || callableInfo.kind == CallableKind.SECONDARY_CONSTRUCTOR) "($list)" else list
+                               || callableInfo.kind == CallableKind.CONSTRUCTOR) "($list)" else list
                 }
 
                 val paramList = when (callableInfo.kind) {
-                    CallableKind.FUNCTION, CallableKind.CLASS_WITH_PRIMARY_CONSTRUCTOR, CallableKind.SECONDARY_CONSTRUCTOR ->
+                    CallableKind.FUNCTION, CallableKind.CLASS_WITH_PRIMARY_CONSTRUCTOR, CallableKind.CONSTRUCTOR ->
                         renderParamList()
                     CallableKind.PROPERTY -> ""
                 }
@@ -443,36 +469,67 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
 
                 val psiFactory = KtPsiFactory(currentFile)
 
-                val modifiers =
-                        if (callableInfo.isAbstract) {
-                            if (containingElement is KtClass && containingElement.isInterface()) "" else "abstract "
-                        }
-                        else if (containingElement is KtClassOrObject
-                                 && !(containingElement is KtClass && containingElement.isInterface())
-                                 && containingElement.isAncestor(config.originalElement)
-                                 && callableInfo.kind != CallableKind.SECONDARY_CONSTRUCTOR) "private "
-                        else if (isExtension) "private "
-                        else ""
+                val modifiers = buildString {
+                    val modifierList = callableInfo.modifierList?.copied() ?: psiFactory.createEmptyModifierList()
+                    val visibilityKeyword = modifierList.visibilityModifierType()
+                    if (visibilityKeyword == null) {
+                        val defaultVisibility =
+                                if (callableInfo.isAbstract) ""
+                                else if (containingElement is KtClassOrObject
+                                         && !(containingElement is KtClass && containingElement.isInterface())
+                                         && containingElement.isAncestor(config.originalElement)
+                                         && callableInfo.kind != CallableKind.CONSTRUCTOR) "private "
+                                else if (isExtension) "private "
+                                else ""
+                        append(defaultVisibility)
+                    }
+
+                    // TODO: Get rid of isAbstract
+                    if (callableInfo.isAbstract
+                        && containingElement is KtClass
+                        && !containingElement.isInterface()
+                        && !modifierList.hasModifier(KtTokens.ABSTRACT_KEYWORD)) {
+                        modifierList.appendModifier(KtTokens.ABSTRACT_KEYWORD)
+                    }
+
+                    val text = modifierList.normalize().text
+                    if (text.isNotEmpty()) {
+                        append("$text ")
+                    }
+                }
+
+                val isExpectClassMember by lazy {
+                    containingElement is KtClassOrObject && containingElement.resolveToDescriptorIfAny()?.isExpect ?: false
+                }
 
                 val declaration: KtNamedDeclaration = when (callableInfo.kind) {
-                    CallableKind.FUNCTION, CallableKind.SECONDARY_CONSTRUCTOR -> {
+                    CallableKind.FUNCTION, CallableKind.CONSTRUCTOR -> {
                         val body = when {
-                            callableInfo.kind == CallableKind.SECONDARY_CONSTRUCTOR -> ""
+                            callableInfo is ConstructorInfo -> if (callableInfo.withBody) "{\n\n}" else ""
                             callableInfo.isAbstract -> ""
-                            else -> "{}"
+                            containingElement is KtClass && containingElement.hasModifier(KtTokens.EXTERNAL_KEYWORD) -> ""
+                            containingElement is KtObjectDeclaration && containingElement.hasModifier(KtTokens.EXTERNAL_KEYWORD) -> ""
+                            containingElement is KtObjectDeclaration && containingElement.isCompanion()
+                                && containingElement.parent.parent is KtClass
+                                && (containingElement.parent.parent as KtClass).hasModifier(KtTokens.EXTERNAL_KEYWORD) -> ""
+                            isExpectClassMember -> ""
+                            else -> "{\n\n}"
+
                         }
                         @Suppress("USELESS_CAST") // KT-10755
                         if (callableInfo is FunctionInfo) {
-                            val operatorModifier = if (callableInfo.isOperator) "operator " else ""
-                            val infixModifier = if (callableInfo.isInfix) "infix " else ""
-                            psiFactory.createFunction("$modifiers$infixModifier${operatorModifier}fun<> $header $body") as KtNamedDeclaration
+                            psiFactory.createFunction("${modifiers}fun<> $header $body") as KtNamedDeclaration
+                        }
+                        else if ((callableInfo as ConstructorInfo).isPrimary) {
+                            val constructorText = if (modifiers.isNotEmpty()) "${modifiers}constructor$paramList" else paramList
+                            psiFactory.createPrimaryConstructor(constructorText) as KtNamedDeclaration
                         }
                         else {
                             psiFactory.createSecondaryConstructor("${modifiers}constructor$paramList $body") as KtNamedDeclaration
                         }
                     }
                     CallableKind.CLASS_WITH_PRIMARY_CONSTRUCTOR -> {
-                        with((callableInfo as PrimaryConstructorInfo).classInfo) {
+                        with((callableInfo as ClassWithPrimaryConstructorInfo).classInfo) {
                             val classBody = when (kind) {
                                 ClassKind.ANNOTATION_CLASS, ClassKind.ENUM_ENTRY -> ""
                                 else -> "{\n\n}"
@@ -480,13 +537,14 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                             val safeName = name.quoteIfNeeded()
                             when (kind) {
                                 ClassKind.ENUM_ENTRY -> {
-                                    if (!(targetParent is KtClass && targetParent.isEnum())) throw AssertionError("Enum class expected: ${targetParent.text}")
+                                    val targetParent = applicableParents.singleOrNull()
+                                    if (!(targetParent is KtClass && targetParent.isEnum())) throw AssertionError("Enum class expected: ${targetParent?.text}")
                                     val hasParameters = targetParent.primaryConstructorParameters.isNotEmpty()
                                     psiFactory.createEnumEntry("$safeName${if (hasParameters) "()" else " "}")
                                 }
                                 else -> {
                                     val openMod = if (open) "open " else ""
-                                    val innerMod = if (inner) "inner " else ""
+                                    val innerMod = if (inner || isInsideInnerOrLocalClass()) "inner " else ""
                                     val typeParamList = when (kind) {
                                         ClassKind.PLAIN_CLASS, ClassKind.INTERFACE -> "<>"
                                         else -> ""
@@ -501,7 +559,7 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                     CallableKind.PROPERTY -> {
                         val isVar = (callableInfo as PropertyInfo).writable
                         val valVar = if (isVar) "var" else "val"
-                        val accessors = if (isExtension) {
+                        val accessors = if (isExtension && !isExpectClassMember) {
                             buildString {
                                 append("\nget() {}")
                                 if (isVar) {
@@ -519,7 +577,11 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                     return assignmentToReplace.replace(declaration) as KtCallableDeclaration
                 }
 
-                val declarationInPlace = placeDeclarationInContainer(declaration, containingElement, config.originalElement, jetFileToEdit)
+                val container = if (containingElement is KtClass && callableInfo.isForCompanion) {
+                    containingElement.getOrCreateCompanionObject()
+                }
+                else containingElement
+                val declarationInPlace = placeDeclarationInContainer(declaration, container, config.originalElement, jetFileToEdit)
 
                 if (declarationInPlace is KtSecondaryConstructor) {
                     val containingClass = declarationInPlace.containingClassOrObject!!
@@ -556,26 +618,21 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
         }
 
         private fun setupTypeReferencesForShortening(declaration: KtNamedDeclaration,
-                                                     parameterTypeExpressions: List<TypeExpression>): List<KtElement> {
-            val typeRefsToShorten = ArrayList<KtElement>()
-
+                                                     parameterTypeExpressions: List<TypeExpression>) {
             if (config.isExtension) {
-                val receiverTypeText = receiverTypeCandidate!!.theType.renderLong(typeParameterNameMap)
+                val receiverTypeText = receiverTypeCandidate!!.theType.renderLong(typeParameterNameMap).first()
                 val replacingTypeRef = KtPsiFactory(declaration).createType(receiverTypeText)
-                val newTypeRef = (declaration as KtCallableDeclaration).setReceiverTypeReference(replacingTypeRef)!!
-                typeRefsToShorten.add(newTypeRef)
+                (declaration as KtCallableDeclaration).setReceiverTypeReference(replacingTypeRef)!!
             }
 
-            val returnTypeRef = declaration.getReturnTypeReference()
-            if (returnTypeRef != null) {
+            val returnTypeRefs = declaration.getReturnTypeReferences()
+            if (returnTypeRefs.isNotEmpty()) {
                 val returnType = typeCandidates[callableInfo.returnTypeInfo]!!.getTypeByRenderedType(
-                        returnTypeRef.text
-                        ?: throw AssertionError("Expression for return type shouldn't be empty: declaration = ${declaration.text}")
+                        returnTypeRefs.map { it.text }
                 )
                 if (returnType != null) {
                     // user selected a given type
-                    replaceWithLongerName(returnTypeRef, returnType)
-                    typeRefsToShorten.add(declaration.getReturnTypeReference()!!)
+                    replaceWithLongerName(returnTypeRefs, returnType)
                 }
             }
 
@@ -586,32 +643,40 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                 val parameterTypeRef = parameter.typeReference
                 if (parameterTypeRef != null) {
                     val parameterType = parameterTypeExpressions[i].typeCandidates.getTypeByRenderedType(
-                            parameterTypeRef.text
-                            ?: throw AssertionError("Expression for parameter type shouldn't be empty: declaration = ${declaration.text}")
+                            listOf(parameterTypeRef.text)
                     )
                     if (parameterType != null) {
-                        replaceWithLongerName(parameterTypeRef, parameterType)
+                        replaceWithLongerName(listOf(parameterTypeRef), parameterType)
                         parameterIndicesToShorten.add(i)
                     }
                 }
             }
+        }
 
-            val expandedValueParameters = declaration.getValueParameters()
-            parameterIndicesToShorten.mapNotNullTo(typeRefsToShorten) { expandedValueParameters[it].typeReference }
+        private fun postprocessDeclaration(declaration: KtNamedDeclaration) {
+            if (callableInfo is PropertyInfo && callableInfo.isLateinitPreferred) {
+                if (declaration.containingClassOrObject == null) return
+                val propertyDescriptor = declaration.resolveToDescriptorIfAny() as? PropertyDescriptor ?: return
+                val returnType = propertyDescriptor.returnType ?: return
+                if (TypeUtils.isNullableType(returnType) || KotlinBuiltIns.isPrimitiveType(returnType)) return
+                declaration.addModifier(KtTokens.LATEINIT_KEYWORD)
+            }
 
-            return typeRefsToShorten
+            if (callableInfo.isAbstract) {
+                val containingClass = declaration.containingClassOrObject
+                if (containingClass is KtClass && containingClass.isInterface()) {
+                    declaration.removeModifier(KtTokens.ABSTRACT_KEYWORD)
+                }
+            }
         }
 
         private fun setupDeclarationBody(func: KtDeclarationWithBody) {
+            if (func !is KtNamedFunction && func !is KtPropertyAccessor) return
+            if (skipReturnType && callableInfo is FunctionInfo && callableInfo.preferEmptyBody) return
             val oldBody = func.bodyExpression ?: return
-            val templateKind = when (func) {
-                is KtSecondaryConstructor -> TemplateKind.SECONDARY_CONSTRUCTOR
-                is KtNamedFunction, is KtPropertyAccessor -> TemplateKind.FUNCTION
-                else -> throw AssertionError("Unexpected declaration: " + func.getElementTextWithContext())
-            }
             val bodyText = getFunctionBodyTextFromTemplate(
                     func.project,
-                    templateKind,
+                    TemplateKind.FUNCTION,
                     if (callableInfo.name.isNotEmpty()) callableInfo.name else null,
                     if (skipReturnType) "Unit" else (func as? KtFunction)?.typeReference?.text ?: "",
                     receiverClassDescriptor?.importableFqName ?: receiverClassDescriptor?.name?.let { FqName.topLevel(it) }
@@ -639,15 +704,14 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
             if (candidates.isEmpty()) return null
 
             val elementToReplace: KtElement?
-            val expression: TypeExpression
-            when (declaration) {
+            val expression: TypeExpression = when (declaration) {
                 is KtCallableDeclaration -> {
                     elementToReplace = declaration.typeReference
-                    expression = TypeExpression.ForTypeReference(candidates)
+                    TypeExpression.ForTypeReference(candidates)
                 }
                 is KtClassOrObject -> {
                     elementToReplace = declaration.superTypeListEntries.firstOrNull()
-                    expression = TypeExpression.ForDelegationSpecifier(candidates)
+                    TypeExpression.ForDelegationSpecifier(candidates)
                 }
                 else -> throw AssertionError("Unexpected declaration kind: ${declaration.text}")
             }
@@ -687,11 +751,11 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
 
             callableInfo.parameterInfos.asSequence()
                     .flatMap { typeCandidates[it.typeInfo]!!.asSequence() }
-                    .forEach { typeParameterMap[it.renderedType!!] = it.renderedTypeParameters!! }
+                    .forEach { typeParameterMap[it.renderedTypes.first()] = it.renderedTypeParameters!! }
 
             if (declaration.getReturnTypeReference() != null) {
                 typeCandidates[callableInfo.returnTypeInfo]!!.forEach {
-                    typeParameterMap[it.renderedType!!] = it.renderedTypeParameters!!
+                    typeParameterMap[it.renderedTypes.first()] = it.renderedTypeParameters!!
                 }
             }
 
@@ -700,7 +764,11 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                     typeParameterMap,
                     callableInfo.kind != CallableKind.CLASS_WITH_PRIMARY_CONSTRUCTOR
             )
-            builder.replaceElement(typeParameterList, expression, false)
+            val leftSpace = typeParameterList.prevSibling as? PsiWhiteSpace
+            val rangeStart = if (leftSpace != null) leftSpace.startOffset else typeParameterList.startOffset
+            val offset = typeParameterList.startOffset
+            val range = UnfairTextRange(rangeStart - offset, typeParameterList.endOffset - offset)
+            builder.replaceElement(typeParameterList, range, "TYPE_PARAMETER_LIST", expression, false)
             return expression
         }
 
@@ -715,19 +783,13 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
 
                 // add parameter name to the template
                 val possibleNamesFromExpression = parameter.typeInfo.getPossibleNamesFromExpression(currentFileContext)
-                val preferredName = parameter.preferredName
-                val possibleNames = if (preferredName != null) {
-                    arrayOf(preferredName, *possibleNamesFromExpression)
-                }
-                else {
-                    possibleNamesFromExpression
-                }
+                val possibleNames = arrayOf(*parameter.nameSuggestions.toTypedArray(), *possibleNamesFromExpression)
 
                 // figure out suggested names for each type option
                 val parameterTypeToNamesMap = HashMap<String, Array<String>>()
                 typeCandidates[parameter.typeInfo]!!.forEach { typeCandidate ->
                     val suggestedNames = KotlinNameSuggester.suggestNamesByType(typeCandidate.theType, { true })
-                    parameterTypeToNamesMap[typeCandidate.renderedType!!] = suggestedNames.toTypedArray()
+                    parameterTypeToNamesMap[typeCandidate.renderedTypes.first()] = suggestedNames.toTypedArray()
                 }
 
                 // add expression to builder
@@ -740,9 +802,10 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
             return typeParameters
         }
 
-        private fun replaceWithLongerName(typeRef: KtTypeReference, theType: KotlinType) {
-            val fullyQualifiedReceiverTypeRef = KtPsiFactory(typeRef).createType(theType.renderLong(typeParameterNameMap))
-            typeRef.replace(fullyQualifiedReceiverTypeRef)
+        private fun replaceWithLongerName(typeRefs: List<KtTypeReference>, theType: KotlinType) {
+            val psiFactory = KtPsiFactory(jetFileToEdit.project)
+            val fullyQualifiedReceiverTypeRefs = theType.renderLong(typeParameterNameMap).map { psiFactory.createType(it) }
+            (typeRefs zip fullyQualifiedReceiverTypeRefs).forEach { (shortRef, longRef) -> shortRef.replace(longRef) }
         }
 
         private fun transformToJavaMemberIfApplicable(declaration: KtNamedDeclaration): Boolean {
@@ -791,7 +854,7 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
             }
 
             val needStatic = when (callableInfo) {
-                is PrimaryConstructorInfo -> with(callableInfo.classInfo) {
+                is ClassWithPrimaryConstructorInfo -> with(callableInfo.classInfo) {
                     !inner && kind != ClassKind.ENUM_ENTRY && kind != ClassKind.ENUM_CLASS
                 }
                 else -> callableInfo.receiverTypeInfo.staticContextRequired
@@ -905,6 +968,8 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                                                                                     false) ?: return
 
                         runWriteAction {
+                            postprocessDeclaration(newDeclaration)
+
                             // file templates
                             if (newDeclaration is KtNamedFunction || newDeclaration is KtSecondaryConstructor) {
                                 setupDeclarationBody(newDeclaration as KtFunction)
@@ -912,6 +977,14 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
 
                             if (newDeclaration is KtProperty) {
                                 newDeclaration.getter?.let { setupDeclarationBody(it) }
+
+                                if (newDeclaration.getter == null
+                                    && newDeclaration.initializer == null
+                                    && callableInfo is PropertyInfo
+                                    && callableInfo.withInitializer
+                                    && !callableInfo.isLateinitPreferred) {
+                                    newDeclaration.initializer = KtPsiFactory(newDeclaration).createExpression("TODO(\"initialize me\")")
+                                }
                             }
 
                             val callElement = config.originalElement as? KtCallElement
@@ -922,9 +995,9 @@ class CallableBuilder(val config: CallableBuilderConfiguration) {
                             CodeStyleManager.getInstance(project).reformat(newDeclaration)
 
                             // change short type names to fully qualified ones (to be shortened below)
-                            val typeRefsToShorten = setupTypeReferencesForShortening(newDeclaration, parameterTypeExpressions)
+                            setupTypeReferencesForShortening(newDeclaration, parameterTypeExpressions)
                             if (!transformToJavaMemberIfApplicable(newDeclaration)) {
-                                elementsToShorten.addAll(typeRefsToShorten)
+                                elementsToShorten.add(newDeclaration)
                                 setupEditor(newDeclaration)
                             }
                         }
@@ -966,7 +1039,7 @@ internal fun <D : KtNamedDeclaration> placeDeclarationInContainer(
     val newLine = psiFactory.createNewLine()
 
     fun calcNecessaryEmptyLines(decl: KtDeclaration, after: Boolean): Int {
-        var lineBreaksPresent: Int = 0
+        var lineBreaksPresent = 0
         var neighbor: PsiElement? = null
 
         siblingsLoop@
@@ -1017,6 +1090,10 @@ internal fun <D : KtNamedDeclaration> placeDeclarationInContainer(
     }
 
     val declarationInPlace = when {
+        declaration is KtPrimaryConstructor -> {
+            (container as KtClass).createPrimaryConstructorIfAbsent().replaced(declaration) as D
+        }
+
         actualContainer.isAncestor(anchor, true) -> {
             val insertToBlock = container is KtBlockExpression
             if (insertToBlock) {
@@ -1047,25 +1124,34 @@ internal fun <D : KtNamedDeclaration> placeDeclarationInContainer(
         }
 
         container is KtClassOrObject -> {
-            insertMember(null, container, declaration, container.declarations.lastOrNull())
+            var sibling: PsiElement? = container.declarations.lastOrNull { it::class == declaration::class }
+            if (sibling == null && declaration is KtProperty) {
+                sibling = container.getBody()?.lBrace
+            }
+
+            insertMember(null, container, declaration, sibling)
         }
         else -> throw AssertionError("Invalid containing element: ${container.text}")
     }
 
-    val parent = declarationInPlace.parent
-    calcNecessaryEmptyLines(declarationInPlace, false).let {
-        if (it > 0) parent.addBefore(psiFactory.createNewLine(it), declarationInPlace)
-    }
-    calcNecessaryEmptyLines(declarationInPlace, true).let {
-        if (it > 0) parent.addAfter(psiFactory.createNewLine(it), declarationInPlace)
+    if (declaration !is KtPrimaryConstructor) {
+        val parent = declarationInPlace.parent
+        calcNecessaryEmptyLines(declarationInPlace, false).let {
+            if (it > 0) parent.addBefore(psiFactory.createNewLine(it), declarationInPlace)
+        }
+        calcNecessaryEmptyLines(declarationInPlace, true).let {
+            if (it > 0) parent.addAfter(psiFactory.createNewLine(it), declarationInPlace)
+        }
     }
     return declarationInPlace
 }
 
-internal fun KtNamedDeclaration.getReturnTypeReference(): KtTypeReference? {
+internal fun KtNamedDeclaration.getReturnTypeReference() = getReturnTypeReferences().singleOrNull()
+
+internal fun KtNamedDeclaration.getReturnTypeReferences(): List<KtTypeReference> {
     return when (this) {
-        is KtCallableDeclaration -> typeReference
-        is KtClassOrObject -> superTypeListEntries.firstOrNull()?.typeReference
+        is KtCallableDeclaration -> listOfNotNull(typeReference)
+        is KtClassOrObject -> superTypeListEntries.mapNotNull { it.typeReference }
         else -> throw AssertionError("Unexpected declaration kind: $text")
     }
 }

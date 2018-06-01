@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -66,6 +66,8 @@ sealed class KotlinType : Annotated {
     }
 }
 
+fun KotlinType.isNullable(): Boolean = TypeUtils.isNullableType(this)
+
 abstract class WrappedType : KotlinType() {
     open fun isComputed(): Boolean = true
     protected abstract val delegate: KotlinType
@@ -85,11 +87,11 @@ abstract class WrappedType : KotlinType() {
     }
 
     override fun toString(): String {
-        if (isComputed()) {
-            return delegate.toString()
+        return if (isComputed()) {
+            delegate.toString()
         }
         else {
-            return "<Not computed yet>"
+            "<Not computed yet>"
         }
     }
 }

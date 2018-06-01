@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1125
 package foo
 
 data class IntPair(public var fst: Int, public var snd: Int)

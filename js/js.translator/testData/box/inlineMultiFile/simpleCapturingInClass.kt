@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1116
 /*
  * Copy of JVM-backend test
  * Found at: compiler/testData/codegen/boxInline/capture/simpleCapturingInClass.1.kt

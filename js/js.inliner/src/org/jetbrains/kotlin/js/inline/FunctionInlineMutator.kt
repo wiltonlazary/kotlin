@@ -29,19 +29,19 @@ import org.jetbrains.kotlin.js.translate.context.Namer
 class FunctionInlineMutator
 private constructor(
         private val call: JsInvocation,
-        private val inliningContext: InliningContext
+        private val inliningContext: InliningContext,
+        function: JsFunction
 ) {
     private val invokedFunction: JsFunction
-    private val namingContext = inliningContext.newNamingContext()
-    private val body: JsBlock
-    private var resultExpr: JsExpression? = null
+    val namingContext = inliningContext.newNamingContext()
+    val body: JsBlock
+    var resultExpr: JsExpression? = null
     private var resultName: JsName? = null
-    private var breakLabel: JsLabel? = null
+    var breakLabel: JsLabel? = null
     private val currentStatement = inliningContext.statementContext.currentNode
 
     init {
-        val functionContext = inliningContext.functionContext
-        invokedFunction = uncoverClosure(functionContext.getFunctionDefinition(call).deepCopy())
+        invokedFunction = uncoverClosure(function.deepCopy())
         body = invokedFunction.body
     }
 
@@ -50,7 +50,7 @@ private constructor(
         val parameters = getParameters()
 
         removeDefaultInitializers(arguments, parameters, body)
-        aliasArgumentsIfNeeded(namingContext, arguments, parameters)
+        aliasArgumentsIfNeeded(namingContext, arguments, parameters, call.source)
         renameLocalNames(namingContext, invokedFunction)
         processReturns()
 
@@ -89,7 +89,7 @@ private constructor(
         val namingContext = inliningContext.newNamingContext()
         val arguments = call.arguments
         val parameters = outer.parameters
-        aliasArgumentsIfNeeded(namingContext, arguments, parameters)
+        aliasArgumentsIfNeeded(namingContext, arguments, parameters, call.source)
         namingContext.applyRenameTo(inner)
     }
 
@@ -97,10 +97,10 @@ private constructor(
         if (!hasThisReference(block)) return
 
         var thisReplacement = getThisReplacement(call)
-        if (thisReplacement == null || thisReplacement is JsLiteral.JsThisRef) return
+        if (thisReplacement == null || thisReplacement is JsThisRef) return
 
         val thisName = JsScope.declareTemporaryName(getThisAlias())
-        namingContext.newVar(thisName, thisReplacement)
+        namingContext.newVar(thisName, thisReplacement, source = call.source)
         thisReplacement = thisName.makeRef()
 
         replaceThisReference(block, thisReplacement)
@@ -121,7 +121,7 @@ private constructor(
 
         val resultName = JsScope.declareTemporaryName(getResultLabel())
         this.resultName = resultName
-        namingContext.newVar(resultName, null)
+        namingContext.newVar(resultName, source = call.source)
         return resultName.makeRef()
     }
 
@@ -166,9 +166,11 @@ private constructor(
     }
 
     companion object {
-
-        @JvmStatic fun getInlineableCallReplacement(call: JsInvocation, inliningContext: InliningContext): InlineableResult {
-            val mutator = FunctionInlineMutator(call, inliningContext)
+        @JvmStatic fun getInlineableCallReplacement(
+                call: JsInvocation, function: JsFunction,
+                inliningContext: InliningContext
+        ): InlineableResult {
+            val mutator = FunctionInlineMutator(call, inliningContext, function)
             mutator.process()
 
             var inlineableBody: JsStatement = mutator.body
@@ -195,7 +197,7 @@ private constructor(
         }
 
         private fun hasThisReference(body: JsBlock): Boolean {
-            val thisRefs = collectInstances(JsLiteral.JsThisRef::class.java, body)
+            val thisRefs = collectInstances(JsThisRef::class.java, body)
             return !thisRefs.isEmpty()
         }
     }

@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1221
 package foo
 
 val a1 = Array<Int>(3, { i: Int -> i })

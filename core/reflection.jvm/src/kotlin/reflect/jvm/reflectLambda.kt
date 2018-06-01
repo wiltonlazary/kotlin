@@ -18,19 +18,13 @@
 
 package kotlin.reflect.jvm
 
-import org.jetbrains.kotlin.load.kotlin.JvmNameResolver
-import org.jetbrains.kotlin.serialization.ProtoBuf
-import org.jetbrains.kotlin.serialization.deserialization.DeserializationContext
+import org.jetbrains.kotlin.metadata.deserialization.TypeTable
+import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil
 import org.jetbrains.kotlin.serialization.deserialization.MemberDeserializer
-import org.jetbrains.kotlin.serialization.deserialization.TypeTable
-import org.jetbrains.kotlin.serialization.deserialization.descriptors.SinceKotlinInfoTable
-import org.jetbrains.kotlin.serialization.jvm.BitEncoding
-import org.jetbrains.kotlin.serialization.jvm.JvmProtoBuf
-import org.jetbrains.kotlin.serialization.jvm.JvmProtoBufUtil
 import kotlin.reflect.KFunction
 import kotlin.reflect.jvm.internal.EmptyContainerForLocal
 import kotlin.reflect.jvm.internal.KFunctionImpl
-import kotlin.reflect.jvm.internal.getOrCreateModule
+import kotlin.reflect.jvm.internal.deserializeToDescriptor
 
 /**
  * This is an experimental API. Given a class for a compiled Kotlin lambda or a function expression,
@@ -39,17 +33,12 @@ import kotlin.reflect.jvm.internal.getOrCreateModule
  */
 fun <R> Function<R>.reflect(): KFunction<R>? {
     val annotation = javaClass.getAnnotation(Metadata::class.java) ?: return null
-    val input = BitEncoding.decodeBytes(annotation.d1).inputStream()
-    val nameResolver = JvmNameResolver(
-            JvmProtoBuf.StringTableTypes.parseDelimitedFrom(input, JvmProtoBufUtil.EXTENSION_REGISTRY), annotation.d2
-    )
-    val proto = ProtoBuf.Function.parseFrom(input, JvmProtoBufUtil.EXTENSION_REGISTRY)
-    val moduleData = javaClass.getOrCreateModule()
-    val context = DeserializationContext(
-            moduleData.deserialization, nameResolver, moduleData.module, TypeTable(proto.typeTable), SinceKotlinInfoTable.EMPTY,
-            containerSource = null, parentTypeDeserializer = null, typeParameters = proto.typeParameterList
-    )
-    val descriptor = MemberDeserializer(context).loadFunction(proto)
+    val data = annotation.d1.takeUnless(Array<String>::isEmpty) ?: return null
+    val (nameResolver, proto) = JvmProtoBufUtil.readFunctionDataFrom(data, annotation.d2)
+
+    val descriptor = deserializeToDescriptor(javaClass, proto, nameResolver, TypeTable(proto.typeTable), MemberDeserializer::loadFunction)
+                     ?: return null
+
     @Suppress("UNCHECKED_CAST")
     return KFunctionImpl(EmptyContainerForLocal, descriptor) as KFunction<R>
 }

@@ -16,27 +16,27 @@
 
 package org.jetbrains.kotlin.gradle.plugin
 
-import org.apache.commons.lang.SystemUtils
 import org.gradle.BuildAdapter
 import org.gradle.BuildResult
 import org.gradle.api.invocation.Gradle
 import org.gradle.api.logging.Logging
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.ZipHandler
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.impl.jar.CoreJarFileSystem
+import com.intellij.openapi.vfs.impl.ZipHandler
+import com.intellij.openapi.vfs.impl.jar.CoreJarFileSystem
 import org.jetbrains.kotlin.compilerRunner.DELETED_SESSION_FILE_PREFIX
 import org.jetbrains.kotlin.compilerRunner.GradleCompilerRunner
 import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompile
-import org.jetbrains.kotlin.incremental.BuildCacheStorage
-import org.jetbrains.kotlin.incremental.multiproject.ArtifactDifferenceRegistryProvider
+import org.jetbrains.kotlin.gradle.utils.isWindows
 import org.jetbrains.kotlin.incremental.relativeToRoot
-import org.jetbrains.kotlin.incremental.stackTraceStr
-import java.io.File
+import org.jetbrains.kotlin.utils.addToStdlib.sumByLong
+import java.lang.management.ManagementFactory
 
-internal class KotlinGradleBuildServices private constructor(gradle: Gradle): BuildAdapter() {
+internal class KotlinGradleBuildServices private constructor(gradle: Gradle) : BuildAdapter() {
     companion object {
         private val CLASS_NAME = KotlinGradleBuildServices::class.java.simpleName
         const val FORCE_SYSTEM_GC_MESSAGE = "Forcing System.gc()"
+        const val SHOULD_REPORT_MEMORY_USAGE_PROPERTY = "kotlin.gradle.test.report.memory.usage"
+
         val INIT_MESSAGE = "Initialized $CLASS_NAME"
         val DISPOSE_MESSAGE = "Disposed $CLASS_NAME"
         val ALREADY_INITIALIZED_MESSAGE = "$CLASS_NAME is already initialized"
@@ -66,18 +66,12 @@ internal class KotlinGradleBuildServices private constructor(gradle: Gradle): Bu
     private val log = Logging.getLogger(this.javaClass)
     private val cleanup = CompilerServicesCleanup()
     private var startMemory: Long? = null
-    private val workingDir = File(gradle.rootProject.buildDir, "kotlin-build").apply { mkdirs() }
-    private val buildCacheStorage = BuildCacheStorage(workingDir)
-
-    internal val artifactDifferenceRegistryProvider: ArtifactDifferenceRegistryProvider
-            get() = buildCacheStorage
+    private val shouldReportMemoryUsage = System.getProperty(SHOULD_REPORT_MEMORY_USAGE_PROPERTY) != null
 
     // There is function with the same name in BuildAdapter,
     // but it is called before any plugin can attach build listener
     fun buildStarted() {
-        if (log.isDebugEnabled) {
-            startMemory = getUsedMemoryKb()!!
-        }
+        startMemory = getUsedMemoryKb()
     }
 
     override fun buildFinished(result: BuildResult) {
@@ -94,6 +88,7 @@ internal class KotlinGradleBuildServices private constructor(gradle: Gradle): Bu
         else {
             log.kotlinDebug("Skipping kotlin cleanup since compiler wasn't called")
         }
+        GradleCompilerRunner.clearBuildModulesInfo()
 
         val rootProject = gradle.rootProject
         val sessionsDir = GradleCompilerRunner.sessionsDir(rootProject)
@@ -111,65 +106,34 @@ internal class KotlinGradleBuildServices private constructor(gradle: Gradle): Bu
             }
         }
 
-        if (kotlinCompilerCalled) {
-            startMemory?.let { startMemoryCopy ->
-                getUsedMemoryKb()?.let { endMemory ->
-                    // the value reported here is not necessarily a leak, since it is calculated before collecting the plugin classes
-                    // but on subsequent runs in the daemon it should be rather small, then the classes are actually reused by the daemon (see above)
-                    log.kotlinDebug("[PERF] Used memory after build: $endMemory kb (difference since build start: ${"%+d".format(endMemory - startMemoryCopy)} kb)")
-                }
-            }
+        if (shouldReportMemoryUsage) {
+            val startMem = startMemory!!
+            val endMem = getUsedMemoryKb()!!
+
+            // the value reported here is not necessarily a leak, since it is calculated before collecting the plugin classes
+            // but on subsequent runs in the daemon it should be rather small, then the classes are actually reused by the daemon (see above)
+            log.lifecycle("[KOTLIN][PERF] Used memory after build: $endMem kb (difference since build start: ${"%+d".format(endMem - startMem)} kb)")
         }
 
-        closeArtifactDifferenceRegistry()
         gradle.removeListener(this)
         instance = null
         log.kotlinDebug(DISPOSE_MESSAGE)
     }
 
-    private fun closeArtifactDifferenceRegistry() {
-        var caughtError = false
-        try {
-            if (workingDir.exists()) {
-                // The working directory may have been removed by the clean task.
-                // https://youtrack.jetbrains.com/issue/KT-16298
-                buildCacheStorage.flush(memoryCachesOnly = false)
-            }
-        }
-        catch (e: Throwable) {
-            log.kotlinDebug { "Error trying to flush artifact difference registry: ${e.stackTraceStr}" }
-            caughtError = true
-        }
-        finally {
-            try {
-                buildCacheStorage.close()
-            }
-            catch (e: Throwable) {
-                log.kotlinDebug { "Error trying to close artifact difference registry: ${e.stackTraceStr}" }
-                caughtError = true
-            }
-        }
-
-        if (caughtError && workingDir.exists()) {
-            try {
-                workingDir.deleteRecursively()
-            }
-            catch (e: Throwable) {
-                log.kotlinDebug { "Error trying to delete kotlin-build $workingDir: ${e.stackTraceStr}" }
-            }
-        }
-    }
-
     private fun getUsedMemoryKb(): Long? {
-        if (!log.isDebugEnabled) return null
+        if (!shouldReportMemoryUsage) return null
 
         log.lifecycle(FORCE_SYSTEM_GC_MESSAGE)
+        val gcCountBefore = getGcCount()
         System.gc()
-        System.runFinalization()
-        System.gc()
+        while (getGcCount() == gcCountBefore) {}
+
         val rt = Runtime.getRuntime()
         return (rt.totalMemory() - rt.freeMemory()) / 1024
     }
+
+    private fun getGcCount(): Long =
+            ManagementFactory.getGarbageCollectorMXBeans().sumByLong { Math.max(0, it.collectionCount) }
 }
 
 
@@ -182,7 +146,7 @@ internal class CompilerServicesCleanup() {
         // clearing jar cache to avoid problems like KT-9440 (unable to clean/rebuild a project due to locked jar file)
         // problem is known to happen only on windows - the reason (seems) related to http://bugs.java.com/view_bug.do?bug_id=6357433
         // clean cache only when running on windows
-        if (SystemUtils.IS_OS_WINDOWS) {
+        if (isWindows) {
             cleanJarCache()
         }
 

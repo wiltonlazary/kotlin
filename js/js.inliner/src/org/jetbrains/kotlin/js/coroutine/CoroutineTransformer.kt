@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,10 +18,12 @@ package org.jetbrains.kotlin.js.coroutine
 
 import org.jetbrains.kotlin.js.backend.ast.*
 import org.jetbrains.kotlin.js.backend.ast.metadata.coroutineMetadata
+import org.jetbrains.kotlin.js.backend.ast.metadata.isInlineableCoroutineBody
+import org.jetbrains.kotlin.js.translate.declaration.transformCoroutineMetadataToSpecialFunctions
 import org.jetbrains.kotlin.js.translate.expression.InlineMetadata
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 
-class CoroutineTransformer(private val program: JsProgram) : JsVisitorWithContextImpl() {
+class CoroutineTransformer : JsVisitorWithContextImpl() {
     private val additionalStatementsByNode = mutableMapOf<JsNode, List<JsStatement>>()
 
     override fun endVisit(x: JsExpressionStatement, ctx: JsContext<in JsStatement>) {
@@ -41,18 +43,26 @@ class CoroutineTransformer(private val program: JsProgram) : JsVisitorWithContex
         val assignment = JsAstUtils.decomposeAssignment(expression)
         if (assignment != null) {
             val (lhs, rhs) = assignment
-            val function = rhs as? JsFunction ?: InlineMetadata.decompose(rhs)?.function
+            val function = rhs as? JsFunction ?: InlineMetadata.decompose(rhs)?.function?.function
             if (function?.coroutineMetadata != null) {
                 val name = ((lhs as? JsNameRef)?.name ?: function.name)?.ident
-                additionalStatementsByNode[x] = CoroutineFunctionTransformer(program, function, name).transform()
+                additionalStatementsByNode[x] = CoroutineFunctionTransformer(function, name).transform()
                 return false
             }
         }
         else if (expression is JsFunction) {
             if (expression.coroutineMetadata != null) {
-                additionalStatementsByNode[x] = CoroutineFunctionTransformer(program, expression, expression.name?.ident).transform()
+                additionalStatementsByNode[x] = CoroutineFunctionTransformer(expression, expression.name?.ident).transform()
                 return false
             }
+        }
+        return super.visit(x, ctx)
+    }
+
+    override fun visit(x: JsFunction, ctx: JsContext<*>): Boolean {
+        if (x.isInlineableCoroutineBody) {
+            x.body = transformCoroutineMetadataToSpecialFunctions(x.body)
+            return false
         }
         return super.visit(x, ctx)
     }
@@ -60,10 +70,10 @@ class CoroutineTransformer(private val program: JsProgram) : JsVisitorWithContex
     override fun visit(x: JsVars.JsVar, ctx: JsContext<*>): Boolean {
         val initExpression = x.initExpression
         if (initExpression != null) {
-            val function = initExpression as? JsFunction ?: InlineMetadata.decompose(initExpression)?.function
+            val function = initExpression as? JsFunction ?: InlineMetadata.decompose(initExpression)?.function?.function
             if (function?.coroutineMetadata != null) {
                 val name = x.name.ident
-                additionalStatementsByNode[x] = CoroutineFunctionTransformer(program, function, name).transform()
+                additionalStatementsByNode[x] = CoroutineFunctionTransformer(function, name).transform()
                 return false
             }
         }

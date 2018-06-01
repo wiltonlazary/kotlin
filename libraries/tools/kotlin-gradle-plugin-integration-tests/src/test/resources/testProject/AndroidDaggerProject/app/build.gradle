@@ -2,23 +2,23 @@ buildscript {
     repositories {
         mavenLocal()
         jcenter()
+        maven { url 'https://maven.google.com' }
     }
 
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
         classpath "com.android.tools.build:gradle:$android_tools_version"
-        classpath "com.jakewharton.sdkmanager:gradle-plugin:0.12.+"
     }
 }
 
-apply plugin: 'android-sdk-manager'
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-kapt'
 apply plugin: 'kotlin-android-extensions'
 
 android {
     compileSdkVersion 23
-    buildToolsVersion "23.0.1"
+    buildToolsVersion "25.0.2"
 
     defaultConfig {
         applicationId "com.example.dagger.kotlin"
@@ -36,6 +36,7 @@ android {
 repositories {
     mavenLocal()
     jcenter()
+    maven { url 'https://maven.google.com' }
 }
 
 dependencies {
@@ -48,6 +49,6 @@ dependencies {
     provided 'org.glassfish:javax.annotation:10.0-b28'
 }
 
-kapt {
-    generateStubs = true
+androidExtensions {
+    experimental = true
 }

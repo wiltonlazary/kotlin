@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1383
 package foo
 
 // CHECK_NOT_CALLED_IN_SCOPE: scope=test function=even

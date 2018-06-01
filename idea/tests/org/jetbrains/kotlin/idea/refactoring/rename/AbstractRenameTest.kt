@@ -42,16 +42,19 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.refactoring.BaseRefactoringProcessor
 import com.intellij.refactoring.BaseRefactoringProcessor.ConflictsInTestsException
 import com.intellij.refactoring.rename.*
+import com.intellij.refactoring.rename.inplace.VariableInplaceRenameHandler
 import com.intellij.refactoring.rename.naming.AutomaticRenamerFactory
 import com.intellij.refactoring.util.CommonRefactoringUtil.RefactoringErrorHintException
 import com.intellij.testFramework.LightProjectDescriptor
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.UsefulTestCase
+import com.intellij.testFramework.fixtures.CodeInsightTestUtil
 import org.jetbrains.kotlin.asJava.finder.KtLightPackage
 import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
-import org.jetbrains.kotlin.idea.caches.resolve.analyzeFullyAndGetResult
+import org.jetbrains.kotlin.descriptors.findClassAcrossModuleDependencies
+import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithAllCompilerChecks
 import org.jetbrains.kotlin.idea.jsonUtils.getNullableString
 import org.jetbrains.kotlin.idea.jsonUtils.getString
 import org.jetbrains.kotlin.idea.references.mainReference
@@ -63,7 +66,6 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
-import org.jetbrains.kotlin.serialization.deserialization.findClassAcrossModuleDependencies
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.junit.Assert
 import java.io.File
@@ -298,7 +300,7 @@ abstract class AbstractRenameTest : KotlinLightCodeInsightFixtureTestCase() {
         doTestCommittingDocuments(context) {
             val ktFile = myFixture.configureFromTempProjectFile(mainFilePath) as KtFile
 
-            val module = ktFile.analyzeFullyAndGetResult().moduleDescriptor
+            val module = ktFile.analyzeWithAllCompilerChecks().moduleDescriptor
 
             val (declaration, scopeToSearch)  = if (classIdStr != null) {
                 module.findClassAcrossModuleDependencies(classIdStr.toClassId())!!.let { it to it.defaultType.memberScope }
@@ -349,9 +351,19 @@ abstract class AbstractRenameTest : KotlinLightCodeInsightFixtureTestCase() {
                     else -> null
                 }
             }
-            val handler = RenameHandlerRegistry.getInstance().getRenameHandler(dataContext)!!
+            var handler = RenameHandlerRegistry.getInstance().getRenameHandler(dataContext) ?: return@doTestCommittingDocuments
             Assert.assertTrue(handler.isAvailableOnDataContext(dataContext))
-            handler.invoke(project, editor, psiFile, dataContext)
+            if (handler is KotlinRenameDispatcherHandler) {
+                handler = handler.getRenameHandler(dataContext)!!
+            }
+
+            if (handler is VariableInplaceRenameHandler) {
+                val elementToRename = psiFile.findElementAt(currentCaret.offset)!!.getNonStrictParentOfType<PsiNamedElement>()!!
+                CodeInsightTestUtil.doInlineRename(handler, newName, editor, elementToRename)
+            }
+            else {
+                handler.invoke(project, editor, psiFile, dataContext)
+            }
         }
     }
 
@@ -374,7 +386,7 @@ abstract class AbstractRenameTest : KotlinLightCodeInsightFixtureTestCase() {
 
         PsiDocumentManager.getInstance(project).commitAllDocuments()
         FileDocumentManager.getInstance().saveAllDocuments()
-        PlatformTestUtil.assertDirectoriesEqual(beforeVFile, afterVFile)
+        PlatformTestUtil.assertDirectoriesEqual(afterVFile, beforeVFile)
     }
 }
 

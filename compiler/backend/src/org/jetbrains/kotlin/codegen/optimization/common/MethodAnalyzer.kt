@@ -46,7 +46,7 @@
 
 package org.jetbrains.kotlin.codegen.optimization.common
 
-import org.jetbrains.kotlin.codegen.inline.InlineCodegenUtil
+import org.jetbrains.kotlin.codegen.inline.insnText
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.*
@@ -62,12 +62,12 @@ import java.util.*
  * @author Dmitry Petrov
  */
 open class MethodAnalyzer<V : Value>(
-        val owner: String,
-        val method: MethodNode,
-        protected val interpreter: Interpreter<V>
+    val owner: String,
+    val method: MethodNode,
+    protected val interpreter: Interpreter<V>
 ) {
     val instructions: InsnList = method.instructions
-    val nInsns: Int = instructions.size()
+    private val nInsns: Int = instructions.size()
 
     val frames: Array<Frame<V>?> = arrayOfNulls(nInsns)
 
@@ -91,7 +91,7 @@ open class MethodAnalyzer<V : Value>(
     protected open fun visitControlFlowExceptionEdge(insn: Int, successor: Int): Boolean = true
 
     protected open fun visitControlFlowExceptionEdge(insn: Int, tcb: TryCatchBlockNode): Boolean =
-            visitControlFlowExceptionEdge(insn, instructions.indexOf(tcb.handler))
+        visitControlFlowExceptionEdge(insn, instructions.indexOf(tcb.handler))
 
     fun analyze(): Array<Frame<V>?> {
         if (nInsns == 0) return frames
@@ -116,8 +116,7 @@ open class MethodAnalyzer<V : Value>(
 
                 if (insnType == AbstractInsnNode.LABEL || insnType == AbstractInsnNode.LINE || insnType == AbstractInsnNode.FRAME) {
                     visitNopInsn(f, insn)
-                }
-                else {
+                } else {
                     current.init(f).execute(insnNode, interpreter)
 
                     when {
@@ -129,12 +128,13 @@ open class MethodAnalyzer<V : Value>(
                             visitTableSwitchInsnNode(insnNode, current, insn)
                         insnOpcode != Opcodes.ATHROW && (insnOpcode < Opcodes.IRETURN || insnOpcode > Opcodes.RETURN) ->
                             visitOpInsn(current, insn)
-                        else -> {}
+                        else -> {
+                        }
                     }
                 }
 
                 handlers[insn]?.forEach { tcb ->
-                    val exnType = Type.getObjectType(tcb.type?:"java/lang/Throwable")
+                    val exnType = Type.getObjectType(tcb.type ?: "java/lang/Throwable")
                     val jump = instructions.indexOf(tcb.handler)
                     if (visitControlFlowExceptionEdge(insn, tcb)) {
                         handler.init(f)
@@ -144,12 +144,10 @@ open class MethodAnalyzer<V : Value>(
                     }
                 }
 
-            }
-            catch (e: AnalyzerException) {
-                throw AnalyzerException(e.node, "Error at instruction #" + insn + " ${InlineCodegenUtil.getInsnText(insnNode)}: " + e.message, e)
-            }
-            catch (e: Exception) {
-                throw AnalyzerException(insnNode, "Error at instruction #" + insn + " ${InlineCodegenUtil.getInsnText(insnNode)}: " + e.message, e)
+            } catch (e: AnalyzerException) {
+                throw AnalyzerException(e.node, "Error at instruction #$insn ${insnNode.insnText}: ${e.message}", e)
+            } catch (e: Exception) {
+                throw AnalyzerException(insnNode, "Error at instruction #$insn ${insnNode.insnText}: ${e.message}", e)
             }
 
         }
@@ -158,7 +156,7 @@ open class MethodAnalyzer<V : Value>(
     }
 
     fun getFrame(insn: AbstractInsnNode): Frame<V>? =
-            frames[instructions.indexOf(insn)]
+        frames[instructions.indexOf(insn)]
 
     private fun checkAssertions() {
         if (instructions.toArray().any { it.opcode == Opcodes.JSR || it.opcode == Opcodes.RET })
@@ -236,7 +234,7 @@ open class MethodAnalyzer<V : Value>(
         for (tcb in m.tryCatchBlocks) {
             val begin = instructions.indexOf(tcb.start)
             val end = instructions.indexOf(tcb.end)
-            for (j in begin..end - 1) {
+            for (j in begin until end) {
                 var insnHandlers: MutableList<TryCatchBlockNode>? = handlers[j]
                 if (insnHandlers == null) {
                     insnHandlers = ArrayList<TryCatchBlockNode>()
@@ -249,15 +247,13 @@ open class MethodAnalyzer<V : Value>(
 
     private fun mergeControlFlowEdge(insn: Int, frame: Frame<V>) {
         val oldFrame = frames[insn]
-        val changes: Boolean
-
-        if (oldFrame == null) {
-            frames[insn] = newFrame(frame)
-            changes = true
-        }
-        else {
-            changes = oldFrame.merge(frame, interpreter)
-        }
+        val changes =
+            if (oldFrame != null)
+                oldFrame.merge(frame, interpreter)
+            else {
+                frames[insn] = newFrame(frame)
+                true
+            }
         if (changes && !queued[insn]) {
             queued[insn] = true
             queue[top++] = insn

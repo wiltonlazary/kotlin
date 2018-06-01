@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2013 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,19 +26,15 @@ import org.apache.maven.project.MavenProject;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments;
 import org.jetbrains.kotlin.maven.kapt.AnnotationProcessingManager;
-import org.jetbrains.kotlin.maven.kapt.KaptTestJvmCompilerMojo;
 
+import java.io.File;
 import java.util.List;
 
+// Note!
+// Please change {@link KaptTestJvmCompilerMojo} because it was mostly copied from this file.
 /**
  * Compiles Kotlin test sources
- *
- * @noinspection UnusedDeclaration
  */
-
-/** Note!
- * Please change {@link KaptTestJvmCompilerMojo} as well as it was majorly copied from this file. */
-
 @Mojo(name = "test-compile",
         defaultPhase = LifecyclePhase.TEST_COMPILE,
         requiresDependencyResolution = ResolutionScope.TEST,
@@ -90,11 +86,11 @@ public class KotlinTestCompileMojo extends K2JVMCompileMojo {
     }
 
     @Override
-    protected void configureSpecificCompilerArguments(@NotNull K2JVMCompilerArguments arguments) throws MojoExecutionException {
+    protected void configureSpecificCompilerArguments(@NotNull K2JVMCompilerArguments arguments, @NotNull List<File> sourceRoots) throws MojoExecutionException {
         classpath = testClasspath;
-        arguments.friendPaths = new String[] { output };
+        arguments.setFriendPaths(new String[] { output });
         output = testOutput;
-        super.configureSpecificCompilerArguments(arguments);
+        super.configureSpecificCompilerArguments(arguments, sourceRoots);
     }
 
     @Override

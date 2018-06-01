@@ -21,6 +21,7 @@ import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
 import org.jetbrains.kotlin.descriptors.annotations.KotlinTarget
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.isPropertyParameter
 import org.jetbrains.kotlin.resolve.AnnotationChecker
@@ -39,8 +40,10 @@ class MovePropertyToClassBodyIntention : SelfTargetingIntention<KtParameter>(KtP
         val propertyDeclaration = KtPsiFactory(element)
                 .createProperty("${element.valOrVarKeyword?.text} ${element.name} = ${element.name}")
 
-        parentClass.addDeclaration(propertyDeclaration).apply {
+        val firstProperty = parentClass.getProperties().firstOrNull()
+        parentClass.addDeclarationBefore(propertyDeclaration, firstProperty).apply {
             val propertyModifierList = element.modifierList?.copy() as? KtModifierList
+            propertyModifierList?.getModifier(KtTokens.VARARG_KEYWORD)?.delete()
             propertyModifierList?.let { modifierList?.replace(it) ?: addBefore(it, firstChild) }
             modifierList?.annotationEntries?.forEach {
                 if (!it.isAppliedToProperty()) {
@@ -58,15 +61,17 @@ class MovePropertyToClassBodyIntention : SelfTargetingIntention<KtParameter>(KtP
                 ?.takeIf { it.isNotEmpty() }
                 ?.joinToString(separator = " ") { it.textWithoutUseSite() }
 
+        val hasVararg = element.hasModifier(KtTokens.VARARG_KEYWORD)
         if (parameterAnnotationsText != null) {
             element.modifierList?.replace(KtPsiFactory(element).createModifierList(parameterAnnotationsText))
         }
         else {
             element.modifierList?.delete()
         }
+        if (hasVararg) element.addModifier(KtTokens.VARARG_KEYWORD)
     }
 
-    fun KtAnnotationEntry.isAppliedToProperty(): Boolean {
+    private fun KtAnnotationEntry.isAppliedToProperty(): Boolean {
         useSiteTarget?.getAnnotationUseSiteTarget()?.let {
             return it == AnnotationUseSiteTarget.FIELD
                    || it == AnnotationUseSiteTarget.PROPERTY
@@ -78,7 +83,7 @@ class MovePropertyToClassBodyIntention : SelfTargetingIntention<KtParameter>(KtP
         return !isApplicableToConstructorParameter()
     }
 
-    fun KtAnnotationEntry.isAppliedToConstructorParameter(): Boolean {
+    private fun KtAnnotationEntry.isAppliedToConstructorParameter(): Boolean {
         useSiteTarget?.getAnnotationUseSiteTarget()?.let {
             return it == AnnotationUseSiteTarget.CONSTRUCTOR_PARAMETER
         }
@@ -86,19 +91,19 @@ class MovePropertyToClassBodyIntention : SelfTargetingIntention<KtParameter>(KtP
         return isApplicableToConstructorParameter()
     }
 
-    fun KtAnnotationEntry.isApplicableToConstructorParameter(): Boolean {
+    private fun KtAnnotationEntry.isApplicableToConstructorParameter(): Boolean {
         val context = analyze(BodyResolveMode.PARTIAL)
         val descriptor = context[BindingContext.ANNOTATION, this] ?: return false
         val applicableTargets = AnnotationChecker.applicableTargetSet(descriptor)
         return applicableTargets.contains(KotlinTarget.VALUE_PARAMETER)
     }
 
-    fun KtAnnotationEntry.textWithoutUseSite() = "@" + typeReference?.text.orEmpty() + valueArgumentList?.text.orEmpty()
+    private fun KtAnnotationEntry.textWithoutUseSite() = "@" + typeReference?.text.orEmpty() + valueArgumentList?.text.orEmpty()
 
-    fun KtAnnotationUseSiteTarget.removeWithColon() {
+    private fun KtAnnotationUseSiteTarget.removeWithColon() {
         nextSibling?.delete() // ':' symbol after use site
         delete()
     }
 
-    fun KtPrimaryConstructor.isNotContainedInAnnotation() = !getContainingClassOrObject().isAnnotation()
+    private fun KtPrimaryConstructor.isNotContainedInAnnotation() = !getContainingClassOrObject().isAnnotation()
 }

@@ -18,31 +18,41 @@ package org.jetbrains.kotlin.idea.compiler.configuration
 
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.StoragePathMacros.PROJECT_CONFIG_DIR
+import com.intellij.openapi.project.Project
+import com.intellij.util.messages.Topic
+import com.intellij.util.ReflectionUtil
 import com.intellij.util.xmlb.SkipDefaultValuesSerializationFilters
 import com.intellij.util.xmlb.XmlSerializer
 import org.jdom.Element
 import org.jetbrains.kotlin.cli.common.arguments.*
 import org.jetbrains.kotlin.config.SettingConstants
+import kotlin.reflect.KClass
 
-abstract class BaseKotlinCompilerSettings<T : Any> protected constructor() : PersistentStateComponent<Element>, Cloneable {
-    @Suppress("LeakingThis")
-    private var _settings: T = createSettings()
+abstract class BaseKotlinCompilerSettings<T : Freezable> protected constructor(private val project: Project) : PersistentStateComponent<Element>, Cloneable {
+    @Suppress("LeakingThis", "UNCHECKED_CAST")
+    private var _settings: T = createSettings().frozen() as T
+        private set(value) {
+            field = value.frozen() as T
+        }
 
     var settings: T
-        get() = copyBean(_settings)
+        get() = _settings
         set(value) {
             validateNewSettings(value)
-            _settings = copyBean(value)
+            _settings = value
+            project.messageBus.syncPublisher(KotlinCompilerSettingsListener.TOPIC).settingsChanged(value)
         }
 
     fun update(changer: T.() -> Unit) {
-        settings = settings.apply { changer() }
+        @Suppress("UNCHECKED_CAST")
+        settings = (settings.unfrozen() as T).apply { changer() }
     }
 
     protected fun validateInheritedFieldsUnchanged(settings: T) {
-        val inheritedFields = collectFieldsToCopy(settings.javaClass, true)
+        @Suppress("UNCHECKED_CAST")
+        val inheritedProperties = collectProperties<T>(settings::class as KClass<T>, true)
         val defaultInstance = createSettings()
-        val invalidFields = inheritedFields.filter { it.get(settings) != it.get(defaultInstance) }
+        val invalidFields = inheritedProperties.filter { it.get(settings) != it.get(defaultInstance) }
         if (invalidFields.isNotEmpty()) {
             throw IllegalArgumentException("Following fields are expected to be left unchanged in ${settings.javaClass}: ${invalidFields.joinToString { it.name }}")
         }
@@ -57,7 +67,13 @@ abstract class BaseKotlinCompilerSettings<T : Any> protected constructor() : Per
     override fun getState() = XmlSerializer.serialize(_settings, SKIP_DEFAULT_VALUES)
 
     override fun loadState(state: Element) {
-        _settings = XmlSerializer.deserialize(state, _settings.javaClass) ?: createSettings()
+        _settings = ReflectionUtil.newInstance(_settings.javaClass).apply {
+            if (this is CommonCompilerArguments) {
+                freeArgs = ArrayList()
+            }
+            XmlSerializer.deserializeInto(this, state)
+        }
+        project.messageBus.syncPublisher(KotlinCompilerSettingsListener.TOPIC).settingsChanged(settings)
     }
 
     public override fun clone(): Any = super.clone()
@@ -66,9 +82,20 @@ abstract class BaseKotlinCompilerSettings<T : Any> protected constructor() : Per
         const val KOTLIN_COMPILER_SETTINGS_PATH = PROJECT_CONFIG_DIR + "/" + SettingConstants.KOTLIN_COMPILER_SETTINGS_FILE
 
         private val SKIP_DEFAULT_VALUES = SkipDefaultValuesSerializationFilters(
-                CommonCompilerArguments.createDefaultInstance(),
-                K2JVMCompilerArguments.createDefaultInstance(),
-                K2JSCompilerArguments.createDefaultInstance()
+                CommonCompilerArguments.DummyImpl(),
+                K2JVMCompilerArguments(),
+                K2JSCompilerArguments().apply {
+                    sourceMapPrefix = ""
+                    sourceMapEmbedSources = K2JsArgumentConstants.SOURCE_MAP_SOURCE_CONTENT_INLINING
+                }
         )
+    }
+}
+
+interface KotlinCompilerSettingsListener {
+    fun <T> settingsChanged(newSettings: T)
+
+    companion object {
+        val TOPIC = Topic.create("KotlinCompilerSettingsListener", KotlinCompilerSettingsListener::class.java)
     }
 }

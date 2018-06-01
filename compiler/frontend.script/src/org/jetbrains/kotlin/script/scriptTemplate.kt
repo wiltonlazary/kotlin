@@ -65,7 +65,7 @@ fun KotlinScriptExternalDependencies?.asFuture(): PseudoFuture<KotlinScriptExter
             replaceWith = ReplaceWith("kotlin.script.dependencies.ScriptDependenciesResolver"))
 interface ScriptDependenciesResolver {
 
-    enum class ReportSeverity { ERROR, WARNING, INFO, DEBUG }
+    enum class ReportSeverity { FATAL, ERROR, WARNING, INFO, DEBUG }
 
     fun resolve(script: ScriptContents,
                 environment: Map<String, Any?>?,
@@ -115,41 +115,3 @@ private fun<T: Comparable<T>> compareIterables(a: Iterable<T>, b: Iterable<T>): 
 
 private inline fun Int.chainCompare(compFn: () -> Int ): Int = if (this != 0) this else compFn()
 
-class LegacyScriptDependenciesResolverWrapper(val legacyResolver: ScriptDependenciesResolver) : kotlin.script.dependencies.ScriptDependenciesResolver {
-
-    override fun resolve(script: kotlin.script.dependencies.ScriptContents,
-                environment: Map<String, Any?>?,
-                report: (kotlin.script.dependencies.ScriptDependenciesResolver.ReportSeverity, String, kotlin.script.dependencies.ScriptContents.Position?) -> Unit,
-                previousDependencies: kotlin.script.dependencies.KotlinScriptExternalDependencies?
-    ): Future<kotlin.script.dependencies.KotlinScriptExternalDependencies?> {
-        val legacyDeps = legacyResolver.resolve(
-                object : ScriptContents {
-                    override val file: File? get() = script.file
-                    override val annotations: Iterable<Annotation> get() = script.annotations
-                    override val text: CharSequence? get() = script.text
-                },
-                environment,
-                { sev, msg, pos -> report(kotlin.script.dependencies.ScriptDependenciesResolver.ReportSeverity.values()[sev.ordinal],
-                                          msg,
-                                          pos?.let { kotlin.script.dependencies.ScriptContents.Position(it.line, it.col) }) },
-                previousDependencies?.let {
-                    object : KotlinScriptExternalDependencies {
-                        override val javaHome get() = it.javaHome
-                        override val classpath get() = it.classpath
-                        override val imports get() = it.imports
-                        override val sources get() = it.sources
-                        override val scripts get() = it.scripts
-                    }
-                }
-        ).get()
-        return kotlin.script.dependencies.PseudoFuture(legacyDeps?.let {
-            object : kotlin.script.dependencies.KotlinScriptExternalDependencies {
-                override val javaHome get() = it.javaHome
-                override val classpath get() = it.classpath
-                override val imports get() = it.imports
-                override val sources get() = it.sources
-                override val scripts get() = it.scripts
-            }
-        })
-    }
-}

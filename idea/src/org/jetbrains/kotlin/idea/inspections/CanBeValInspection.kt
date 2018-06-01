@@ -34,6 +34,7 @@ import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.quickfix.ChangeVariableMutabilityFix
 import org.jetbrains.kotlin.idea.references.KtSimpleNameReference
 import org.jetbrains.kotlin.idea.references.readWriteAccess
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
@@ -49,7 +50,7 @@ class CanBeValInspection : AbstractKotlinInspection() {
 
                 when (declaration) {
                     is KtProperty -> {
-                        if (declaration.isVar && declaration.isLocal &&
+                        if (declaration.isVar && declaration.isLocal && !declaration.hasModifier(KtTokens.LATEINIT_KEYWORD) &&
                             canBeVal(declaration,
                                      declaration.hasInitializer() || declaration.hasDelegateExpression(),
                                      listOf(declaration))) {
@@ -76,11 +77,11 @@ class CanBeValInspection : AbstractKotlinInspection() {
                     return false
                 }
 
-                if (hasInitializerOrDelegate) {
+                return if (hasInitializerOrDelegate) {
                     val hasWriteUsages = ReferencesSearch.search(declaration, declaration.useScope).any {
                         (it as? KtSimpleNameReference)?.element?.readWriteAccess(useResolveForReadWrite = true)?.isWrite == true
                     }
-                    return !hasWriteUsages
+                    !hasWriteUsages
                 }
                 else {
                     val bindingContext = declaration.analyze(BodyResolveMode.FULL)
@@ -90,7 +91,7 @@ class CanBeValInspection : AbstractKotlinInspection() {
                     val writeInstructions = pseudocode.collectWriteInstructions(descriptor)
                     if (writeInstructions.isEmpty()) return false // incorrect code - do not report
 
-                    return writeInstructions.none { it.owner !== pseudocode || canReach(it, writeInstructions) }
+                    writeInstructions.none { it.owner !== pseudocode || canReach(it, writeInstructions) }
                 }
             }
 

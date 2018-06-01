@@ -1,3 +1,6 @@
+// IGNORE_BACKEND: JS_IR
+// SKIP_MINIFICATION
+// This test uses eval
 open class A {
     val a: Int
     open val b: Int
@@ -37,7 +40,7 @@ fun box(): String {
         field("e")
         field("f")
         field("g")
-        property("h")
+        field("h")
     }
     if (expectedRegex.find(aBody) == null) return "fail"
 

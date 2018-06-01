@@ -265,6 +265,12 @@ class RangeExpression(val start: Expression, val end: Expression): Expression() 
     }
 }
 
+class UntilExpression(val start: Expression, val end: Expression): Expression() {
+    override fun generateCode(builder: CodeBuilder) {
+        builder.appendOperand(this, start).append(" until ").appendOperand(this, end)
+    }
+}
+
 class DownToExpression(val start: Expression, val end: Expression): Expression() {
     override fun generateCode(builder: CodeBuilder) {
         builder.appendOperand(this, start).append(" downTo ").appendOperand(this, end)
@@ -279,11 +285,10 @@ class ClassLiteralExpression(val type: Type): Expression() {
 
 fun createArrayInitializerExpression(arrayType: ArrayType, initializers: List<Expression>, needExplicitType: Boolean = true) : MethodCallExpression {
     val elementType = arrayType.elementType
-    val createArrayFunction = if (elementType is PrimitiveType)
-            (elementType.toNotNullType().canonicalCode() + "ArrayOf").decapitalize()
-        else if (needExplicitType)
-            "arrayOf<" + arrayType.elementType.canonicalCode() + ">"
-        else
-            "arrayOf"
+    val createArrayFunction = when {
+        elementType is PrimitiveType -> (elementType.toNotNullType().canonicalCode() + "ArrayOf").decapitalize()
+        needExplicitType -> "arrayOf<" + arrayType.elementType.canonicalCode() + ">"
+        else -> "arrayOf"
+    }
     return MethodCallExpression.buildNonNull(null, createArrayFunction, ArgumentList.withNoPrototype(initializers))
 }

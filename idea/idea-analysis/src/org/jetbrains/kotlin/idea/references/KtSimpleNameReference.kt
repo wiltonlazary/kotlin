@@ -22,13 +22,13 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.IncorrectOperationException
 import com.intellij.util.SmartList
+import org.jetbrains.kotlin.asJava.unwrapped
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveImportReference
+import org.jetbrains.kotlin.idea.codeInsight.shorten.addDelayedImportRequest
 import org.jetbrains.kotlin.idea.codeInsight.shorten.addToShorteningWaitSet
-import org.jetbrains.kotlin.idea.core.ShortenReferences
-import org.jetbrains.kotlin.idea.core.copied
-import org.jetbrains.kotlin.idea.core.quoteIfNeeded
+import org.jetbrains.kotlin.idea.core.*
 import org.jetbrains.kotlin.idea.intentions.OperatorToFunctionIntention
 import org.jetbrains.kotlin.idea.refactoring.fqName.getKotlinFqName
 import org.jetbrains.kotlin.lexer.KtToken
@@ -36,15 +36,14 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.load.java.descriptors.JavaPropertyDescriptor
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.name.isOneSegmentFQN
 import org.jetbrains.kotlin.plugin.references.SimpleNameReferenceExtension
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.getParentOfTypeAndBranch
-import org.jetbrains.kotlin.psi.psiUtil.getQualifiedElementOrCallableRef
-import org.jetbrains.kotlin.psi.psiUtil.getQualifiedElementSelector
-import org.jetbrains.kotlin.psi.psiUtil.startOffset
+import org.jetbrains.kotlin.psi.psiUtil.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DataClassDescriptorResolver
+import org.jetbrains.kotlin.resolve.ImportedFromObjectCallableDescriptor
 import org.jetbrains.kotlin.resolve.descriptorUtil.getImportableDescriptor
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
@@ -77,8 +76,12 @@ class KtSimpleNameReference(expression: KtSimpleNameExpression) : KtSimpleRefere
     }
 
     override fun isReferenceTo(element: PsiElement?): Boolean {
-        if (element != null && !canBeReferenceTo(element)) {
-            return false
+        if (element != null) {
+            if (!canBeReferenceTo(element)) return false
+
+            for (extension in Extensions.getArea(element.project).getExtensionPoint(SimpleNameReferenceExtension.EP_NAME).extensions) {
+                if (extension.isReferenceTo(this, element)) return true
+            }
         }
 
         return super.isReferenceTo(element)
@@ -102,6 +105,20 @@ class KtSimpleNameReference(expression: KtSimpleNameExpression) : KtSimpleRefere
     override fun handleElementRename(newElementName: String?): PsiElement {
         if (!canRename()) throw IncorrectOperationException()
         if (newElementName == null) return expression
+
+        if (newElementName.unquote() == "") {
+            val qualifiedElement = expression.getQualifiedElement()
+            return when (qualifiedElement) {
+                is KtQualifiedExpression -> {
+                    expression.replace(qualifiedElement.receiverExpression)
+                    qualifiedElement.replaced(qualifiedElement.selectorExpression!!)
+                }
+                is KtUserType -> {
+                    expression.replaced(KtPsiFactory(expression).createSimpleName(SpecialNames.DEFAULT_NAME_FOR_COMPANION_OBJECT.asString()))
+                }
+                else -> expression
+            }
+        }
 
         // Do not rename if the reference corresponds to synthesized component function
         val expressionText = expression.text
@@ -129,7 +146,12 @@ class KtSimpleNameReference(expression: KtSimpleNameExpression) : KtSimpleRefere
             }
         }
 
-        nameElement.replace(element)
+        if (element.node.elementType == KtTokens.IDENTIFIER) {
+            nameElement.astReplace(element)
+        }
+        else {
+            nameElement.replace(element)
+        }
         return expression
     }
 
@@ -144,9 +166,9 @@ class KtSimpleNameReference(expression: KtSimpleNameExpression) : KtSimpleRefere
             bindToElement(element, ShorteningMode.DELAYED_SHORTENING)
 
     fun bindToElement(element: PsiElement, shorteningMode: ShorteningMode): PsiElement =
-            element.getKotlinFqName()?.let { fqName -> bindToFqName(fqName, shorteningMode) } ?: expression
+            element.getKotlinFqName()?.let { fqName -> bindToFqName(fqName, shorteningMode, element) } ?: expression
 
-    fun bindToFqName(fqName: FqName, shorteningMode: ShorteningMode = ShorteningMode.DELAYED_SHORTENING): PsiElement {
+    fun bindToFqName(fqName: FqName, shorteningMode: ShorteningMode = ShorteningMode.DELAYED_SHORTENING, targetElement: PsiElement? = null): PsiElement {
         val expression = expression
         if (fqName.isRoot) return expression
 
@@ -154,7 +176,7 @@ class KtSimpleNameReference(expression: KtSimpleNameExpression) : KtSimpleRefere
         if (expression !is KtNameReferenceExpression) return expression
         if (expression.parent is KtThisExpression || expression.parent is KtSuperExpression) return expression // TODO: it's a bad design of PSI tree, we should change it
 
-        val newExpression = expression.changeQualifiedName(fqName.quoteIfNeeded())
+        val newExpression = expression.changeQualifiedName(fqName.quoteIfNeeded(), targetElement)
         val newQualifiedElement = newExpression.getQualifiedElementOrCallableRef()
 
         if (shorteningMode == ShorteningMode.NO_SHORTENING) return newExpression
@@ -176,12 +198,28 @@ class KtSimpleNameReference(expression: KtSimpleNameExpression) : KtSimpleRefere
      * Result is either the same as original element, or [[KtQualifiedExpression]], or [[KtUserType]]
      * Note that FqName may not be empty
      */
-    private fun KtNameReferenceExpression.changeQualifiedName(fqName: FqName): KtNameReferenceExpression {
+    private fun KtNameReferenceExpression.changeQualifiedName(fqName: FqName, targetElement: PsiElement? = null): KtNameReferenceExpression {
         assert(!fqName.isRoot) { "Can't set empty FqName for element $this" }
 
         val shortName = fqName.shortName().asString()
         val psiFactory = KtPsiFactory(this)
         val parent = parent
+
+        if (parent is KtUserType && !fqName.isOneSegmentFQN()) {
+            val qualifier = parent.qualifier
+            val qualifierReference = qualifier?.referenceExpression as? KtNameReferenceExpression
+            if (qualifierReference != null && qualifier.typeArguments.isNotEmpty()) {
+                qualifierReference.changeQualifiedName(fqName.parent(), targetElement)
+                return this
+            }
+        }
+
+        val targetUnwrapped = targetElement?.unwrapped
+
+        if (targetUnwrapped != null && targetUnwrapped.isTopLevelKtOrJavaMember() && fqName.isOneSegmentFQN()) {
+            addDelayedImportRequest(targetUnwrapped, containingKtFile)
+        }
+
         var parentDelimiter = "."
         val fqNameBase = when {
             parent is KtCallElement -> {
@@ -191,7 +229,16 @@ class KtSimpleNameReference(expression: KtSimpleNameExpression) : KtSimpleRefere
             parent is KtCallableReferenceExpression && parent.callableReference == this -> {
                 parentDelimiter = ""
                 val callableRefCopy = parent.copied()
-                callableRefCopy.callableReference.replace(psiFactory.createSimpleName(shortName)).parent!!.text
+                callableRefCopy.receiverExpression?.delete()
+                val newCallableRef = callableRefCopy
+                    .callableReference
+                    .replace(psiFactory.createSimpleName(shortName))
+                    .parent as KtCallableReferenceExpression
+                if (targetUnwrapped != null && targetUnwrapped.isTopLevelKtOrJavaMember()) {
+                    addDelayedImportRequest(targetUnwrapped, parent.containingKtFile)
+                    return parent.replaced(newCallableRef).callableReference as KtNameReferenceExpression
+                }
+                newCallableRef.text
             }
             else -> shortName
         }
@@ -205,7 +252,7 @@ class KtSimpleNameReference(expression: KtSimpleNameExpression) : KtSimpleRefere
                 val typeText = "$text${elementToReplace.typeArgumentList?.text ?: ""}"
                 elementToReplace.replace(psiFactory.createType(typeText).typeElement!!)
             }
-            else -> elementToReplace.replace(psiFactory.createExpression(text))
+            else -> KtPsiUtil.safeDeparenthesize(elementToReplace.replaced(psiFactory.createExpression(text)))
         } as KtElement
 
         val selector = (newElement as? KtCallableReferenceExpression)?.callableReference
@@ -227,12 +274,12 @@ class KtSimpleNameReference(expression: KtSimpleNameExpression) : KtSimpleRefere
                             tokenType, element.parent is KtUnaryExpression, element.parent is KtBinaryExpression
                     ) ?: return emptyList()
                     val counterpart = OperatorConventions.ASSIGNMENT_OPERATION_COUNTERPARTS[tokenType]
-                    if (counterpart != null) {
+                    return if (counterpart != null) {
                         val counterpartName = OperatorConventions.getNameForOperationSymbol(counterpart, false, true)!!
-                        return listOf(name, counterpartName)
+                        listOf(name, counterpartName)
                     }
                     else {
-                        return listOf(name)
+                        listOf(name)
                     }
                 }
             }
@@ -241,13 +288,15 @@ class KtSimpleNameReference(expression: KtSimpleNameExpression) : KtSimpleRefere
         }
 
     fun getImportAlias(): KtImportAlias? {
+        fun DeclarationDescriptor.unwrap() = if (this is ImportedFromObjectCallableDescriptor<*>) callableFromObject else this
+
         val element = element
         val name = element.getReferencedName()
         val file = element.containingKtFile
         val importDirective = file.findImportByAlias(name) ?: return null
         val fqName = importDirective.importedFqName ?: return null
-        val importedDescriptors = file.resolveImportReference(fqName)
-        if (getTargetDescriptors(element.analyze(BodyResolveMode.PARTIAL)).any { it.getImportableDescriptor() in importedDescriptors }) {
+        val importedDescriptors = file.resolveImportReference(fqName).map { it.unwrap() }
+        if (getTargetDescriptors(element.analyze(BodyResolveMode.PARTIAL)).any { it.unwrap().getImportableDescriptor() in importedDescriptors }) {
             return importDirective.alias
         }
         return null

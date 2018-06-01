@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1115
 package foo
 
 fun singleQuoted(i: Int): Int = js("return i")

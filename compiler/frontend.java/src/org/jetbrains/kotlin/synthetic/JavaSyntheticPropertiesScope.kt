@@ -40,6 +40,10 @@ import org.jetbrains.kotlin.utils.addIfNotNull
 import java.util.*
 import kotlin.properties.Delegates
 
+fun canBePropertyAccessor(identifier: String): Boolean {
+    return identifier.startsWith("get") || identifier.startsWith("is") || identifier.startsWith("set")
+}
+
 interface SyntheticJavaPropertyDescriptor : PropertyDescriptor {
     val getMethod: FunctionDescriptor
     val setMethod: FunctionDescriptor?
@@ -49,7 +53,7 @@ interface SyntheticJavaPropertyDescriptor : PropertyDescriptor {
             val name = getterOrSetter.name
             if (name.isSpecial) return null
             val identifier = name.identifier
-            if (!identifier.startsWith("get") && !identifier.startsWith("is") && !identifier.startsWith("set")) return null // optimization
+            if (!canBePropertyAccessor(identifier)) return null  // optimization
 
             val classDescriptorOwner = getterOrSetter.containingDeclaration as? ClassDescriptor ?: return null
 
@@ -180,8 +184,17 @@ class JavaSyntheticPropertiesScope(storageManager: StorageManager, private val l
     override fun getSyntheticStaticFunctions(scope: ResolutionScope, name: Name, location: LookupLocation): Collection<FunctionDescriptor>
             = emptyList()
 
+    override fun getSyntheticConstructors(scope: ResolutionScope, name: Name, location: LookupLocation): Collection<FunctionDescriptor>
+            = emptyList()
+
     override fun getSyntheticStaticFunctions(scope: ResolutionScope): Collection<FunctionDescriptor>
             = emptyList()
+
+    override fun getSyntheticConstructors(scope: ResolutionScope): Collection<FunctionDescriptor>
+            = emptyList()
+
+    override fun getSyntheticConstructor(constructor: ConstructorDescriptor): ConstructorDescriptor?
+            = null
 
     private fun collectSyntheticPropertiesByName(result: SmartList<PropertyDescriptor>?, type: TypeConstructor, name: Name, processedTypes: MutableSet<TypeConstructor>?, location: LookupLocation): SmartList<PropertyDescriptor>? {
         if (processedTypes != null && !processedTypes.add(type)) return result
@@ -231,37 +244,6 @@ class JavaSyntheticPropertiesScope(storageManager: StorageManager, private val l
         return list
     }
 
-    //TODO: reuse code with generation?
-
-    private fun possibleGetMethodNames(propertyName: Name): List<Name> {
-        val result = ArrayList<Name>(3)
-        val identifier = propertyName.identifier
-
-        if (JvmAbi.startsWithIsPrefix(identifier)) {
-            result.add(propertyName)
-        }
-
-        val capitalize1 = identifier.capitalizeAsciiOnly()
-        val capitalize2 = identifier.capitalizeFirstWord(asciiOnly = true)
-        result.add(Name.identifier("get" + capitalize1))
-        if (capitalize2 != capitalize1) {
-            result.add(Name.identifier("get" + capitalize2))
-        }
-
-        return result
-                .filter { SyntheticJavaPropertyDescriptor.propertyNameByGetMethodName(it) == propertyName } // don't accept "uRL" for "getURL" etc
-    }
-
-    private fun setMethodName(getMethodName: Name): Name {
-        val identifier = getMethodName.identifier
-        val prefix = when {
-            identifier.startsWith("get") -> "get"
-            identifier.startsWith("is") -> "is"
-            else -> throw IllegalArgumentException()
-        }
-        return Name.identifier("set" + identifier.removePrefix(prefix))
-    }
-
     override fun getSyntheticMemberFunctions(receiverTypes: Collection<KotlinType>, name: Name, location: LookupLocation): Collection<FunctionDescriptor> = emptyList()
     override fun getSyntheticMemberFunctions(receiverTypes: Collection<KotlinType>): Collection<FunctionDescriptor> = emptyList()
 
@@ -283,7 +265,7 @@ class JavaSyntheticPropertiesScope(storageManager: StorageManager, private val l
             source: SourceElement
     ) : SyntheticJavaPropertyDescriptor, PropertyDescriptorImpl(
             containingDeclaration, original, annotations, modality, visibility, isVar, name, kind, source,
-            /* lateInit = */ false, /* isConst = */ false, /* isHeader = */ false, /* isImpl = */ false, /* isExternal = */ false,
+            /* lateInit = */ false, /* isConst = */ false, /* isExpect = */ false, /* isActual = */ false, /* isExternal = */ false,
             /* isDelegated = */ false
     ) {
 
@@ -349,8 +331,15 @@ class JavaSyntheticPropertiesScope(storageManager: StorageManager, private val l
             }
         }
 
-        override fun createSubstitutedCopy(newOwner: DeclarationDescriptor, newModality: Modality, newVisibility: Visibility, original: PropertyDescriptor?, kind: CallableMemberDescriptor.Kind): PropertyDescriptorImpl {
-            return MyPropertyDescriptor(newOwner, this, annotations, newModality, newVisibility, isVar, name, kind, source).apply {
+        override fun createSubstitutedCopy(
+                newOwner: DeclarationDescriptor,
+                newModality: Modality,
+                newVisibility: Visibility,
+                original: PropertyDescriptor?,
+                kind: CallableMemberDescriptor.Kind,
+                newName: Name
+        ): PropertyDescriptorImpl {
+            return MyPropertyDescriptor(newOwner, this, annotations, newModality, newVisibility, isVar, newName, kind, source).apply {
                 getMethod = this@MyPropertyDescriptor.getMethod
                 setMethod = this@MyPropertyDescriptor.setMethod
             }
@@ -375,6 +364,37 @@ class JavaSyntheticPropertiesScope(storageManager: StorageManager, private val l
             descriptor.getMethod = getMethod.substitute(classParametersSubstitutor) ?: return null
             descriptor.setMethod = setMethod?.substitute(classParametersSubstitutor)
             return descriptor
+        }
+    }
+
+    companion object {
+        fun possibleGetMethodNames(propertyName: Name): List<Name> {
+            val result = ArrayList<Name>(3)
+            val identifier = propertyName.identifier
+
+            if (JvmAbi.startsWithIsPrefix(identifier)) {
+                result.add(propertyName)
+            }
+
+            val capitalize1 = identifier.capitalizeAsciiOnly()
+            val capitalize2 = identifier.capitalizeFirstWord(asciiOnly = true)
+            result.add(Name.identifier("get" + capitalize1))
+            if (capitalize2 != capitalize1) {
+                result.add(Name.identifier("get" + capitalize2))
+            }
+
+            return result
+                .filter { SyntheticJavaPropertyDescriptor.propertyNameByGetMethodName(it) == propertyName } // don't accept "uRL" for "getURL" etc
+        }
+
+        fun setMethodName(getMethodName: Name): Name {
+            val identifier = getMethodName.identifier
+            val prefix = when {
+                identifier.startsWith("get") -> "get"
+                identifier.startsWith("is") -> "is"
+                else -> throw IllegalArgumentException()
+            }
+            return Name.identifier("set" + identifier.removePrefix(prefix))
         }
     }
 }

@@ -21,16 +21,14 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.search.LocalSearchScope
-import com.intellij.psi.search.searches.MethodReferencesSearch
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.util.RefactoringUIUtil
 import com.intellij.util.containers.MultiMap
-import org.jetbrains.kotlin.asJava.toLightMethods
 import org.jetbrains.kotlin.builtins.getReceiverTypeFromFunctionType
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
-import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
+import org.jetbrains.kotlin.idea.caches.resolve.unsafeResolveToDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
 import org.jetbrains.kotlin.idea.core.*
 import org.jetbrains.kotlin.idea.refactoring.CallableRefactoring
@@ -38,7 +36,9 @@ import org.jetbrains.kotlin.idea.refactoring.checkConflictsInteractively
 import org.jetbrains.kotlin.idea.refactoring.getAffectedCallables
 import org.jetbrains.kotlin.idea.references.KtSimpleReference
 import org.jetbrains.kotlin.idea.runSynchronouslyWithProgress
+import org.jetbrains.kotlin.idea.search.usagesSearch.searchReferencesOrMethodReferences
 import org.jetbrains.kotlin.idea.util.application.executeWriteCommand
+import org.jetbrains.kotlin.idea.util.application.progressIndicatorNullable
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
@@ -58,12 +58,12 @@ class ConvertFunctionTypeReceiverToParameterIntention : SelfTargetingRangeIntent
             val lambdaReceiverType: KotlinType,
             val function: KtFunction
     ) {
-        val functionDescriptor by lazy { function.resolveToDescriptor() as FunctionDescriptor }
+        val functionDescriptor by lazy { function.unsafeResolveToDescriptor() as FunctionDescriptor }
     }
 
     class FunctionDefinitionInfo(element: KtFunction) : AbstractProcessableUsageInfo<KtFunction, ConversionData>(element) {
         override fun process(data: ConversionData, elementsToShorten: MutableList<KtElement>) {
-            val function = element as? KtFunction ?: return
+            val function = element ?: return
             val functionParameter = function.valueParameters.getOrNull(data.functionParameterIndex) ?: return
             val functionType = functionParameter.typeReference?.typeElement as? KtFunctionType ?: return
             val functionTypeParameterList = functionType.parameterList ?: return
@@ -126,7 +126,7 @@ class ConvertFunctionTypeReceiverToParameterIntention : SelfTargetingRangeIntent
                 runReadAction {
                     val progressStep = 1.0/callables.size
                     for ((i, callable) in callables.withIndex()) {
-                        ProgressManager.getInstance().progressIndicator.fraction = (i + 1) * progressStep
+                        ProgressManager.getInstance().progressIndicatorNullable!!.fraction = (i + 1) * progressStep
 
                         if (callable !is KtFunction) continue
 
@@ -135,8 +135,7 @@ class ConvertFunctionTypeReceiverToParameterIntention : SelfTargetingRangeIntent
                             conflicts.putValue(callable, "Can't modify $renderedCallable")
                         }
 
-                        val references = callable.toLightMethods().flatMapTo(LinkedHashSet()) { MethodReferencesSearch.search(it) }
-                        for (ref in references) {
+                        for (ref in callable.searchReferencesOrMethodReferences()) {
                             if (ref !is KtSimpleReference<*>) continue
                             processExternalUsage(ref, usages)
                         }
@@ -195,7 +194,7 @@ class ConvertFunctionTypeReceiverToParameterIntention : SelfTargetingRangeIntent
                                          ?.getReceiverTypeFromFunctionType()
                                  ?: return null
         val containingParameter = (functionType.parent as? KtTypeReference)?.parent as? KtParameter ?: return null
-        val ownerFunction = containingParameter.ownerFunction ?: return null
+        val ownerFunction = containingParameter.ownerFunction as? KtFunction ?: return null
         val functionParameterIndex = ownerFunction.valueParameters.indexOf(containingParameter)
         return ConversionData(functionParameterIndex, lambdaReceiverType, ownerFunction)
     }

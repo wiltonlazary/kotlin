@@ -20,12 +20,11 @@ import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
 import org.jetbrains.kotlin.backend.jvm.descriptors.JvmDescriptorWithExtraFlags
-import org.jetbrains.kotlin.backend.jvm.descriptors.FileClassDescriptor
 import org.jetbrains.kotlin.codegen.*
-import org.jetbrains.kotlin.codegen.MemberCodegen.badDescriptor
 import org.jetbrains.kotlin.codegen.binding.CodegenBinding
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.util.dump
 import org.jetbrains.kotlin.load.java.JavaVisibilities
 import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.psi.KtElement
@@ -40,7 +39,11 @@ import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import java.lang.RuntimeException
 
-class ClassCodegen private constructor(val irClass: IrClass, val context: JvmBackendContext, val parentClassCodegen: ClassCodegen? = null) : InnerClassConsumer {
+class ClassCodegen private constructor(
+    internal val irClass: IrClass,
+    val context: JvmBackendContext,
+    private val parentClassCodegen: ClassCodegen? = null
+) : InnerClassConsumer {
 
     private val innerClasses = mutableListOf<ClassDescriptor>()
 
@@ -50,9 +53,12 @@ class ClassCodegen private constructor(val irClass: IrClass, val context: JvmBac
 
     val descriptor = irClass.descriptor
 
-    val isAnonymous = DescriptorUtils.isAnonymousObject(irClass.descriptor)
+    private val isAnonymous = DescriptorUtils.isAnonymousObject(irClass.descriptor)
 
-    val type: Type = if (isAnonymous) CodegenBinding.asmTypeForAnonymousClass(state.bindingContext, descriptor.source.getPsi() as KtElement) else typeMapper.mapType(descriptor)
+    val type: Type = if (isAnonymous) CodegenBinding.asmTypeForAnonymousClass(
+        state.bindingContext,
+        descriptor.source.getPsi() as KtElement
+    ) else typeMapper.mapType(descriptor)
 
     val psiElement = irClass.descriptor.psiElement!!
 
@@ -63,13 +69,13 @@ class ClassCodegen private constructor(val irClass: IrClass, val context: JvmBac
         val signature = ImplementationBodyCodegen.signature(descriptor, type, superClassInfo, typeMapper)
 
         visitor.defineClass(
-                psiElement,
-                state.classFileVersion,
-                descriptor.calculateClassFlags(),
-                signature.name,
-                signature.javaGenericSignature,
-                signature.superclassName,
-                signature.interfaces.toTypedArray()
+            psiElement,
+            state.classFileVersion,
+            descriptor.calculateClassFlags(),
+            signature.name,
+            signature.javaGenericSignature,
+            signature.superclassName,
+            signature.interfaces.toTypedArray()
         )
         AnnotationCodegen.forClass(visitor.visitor, this, typeMapper).genAnnotations(descriptor, null)
 
@@ -88,15 +94,21 @@ class ClassCodegen private constructor(val irClass: IrClass, val context: JvmBac
             val state = context.state
 
             if (ErrorUtils.isError(descriptor)) {
-                badDescriptor(descriptor, state.classBuilderMode)
+                badDescriptor(irClass, state.classBuilderMode)
                 return
             }
 
-            if (descriptor.name == SpecialNames.NO_NAME_PROVIDED) {
-                badDescriptor(descriptor, state.classBuilderMode)
+            if (irClass.name == SpecialNames.NO_NAME_PROVIDED) {
+                badDescriptor(irClass, state.classBuilderMode)
             }
 
             ClassCodegen(irClass, context).generate()
+        }
+
+        private fun badDescriptor(irClass: IrClass, mode: ClassBuilderMode) {
+            if (mode.generateBodies) {
+                throw IllegalStateException("Generating bad class in ClassBuilderMode = $mode: ${irClass.dump()}")
+            }
         }
     }
 
@@ -121,22 +133,24 @@ class ClassCodegen private constructor(val irClass: IrClass, val context: JvmBac
     }
 
 
-    fun generateField(field: IrField) {
+    private fun generateField(field: IrField) {
+        if (field.origin == IrDeclarationOrigin.FAKE_OVERRIDE) return
         val fieldType = typeMapper.mapType(field.descriptor)
         val fieldSignature = typeMapper.mapFieldSignature(field.descriptor.type, field.descriptor)
-        val fv = visitor.newField(field.OtherOrigin, field.descriptor.calculateCommonFlags(), field.descriptor.name.asString(), fieldType.descriptor,
-                                  fieldSignature, null/*TODO support default values*/)
+        val fv = visitor.newField(
+            field.OtherOrigin, field.descriptor.calculateCommonFlags(), field.descriptor.name.asString(), fieldType.descriptor,
+            fieldSignature, null/*TODO support default values*/
+        )
 
         if (field.origin == JvmLoweredDeclarationOrigin.FIELD_FOR_ENUM_ENTRY) {
             AnnotationCodegen.forField(fv, this, typeMapper).genAnnotations(field.descriptor, null)
-        }
-        else {
+        } else {
 
         }
     }
 
-    fun generateMethod(method: IrFunction) {
-        if (method.descriptor.kind == CallableMemberDescriptor.Kind.FAKE_OVERRIDE) return
+    private fun generateMethod(method: IrFunction) {
+        if (method.origin == IrDeclarationOrigin.FAKE_OVERRIDE) return
         FunctionCodegen(method, this).generate()
     }
 
@@ -145,9 +159,7 @@ class ClassCodegen private constructor(val irClass: IrClass, val context: JvmBac
         // for each enclosing class and for each immediate member
         val classDescriptor = classForInnerClassRecord()
         if (classDescriptor != null) {
-            if (parentClassCodegen != null) {
-                parentClassCodegen.innerClasses.add(classDescriptor)
-            }
+            parentClassCodegen?.innerClasses?.add(classDescriptor)
 
             var codegen: ClassCodegen? = this
             while (codegen != null) {
@@ -184,7 +196,7 @@ class ClassCodegen private constructor(val irClass: IrClass, val context: JvmBac
 
 fun ClassDescriptor.calculateClassFlags(): Int {
     var flags = 0
-    flags = flags or if (DescriptorUtils.isInterface(this) || DescriptorUtils.isAnnotationClass(this)) Opcodes.ACC_INTERFACE else Opcodes.ACC_SUPER
+    flags = flags or if (JvmCodegenUtil.isJvmInterface(this)) Opcodes.ACC_INTERFACE else Opcodes.ACC_SUPER
     flags = flags or calcModalityFlag()
     flags = flags or AsmUtil.getVisibilityAccessFlagForClass(this)
     flags = flags or if (kind == ClassKind.ENUM_CLASS) Opcodes.ACC_ENUM else 0
@@ -196,21 +208,17 @@ fun MemberDescriptor.calculateCommonFlags(): Int {
     var flags = 0
     if (Visibilities.isPrivate(visibility)) {
         flags = flags.or(Opcodes.ACC_PRIVATE)
-    }
-    else if (visibility == Visibilities.PUBLIC || visibility == Visibilities.INTERNAL) {
+    } else if (visibility == Visibilities.PUBLIC || visibility == Visibilities.INTERNAL) {
         flags = flags.or(Opcodes.ACC_PUBLIC)
-    }
-    else if (visibility == Visibilities.PROTECTED) {
+    } else if (visibility == Visibilities.PROTECTED) {
         flags = flags.or(Opcodes.ACC_PROTECTED)
-    }
-    else if (visibility == JavaVisibilities.PACKAGE_VISIBILITY) {
+    } else if (visibility == JavaVisibilities.PACKAGE_VISIBILITY) {
         // default visibility
-    }
-    else {
+    } else {
         throw RuntimeException("Unsupported visibility $visibility for descriptor $this")
     }
 
-    flags =  flags.or(calcModalityFlag())
+    flags = flags.or(calcModalityFlag())
 
     if (this is JvmDescriptorWithExtraFlags) {
         flags = flags or extraFlags
@@ -244,7 +252,7 @@ private fun MemberDescriptor.calcModalityFlag(): Int {
     return flags
 }
 
-val MemberDescriptor.effectiveModality: Modality
+private val MemberDescriptor.effectiveModality: Modality
     get() {
         if (this is ClassDescriptor && kind == ClassKind.ENUM_CLASS) {
             if (JvmCodegenUtil.hasAbstractMembers(this)) {
@@ -253,28 +261,19 @@ val MemberDescriptor.effectiveModality: Modality
         }
         if (DescriptorUtils.isSealedClass(this) ||
             DescriptorUtils.isAnnotationClass(this) ||
-            DescriptorUtils.isAnnotationClass(this.containingDeclaration)) {
+            DescriptorUtils.isAnnotationClass(this.containingDeclaration)
+        ) {
             return Modality.ABSTRACT
         }
 
         return modality
     }
 
-val DeclarationDescriptorWithSource.psiElement: PsiElement?
+private val DeclarationDescriptorWithSource.psiElement: PsiElement?
     get() = (source as? PsiSourceElement)?.psi
 
-val IrField.OtherOrigin: JvmDeclarationOrigin
+private val IrField.OtherOrigin: JvmDeclarationOrigin
     get() = OtherOrigin(descriptor.psiElement, this.descriptor)
 
-val IrFunction.OtherOrigin: JvmDeclarationOrigin
+internal val IrFunction.OtherOrigin: JvmDeclarationOrigin
     get() = OtherOrigin(descriptor.psiElement, this.descriptor)
-
-fun DeclarationDescriptor.getMemberOwnerKind(): OwnerKind = when (this) {
-    is FileClassDescriptor,
-    is PackageFragmentDescriptor ->
-        OwnerKind.PACKAGE
-    is ClassDescriptor ->
-        OwnerKind.IMPLEMENTATION
-    else ->
-        throw AssertionError("Unexpected declaration container: $this")
-}

@@ -21,8 +21,8 @@ import com.intellij.util.indexing.DataIndexer
 import com.intellij.util.indexing.FileBasedIndex
 import com.intellij.util.indexing.FileContent
 import org.jetbrains.kotlin.load.java.JvmAnnotationNames.*
-import org.jetbrains.kotlin.load.kotlin.JvmMetadataVersion
 import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
+import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmMetadataVersion
 import org.jetbrains.org.objectweb.asm.AnnotationVisitor
 import org.jetbrains.org.objectweb.asm.ClassReader
 import org.jetbrains.org.objectweb.asm.ClassVisitor
@@ -52,12 +52,12 @@ object KotlinJvmMetadataVersionIndex : KotlinMetadataVersionIndexBase<KotlinJvmM
 
         tryBlock(inputData) {
             val classReader = ClassReader(inputData.content)
-            classReader.accept(object : ClassVisitor(Opcodes.ASM5) {
+            classReader.accept(object : ClassVisitor(Opcodes.ASM6) {
                 override fun visitAnnotation(desc: String, visible: Boolean): AnnotationVisitor? {
                     if (desc != METADATA_DESC) return null
 
                     annotationPresent = true
-                    return object : AnnotationVisitor(Opcodes.ASM5) {
+                    return object : AnnotationVisitor(Opcodes.ASM6) {
                         override fun visit(name: String, value: Any) {
                             when (name) {
                                 METADATA_VERSION_FIELD_NAME -> if (value is IntArray) {

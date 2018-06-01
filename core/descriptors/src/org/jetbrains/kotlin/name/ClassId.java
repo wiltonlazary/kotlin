@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.name;
 
+import kotlin.text.StringsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -88,6 +89,25 @@ public final class ClassId {
     public FqName asSingleFqName() {
         if (packageFqName.isRoot()) return relativeClassName;
         return new FqName(packageFqName.asString() + "." + relativeClassName.asString());
+    }
+
+    public boolean startsWith(@NotNull Name segment) {
+        return packageFqName.startsWith(segment);
+    }
+
+    /**
+     * @param string a string where packages are delimited by '/' and classes by '.', e.g. "kotlin/Map.Entry"
+     */
+    @NotNull
+    public static ClassId fromString(@NotNull String string) {
+        return fromString(string, false);
+    }
+
+    @NotNull
+    public static ClassId fromString(@NotNull String string, boolean isLocal) {
+        String packageName = StringsKt.substringBeforeLast(string, '/', "").replace('/', '.');
+        String className = StringsKt.substringAfterLast(string, '/', string);
+        return new ClassId(new FqName(packageName), new FqName(className), isLocal);
     }
 
     /**

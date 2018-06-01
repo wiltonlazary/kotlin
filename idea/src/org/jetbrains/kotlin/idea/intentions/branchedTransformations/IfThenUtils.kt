@@ -17,11 +17,14 @@
 package org.jetbrains.kotlin.idea.intentions.branchedTransformations
 
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import org.jetbrains.kotlin.KtNodeTypes
-import org.jetbrains.kotlin.descriptors.VariableDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
+import org.jetbrains.kotlin.idea.caches.resolve.findModuleDescriptor
+import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
 import org.jetbrains.kotlin.idea.core.replaced
 import org.jetbrains.kotlin.idea.intentions.getLeftMostReceiverExpression
 import org.jetbrains.kotlin.idea.intentions.replaceFirstReceiver
@@ -29,14 +32,17 @@ import org.jetbrains.kotlin.idea.refactoring.inline.KotlinInlineValHandler
 import org.jetbrains.kotlin.idea.refactoring.introduce.introduceVariable.KotlinIntroduceVariableHandler
 import org.jetbrains.kotlin.idea.refactoring.isMultiLine
 import org.jetbrains.kotlin.idea.references.mainReference
+import org.jetbrains.kotlin.idea.resolve.frontendService
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.BindingContextUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
+import org.jetbrains.kotlin.resolve.calls.resolvedCallUtil.getImplicitReceiverValue
+import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValue
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValueFactory
-import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver
 import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
 import org.jetbrains.kotlin.utils.addToStdlib.constant
@@ -55,36 +61,49 @@ fun KtBinaryExpression.expressionComparedToNull(): KtExpression? {
 }
 
 fun KtExpression.unwrapBlockOrParenthesis(): KtExpression {
-    val innerExpression = KtPsiUtil.safeDeparenthesize(this)
+    val innerExpression = KtPsiUtil.safeDeparenthesize(this, true)
     if (innerExpression is KtBlockExpression) {
         val statement = innerExpression.statements.singleOrNull() ?: return this
-        return KtPsiUtil.safeDeparenthesize(statement)
+        return KtPsiUtil.safeDeparenthesize(statement, true)
     }
     return innerExpression
 }
 
+fun KtExpression?.isTrivialStatementBody(): Boolean = when (this?.unwrapBlockOrParenthesis()) {
+    is KtIfExpression, is KtBlockExpression -> false
+    else -> true
+}
+
 fun KtExpression?.isNullExpression(): Boolean = this?.unwrapBlockOrParenthesis()?.node?.elementType == KtNodeTypes.NULL
 
-fun KtExpression?.isNullExpressionOrEmptyBlock(): Boolean = this.isNullExpression() || this is KtBlockExpression && this.statements.isEmpty()
+fun KtExpression?.isNullExpressionOrEmptyBlock(): Boolean =
+    this.isNullExpression() || this is KtBlockExpression && this.statements.isEmpty()
 
 fun KtThrowExpression.throwsNullPointerExceptionWithNoArguments(): Boolean {
     val thrownExpression = this.thrownExpression as? KtCallExpression ?: return false
 
-    val context = this.analyze(BodyResolveMode.PARTIAL)
     val nameExpression = thrownExpression.calleeExpression as? KtNameReferenceExpression ?: return false
-    val descriptor = context[BindingContext.REFERENCE_TARGET, nameExpression]
+    val descriptor = nameExpression.resolveToCall()?.resultingDescriptor
     val declDescriptor = descriptor?.containingDeclaration ?: return false
 
     val exceptionName = DescriptorUtils.getFqName(declDescriptor).asString()
-    return exceptionName in constant { setOf("kotlin.KotlinNullPointerException", "kotlin.NullPointerException", "java.lang.NullPointerException") }
-           && thrownExpression.valueArguments.isEmpty()
+    return exceptionName in constant {
+        setOf(
+            "kotlin.KotlinNullPointerException",
+            "kotlin.NullPointerException",
+            "java.lang.NullPointerException"
+        )
+    } && thrownExpression.valueArguments.isEmpty()
 }
 
-fun KtExpression.evaluatesTo(other: KtExpression): Boolean {
-    return this.unwrapBlockOrParenthesis().text == other.text
-}
+fun KtExpression.evaluatesTo(other: KtExpression): Boolean =
+    this.unwrapBlockOrParenthesis().text == other.text
 
-fun KtExpression.convertToIfNotNullExpression(conditionLhs: KtExpression, thenClause: KtExpression, elseClause: KtExpression?): KtIfExpression {
+fun KtExpression.convertToIfNotNullExpression(
+    conditionLhs: KtExpression,
+    thenClause: KtExpression,
+    elseClause: KtExpression?
+): KtIfExpression {
     val condition = KtPsiFactory(this).createExpressionByPattern("$0 != null", conditionLhs)
     return this.convertToIfStatement(condition, thenClause, elseClause)
 }
@@ -94,18 +113,24 @@ fun KtExpression.convertToIfNullExpression(conditionLhs: KtExpression, thenClaus
     return this.convertToIfStatement(condition, thenClause)
 }
 
-fun KtExpression.convertToIfStatement(condition: KtExpression, thenClause: KtExpression, elseClause: KtExpression? = null): KtIfExpression {
-    return replaced(KtPsiFactory(this).createIf(condition, thenClause, elseClause))
-}
+fun KtExpression.convertToIfStatement(condition: KtExpression, thenClause: KtExpression, elseClause: KtExpression? = null): KtIfExpression =
+    replaced(KtPsiFactory(this).createIf(condition, thenClause, elseClause))
 
 fun KtIfExpression.introduceValueForCondition(occurrenceInThenClause: KtExpression, editor: Editor?) {
     val project = this.project
-    val occurrenceInConditional = (this.condition as KtBinaryExpression).left!!
-    KotlinIntroduceVariableHandler.doRefactoring(project,
-                                                 editor,
-                                                 occurrenceInConditional,
-                                                 false,
-                                                 listOf(occurrenceInConditional, occurrenceInThenClause), null)
+    val condition = condition
+    val occurrenceInConditional = when (condition) {
+        is KtBinaryExpression -> condition.left
+        is KtIsExpression -> condition.leftHandSide
+        else -> throw AssertionError("Only binary / is expressions are supported here: ${condition?.text}")
+    }!!
+    KotlinIntroduceVariableHandler.doRefactoring(
+        project,
+        editor,
+        occurrenceInConditional,
+        false,
+        listOf(occurrenceInConditional, occurrenceInThenClause), null
+    )
 }
 
 fun KtNameReferenceExpression.inlineIfDeclaredLocallyAndOnlyUsedOnceWithPrompt(editor: Editor?) {
@@ -135,39 +160,69 @@ fun KtPostfixExpression.inlineBaseExpressionIfApplicableWithPrompt(editor: Edito
     (this.baseExpression as? KtNameReferenceExpression)?.inlineIfDeclaredLocallyAndOnlyUsedOnceWithPrompt(editor)
 }
 
-fun KtExpression.isStableVariable(context: BindingContext = this.analyze()): Boolean {
-    val descriptor = BindingContextUtils.extractVariableDescriptorFromReference(context, this)
-    return descriptor is VariableDescriptor &&
-           DataFlowValueFactory.isStableValue(descriptor, DescriptorUtils.getContainingModule(descriptor))
+// I.e. stable val/var/receiver
+// We exclude stable complex expressions here, because we don't do smartcasts on them (even though they are stable)
+fun KtExpression.isStableSimpleExpression(context: BindingContext = this.analyze()): Boolean {
+    val dataFlowValue = this.toDataFlowValue(context)
+    return dataFlowValue?.isStable == true &&
+            dataFlowValue.kind != DataFlowValue.Kind.STABLE_COMPLEX_EXPRESSION
+
+}
+
+fun KtExpression.isStableVal(context: BindingContext = this.analyze()): Boolean {
+    return this.toDataFlowValue(context)?.kind == DataFlowValue.Kind.STABLE_VALUE
+}
+
+private fun KtExpression.toDataFlowValue(context: BindingContext): DataFlowValue? {
+    val expressionType = this.getType(context) ?: return null
+    val dataFlowValueFactory = this.getResolutionFacade().frontendService<DataFlowValueFactory>()
+    return dataFlowValueFactory.createDataFlowValue(this, expressionType, context, findModuleDescriptor())
 }
 
 data class IfThenToSelectData(
-        val context: BindingContext,
-        val condition: KtOperationExpression,
-        val receiverExpression: KtExpression,
-        val baseClause: KtExpression?,
-        val negatedClause: KtExpression?
+    val context: BindingContext,
+    val condition: KtOperationExpression,
+    val receiverExpression: KtExpression,
+    val baseClause: KtExpression?,
+    val negatedClause: KtExpression?
 ) {
+    internal fun baseClauseEvaluatesToReceiver() =
+        baseClause?.evaluatesTo(receiverExpression) == true
+
     internal fun replacedBaseClause(factory: KtPsiFactory): KtExpression {
         baseClause ?: error("Base clause must be not-null here")
         val newReceiver = (condition as? KtIsExpression)?.let {
-            factory.createExpressionByPattern("$0 as? $1",
-                                              (baseClause as? KtDotQualifiedExpression)?.getLeftMostReceiverExpression() ?: baseClause,
-                                              it.typeReference!!)
+            factory.createExpressionByPattern(
+                "$0 as? $1",
+                it.leftHandSide,
+                it.typeReference!!
+            )
         }
-        return if (baseClause.evaluatesTo(receiverExpression)) {
+
+        return if (baseClauseEvaluatesToReceiver()) {
             if (condition is KtIsExpression) newReceiver!! else baseClause
-        }
-        else {
-            if (condition is KtIsExpression) {
-                (baseClause as KtDotQualifiedExpression).replaceFirstReceiver(
-                        factory, newReceiver!!, safeAccess = true)
-            }
-            else {
-                baseClause.insertSafeCalls(factory)
+        } else {
+            when {
+                condition is KtIsExpression -> {
+                    when {
+                        baseClause is KtDotQualifiedExpression -> baseClause.replaceFirstReceiver(
+                            factory, newReceiver!!, safeAccess = true
+                        )
+                        hasImplicitReceiver() -> factory.createExpressionByPattern("$0?.$1", newReceiver!!, baseClause).insertSafeCalls(
+                            factory
+                        )
+                        else -> error("Illegal state")
+                    }
+                }
+                hasImplicitReceiver() -> factory.createExpressionByPattern("this?.$0", baseClause).insertSafeCalls(factory)
+                else -> baseClause.insertSafeCalls(factory)
             }
         }
     }
+
+    internal fun getImplicitReceiver(): ImplicitReceiver? = baseClause.getResolvedCall(context)?.getImplicitReceiverValue()
+
+    internal fun hasImplicitReceiver(): Boolean = getImplicitReceiver() != null
 }
 
 internal fun KtIfExpression.buildSelectTransformationData(): IfThenToSelectData? {
@@ -194,7 +249,6 @@ internal fun KtIfExpression.buildSelectTransformationData(): IfThenToSelectData?
             when (condition.isNegated) {
                 true -> elseClause to thenClause
                 false -> thenClause to elseClause
-                else -> return null
             }
         }
         else -> return null
@@ -241,3 +295,14 @@ private fun KtExpression.insertSafeCalls(factory: KtPsiFactory): KtExpression {
     replaced.receiverExpression.let { it.replace(it.insertSafeCalls(factory)) }
     return replaced
 }
+
+// Returns -1 if cannot obtain a document
+internal fun KtExpression.lineCount(): Int {
+    val file = containingFile?.virtualFile ?: return -1
+    val document = FileDocumentManager.getInstance().getDocument(file) ?: return -1
+    return document.getLineNumber(textRange.endOffset) - document.getLineNumber(textRange.startOffset) + 1
+}
+
+internal fun KtExpression.isOneLiner(): Boolean = lineCount() == 1
+
+internal fun KtExpression.isElseIf() = parent.node.elementType == KtNodeTypes.ELSE

@@ -24,7 +24,7 @@ import org.jetbrains.kotlin.builtins.DefaultBuiltIns
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
-import org.jetbrains.kotlin.idea.caches.resolve.BinaryModuleInfo
+import org.jetbrains.kotlin.idea.caches.project.BinaryModuleInfo
 import org.jetbrains.kotlin.idea.caches.resolve.LOG
 import org.jetbrains.kotlin.idea.decompiler.KtDecompiledFile
 import org.jetbrains.kotlin.idea.decompiler.textBuilder.DecompiledTextIndexer
@@ -85,11 +85,11 @@ private fun findInScope(referencedDescriptor: DeclarationDescriptor, scope: Glob
 }
 
 private fun isLocal(descriptor: DeclarationDescriptor): Boolean {
-    if (descriptor is ParameterDescriptor) {
-        return isLocal(descriptor.containingDeclaration)
+    return if (descriptor is ParameterDescriptor) {
+        isLocal(descriptor.containingDeclaration)
     }
     else {
-        return DescriptorUtils.isLocal(descriptor)
+        DescriptorUtils.isLocal(descriptor)
     }
 }
 

@@ -60,7 +60,7 @@ abstract class KotlinCompilerRunner<in Env : CompilerEnvironment> {
             environment: Env,
             daemonOptions: DaemonOptions = configureDaemonOptions()
     ): CompileServiceSession? {
-        val daemonJVMOptions = configureDaemonJVMOptions(inheritMemoryLimits = true, inheritAdditionalProperties = true)
+        val daemonJVMOptions = configureDaemonJVMOptions(inheritMemoryLimits = true, inheritOtherJvmOptions = false, inheritAdditionalProperties = true)
 
         val daemonReportMessages = ArrayList<DaemonReportMessage>()
         val daemonReportingTargets = DaemonReportingTargets(messages = daemonReportMessages)
@@ -147,12 +147,16 @@ abstract class KotlinCompilerRunner<in Env : CompilerEnvironment> {
             environment: Env
     ): ExitCode?
 
-    protected fun exitCodeFromProcessExitCode(code: Int): ExitCode {
-        val exitCode = ExitCode.values().find { it.code == code }
-        if (exitCode != null) return exitCode
+    protected fun exitCodeFromProcessExitCode(code: Int): ExitCode = Companion.exitCodeFromProcessExitCode(log, code)
 
-        log.debug("Could not find exit code by value: $code")
-        return if (code == 0) ExitCode.OK else ExitCode.COMPILATION_ERROR
+    companion object {
+        fun exitCodeFromProcessExitCode(log: KotlinLogger, code: Int): ExitCode {
+            val exitCode = ExitCode.values().find { it.code == code }
+            if (exitCode != null) return exitCode
+
+            log.debug("Could not find exit code by value: $code")
+            return if (code == 0) ExitCode.OK else ExitCode.COMPILATION_ERROR
+        }
     }
 }
 

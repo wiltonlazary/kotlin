@@ -19,7 +19,7 @@ package org.jetbrains.kotlin.idea.actions
 import com.intellij.ide.fileTemplates.DefaultCreateFromTemplateHandler
 import com.intellij.ide.fileTemplates.FileTemplate
 import org.jetbrains.kotlin.idea.KotlinFileType
-import org.jetbrains.kotlin.idea.core.quoteIfNeeded
+import org.jetbrains.kotlin.psi.psiUtil.quoteIfNeeded
 
 class KotlinCreateFromTemplateHandler : DefaultCreateFromTemplateHandler() {
     override fun handlesTemplate(template: FileTemplate) = template.isTemplateOfType(KotlinFileType.INSTANCE)
@@ -29,8 +29,7 @@ class KotlinCreateFromTemplateHandler : DefaultCreateFromTemplateHandler() {
         if (!packageName.isNullOrEmpty()) {
             props[FileTemplate.ATTRIBUTE_PACKAGE_NAME] = packageName!!
                     .split('.')
-                    .map(String::quoteIfNeeded)
-                    .joinToString(".")
+                    .joinToString(".", transform = String::quoteIfNeeded)
         }
 
         val name = props[FileTemplate.ATTRIBUTE_NAME] as? String

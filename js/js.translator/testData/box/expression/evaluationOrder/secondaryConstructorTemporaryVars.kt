@@ -1,4 +1,5 @@
-// HAS_NO_CAPTURED_VARS: function=A_init except=Kotlin;A
+// EXPECTED_REACHABLE_NODES: 1113
+// HAS_NO_CAPTURED_VARS: function=A_init except=Kotlin;A;equals
 
 class A() {
     var y: String? = null

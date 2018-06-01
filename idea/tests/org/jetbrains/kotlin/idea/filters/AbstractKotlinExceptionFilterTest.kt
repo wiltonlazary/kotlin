@@ -26,8 +26,7 @@ import com.intellij.openapi.util.io.FileUtilRt
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.testFramework.PsiTestUtil
 import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime
-import org.jetbrains.kotlin.fileClasses.NoResolveFileClassesProvider
-import org.jetbrains.kotlin.fileClasses.getFileClassFqName
+import org.jetbrains.kotlin.fileClasses.JvmFileClassUtil
 import org.jetbrains.kotlin.idea.refactoring.toVirtualFile
 import org.jetbrains.kotlin.idea.test.KotlinCodeInsightTestCase
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
@@ -61,7 +60,7 @@ abstract class AbstractKotlinExceptionFilterTest : KotlinCodeInsightTestCase() {
         val classLoader: URLClassLoader
         if (InTextDirectivesUtils.getPrefixedBoolean(fileText, "// WITH_MOCK_LIBRARY: ") ?: false) {
             if (MOCK_LIBRARY_JAR == null) {
-                MOCK_LIBRARY_JAR = MockLibraryUtil.compileLibraryToJar(MOCK_LIBRARY_SOURCES, "mockLibrary", true, false)
+                MOCK_LIBRARY_JAR = MockLibraryUtil.compileJvmLibraryToJar(MOCK_LIBRARY_SOURCES, "mockLibrary", addSources = true)
             }
 
             val mockLibraryJar = MOCK_LIBRARY_JAR ?: throw AssertionError("Mock library JAR is null")
@@ -77,7 +76,7 @@ abstract class AbstractKotlinExceptionFilterTest : KotlinCodeInsightTestCase() {
                 }
                 moduleModel.commit()
             }
-            MockLibraryUtil.compileKotlin(path, File(outDir.path), mockLibraryPath)
+            MockLibraryUtil.compileKotlin(path, File(outDir.path), extraClasspath = mockLibraryPath)
             classLoader = URLClassLoader(
                     arrayOf(URL(outDir.url + "/"), mockLibraryJar.toURI().toURL()),
                     ForTestCompileRuntime.runtimeJarClassLoader())
@@ -90,7 +89,7 @@ abstract class AbstractKotlinExceptionFilterTest : KotlinCodeInsightTestCase() {
         }
 
         val stackTraceElement = try {
-            val className = NoResolveFileClassesProvider.getFileClassFqName(file as KtFile)
+            val className = JvmFileClassUtil.getFileClassInfoNoResolve(file as KtFile).fileClassFqName
             val clazz = classLoader.loadClass(className.asString())
             clazz.getMethod("box")?.invoke(null)
             throw AssertionError("class ${className.asString()} should have box() method and throw exception")

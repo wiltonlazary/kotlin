@@ -24,19 +24,17 @@ import org.jetbrains.kotlin.cfg.pseudocode.instructions.InstructionVisitorWithRe
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.InstructionImpl
 
 class SubroutineEnterInstruction(
-        val subroutine: KtElement,
-        blockScope: BlockScope
+    val subroutine: KtElement,
+    blockScope: BlockScope
 ) : InstructionWithNext(subroutine, blockScope) {
     override fun accept(visitor: InstructionVisitor) {
         visitor.visitSubroutineEnter(this)
     }
 
-    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R {
-        return visitor.visitSubroutineEnter(this)
-    }
+    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R = visitor.visitSubroutineEnter(this)
 
     override fun toString(): String = "<START>"
 
     override fun createCopy(): InstructionImpl =
-            SubroutineEnterInstruction(subroutine, blockScope)
+        SubroutineEnterInstruction(subroutine, blockScope)
 }

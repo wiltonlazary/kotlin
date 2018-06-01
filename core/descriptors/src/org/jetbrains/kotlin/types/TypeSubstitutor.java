@@ -28,6 +28,7 @@ import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.resolve.calls.inference.CapturedTypeConstructorKt;
 import org.jetbrains.kotlin.types.typeUtil.TypeUtilsKt;
 import org.jetbrains.kotlin.types.typesApproximation.CapturedTypeApproximationKt;
+import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -133,6 +134,21 @@ public class TypeSubstitutor {
 
         // The type is within the substitution range, i.e. T or T?
         KotlinType type = originalProjection.getType();
+        if (type instanceof TypeWithEnhancement) {
+            KotlinType origin = ((TypeWithEnhancement) type).getOrigin();
+            KotlinType enhancement = ((TypeWithEnhancement) type).getEnhancement();
+
+            TypeProjection substitution = unsafeSubstitute(
+                    new TypeProjectionImpl(originalProjection.getProjectionKind(), origin),
+                    recursionDepth + 1
+            );
+
+            KotlinType substitutedEnhancement = substitute(enhancement, originalProjection.getProjectionKind());
+            KotlinType resultingType = TypeWithEnhancementKt.wrapEnhancement(substitution.getType().unwrap(), substitutedEnhancement);
+
+            return new TypeProjectionImpl(substitution.getProjectionKind(), resultingType);
+        }
+
         if (DynamicTypesKt.isDynamic(type) || type.unwrap() instanceof RawType) {
             return originalProjection; // todo investigate
         }
@@ -150,6 +166,8 @@ public class TypeSubstitutor {
             assert (substitutedProjectionKind == substitutedUpper.getProjectionKind()) &&
                    originalProjectionKind == Variance.INVARIANT || originalProjectionKind == substitutedProjectionKind :
                     "Unexpected substituted projection kind: " + substitutedProjectionKind + "; original: " + originalProjectionKind;
+
+            if (substitutedLower.getType() == flexibleType.getLowerBound() && substitutedUpper.getType() == flexibleType.getUpperBound()) return originalProjection;
 
             KotlinType substitutedFlexibleType = KotlinTypeFactory.flexibleType(
                     TypeSubstitutionKt.asSimpleType(substitutedLower.getType()), TypeSubstitutionKt.asSimpleType(substitutedUpper.getType()));
@@ -251,6 +269,7 @@ public class TypeSubstitutor {
             List<TypeParameterDescriptor> typeParameters, List<TypeProjection> typeArguments, int recursionDepth
     ) throws SubstitutionException {
         List<TypeProjection> substitutedArguments = new ArrayList<TypeProjection>(typeParameters.size());
+        boolean wereChanges = false;
         for (int i = 0; i < typeParameters.size(); i++) {
             TypeParameterDescriptor typeParameter = typeParameters.get(i);
             TypeProjection typeArgument = typeArguments.get(i);
@@ -270,8 +289,15 @@ public class TypeSubstitutor {
                     break;
             }
 
+            if (substitutedTypeArgument != typeArgument) {
+                wereChanges = true;
+            }
+
             substitutedArguments.add(substitutedTypeArgument);
         }
+
+        if (!wereChanges) return typeArguments;
+
         return substitutedArguments;
     }
 
@@ -318,7 +344,7 @@ public class TypeSubstitutor {
             return o.toString();
         }
         catch (Throwable e) {
-            if (e.getClass().getName().equals("com.intellij.openapi.progress.ProcessCanceledException")) {
+            if (ExceptionUtilsKt.isProcessCanceledException(e)) {
                 //noinspection ConstantConditions
                 throw (RuntimeException) e;
             }

@@ -45,6 +45,7 @@ import org.jetbrains.kotlin.idea.search.excludeKotlinSources
 import org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinReadWriteAccessDetector
 import org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinReferencesSearchOptions
 import org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinReferencesSearchParameters
+import org.jetbrains.kotlin.idea.search.isOnlyKotlinSearch
 import org.jetbrains.kotlin.idea.search.usagesSearch.dataClassComponentFunction
 import org.jetbrains.kotlin.idea.search.usagesSearch.isImportUsage
 import org.jetbrains.kotlin.idea.util.application.runReadAction
@@ -112,7 +113,7 @@ abstract class KotlinFindMemberUsagesHandler<T : KtNamedDeclaration>
                     when (access) {
                         ReadWriteAccessDetector.Access.Read -> kotlinOptions.isReadAccess
                         ReadWriteAccessDetector.Access.Write -> kotlinOptions.isWriteAccess
-                        ReadWriteAccessDetector.Access.ReadWrite -> true
+                        ReadWriteAccessDetector.Access.ReadWrite -> kotlinOptions.isReadWriteAccess
                     }
                 }
             }
@@ -146,15 +147,18 @@ abstract class KotlinFindMemberUsagesHandler<T : KtNamedDeclaration>
                     addTask { query.forEach(referenceProcessor) }
                 }
 
-
-                for (psiMethod in element.toLightMethods()) {
-                    var searchScope = options.searchScope
+                if (element is KtElement && !isOnlyKotlinSearch(options.searchScope)) {
                     // TODO: very bad code!! ReferencesSearch does not work correctly for constructors and annotation parameters
-                    if (element is KtNamedFunction || (element is KtParameter && element.dataClassComponentFunction() != null)) {
-                        searchScope = searchScope.excludeKotlinSources()
+                    val psiMethodScopeSearch = when {
+                        element is KtNamedFunction || element is KtParameter && element.dataClassComponentFunction() != null ->
+                            options.searchScope.excludeKotlinSources()
+                        else -> options.searchScope
                     }
-                    applyQueryFilters(element, options, MethodReferencesSearch.search(psiMethod, searchScope, true)).let { query ->
-                        addTask { query.forEach(referenceProcessor) }
+
+                    for (psiMethod in element.toLightMethods()) {
+                        applyQueryFilters(element, options, MethodReferencesSearch.search(psiMethod, psiMethodScopeSearch, true)).let { query ->
+                            addTask { query.forEach(referenceProcessor) }
+                        }
                     }
                 }
             }

@@ -55,6 +55,8 @@ inline fun <K, V> MutableMap<K, V>.getOrPutNullable(key: K, defaultValue: () -> 
 
 inline fun <T, C: Collection<T>> C.ifEmpty(body: () -> C): C = if (isEmpty()) body() else this
 
+inline fun <K, V, M: Map<K, V>> M.ifEmpty(body: () -> M): M = if (isEmpty()) body() else this
+
 inline fun <T> Array<out T>.ifEmpty(body: () -> Array<out T>): Array<out T> = if (isEmpty()) body() else this
 
 fun <T: Any> MutableCollection<T>.addIfNotNull(t: T?) {
@@ -78,7 +80,7 @@ fun <E> newLinkedHashSetWithExpectedSize(expectedSize: Int): LinkedHashSet<E> =
 private fun capacity(expectedSize: Int): Int =
         if (expectedSize < 3) 3 else expectedSize + expectedSize / 3 + 1
 
-fun <T> ArrayList<T>.compactIfPossible(): List<T> =
+fun <T> ArrayList<T>.compact(): List<T> =
         when (size) {
             0 -> emptyList()
             1 -> listOf(first())

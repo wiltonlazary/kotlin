@@ -23,17 +23,13 @@ import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
-import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
-import org.jetbrains.kotlin.idea.util.getResolutionScope
+import org.jetbrains.kotlin.idea.intentions.branchedTransformations.isStableSimpleExpression
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.createSmartPointer
 import org.jetbrains.kotlin.psi.psiUtil.getLastParentOfTypeInRow
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfTypesAndPredicate
-import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.bindingContextUtil.isUsedAsExpression
-import org.jetbrains.kotlin.resolve.calls.callUtil.getType
-import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValueFactory
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.types.typeUtil.isNullabilityMismatch
 
@@ -65,7 +61,7 @@ class SurroundWithNullCheckFix(
         override fun createAction(diagnostic: Diagnostic): IntentionAction? {
             val element = diagnostic.psiElement
             val expressionParent = element.getParentOfType<KtExpression>(strict = element is KtOperationReferenceExpression) ?: return null
-            val context = expressionParent.analyze(BodyResolveMode.PARTIAL)
+            val context = expressionParent.analyze(BodyResolveMode.PARTIAL_WITH_CFA)
 
             val parent = element.parent
             val nullableExpression =
@@ -76,7 +72,7 @@ class SurroundWithNullCheckFix(
                         else -> return null
                     } as? KtReferenceExpression ?: return null
 
-            if (!nullableExpression.isStable(context)) return null
+            if (!nullableExpression.isStableSimpleExpression(context)) return null
 
             val expressionTarget = expressionParent.getParentOfTypesAndPredicate(strict = false, parentClasses = KtExpression::class.java) {
                 !it.isUsedAsExpression(context) && it.hasAcceptableParent()
@@ -95,7 +91,7 @@ class SurroundWithNullCheckFix(
             val forExpression = nullableExpression.parent.parent as? KtForExpression ?: return null
             if (forExpression.parent !is KtBlockExpression) return null
 
-            if (!nullableExpression.isStable()) return null
+            if (!nullableExpression.isStableSimpleExpression()) return null
 
             return SurroundWithNullCheckFix(forExpression, nullableExpression)
         }
@@ -114,15 +110,9 @@ class SurroundWithNullCheckFix(
 
             if (!isNullabilityMismatch(expected = typeMismatch.a, actual = typeMismatch.b)) return null
 
-            if (!nullableExpression.isStable()) return null
+            if (!nullableExpression.isStableSimpleExpression()) return null
 
             return SurroundWithNullCheckFix(rootCall, nullableExpression)
         }
     }
-}
-
-private fun KtExpression.isStable(context: BindingContext = this.analyze()): Boolean {
-    val nullableType = this.getType(context) ?: return false
-    val containingDescriptor = this.getResolutionScope(context, this.getResolutionFacade()).ownerDescriptor
-    return DataFlowValueFactory.createDataFlowValue(this, nullableType, context, containingDescriptor).isStable
 }

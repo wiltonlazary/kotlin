@@ -396,6 +396,18 @@ public class Visibilities {
         public KotlinType getType() {
             throw new IllegalStateException("This method should not be called");
         }
+
+        @NotNull
+        @Override
+        public ReceiverValue replaceType(@NotNull KotlinType newType) {
+            throw new IllegalStateException("This method should not be called");
+        }
+
+        @NotNull
+        @Override
+        public ReceiverValue getOriginal() {
+            return this;
+        }
     };
 
     /**
@@ -408,6 +420,18 @@ public class Visibilities {
         public KotlinType getType() {
             throw new IllegalStateException("This method should not be called");
         }
+
+        @NotNull
+        @Override
+        public ReceiverValue replaceType(@NotNull KotlinType newType) {
+            throw new IllegalStateException("This method should not be called");
+        }
+
+        @NotNull
+        @Override
+        public ReceiverValue getOriginal() {
+            return this;
+        }
     };
 
     // This constant is not intended to use somewhere else from
@@ -417,6 +441,18 @@ public class Visibilities {
         @Override
         public KotlinType getType() {
             throw new IllegalStateException("This method should not be called");
+        }
+
+        @NotNull
+        @Override
+        public ReceiverValue replaceType(@NotNull KotlinType newType) {
+            throw new IllegalStateException("This method should not be called");
+        }
+
+        @NotNull
+        @Override
+        public ReceiverValue getOriginal() {
+            return this;
         }
     };
 

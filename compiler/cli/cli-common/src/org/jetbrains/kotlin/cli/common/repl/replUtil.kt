@@ -40,7 +40,7 @@ fun renderReplStackTrace(cause: Throwable, startFromMethodName: String): String 
     @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN", "UsePropertyAccessSyntax")
     (cause as java.lang.Throwable).setStackTrace(resultingTrace.toTypedArray())
 
-    return Throwables.getStackTraceAsString(cause)
+    return Throwables.getStackTraceAsString(cause).trimEnd()
 }
 
 internal fun ClassLoader.listAllUrlsAsFiles(): List<File> {
@@ -51,7 +51,7 @@ internal fun ClassLoader.listAllUrlsAsFiles(): List<File> {
 }
 
 internal fun URLClassLoader.listLocalUrlsAsFiles(): List<File> {
-    return this.urLs.map { it.toString().removePrefix("file:") }.filterNotNull().map(::File)
+    return this.urLs.mapNotNull { it.toString().removePrefix("file:") }.map(::File)
 }
 
 internal fun <T : Any> List<T>.ensureNotEmpty(error: String): List<T> {

@@ -29,13 +29,20 @@ public enum CompilerMessageSeverity {
     WARNING,
     INFO,
     LOGGING,
+    /**
+     * Source to output files mapping messages (e.g A.kt->A.class).
+     * It is needed for incremental compilation.
+     */
     OUTPUT;
 
-    public static final EnumSet<CompilerMessageSeverity> ERRORS = EnumSet.of(ERROR, EXCEPTION);
     public static final EnumSet<CompilerMessageSeverity> VERBOSE = EnumSet.of(LOGGING);
 
     public boolean isError() {
-        return ERRORS.contains(this);
+        return this == EXCEPTION || this == ERROR;
+    }
+
+    public boolean isWarning() {
+        return this == STRONG_WARNING || this == WARNING;
     }
 
     @NotNull

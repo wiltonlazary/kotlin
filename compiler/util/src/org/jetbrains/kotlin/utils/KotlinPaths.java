@@ -27,12 +27,6 @@ public interface KotlinPaths {
     @NotNull
     File getLibPath();
 
-    /**
-     * @deprecated Use getStdlibPath() instead
-     */
-    @NotNull
-    File getRuntimePath();
-
     @NotNull
     File getStdlibPath();
 
@@ -64,8 +58,9 @@ public interface KotlinPaths {
     File getNoArgPluginJarPath();
 
     @NotNull
-    File getCompilerPath();
+    File getSamWithReceiverJarPath();
 
     @NotNull
-    File getBuildNumberFile();
+    File getCompilerPath();
+
 }

@@ -16,14 +16,17 @@
 
 package org.jetbrains.kotlin.idea.quickfix.createFromUsage.createCallable
 
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.idea.core.quickfix.QuickFixUtil
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.CallableInfo
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.FunctionInfo
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.TypeInfo
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
 import org.jetbrains.kotlin.psi.KtForExpression
+import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.resolve.DataClassDescriptorResolver
 import org.jetbrains.kotlin.types.Variance
 
@@ -41,13 +44,21 @@ object CreateComponentFunctionActionFactory : CreateCallableMemberFromUsageFacto
 
         val componentNumber = DataClassDescriptorResolver.getComponentIndex(name.asString()) - 1
 
-        val ownerType = element.initializer?.let { TypeInfo(it, Variance.IN_VARIANCE) }
-                        ?: TypeInfo(diagnosticWithParameters.b, Variance.IN_VARIANCE)
+        val targetType = diagnosticWithParameters.b
+        val targetClassDescriptor = targetType.constructor.declarationDescriptor as? ClassDescriptor
+        if (targetClassDescriptor != null && targetClassDescriptor.isData) return null
+
+        val ownerTypeInfo = TypeInfo(targetType, Variance.IN_VARIANCE)
         val entries = element.entries
 
         val entry = entries[componentNumber]
-        val returnType = TypeInfo(entry, Variance.OUT_VARIANCE)
+        val returnTypeInfo = TypeInfo(entry, Variance.OUT_VARIANCE)
 
-        return FunctionInfo(name.identifier, ownerType, returnType, isOperator = true)
+        return FunctionInfo(
+                name.identifier,
+                ownerTypeInfo,
+                returnTypeInfo,
+                modifierList = KtPsiFactory(element).createModifierList(KtTokens.OPERATOR_KEYWORD)
+        )
     }
 }

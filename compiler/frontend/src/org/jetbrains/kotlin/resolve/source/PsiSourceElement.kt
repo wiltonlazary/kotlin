@@ -27,10 +27,12 @@ interface PsiSourceElement : SourceElement {
     override fun getContainingFile(): SourceFile = psi?.containingFile?.let(::PsiSourceFile) ?: SourceFile.NO_SOURCE_FILE
 }
 
-class PsiSourceFile(val psiFile: PsiFile): SourceFile {
+class PsiSourceFile(val psiFile: PsiFile) : SourceFile {
     override fun equals(other: Any?): Boolean = other is PsiSourceFile && psiFile == other.psiFile
 
     override fun hashCode(): Int = psiFile.hashCode()
 
     override fun toString(): String = psiFile.virtualFile.path
+
+    override fun getName(): String? = psiFile.virtualFile?.name
 }

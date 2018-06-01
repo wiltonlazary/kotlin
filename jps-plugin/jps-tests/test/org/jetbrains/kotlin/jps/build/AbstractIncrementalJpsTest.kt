@@ -22,6 +22,7 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.io.FileUtilRt
 import com.intellij.testFramework.TestLoggerFactory
 import com.intellij.testFramework.UsefulTestCase
+import com.intellij.util.concurrency.FixedFuture
 import junit.framework.TestCase
 import org.apache.log4j.ConsoleAppender
 import org.apache.log4j.Level
@@ -45,16 +46,17 @@ import org.jetbrains.jps.util.JpsPathUtil
 import org.jetbrains.kotlin.config.IncrementalCompilation
 import org.jetbrains.kotlin.incremental.CacheVersion
 import org.jetbrains.kotlin.incremental.LookupSymbol
-import org.jetbrains.kotlin.incremental.components.LookupTracker
+import org.jetbrains.kotlin.incremental.isJavaFile
 import org.jetbrains.kotlin.incremental.testingUtils.*
-import org.jetbrains.kotlin.jps.incremental.JpsLookupStorageProvider
-import org.jetbrains.kotlin.jps.incremental.KotlinDataContainerTarget
 import org.jetbrains.kotlin.jps.incremental.getKotlinCache
+import org.jetbrains.kotlin.jps.incremental.withLookupStorage
+import org.jetbrains.kotlin.jps.model.JpsKotlinFacetModuleExtension
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.utils.Printer
 import org.jetbrains.kotlin.utils.keysToMap
 import java.io.*
 import java.util.*
+import java.util.concurrent.Future
 import kotlin.reflect.jvm.javaField
 
 abstract class AbstractIncrementalJpsTest(
@@ -71,17 +73,17 @@ abstract class AbstractIncrementalJpsTest(
         private val DEBUG_LOGGING_ENABLED = System.getProperty("debug.logging.enabled") == "true"
     }
 
-    protected open val enableExperimentalIncrementalCompilation = false
-
     protected lateinit var testDataDir: File
     protected lateinit var workDir: File
     protected lateinit var projectDescriptor: ProjectDescriptor
+    // is used to compare lookup dumps in a human readable way (lookup symbols are hashed in an actual lookup storage)
     protected lateinit var lookupsDuringTest: MutableSet<LookupSymbol>
+    private var isICEnabledBackup: Boolean = false
 
     protected var mapWorkingToOriginalFile: MutableMap<File, File> = hashMapOf()
 
     protected open val buildLogFinder: BuildLogFinder
-        get() = BuildLogFinder(isExperimentalEnabled = enableExperimentalIncrementalCompilation)
+        get() = BuildLogFinder()
 
     private fun enableDebugLogging() {
         com.intellij.openapi.diagnostic.Logger.setFactory(TestLoggerFactory::class.java)
@@ -112,7 +114,8 @@ abstract class AbstractIncrementalJpsTest(
     override fun setUp() {
         super.setUp()
         lookupsDuringTest = hashSetOf()
-        IncrementalCompilation.setIsExperimental(enableExperimentalIncrementalCompilation)
+        isICEnabledBackup = IncrementalCompilation.isEnabled()
+        IncrementalCompilation.setIsEnabled(true)
 
         if (DEBUG_LOGGING_ENABLED) {
             enableDebugLogging()
@@ -125,23 +128,23 @@ abstract class AbstractIncrementalJpsTest(
         (AbstractIncrementalJpsTest::projectDescriptor).javaField!![this] = null
         (AbstractIncrementalJpsTest::systemPropertiesBackup).javaField!![this] = null
         lookupsDuringTest.clear()
+        IncrementalCompilation.setIsEnabled(isICEnabledBackup)
         super.tearDown()
     }
 
-    protected open val mockConstantSearch: Callbacks.ConstantAffectionResolver?
-        get() = null
+    // JPS forces rebuild of all files when JVM constant has been changed and Callbacks.ConstantAffectionResolver
+    // is not provided, so ConstantAffectionResolver is mocked with empty implementation
+    // Usages in Kotlin files are expected to be found by KotlinLookupConstantSearch
+    private val mockConstantSearch: Callbacks.ConstantAffectionResolver?
+        get() = MockJavaConstantSearch(workDir)
 
-    private fun createLookupTracker(): TestLookupTracker = TestLookupTracker()
-
-    protected open fun checkLookups(@Suppress("UNUSED_PARAMETER") lookupTracker: LookupTracker, compiledFiles: Set<File>) {
-    }
-
-    private fun build(scope: CompileScopeTestBuilder = CompileScopeTestBuilder.make().allModules(), checkLookups: Boolean = true): MakeResult {
+    private fun build(scope: CompileScopeTestBuilder = CompileScopeTestBuilder.make().allModules()): MakeResult {
         val workDirPath = FileUtil.toSystemIndependentName(workDir.absolutePath)
+
         val logger = MyLogger(workDirPath)
         projectDescriptor = createProjectDescriptor(BuildLoggingManager(logger))
 
-        val lookupTracker = createLookupTracker()
+        val lookupTracker = TestLookupTracker()
         projectDescriptor.project.setTestingContext(TestingContext(lookupTracker, logger))
 
         try {
@@ -150,12 +153,7 @@ abstract class AbstractIncrementalJpsTest(
             builder.addMessageHandler(buildResult)
             builder.build(scope.build(), false)
 
-            if (checkLookups) {
-                checkLookups(lookupTracker, logger.compiledFiles)
-            }
-
-            val lookups = lookupTracker.lookups.map { LookupSymbol(it.name, it.scopeFqName) }
-            lookupsDuringTest.addAll(lookups)
+            lookupTracker.lookups.mapTo(lookupsDuringTest) { LookupSymbol(it.name, it.scopeFqName) }
 
             if (!buildResult.isSuccessful) {
                 val errorMessages =
@@ -195,7 +193,7 @@ abstract class AbstractIncrementalJpsTest(
     }
 
     private fun rebuild(): MakeResult {
-        return build(CompileScopeTestBuilder.rebuild().allModules(), checkLookups = false)
+        return build(CompileScopeTestBuilder.rebuild().allModules())
     }
 
     private fun rebuildAndCheckOutput(makeOverallResult: MakeResult) {
@@ -279,8 +277,6 @@ abstract class AbstractIncrementalJpsTest(
             throw IllegalStateException("No build log file in $testDataDir")
         }
 
-        if (!enableExperimentalIncrementalCompilation && File(testDataDir, "dont-check-caches-in-non-experimental-ic.txt").exists()) return
-
         val lastMakeResult = otherMakeResults.last()
         rebuildAndCheckOutput(lastMakeResult)
         clearCachesRebuildAndCheckOutput(lastMakeResult)
@@ -308,9 +304,10 @@ abstract class AbstractIncrementalJpsTest(
         p.println("Begin of Lookup Maps")
         p.println()
 
-        val lookupStorage = project.dataManager.getStorage(KotlinDataContainerTarget, JpsLookupStorageProvider)
-        lookupStorage.forceGC()
-        p.print(lookupStorage.dump(lookupsDuringTest))
+        project.dataManager.withLookupStorage { lookupStorage ->
+            lookupStorage.forceGC()
+            p.print(lookupStorage.dump(lookupsDuringTest))
+        }
 
         p.println()
         p.println("End of Lookup Maps")
@@ -419,8 +416,8 @@ abstract class AbstractIncrementalJpsTest(
 
             moduleNames = nameToModule.keys
         }
-        AbstractKotlinJpsBuildTestCase.addKotlinRuntimeDependency(myProject)
-        AbstractKotlinJpsBuildTestCase.addKotlinTestRuntimeDependency(myProject)
+        AbstractKotlinJpsBuildTestCase.addKotlinStdlibDependency(myProject)
+        AbstractKotlinJpsBuildTestCase.addKotlinTestDependency(myProject)
         return moduleNames
     }
 
@@ -431,8 +428,8 @@ abstract class AbstractIncrementalJpsTest(
     override fun doGetProjectDir(): File? = workDir
 
     private class MyLogger(val rootPath: String) : ProjectBuilderLoggerBase(), BuildLogger {
-
-        private val dirtyFiles = ArrayList<File>()
+        private val markedDirtyBeforeRound = ArrayList<File>()
+        private val markedDirtyAfterRound = ArrayList<File>()
 
         override fun actionsOnCacheVersionChanged(actions: List<CacheVersion.Action>) {
             if (actions.size > 1 && actions.any { it != CacheVersion.Action.DO_NOTHING }) {
@@ -440,28 +437,41 @@ abstract class AbstractIncrementalJpsTest(
             }
         }
 
-        override fun markedAsDirty(files: Iterable<File>) {
-            dirtyFiles.addAll(files)
+        override fun markedAsDirtyBeforeRound(files: Iterable<File>) {
+            markedDirtyBeforeRound.addAll(files)
+        }
+
+        override fun markedAsDirtyAfterRound(files: Iterable<File>) {
+            markedDirtyAfterRound.addAll(files)
         }
 
         override fun buildStarted(context: CompileContext, chunk: ModuleChunk) {
-            if (context.projectDescriptor.project.modules.size > 1) {
+            if (!chunk.isDummy(context) && context.projectDescriptor.project.modules.size > 1) {
                 logLine("Building ${chunk.modules.sortedBy { it.name }.joinToString { it.name }}")
             }
         }
 
-        override fun buildFinished(exitCode: ModuleLevelBuilder.ExitCode) {
+        override fun afterBuildStarted(context: CompileContext, chunk: ModuleChunk) {
+            logDirtyFiles(markedDirtyBeforeRound)
+        }
 
-            if (dirtyFiles.isNotEmpty()) {
-                logLine("Marked as dirty by Kotlin:")
-                dirtyFiles
-                        .map { FileUtil.toSystemIndependentName(it.path) }
-                        .sorted()
-                        .forEach { logLine(it) }
-                dirtyFiles.clear()
-            }
+        override fun buildFinished(exitCode: ModuleLevelBuilder.ExitCode) {
+            logDirtyFiles(markedDirtyAfterRound)
             logLine("Exit code: $exitCode")
             logLine("------------------------------------------")
+        }
+
+        private fun logDirtyFiles(files: MutableList<File>) {
+            if (files.isEmpty()) return
+
+            logLine("Marked as dirty by Kotlin:")
+            files.apply {
+                map { FileUtil.toSystemIndependentName(it.path) }
+                    .sorted()
+                    .forEach { logLine(it) }
+
+                clear()
+            }
         }
 
         private val logBuf = StringBuilder()
@@ -483,6 +493,38 @@ abstract class AbstractIncrementalJpsTest(
         override fun logLine(message: String?) {
             logBuf.append(KotlinTestUtils.replaceHashWithStar(message!!.replace("^$rootPath/".toRegex(), "  "))).append('\n')
         }
+    }
+}
+
+/**
+ * Mocks Intellij Java constant search.
+ * When JPS is run from Intellij, it sends find usages request to IDE (it only searches for references inside Java files).
+ *
+ * We rely on heuristics instead of precise usages search.
+ * A Java file is considered affected if:
+ * 1. It contains changed field name as a content substring.
+ * 2. Its simple file name is not equal to a field's owner class simple name (to avoid recompiling field's declaration again)
+ */
+private class MockJavaConstantSearch(private val workDir: File) : Callbacks.ConstantAffectionResolver {
+    override fun request(
+        ownerClassName: String,
+        fieldName: String,
+        accessFlags: Int,
+        fieldRemoved: Boolean,
+        accessChanged: Boolean
+    ): Future<Callbacks.ConstantAffection> {
+        fun File.isAffected(): Boolean {
+            if (!isJavaFile()) return false
+
+            if (nameWithoutExtension == ownerClassName.substringAfterLast(".")) return false
+
+            val code = readText()
+            return code.contains(fieldName)
+        }
+
+
+        val affectedJavaFiles = workDir.walk().filter(File::isAffected).toList()
+        return FixedFuture(Callbacks.ConstantAffection(affectedJavaFiles))
     }
 }
 

@@ -19,7 +19,6 @@ package org.jetbrains.kotlin.idea.quickfix
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiFile
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor.Kind.SYNTHESIZED
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -52,9 +51,7 @@ abstract class ChangeFunctionSignatureFix(
 
     override fun startInWriteAction() = false
 
-    override fun isAvailable(project: Project, editor: Editor?, file: PsiFile): Boolean {
-        if (!super.isAvailable(project, editor, file)) return false
-
+    override fun isAvailable(project: Project, editor: Editor?, file: KtFile): Boolean {
         val declarations = DescriptorToSourceUtilsIde.getAllDeclarations(project, functionDescriptor)
         return declarations.isNotEmpty() && declarations.all { it.isValid && it.canRefactor() }
     }
@@ -63,15 +60,13 @@ abstract class ChangeFunctionSignatureFix(
         val argumentName = argument.getArgumentName()
         val expression = argument.getArgumentExpression()
 
-        if (argumentName != null) {
-            return KotlinNameSuggester.suggestNameByName(argumentName.asName.asString(), validator)
-        }
-        else if (expression != null) {
-            val bindingContext = expression.analyze(BodyResolveMode.PARTIAL)
-            return KotlinNameSuggester.suggestNamesByExpressionAndType(expression, null, bindingContext, validator, "param").first()
-        }
-        else {
-            return KotlinNameSuggester.suggestNameByName("param", validator)
+        return when {
+            argumentName != null -> KotlinNameSuggester.suggestNameByName(argumentName.asName.asString(), validator)
+            expression != null -> {
+                val bindingContext = expression.analyze(BodyResolveMode.PARTIAL)
+                KotlinNameSuggester.suggestNamesByExpressionAndType(expression, null, bindingContext, validator, "param").first()
+            }
+            else -> KotlinNameSuggester.suggestNameByName("param", validator)
         }
     }
 

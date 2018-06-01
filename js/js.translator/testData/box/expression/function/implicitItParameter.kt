@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1114
 package foo
 
 fun test(f: (Int) -> Boolean, p: Int) = f(p)

@@ -17,8 +17,6 @@
 package org.jetbrains.kotlin.codegen.inline
 
 import org.jetbrains.kotlin.codegen.StackValue
-import org.jetbrains.kotlin.codegen.inline.InlineCodegenUtil.CAPTURED_FIELD_FOLD_PREFIX
-import org.jetbrains.kotlin.codegen.inline.InlineCodegenUtil.THIS
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.FieldInsnNode
@@ -27,7 +25,7 @@ class RegeneratedLambdaFieldRemapper(
         originalLambdaInternalName: String,
         override val newLambdaInternalName: String,
         parameters: Parameters,
-        private val recapturedLambdas: Map<String, LambdaInfo>,
+        val recapturedLambdas: Map<String, LambdaInfo>,
         remapper: FieldRemapper,
         private val isConstructor: Boolean
 ) : FieldRemapper(originalLambdaInternalName, remapper, parameters) {
@@ -46,8 +44,8 @@ class RegeneratedLambdaFieldRemapper(
         return findFieldInSuper(fieldInsnNode)
     }
 
-    override fun processNonAload0FieldAccessChains(isInlinedLambda: Boolean): Boolean {
-        return isInlinedLambda && isConstructor
+    override fun shouldProcessNonAload0FieldAccessChains(): Boolean {
+        return isConstructor
     }
 
     private fun findFieldInSuper(fieldInsnNode: FieldInsnNode): CapturedParamInfo? {
@@ -67,7 +65,7 @@ class RegeneratedLambdaFieldRemapper(
         val field = findFieldInSuper(fin) ?:
                     //search in parent
                     findFieldInSuper(FieldInsnNode(
-                            Opcodes.GETSTATIC, originalLambdaInternalName, InlineCodegenUtil.`THIS$0`,
+                            Opcodes.GETSTATIC, originalLambdaInternalName, THIS_0,
                             Type.getObjectType(parent!!.originalLambdaInternalName!!).descriptor
                     ))?.also { fromParent = true } ?:
                     throw AssertionError("Couldn't find captured this $originalLambdaInternalName for $fieldName")

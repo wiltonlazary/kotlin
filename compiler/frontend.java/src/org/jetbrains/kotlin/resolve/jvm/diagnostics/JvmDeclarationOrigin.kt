@@ -1,24 +1,12 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.jvm.diagnostics
 
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPureElement
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
@@ -41,7 +29,9 @@ enum class JvmDeclarationOriginKind {
     MULTIFILE_CLASS_PART,
     SYNTHETIC, // this means that there's no proper descriptor for this jvm declaration,
     COLLECTION_STUB,
-    AUGMENTED_BUILTIN_API
+    AUGMENTED_BUILTIN_API,
+    ERASED_INLINE_CLASS,
+    UNBOX_METHOD_OF_INLINE_CLASS
 }
 
 class JvmDeclarationOrigin(
@@ -54,24 +44,18 @@ class JvmDeclarationOrigin(
     }
 }
 
-fun OtherOrigin(element: PsiElement?, descriptor: DeclarationDescriptor?): JvmDeclarationOrigin =
+@JvmOverloads
+fun OtherOrigin(element: PsiElement?, descriptor: DeclarationDescriptor? = null) =
         if (element == null && descriptor == null)
             JvmDeclarationOrigin.NO_ORIGIN
-        else JvmDeclarationOrigin(OTHER, element, descriptor)
+        else
+            JvmDeclarationOrigin(OTHER, element, descriptor)
 
-fun OtherOrigin(element: KtPureElement?, descriptor: DeclarationDescriptor?): JvmDeclarationOrigin =
-        OtherOrigin(element?.psiOrParent as PsiElement, descriptor)
+@JvmOverloads
+fun OtherOriginFromPure(element: KtPureElement?, descriptor: DeclarationDescriptor? = null) =
+        OtherOrigin(element?.psiOrParent, descriptor)
 
-fun OtherOrigin(element: KtElement, descriptor: DeclarationDescriptor?): JvmDeclarationOrigin =
-        OtherOrigin(element as PsiElement, descriptor)
-
-fun OtherOrigin(element: PsiElement): JvmDeclarationOrigin = OtherOrigin(element, null)
-
-fun OtherOrigin(element: KtPureElement): JvmDeclarationOrigin = OtherOrigin(element, null)
-
-fun OtherOrigin(element: KtElement): JvmDeclarationOrigin = OtherOrigin(element, null)
-
-fun OtherOrigin(descriptor: DeclarationDescriptor): JvmDeclarationOrigin = JvmDeclarationOrigin(OTHER, null, descriptor)
+fun OtherOrigin(descriptor: DeclarationDescriptor) = JvmDeclarationOrigin(OTHER, null, descriptor)
 
 fun Bridge(descriptor: DeclarationDescriptor, element: PsiElement? = DescriptorToSourceUtils.descriptorToDeclaration(descriptor)): JvmDeclarationOrigin =
         JvmDeclarationOrigin(BRIDGE, element, descriptor)
@@ -97,3 +81,9 @@ fun Synthetic(element: PsiElement?, descriptor: CallableMemberDescriptor): JvmDe
 val CollectionStub = JvmDeclarationOrigin(COLLECTION_STUB, null, null)
 
 fun AugmentedBuiltInApi(descriptor: CallableDescriptor): JvmDeclarationOrigin = JvmDeclarationOrigin(AUGMENTED_BUILTIN_API, null, descriptor)
+
+fun ErasedInlineClassOrigin(element: PsiElement?, descriptor: ClassDescriptor): JvmDeclarationOrigin =
+    JvmDeclarationOrigin(ERASED_INLINE_CLASS, element, descriptor)
+
+fun UnboxMethodOfInlineClass(descriptor: FunctionDescriptor): JvmDeclarationOrigin =
+    JvmDeclarationOrigin(UNBOX_METHOD_OF_INLINE_CLASS, null, descriptor)

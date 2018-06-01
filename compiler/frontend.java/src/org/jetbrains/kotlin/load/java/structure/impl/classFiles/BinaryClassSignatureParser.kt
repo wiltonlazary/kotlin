@@ -16,29 +16,25 @@
 
 package org.jetbrains.kotlin.load.java.structure.impl.classFiles
 
-import com.intellij.psi.CommonClassNames
 import com.intellij.util.containers.ContainerUtil
 import org.jetbrains.kotlin.builtins.PrimitiveType
 import org.jetbrains.kotlin.load.java.structure.JavaClassifierType
 import org.jetbrains.kotlin.load.java.structure.JavaType
 import org.jetbrains.kotlin.load.java.structure.JavaTypeParameter
-import org.jetbrains.kotlin.name.ClassId
-import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.utils.addToStdlib.flattenTo
+import org.jetbrains.kotlin.utils.compact
 import org.jetbrains.org.objectweb.asm.Type
 import java.text.CharacterIterator
 import java.text.StringCharacterIterator
 
 /**
  * Take a look at com.intellij.psi.impl.compiled.SignatureParsing
+ * NOTE: currently this class can simply be converted to an object, but there are postponed plans
+ * to introduce cached instance for java.lang.Object type that would require injected class finder.
+ * So please, do not convert it to object
  */
-class BinaryClassSignatureParser(globalContext: ClassifierResolutionContext) {
-    companion object {
-        private val JAVA_LANG_OBJECT = ClassId.topLevel(FqName(CommonClassNames.JAVA_LANG_OBJECT))
-    }
-
-    private val JAVA_LANG_OBJECT_CLASSIFIER_TYPE: JavaClassifierType =
-            PlainJavaClassifierType({ globalContext.resolveClass(JAVA_LANG_OBJECT) }, emptyList())
+class BinaryClassSignatureParser {
 
     fun parseTypeParametersDeclaration(signature: CharacterIterator, context: ClassifierResolutionContext): List<JavaTypeParameter> {
         if (signature.current() != '<') {
@@ -51,7 +47,7 @@ class BinaryClassSignatureParser(globalContext: ClassifierResolutionContext) {
             typeParameters.add(parseTypeParameter(signature, context))
         }
         signature.next()
-        return typeParameters
+        return typeParameters.compact()
     }
 
     private fun parseTypeParameter(signature: CharacterIterator, context: ClassifierResolutionContext): JavaTypeParameter {
@@ -66,25 +62,14 @@ class BinaryClassSignatureParser(globalContext: ClassifierResolutionContext) {
         val parameterName = name.toString()
 
         // postpone list allocation till a second bound is seen; ignore sole Object bound
-        var bounds: MutableList<JavaClassifierType>? = null
-        var jlo = false
+        val bounds: MutableList<JavaClassifierType> = ContainerUtil.newSmartList()
         while (signature.current() == ':') {
             signature.next()
             val bound = parseClassifierRefSignature(signature, context) ?: continue
-            if (bounds == null) {
-                if (JAVA_LANG_OBJECT_CLASSIFIER_TYPE === bound) {
-                    jlo = true
-                    continue
-                }
-                bounds = ContainerUtil.newSmartList()
-                if (jlo) {
-                    bounds.add(JAVA_LANG_OBJECT_CLASSIFIER_TYPE)
-                }
-            }
             bounds.add(bound)
         }
 
-        return BinaryJavaTypeParameter(Name.identifier(parameterName), bounds ?: emptyList())
+        return BinaryJavaTypeParameter(Name.identifier(parameterName), bounds)
     }
 
     fun parseClassifierRefSignature(signature: CharacterIterator, context: ClassifierResolutionContext): JavaClassifierType? {
@@ -146,9 +131,10 @@ class BinaryClassSignatureParser(globalContext: ClassifierResolutionContext) {
         }
         signature.next()
 
-        if (canonicalName.toString() == "java/lang/Object") return JAVA_LANG_OBJECT_CLASSIFIER_TYPE
-
-        return PlainJavaClassifierType({ context.resolveByInternalName(canonicalName.toString()) }, argumentGroups.reversed().flatten())
+        return PlainJavaClassifierType(
+                { context.resolveByInternalName(canonicalName.toString()) },
+                argumentGroups.reversed().flattenTo(arrayListOf()).compact()
+        )
     }
 
     private fun parseClassOrTypeVariableElement(signature: CharacterIterator, context: ClassifierResolutionContext): JavaType {

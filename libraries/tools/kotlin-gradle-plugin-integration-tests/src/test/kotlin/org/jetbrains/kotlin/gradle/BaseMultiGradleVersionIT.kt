@@ -7,11 +7,14 @@ import org.junit.runners.Parameterized.Parameters
 
 @RunWith(Parameterized::class)
 abstract class BaseMultiGradleVersionIT : BaseGradleIT() {
-    @Parameter lateinit var gradleVersion: String
+    @Parameter
+    lateinit var gradleVersionString: String
+
+    protected val gradleVersion get() = GradleVersionRequired.Exact(gradleVersionString)
 
     companion object {
         @JvmStatic
         @Parameters(name = "Test with Gradle version {0}")
-        fun params() = listOf("2.10", "2.14.1", "3.2", "3.3", "3.4").map { arrayOf(it) }
+        fun params() = listOf("2.10", "2.14.1", "3.3", "3.4", "4.0").map { arrayOf(it) }
     }
 }

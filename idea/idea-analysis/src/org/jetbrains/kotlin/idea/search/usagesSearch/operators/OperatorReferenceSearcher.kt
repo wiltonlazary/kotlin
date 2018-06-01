@@ -20,15 +20,17 @@ import com.intellij.openapi.progress.ProgressIndicatorProvider
 import com.intellij.openapi.progress.util.ProgressWrapper
 import com.intellij.psi.*
 import com.intellij.psi.search.*
-import com.intellij.util.Processor
 import org.jetbrains.kotlin.asJava.elements.KtLightMethod
 import org.jetbrains.kotlin.asJava.namedUnwrappedElement
+import org.jetbrains.kotlin.asJava.toLightClass
+import org.jetbrains.kotlin.compatibility.ExecutorProcessor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.idea.KotlinFileType
-import org.jetbrains.kotlin.idea.caches.resolve.getJavaOrKotlinMemberDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.caches.resolve.util.getJavaOrKotlinMemberDescriptor
+import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
 import org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinReferencesSearchOptions
 import org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinRequestResultProcessor
 import org.jetbrains.kotlin.idea.search.restrictToKotlinSources
@@ -54,7 +56,7 @@ import java.util.*
 abstract class OperatorReferenceSearcher<TReferenceElement : KtElement>(
         protected val targetDeclaration: PsiElement,
         private val searchScope: SearchScope,
-        private val consumer: Processor<PsiReference>,
+        private val consumer: ExecutorProcessor<PsiReference>,
         private val optimizer: SearchRequestCollector,
         private val options: KotlinReferencesSearchOptions,
         private val wordsToSearch: List<String>
@@ -78,12 +80,12 @@ abstract class OperatorReferenceSearcher<TReferenceElement : KtElement>(
 
     protected fun processReferenceElement(element: TReferenceElement): Boolean {
         val reference = extractReference(element) ?: return true
-        testLog?.add("Resolved ${logPresentation(element)}")
-        if (reference.isReferenceTo(targetDeclaration)) {
-            return consumer.process(reference)
+        testLog { "Resolved ${logPresentation(element)}" }
+        return if (reference.isReferenceTo(targetDeclaration)) {
+            consumer.process(reference)
         }
         else {
-            return true
+            true
         }
     }
 
@@ -91,7 +93,7 @@ abstract class OperatorReferenceSearcher<TReferenceElement : KtElement>(
         fun create(
                 declaration: PsiElement,
                 searchScope: SearchScope,
-                consumer: Processor<PsiReference>,
+                consumer: ExecutorProcessor<PsiReference>,
                 optimizer: SearchRequestCollector,
                 options: KotlinReferencesSearchOptions
         ): OperatorReferenceSearcher<*>? {
@@ -106,7 +108,7 @@ abstract class OperatorReferenceSearcher<TReferenceElement : KtElement>(
         private fun createInReadAction(
                 declaration: PsiElement,
                 searchScope: SearchScope,
-                consumer: Processor<PsiReference>,
+                consumer: ExecutorProcessor<PsiReference>,
                 optimizer: SearchRequestCollector,
                 options: KotlinReferencesSearchOptions
         ): OperatorReferenceSearcher<*>? {
@@ -132,7 +134,7 @@ abstract class OperatorReferenceSearcher<TReferenceElement : KtElement>(
         private fun createInReadAction(
                 declaration: PsiElement,
                 name: Name,
-                consumer: Processor<PsiReference>,
+                consumer: ExecutorProcessor<PsiReference>,
                 optimizer: SearchRequestCollector,
                 options: KotlinReferencesSearchOptions,
                 searchScope: SearchScope
@@ -192,7 +194,6 @@ abstract class OperatorReferenceSearcher<TReferenceElement : KtElement>(
 
         }
 
-        //TODO: check no light elements here
         private object SearchesInProgress : ThreadLocal<HashSet<PsiElement>>() {
             override fun initialValue() = HashSet<PsiElement>()
         }
@@ -207,14 +208,27 @@ abstract class OperatorReferenceSearcher<TReferenceElement : KtElement>(
     }
 
     fun run() {
+        val receiverType = runReadAction { extractReceiverType() } ?: return
+        val psiClass = runReadAction { receiverType.toPsiClass() }
+
         val inProgress = SearchesInProgress.get()
-        if (!inProgress.add(targetDeclaration)) return //TODO: it's not quite correct
+        if (psiClass != null) {
+            if (!inProgress.add(psiClass)) {
+                testLog { "ExpressionOfTypeProcessor is already started for ${runReadAction { psiClass.qualifiedName }}. Exit for operator ${logPresentation(targetDeclaration)}." }
+                return
+            }
+        }
+        else {
+            if (!inProgress.add(targetDeclaration)) {
+                testLog { "ExpressionOfTypeProcessor is already started for operator ${logPresentation(targetDeclaration)}. Exit." }
+                return //TODO: it's not quite correct
+            }
+        }
 
         try {
-            val receiverType = runReadAction { extractReceiverType() } ?: return
-
             ExpressionsOfTypeProcessor(
                     receiverType,
+                    psiClass,
                     searchScope,
                     project,
                     possibleMatchHandler = { expression -> processPossibleReceiverExpression(expression) },
@@ -222,7 +236,17 @@ abstract class OperatorReferenceSearcher<TReferenceElement : KtElement>(
             ).run()
         }
         finally {
-            inProgress.remove(targetDeclaration)
+            inProgress.remove(if (psiClass != null) psiClass else targetDeclaration)
+        }
+    }
+
+    private fun FuzzyType.toPsiClass(): PsiClass? {
+        val classDescriptor = type.constructor.declarationDescriptor ?: return null
+        val classDeclaration = DescriptorToSourceUtilsIde.getAnyDeclaration(project, classDescriptor)
+        return when (classDeclaration) {
+            is PsiClass -> classDeclaration
+            is KtClassOrObject -> classDeclaration.toLightClass()
+            else -> null
         }
     }
 
@@ -239,7 +263,7 @@ abstract class OperatorReferenceSearcher<TReferenceElement : KtElement>(
     }
 
     private fun doPlainSearch(scope: SearchScope) {
-        testLog?.add("Used plain search of ${logPresentation(targetDeclaration)} in ${scope.logPresentation()}")
+        testLog { "Used plain search of ${logPresentation(targetDeclaration)} in ${scope.logPresentation()}" }
 
         if (scope is LocalSearchScope) {
             for (element in scope.scope) {
@@ -312,16 +336,18 @@ abstract class OperatorReferenceSearcher<TReferenceElement : KtElement>(
             is LocalSearchScope -> {
                 scope
                         .map { element ->
-                            "    " + when (element) {
-                                is KtFunctionLiteral -> element.text
-                                is KtWhenEntry -> {
-                                    if (element.isElse)
-                                        "KtWhenEntry \"else\""
-                                    else
-                                        "KtWhenEntry \"" + element.conditions.joinToString(", ") { it.text } + "\""
+                            "    " + runReadAction {
+                                when (element) {
+                                    is KtFunctionLiteral -> element.text
+                                    is KtWhenEntry -> {
+                                        if (element.isElse)
+                                            "KtWhenEntry \"else\""
+                                        else
+                                            "KtWhenEntry \"" + element.conditions.joinToString(", ") { it.text } + "\""
+                                    }
+                                    is KtNamedDeclaration -> element.node.elementType.toString() + ":" + element.name
+                                    else -> element.toString()
                                 }
-                                is KtNamedDeclaration -> element.node.elementType.toString() + ":" + element.name
-                                else -> element.toString()
                             }
                         }
                         .toList()

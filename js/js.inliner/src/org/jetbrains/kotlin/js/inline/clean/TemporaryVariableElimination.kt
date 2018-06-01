@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.js.backend.ast.metadata.sideEffects
 import org.jetbrains.kotlin.js.backend.ast.metadata.synthetic
 import org.jetbrains.kotlin.js.inline.util.collectFreeVariables
 import org.jetbrains.kotlin.js.inline.util.collectLocalVariables
+import org.jetbrains.kotlin.js.translate.context.Namer
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 import org.jetbrains.kotlin.js.translate.utils.splitToRanges
 
@@ -165,7 +166,7 @@ internal class TemporaryVariableElimination(private val function: JsFunction) {
                     useVariable(name)
                     if (name !in currentScope) {
                         // Variable is inconsistent, i.e. it's defined after it's used.
-                        assignVariable(name, JsLiteral.UNDEFINED)
+                        assignVariable(name, Namer.getUndefinedExpression())
                     }
                     return
                 }
@@ -494,6 +495,11 @@ internal class TemporaryVariableElimination(private val function: JsFunction) {
                 accept(right)
                 sideEffectOccurred = true
             }
+            else if (x.operator == JsBinaryOperator.AND || x.operator == JsBinaryOperator.OR) {
+                accept(x.arg1)
+                sideEffectOccurred = true
+                accept(x.arg2)
+            }
             else {
                 super.visitBinaryExpression(x)
             }
@@ -614,7 +620,7 @@ internal class TemporaryVariableElimination(private val function: JsFunction) {
         is JsNameRef -> {
             val qualifier = expr.qualifier
             if (expr.sideEffects == SideEffectKind.PURE && (qualifier == null || isTrivial(qualifier))) {
-                true
+                expr.name !in temporary
             }
             else {
                 val name = expr.name

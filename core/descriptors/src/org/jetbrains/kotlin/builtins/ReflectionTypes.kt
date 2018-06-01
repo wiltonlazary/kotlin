@@ -16,9 +16,7 @@
 
 package org.jetbrains.kotlin.builtins
 
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.descriptors.PackageFragmentDescriptor
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.name.ClassId
@@ -27,8 +25,6 @@ import org.jetbrains.kotlin.name.FqNameUnsafe
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
-import org.jetbrains.kotlin.serialization.deserialization.NotFoundClasses
-import org.jetbrains.kotlin.serialization.deserialization.findClassAcrossModuleDependencies
 import org.jetbrains.kotlin.types.*
 import kotlin.reflect.KProperty
 
@@ -152,6 +148,30 @@ class ReflectionTypes(module: ModuleDescriptor, private val notFoundClasses: Not
             val kPropertyClass = module.findClassAcrossModuleDependencies(KotlinBuiltIns.FQ_NAMES.kProperty) ?: return null
             return KotlinTypeFactory.simpleNotNullType(Annotations.EMPTY, kPropertyClass,
                                                        listOf(StarProjectionImpl(kPropertyClass.typeConstructor.parameters.single())))
+        }
+
+        fun isPossibleExpectedCallableType(typeConstructor: TypeConstructor): Boolean {
+            val descriptor = typeConstructor.declarationDescriptor as? ClassDescriptor ?: return false
+            if (KotlinBuiltIns.isAny(descriptor)) return true
+
+            val shortName = descriptor.name.asString()
+
+            val fqName = DescriptorUtils.getFqName(descriptor)
+            if (fqName.isRoot) return false
+
+            val packageName = fqName.parent().toSafe()
+            if (packageName == KOTLIN_REFLECT_FQ_NAME) {
+                return shortName.startsWith("KFunction") // KFunctionN, KFunction
+                       || shortName.startsWith("KProperty") // KPropertyN, KProperty
+                       || shortName.startsWith("KMutableProperty") // KMutablePropertyN, KMutableProperty
+                       || shortName == "KCallable" || shortName == "KAnnotatedElement"
+
+            }
+            if (packageName == KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME) {
+                return shortName.startsWith("Function") // FunctionN, Function
+            }
+
+            return false
         }
     }
 }

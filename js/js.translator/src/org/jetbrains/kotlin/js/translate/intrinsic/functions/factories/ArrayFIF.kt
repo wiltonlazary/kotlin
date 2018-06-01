@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.builtins.getValueParameterTypesFromFunctionType
 import org.jetbrains.kotlin.builtins.isBuiltinFunctionalType
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
+import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.js.backend.ast.*
 import org.jetbrains.kotlin.js.backend.ast.metadata.descriptor
 import org.jetbrains.kotlin.js.backend.ast.metadata.inlineStrategy
@@ -43,7 +44,7 @@ import java.util.*
 
 object ArrayFIF : CompositeFIF() {
     @JvmField
-    val GET_INTRINSIC = intrinsify { callInfo, arguments, _ ->
+    val GET_INTRINSIC = intrinsify { callInfo, arguments, context ->
         assert(arguments.size == 1) { "Array get expression must have one argument." }
         val (indexExpression) = arguments
         JsArrayAccess(callInfo.dispatchReceiver, indexExpression)
@@ -61,16 +62,16 @@ object ArrayFIF : CompositeFIF() {
     val LENGTH_PROPERTY_INTRINSIC = BuiltInPropertyIntrinsic("length")
 
     @JvmStatic
-    fun typedArraysEnabled(config: JsConfig) = config.configuration.getBoolean(JSConfigurationKeys.TYPED_ARRAYS_ENABLED)
+    fun typedArraysEnabled(config: JsConfig) = config.configuration.get(JSConfigurationKeys.TYPED_ARRAYS_ENABLED, true)
 
     fun castOrCreatePrimitiveArray(ctx: TranslationContext, type: PrimitiveType?, arg: JsArrayLiteral): JsExpression {
         if (type == null || !typedArraysEnabled(ctx.config)) return arg
 
-        if (type in TYPED_ARRAY_MAP) {
-            return createTypedArray(type, arg)
+        return if (type in TYPED_ARRAY_MAP) {
+            createTypedArray(type, arg)
         }
         else {
-            return JsAstUtils.invokeKotlinFunction(type.lowerCaseName + "ArrayOf", *arg.expressions.toTypedArray())
+            JsAstUtils.invokeKotlinFunction(type.lowerCaseName + "ArrayOf", *arg.expressions.toTypedArray())
         }
     }
 
@@ -108,7 +109,12 @@ object ArrayFIF : CompositeFIF() {
             }
         }
         else {
-            "kotlin.newArrayF"
+            if (primitiveType == CHAR) {
+                "kotlin.untypedCharArrayF"
+            }
+            else {
+                "kotlin.newArrayF"
+            }
         }
     }
 
@@ -139,9 +145,9 @@ object ArrayFIF : CompositeFIF() {
                 }
                 else {
                     val initValue = when (type) {
-                        BOOLEAN -> JsLiteral.FALSE
+                        BOOLEAN -> JsBooleanLiteral(false)
                         LONG -> JsNameRef(Namer.LONG_ZERO, Namer.kotlinLong())
-                        else -> JsNumberLiteral.ZERO
+                        else -> JsIntLiteral(0)
                     }
                     JsAstUtils.invokeKotlinFunction("newArray", size, initValue)
                 }
@@ -155,8 +161,7 @@ object ArrayFIF : CompositeFIF() {
                     JsAstUtils.invokeKotlinFunction("${type.lowerCaseName}ArrayIterator", receiver!!)
                 }
                 else {
-                    JsAstUtils.invokeKotlinFunction("arrayIterator", receiver!!,
-                                                    context.program().getStringLiteral(type.arrayTypeName.asString()))
+                    JsAstUtils.invokeKotlinFunction("arrayIterator", receiver!!, JsStringLiteral(type.arrayTypeName.asString()))
                 }
             })
         }
@@ -164,7 +169,7 @@ object ArrayFIF : CompositeFIF() {
         add(pattern(NamePredicate(arrayName), "<init>(Int,Function1)"), createConstructorIntrinsic(null))
         add(pattern(NamePredicate(arrayName), "iterator"), KotlinFunctionIntrinsic("arrayIterator"))
 
-        add(pattern(Namer.KOTLIN_LOWER_NAME, "arrayOfNulls"), KotlinFunctionIntrinsic("newArray", JsLiteral.NULL))
+        add(pattern(Namer.KOTLIN_LOWER_NAME, "arrayOfNulls"), KotlinFunctionIntrinsic("newArray", JsNullLiteral()))
 
         val arrayFactoryMethodNames = arrayTypeNames.map { Name.identifier(decapitalize(it.asString() + "Of")) }
         val arrayFactoryMethods = pattern(Namer.KOTLIN_LOWER_NAME, NamePredicate(arrayFactoryMethodNames))
@@ -184,12 +189,16 @@ object ArrayFIF : CompositeFIF() {
                 }
             }
             else {
-                JsAstUtils.invokeKotlinFunction("newArrayF", size, fn)
+                JsAstUtils.invokeKotlinFunction(if (type == CHAR) "untypedCharArrayF" else "newArrayF", size, fn)
             }
             invocation.inlineStrategy = InlineStrategy.IN_PLACE
             val descriptor = callInfo.resolvedCall.resultingDescriptor.original
-            invocation.descriptor = descriptor
-            context.addInlineCall(descriptor)
+            val resolvedDescriptor = when (descriptor) {
+                is TypeAliasConstructorDescriptor -> descriptor.underlyingConstructorDescriptor
+                else -> descriptor
+            }
+            invocation.descriptor = resolvedDescriptor
+            context.addInlineCall(resolvedDescriptor)
             invocation
         }
     }

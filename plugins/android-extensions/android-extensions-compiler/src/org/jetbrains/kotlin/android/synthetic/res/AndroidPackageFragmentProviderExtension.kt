@@ -19,9 +19,15 @@ package org.jetbrains.kotlin.android.synthetic.res
 import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.analyzer.ModuleInfo
 import org.jetbrains.kotlin.android.synthetic.AndroidConst
-import org.jetbrains.kotlin.android.synthetic.descriptors.*
+import org.jetbrains.kotlin.android.synthetic.descriptors.AndroidSyntheticPackageData
+import org.jetbrains.kotlin.android.synthetic.descriptors.AndroidSyntheticPackageFragmentDescriptor
+import org.jetbrains.kotlin.android.synthetic.descriptors.LazySyntheticElementResolveContext
+import org.jetbrains.kotlin.android.synthetic.descriptors.PredefinedPackageFragmentDescriptor
 import org.jetbrains.kotlin.android.synthetic.forEachUntilLast
-import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor
+import org.jetbrains.kotlin.descriptors.PackageFragmentDescriptor
+import org.jetbrains.kotlin.descriptors.PackageFragmentProvider
+import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.BindingTrace
@@ -31,13 +37,18 @@ import org.jetbrains.kotlin.storage.StorageManager
 abstract class AndroidPackageFragmentProviderExtension : PackageFragmentProviderExtension {
     protected abstract fun getLayoutXmlFileManager(project: Project, moduleInfo: ModuleInfo?): AndroidLayoutXmlFileManager?
 
+    protected abstract fun isExperimental(moduleInfo: ModuleInfo?): Boolean
+
     override fun getPackageFragmentProvider(
             project: Project,
             module: ModuleDescriptor,
             storageManager: StorageManager,
             trace: BindingTrace,
-            moduleInfo: ModuleInfo?
+            moduleInfo: ModuleInfo?,
+            lookupTracker: LookupTracker
     ): PackageFragmentProvider? {
+        val isExperimental = isExperimental(moduleInfo)
+
         val layoutXmlFileManager = getLayoutXmlFileManager(project, moduleInfo) ?: return null
 
         val moduleData = layoutXmlFileManager.getModuleData()
@@ -48,13 +59,15 @@ abstract class AndroidPackageFragmentProviderExtension : PackageFragmentProvider
         val packagesToLookupInCompletion = arrayListOf<PackageFragmentDescriptor>()
 
         // Packages with synthetic properties
-        for (variantData in moduleData) {
-            for ((layoutName, layouts) in variantData) {
+        for (variantData in moduleData.variants) {
+            for ((layoutName, layouts) in variantData.layouts) {
                 fun createPackageFragment(fqName: String, forView: Boolean, isDeprecated: Boolean = false) {
-                    val resources = layoutXmlFileManager.extractResources(layouts, module)
-                    val packageData = AndroidSyntheticPackageData(layoutName, moduleData, forView, isDeprecated, resources)
+                    val resources = layoutXmlFileManager.extractResources(AndroidLayoutGroupData(layoutName, layouts), module)
+                    val packageData = AndroidSyntheticPackageData(moduleData, forView, isDeprecated, resources)
                     val packageDescriptor = AndroidSyntheticPackageFragmentDescriptor(
-                            module, FqName(fqName), packageData, lazyContext, storageManager)
+                            module, FqName(fqName), packageData, lazyContext, storageManager, isExperimental,
+                            lookupTracker, layoutName
+                    )
                     packagesToLookupInCompletion += packageDescriptor
                     allPackageDescriptors += packageDescriptor
                 }
@@ -71,7 +84,7 @@ abstract class AndroidPackageFragmentProviderExtension : PackageFragmentProvider
             allPackageDescriptors += PredefinedPackageFragmentDescriptor(s, module, storageManager)
         }
 
-        for (variantData in moduleData) {
+        for (variantData in moduleData.variants) {
             val fqName = AndroidConst.SYNTHETIC_PACKAGE + '.' + variantData.variant.name
             allPackageDescriptors += PredefinedPackageFragmentDescriptor(fqName, module, storageManager)
         }
@@ -79,7 +92,12 @@ abstract class AndroidPackageFragmentProviderExtension : PackageFragmentProvider
         // Package with clearFindViewByIdCache()
         AndroidConst.SYNTHETIC_SUBPACKAGES.last().let { s ->
             val packageDescriptor = PredefinedPackageFragmentDescriptor(s, module, storageManager, packagesToLookupInCompletion) { descriptor ->
-                lazyContext().getWidgetReceivers(false).filter { it.mayHaveCache }.map { genClearCacheFunction(descriptor, it.type) }
+                val widgetReceivers = lazyContext().getWidgetReceivers(forView = false, isExperimental = isExperimental) +
+                                      lazyContext().getWidgetReceivers(forView = true, isExperimental = isExperimental)
+
+                widgetReceivers
+                        .filter { it.mayHaveCache }
+                        .map { genClearCacheFunction(descriptor, it.type) }
             }
             packagesToLookupInCompletion += packageDescriptor
             allPackageDescriptors += packageDescriptor
@@ -89,14 +107,13 @@ abstract class AndroidPackageFragmentProviderExtension : PackageFragmentProvider
     }
 }
 
-class AndroidSyntheticPackageFragmentProvider(
-        val packageFragments: Collection<PackageFragmentDescriptor>
-) : PackageFragmentProvider {
+class AndroidSyntheticPackageFragmentProvider(val packageFragments: Collection<PackageFragmentDescriptor>) : PackageFragmentProvider {
     override fun getPackageFragments(fqName: FqName) = packageFragments.filter { it.fqName == fqName }
 
-    override fun getSubPackagesOf(fqName: FqName, nameFilter: (Name) -> Boolean) =
-            packageFragments.asSequence()
-                    .map { it.fqName }
-                    .filter { !it.isRoot && it.parent() == fqName }
-                    .toList()
+    override fun getSubPackagesOf(fqName: FqName, nameFilter: (Name) -> Boolean): List<FqName> {
+        return packageFragments.asSequence()
+                .map { it.fqName }
+                .filter { !it.isRoot && it.parent() == fqName }
+                .toList()
+    }
 }

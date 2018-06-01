@@ -16,44 +16,22 @@
 
 package org.jetbrains.kotlin.idea.intentions
 
-import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.util.TextRange
-import org.jetbrains.kotlin.idea.inspections.IntentionBasedInspection
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.idea.search.usagesSearch.descriptor
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
-
-class RemoveSetterParameterTypeInspection : IntentionBasedInspection<KtCallableDeclaration>(
-        RemoveExplicitTypeIntention::class,
-        { it -> RemoveExplicitTypeIntention.isSetterParameter(it) }
-) {
-    override fun problemHighlightType(element: KtCallableDeclaration) = ProblemHighlightType.LIKE_UNUSED_SYMBOL
-
-    override fun inspectionTarget(element: KtCallableDeclaration) = (element as? KtParameter)?.typeReference
-}
+import org.jetbrains.kotlin.types.typeUtil.isUnit
 
 class RemoveExplicitTypeIntention : SelfTargetingRangeIntention<KtCallableDeclaration>(
-        KtCallableDeclaration::class.java,
-        "Remove explicit type specification"
+    KtCallableDeclaration::class.java,
+    "Remove explicit type specification"
 ) {
 
     override fun applicabilityRange(element: KtCallableDeclaration): TextRange? {
-        if (element.containingFile is KtCodeFragment) return null
-        if (element.typeReference == null) return null
-
-        if (element is KtParameter && (element.isLoopParameter || element.isSetterParameter)) {
-            return element.textRange
-        }
-
-        val initializer = (element as? KtDeclarationWithInitializer)?.initializer
-        if (element !is KtProperty && (element !is KtNamedFunction || element.hasBlockBody())) return null
-
-        return when {
-            initializer != null -> TextRange(element.startOffset, initializer.startOffset - 1)
-            element is KtProperty && element.getter != null -> TextRange(element.startOffset, element.typeReference!!.endOffset)
-            else -> null
-        }
+        return getRange(element)
     }
 
     override fun applyTo(element: KtCallableDeclaration, editor: Editor?) {
@@ -61,9 +39,45 @@ class RemoveExplicitTypeIntention : SelfTargetingRangeIntention<KtCallableDeclar
     }
 
     companion object {
-        fun isSetterParameter(element: KtCallableDeclaration) =
-                element is KtParameter && element.isSetterParameter
+        fun getRange(element: KtCallableDeclaration): TextRange? {
+            if (element.containingFile is KtCodeFragment) return null
+            val typeReference = element.typeReference ?: return null
+            if (typeReference.annotationEntries.isNotEmpty()) return null
 
-        private val KtParameter.isSetterParameter: Boolean get() = (parent.parent as? KtPropertyAccessor)?.isSetter ?: false
+            if (element is KtParameter) {
+                if (element.isLoopParameter) return element.textRange
+                if (element.isSetterParameter) return typeReference.textRange
+            }
+
+            if (element !is KtProperty && element !is KtNamedFunction) return null
+
+            if (element is KtNamedFunction
+                && element.hasBlockBody()
+                && (element.descriptor as? FunctionDescriptor)?.returnType?.isUnit()?.not() != false
+            ) return null
+
+            val initializer = (element as? KtDeclarationWithInitializer)?.initializer
+
+            if (initializer is KtLambdaExpression || initializer is KtNamedFunction) {
+                val functionType = element.typeReference?.typeElement as? KtFunctionType
+                if (functionType?.parameters?.isNotEmpty() == true) {
+                    val valueParameters = when (initializer) {
+                        is KtLambdaExpression -> initializer.valueParameters
+                        is KtNamedFunction -> initializer.valueParameters
+                        else -> emptyList()
+                    }
+                    if (valueParameters.isEmpty() || valueParameters.any { it.typeReference == null }) return null
+                }
+            }
+
+            return when {
+                initializer != null -> TextRange(element.startOffset, initializer.startOffset - 1)
+                element is KtProperty && element.getter != null -> TextRange(element.startOffset, typeReference.endOffset)
+                element is KtNamedFunction -> TextRange(element.startOffset, typeReference.endOffset)
+                else -> null
+            }
+        }
     }
 }
+
+internal val KtParameter.isSetterParameter: Boolean get() = (parent.parent as? KtPropertyAccessor)?.isSetter ?: false

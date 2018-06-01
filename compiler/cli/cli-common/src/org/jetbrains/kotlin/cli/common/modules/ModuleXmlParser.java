@@ -22,7 +22,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector;
 import org.jetbrains.kotlin.cli.common.messages.MessageCollectorUtil;
-import org.jetbrains.kotlin.cli.common.messages.OutputMessageUtil;
 import org.jetbrains.kotlin.modules.JavaRootPath;
 import org.jetbrains.kotlin.modules.Module;
 import org.xml.sax.Attributes;
@@ -52,9 +51,10 @@ public class ModuleXmlParser {
     public static final String JAVA_SOURCE_PACKAGE_PREFIX = "packagePrefix";
     public static final String PATH = "path";
     public static final String CLASSPATH = "classpath";
+    public static final String MODULAR_JDK_ROOT = "modularJdkRoot";
 
     @NotNull
-    public static ModuleScriptData parseModuleScript(
+    public static ModuleChunk parseModuleScript(
             @NotNull String xmlFile,
             @NotNull MessageCollector messageCollector
     ) {
@@ -66,7 +66,7 @@ public class ModuleXmlParser {
         }
         catch (FileNotFoundException e) {
             MessageCollectorUtil.reportException(messageCollector, e);
-            return ModuleScriptData.EMPTY;
+            return ModuleChunk.EMPTY;
         }
         finally {
             StreamUtil.closeStream(stream);
@@ -85,7 +85,7 @@ public class ModuleXmlParser {
         this.currentState = currentState;
     }
 
-    private ModuleScriptData parse(@NotNull InputStream xml) {
+    private ModuleChunk parse(@NotNull InputStream xml) {
         try {
             setCurrentState(initial);
             SAXParser saxParser = SAXParserFactory.newInstance().newSAXParser();
@@ -96,15 +96,15 @@ public class ModuleXmlParser {
                     return currentState;
                 }
             });
-            return new ModuleScriptData(modules);
+            return new ModuleChunk(modules);
         }
         catch (ParserConfigurationException | IOException e) {
             MessageCollectorUtil.reportException(messageCollector, e);
         }
         catch (SAXException e) {
-            messageCollector.report(ERROR, OutputMessageUtil.renderException(e), null);
+            messageCollector.report(ERROR, "Build file does not have a valid XML: " + e, null);
         }
-        return ModuleScriptData.EMPTY;
+        return ModuleChunk.EMPTY;
     }
 
     private final DefaultHandler initial = new DefaultHandler() {
@@ -171,6 +171,10 @@ public class ModuleXmlParser {
                 String path = getAttribute(attributes, PATH, qName);
                 String packagePrefix = getNullableAttribute(attributes, JAVA_SOURCE_PACKAGE_PREFIX);
                 moduleBuilder.addJavaSourceRoot(new JavaRootPath(path, packagePrefix));
+            }
+            else if (MODULAR_JDK_ROOT.equalsIgnoreCase(qName)) {
+                String path = getAttribute(attributes, PATH, qName);
+                moduleBuilder.setModularJdkRoot(path);
             }
             else {
                 throw createError(qName);

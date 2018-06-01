@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1111
 // FILE: a.kt
 
 private fun bar(): String = "O"

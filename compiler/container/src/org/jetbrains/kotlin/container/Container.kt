@@ -38,12 +38,12 @@ object DynamicComponentDescriptor : ValueDescriptor {
     override fun toString(): String = "Dynamic"
 }
 
-class StorageComponentContainer(id: String, parent: StorageComponentContainer? = null) : ComponentContainer, ComponentProvider, Closeable {
+class StorageComponentContainer(private val id: String, parent: StorageComponentContainer? = null) : ComponentContainer, ComponentProvider, Closeable {
     val unknownContext: ComponentResolveContext by lazy {
         val parentContext = parent?.let { ComponentResolveContext(it, DynamicComponentDescriptor) }
         ComponentResolveContext(this, DynamicComponentDescriptor, parentContext)
     }
-    val componentStorage: ComponentStorage = ComponentStorage(id, parent?.componentStorage)
+    private val componentStorage: ComponentStorage = ComponentStorage(id, parent?.componentStorage)
 
     override fun createResolveContext(requestingDescriptor: ValueDescriptor): ValueResolveContext {
         if (requestingDescriptor == DynamicComponentDescriptor) // cache unknown component descriptor
@@ -104,6 +104,8 @@ class StorageComponentContainer(id: String, parent: StorageComponentContainer? =
         val args = constructorBinding.argumentDescriptors.map { it.getValue() }.toTypedArray()
         return constructorBinding.constructor.newInstance(*args) as T
     }
+
+    override fun toString() = "Container $id"
 }
 
 fun StorageComponentContainer.registerSingleton(klass: Class<*>): StorageComponentContainer {

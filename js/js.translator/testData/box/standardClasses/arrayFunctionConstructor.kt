@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1112
 package foo
 
 val f = { i: Int -> i + 1 }

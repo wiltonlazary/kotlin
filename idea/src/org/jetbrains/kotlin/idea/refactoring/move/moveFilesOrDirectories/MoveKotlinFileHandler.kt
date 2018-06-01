@@ -73,7 +73,7 @@ class MoveKotlinFileHandler : MoveFileHandler() {
         return ContainerChangeInfo(ContainerInfo.Package(oldPackageName), ContainerInfo.Package(newPackageName.toSafe()))
     }
 
-    fun initMoveProcessor(psiFile: PsiFile, newParent: PsiDirectory?): MoveKotlinDeclarationsProcessor? {
+    fun initMoveProcessor(psiFile: PsiFile, newParent: PsiDirectory?, withConflicts: Boolean): MoveKotlinDeclarationsProcessor? {
         if (psiFile !is KtFile) return null
         val packageNameInfo = psiFile.getPackageNameInfo(newParent, false) ?: return null
 
@@ -91,18 +91,18 @@ class MoveKotlinFileHandler : MoveFileHandler() {
             }
         }
 
-        val declarationMoveProcessor = MoveKotlinDeclarationsProcessor(
+        return MoveKotlinDeclarationsProcessor(
                 MoveDeclarationsDescriptor(
                         project = project,
                         elementsToMove = psiFile.declarations.filterIsInstance<KtNamedDeclaration>(),
                         moveTarget = moveTarget,
                         delegate = MoveDeclarationsDelegate.TopLevel,
                         scanEntireFile = true,
-                        allElementsToMove = psiFile.allElementsToMove
+                        allElementsToMove = psiFile.allElementsToMove,
+                        analyzeConflicts = withConflicts
                 ),
                 Mover.Idle
         )
-        return declarationMoveProcessor
     }
 
     override fun canProcessElement(element: PsiFile?): Boolean {
@@ -116,10 +116,18 @@ class MoveKotlinFileHandler : MoveFileHandler() {
             searchInComments: Boolean,
             searchInNonJavaFiles: Boolean
     ): List<UsageInfo> {
+        return findUsages(psiFile, newParent, true)
+    }
+
+    fun findUsages(
+            psiFile: PsiFile,
+            newParent: PsiDirectory?,
+            withConflicts: Boolean
+    ): List<UsageInfo> {
         if (psiFile !is KtFile) return emptyList()
 
         val usages = arrayListOf<UsageInfo>(FileInfo(psiFile))
-        initMoveProcessor(psiFile, newParent)?.let {
+        initMoveProcessor(psiFile, newParent, withConflicts)?.let {
             usages += it.findUsages()
             usages += it.getConflictsAsUsages()
         }
@@ -128,7 +136,7 @@ class MoveKotlinFileHandler : MoveFileHandler() {
 
     override fun prepareMovedFile(file: PsiFile, moveDestination: PsiDirectory, oldToNewMap: MutableMap<PsiElement, PsiElement>) {
         if (file !is KtFile) return
-        val moveProcessor = initMoveProcessor(file, moveDestination) ?: return
+        val moveProcessor = initMoveProcessor(file, moveDestination, false) ?: return
         val moveContext = MoveContext(file, moveProcessor)
         oldToNewMap[moveContext] = moveContext
         val packageNameInfo = file.getPackageNameInfo(moveDestination, true) ?: return

@@ -49,6 +49,19 @@ interface KotlinJsOptions  : org.jetbrains.kotlin.gradle.dsl.KotlinCommonOptions
      var sourceMap: kotlin.Boolean
 
     /**
+     * Embed source files into source map
+     * Possible values: "never", "always", "inlining"
+     * Default value: null
+     */
+     var sourceMapEmbedSources: kotlin.String?
+
+    /**
+     * Prefix for paths in a source map
+     * Default value: null
+     */
+     var sourceMapPrefix: kotlin.String?
+
+    /**
      * Generate JS files for specific ECMA version
      * Possible values: "v5"
      * Default value: "v5"
@@ -57,7 +70,7 @@ interface KotlinJsOptions  : org.jetbrains.kotlin.gradle.dsl.KotlinCommonOptions
 
     /**
      * Translate primitive arrays to JS typed arrays
-     * Default value: false
+     * Default value: true
      */
      var typedArrays: kotlin.Boolean
 }

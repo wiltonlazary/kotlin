@@ -35,7 +35,8 @@ import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.idea.KotlinLanguage
-import org.jetbrains.kotlin.idea.caches.resolve.getJavaOrKotlinMemberDescriptor
+import org.jetbrains.kotlin.idea.caches.resolve.util.getJavaOrKotlinMemberDescriptor
+import org.jetbrains.kotlin.idea.caches.resolve.util.javaResolutionFacade
 import org.jetbrains.kotlin.idea.project.TargetPlatformDetector
 import org.jetbrains.kotlin.idea.refactoring.changeSignature.KotlinMethodDescriptor.Kind
 import org.jetbrains.kotlin.idea.refactoring.changeSignature.usages.KotlinCallableDefinitionUsage
@@ -49,6 +50,7 @@ import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.jvm.annotations.findJvmOverloadsAnnotation
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
+import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.isUnit
 import org.jetbrains.kotlin.utils.keysToMap
@@ -121,6 +123,11 @@ open class KotlinChangeInfo(
     override fun isParameterSetOrOrderChanged(): Boolean = isParameterSetOrOrderChangedLazy
 
     fun getNewParametersCount(): Int = newParameters.size
+
+    fun hasAppendedParametersOnly(): Boolean {
+        val oldParamCount = originalBaseFunctionDescriptor.valueParameters.size
+        return newParameters.withIndex().all { (i, p) -> if (i < oldParamCount) p.oldIndex == i else p.isNewParameter }
+    }
 
     override fun getNewParameters(): Array<KotlinParameterInfo> = newParameters.toTypedArray()
 
@@ -257,9 +264,8 @@ open class KotlinChangeInfo(
                     }
                     buffer.append('.')
                 }
+                buffer.append(name)
             }
-
-            buffer.append(name)
         }
 
         buffer.append(getNewParametersSignature(inheritedCallable))
@@ -288,9 +294,9 @@ open class KotlinChangeInfo(
             return signatureParameters[0].getDeclarationSignature(0, inheritedCallable).text
         }
 
-        return signatureParameters.indices
-                .map { i -> signatureParameters[i].getDeclarationSignature(i, inheritedCallable).text }
-                .joinToString(separator = ", ")
+        return signatureParameters.indices.joinToString(separator = ", ") { i ->
+            signatureParameters[i].getDeclarationSignature(i, inheritedCallable).text
+        }
     }
 
     fun renderReceiverType(inheritedCallable: KotlinCallableDefinitionUsage<*>): String? {
@@ -522,7 +528,7 @@ fun KotlinChangeInfo.getAffectedCallables(): Collection<UsageInfo> = methodDescr
 
 fun ChangeInfo.toJetChangeInfo(
         originalChangeSignatureDescriptor: KotlinMethodDescriptor,
-        resolutionFacade: ResolutionFacade? = null
+        resolutionFacade: ResolutionFacade
 ): KotlinChangeInfo {
     val method = method as PsiMethod
 
@@ -550,11 +556,14 @@ fun ChangeInfo.toJetChangeInfo(
                 }
 
         val parameterType = if (oldIndex >= 0) originalParameterDescriptors[oldIndex].type else currentType
+        val originalKtParameter = originalParameterDescriptors.getOrNull(oldIndex)?.source?.getPsi() as? KtParameter
+        val valOrVar = originalKtParameter?.valOrVarKeyword?.toValVar() ?: KotlinValVar.None
         KotlinParameterInfo(callableDescriptor = functionDescriptor,
                             originalIndex = oldIndex,
                             name = info.name,
                             originalTypeInfo = KotlinTypeInfo(false, parameterType),
-                            defaultValueForCall = defaultValueExpr).apply {
+                            defaultValueForCall = defaultValueExpr,
+                            valOrVar = valOrVar).apply {
             currentTypeInfo = KotlinTypeInfo(false, currentType)
         }
     }

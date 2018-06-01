@@ -20,14 +20,14 @@ import org.jetbrains.kotlin.cli.common.ExitCode
 import java.io.File
 
 interface ICReporter {
-    fun report(message: ()->String)
+    fun report(message: () -> String)
 
     // used in Gradle plugin
     @Suppress("unused")
     fun reportCompileIteration(sourceFiles: Collection<File>, exitCode: ExitCode) {}
 
     fun pathsAsString(files: Iterable<File>): String =
-            files.map { it.canonicalPath }.joinToString()
+            files.joinToString { it.canonicalPath }
 
     fun pathsAsString(vararg files: File): String =
             pathsAsString(files.toList())

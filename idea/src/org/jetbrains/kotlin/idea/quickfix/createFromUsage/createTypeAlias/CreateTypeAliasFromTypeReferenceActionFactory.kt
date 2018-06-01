@@ -16,6 +16,9 @@
 
 package org.jetbrains.kotlin.idea.quickfix.createFromUsage.createTypeAlias
 
+import com.intellij.lang.java.JavaLanguage
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiPackage
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.idea.core.CollectingNameValidator
@@ -39,16 +42,17 @@ object CreateTypeAliasFromTypeReferenceActionFactory : KotlinSingleIntentionActi
         if (!element.languageVersionSettings.supportsFeature(LanguageFeature.TypeAliases)) return null
 
         val classInfo = CreateClassFromTypeReferenceActionFactory.extractFixData(element, diagnostic) ?: return null
-        if (classInfo.targetParent is KtDeclaration) return null
+        val targetParent = classInfo.applicableParents.singleOrNull { it !is KtDeclaration && it !is PsiPackage } ?: return null
+        if ((targetParent as? PsiClass)?.language == JavaLanguage.INSTANCE) return null
 
         val expectedType = getTypeConstraintInfo(element)?.upperBound
         if (expectedType != null && expectedType.containsError()) return null
 
         val validator = CollectingNameValidator(
-                filter = NewDeclarationNameValidator(classInfo.targetParent, null, NewDeclarationNameValidator.Target.FUNCTIONS_AND_CLASSES)
+                filter = NewDeclarationNameValidator(targetParent, null, NewDeclarationNameValidator.Target.FUNCTIONS_AND_CLASSES)
         )
         val typeParameterNames = KotlinNameSuggester.suggestNamesForTypeParameters(classInfo.typeArguments.size, validator)
-        return TypeAliasInfo(classInfo.name, classInfo.targetParent, typeParameterNames, expectedType)
+        return TypeAliasInfo(classInfo.name, targetParent, typeParameterNames, expectedType)
     }
 
     override fun createFix(originalElement: KtUserType, data: TypeAliasInfo) = CreateTypeAliasFromUsageFix(originalElement, data)

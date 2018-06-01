@@ -19,9 +19,9 @@ package kotlin.reflect.jvm.internal
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.load.java.JvmAbi
+import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil
 import org.jetbrains.kotlin.resolve.DescriptorFactory
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.serialization.jvm.JvmProtoBufUtil
 import org.jetbrains.kotlin.types.TypeUtils
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
@@ -178,12 +178,14 @@ internal abstract class KPropertyImpl<out R> private constructor(
 
 
 private fun KPropertyImpl.Accessor<*, *>.computeCallerForAccessor(isGetter: Boolean): FunctionCaller<*> {
+    if (KDeclarationContainerImpl.LOCAL_PROPERTY_SIGNATURE.matches(property.signature)) {
+        return FunctionCaller.ThrowingCaller
+    }
+
     fun isInsideClassCompanionObject(): Boolean {
         val possibleCompanionObject = property.descriptor.containingDeclaration
-        if (DescriptorUtils.isCompanionObject(possibleCompanionObject) && !DescriptorUtils.isInterface(possibleCompanionObject.containingDeclaration)) {
-            return true
-        }
-        return false
+        return DescriptorUtils.isCompanionObject(possibleCompanionObject) &&
+               !DescriptorUtils.isInterface(possibleCompanionObject.containingDeclaration)
     }
 
     fun isJvmStaticProperty() =
@@ -235,12 +237,15 @@ private fun KPropertyImpl.Accessor<*, *>.computeCallerForAccessor(isGetter: Bool
                 property.container.findMethodBySignature(
                         jvmSignature.nameResolver.getString(signature.name),
                         jvmSignature.nameResolver.getString(signature.desc),
-                        Visibilities.isPrivate(descriptor.visibility)
+                        descriptor.isPublicInBytecode
                 )
             }
 
             when {
-                accessor == null -> computeFieldCaller(property.javaField!!)
+                accessor == null -> computeFieldCaller(
+                        property.javaField
+                        ?: throw KotlinReflectionInternalError("No accessors or field is found for property $property")
+                )
                 !Modifier.isStatic(accessor.modifiers) ->
                     if (isBound) FunctionCaller.BoundInstanceMethod(accessor, property.boundReceiver)
                     else FunctionCaller.InstanceMethod(accessor)

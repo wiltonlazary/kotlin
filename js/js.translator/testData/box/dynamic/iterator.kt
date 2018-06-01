@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1414
 package foo
 
 fun testFor(expected: Int, d: dynamic, case: String) {

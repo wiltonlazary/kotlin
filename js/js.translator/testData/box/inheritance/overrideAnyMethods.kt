@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1119
 package foo
 
 inline fun String.charCodeAt(i: Int): Int = asDynamic().charCodeAt(i)
@@ -6,7 +8,7 @@ inline fun String.charCodeAt(i: Int): Int = asDynamic().charCodeAt(i)
 fun String.myHashCode(): Int {
     var hash = 0
 
-    for (i in 0..size - 1) {
+    for (i in 0..length - 1) {
         hash = 31 * hash + charCodeAt(i)
     }
 

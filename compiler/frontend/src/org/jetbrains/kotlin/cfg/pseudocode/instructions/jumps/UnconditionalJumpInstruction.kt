@@ -21,20 +21,18 @@ import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.cfg.Label
 
 class UnconditionalJumpInstruction(
-        element: KtElement,
-        targetLabel: Label,
-        blockScope: BlockScope
+    element: KtElement,
+    targetLabel: Label,
+    blockScope: BlockScope
 ) : AbstractJumpInstruction(element, targetLabel, blockScope) {
     override fun accept(visitor: InstructionVisitor) {
         visitor.visitUnconditionalJump(this)
     }
 
-    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R {
-        return visitor.visitUnconditionalJump(this)
-    }
+    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R = visitor.visitUnconditionalJump(this)
 
     override fun toString(): String = "jmp(${targetLabel.name})"
 
     override fun createCopy(newLabel: Label, blockScope: BlockScope): AbstractJumpInstruction =
-            UnconditionalJumpInstruction(element, newLabel, blockScope)
+        UnconditionalJumpInstruction(element, newLabel, blockScope)
 }

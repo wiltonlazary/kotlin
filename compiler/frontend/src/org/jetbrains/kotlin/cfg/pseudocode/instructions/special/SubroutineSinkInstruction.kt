@@ -25,9 +25,10 @@ import org.jetbrains.kotlin.cfg.pseudocode.instructions.InstructionVisitor
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.InstructionVisitorWithResult
 
 class SubroutineSinkInstruction(
-        val subroutine: KtElement,
-        blockScope: BlockScope,
-        private val debugLabel: String) : InstructionImpl(blockScope) {
+    val subroutine: KtElement,
+    blockScope: BlockScope,
+    private val debugLabel: String
+) : InstructionImpl(blockScope) {
     override val nextInstructions: Collection<Instruction>
         get() = Collections.emptyList()
 
@@ -35,12 +36,10 @@ class SubroutineSinkInstruction(
         visitor.visitSubroutineSink(this)
     }
 
-    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R {
-        return visitor.visitSubroutineSink(this)
-    }
+    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R = visitor.visitSubroutineSink(this)
 
     override fun toString(): String = debugLabel
 
     override fun createCopy(): InstructionImpl =
-            SubroutineSinkInstruction(subroutine, blockScope, debugLabel)
+        SubroutineSinkInstruction(subroutine, blockScope, debugLabel)
 }

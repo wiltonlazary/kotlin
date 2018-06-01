@@ -16,10 +16,6 @@
 
 package org.jetbrains.kotlin.descriptors.annotations
 
-import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.descriptorUtil.annotationClass
-
 class AnnotationsImpl : Annotations {
     private val annotations: List<AnnotationDescriptor>
     private val targetedAnnotations: List<AnnotationWithTarget>
@@ -40,11 +36,6 @@ class AnnotationsImpl : Annotations {
 
     override fun isEmpty() = targetedAnnotations.isEmpty()
 
-    override fun findAnnotation(fqName: FqName) = annotations.firstOrNull {
-        val descriptor = it.annotationClass
-        descriptor != null && fqName.toUnsafe() == DescriptorUtils.getFqName(descriptor)
-    }
-
     override fun getUseSiteTargetedAnnotations(): List<AnnotationWithTarget> {
         return targetedAnnotations
                 .filter { it.target != null }
@@ -52,8 +43,6 @@ class AnnotationsImpl : Annotations {
     }
 
     override fun getAllAnnotations() = targetedAnnotations
-
-    override fun findExternalAnnotation(fqName: FqName) = null
 
     override fun iterator() = annotations.iterator()
 

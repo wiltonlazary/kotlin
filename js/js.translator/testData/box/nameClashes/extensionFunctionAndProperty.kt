@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1384
 package foo
 
 public fun <T> List<T>.some(): T = this[0]

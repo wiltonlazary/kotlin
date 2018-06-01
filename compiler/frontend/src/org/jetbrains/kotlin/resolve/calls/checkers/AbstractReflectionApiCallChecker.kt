@@ -22,10 +22,10 @@ import org.jetbrains.kotlin.builtins.ReflectionTypes
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
+import org.jetbrains.kotlin.descriptors.NotFoundClasses
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
-import org.jetbrains.kotlin.serialization.deserialization.NotFoundClasses
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.storage.getValue
 import org.jetbrains.kotlin.util.OperatorNameConventions
@@ -36,9 +36,9 @@ private val ANY_MEMBER_NAMES = setOf("equals", "hashCode", "toString")
  * Checks that there are no usages of reflection API which will fail at runtime.
  */
 abstract class AbstractReflectionApiCallChecker(
-        private val module: ModuleDescriptor,
-        private val notFoundClasses: NotFoundClasses,
-        storageManager: StorageManager
+    private val module: ModuleDescriptor,
+    private val notFoundClasses: NotFoundClasses,
+    storageManager: StorageManager
 ) : CallChecker {
     protected abstract val isWholeReflectionApiAvailable: Boolean
     protected abstract fun report(element: PsiElement, context: CallCheckerContext)
@@ -66,9 +66,9 @@ abstract class AbstractReflectionApiCallChecker(
     protected open fun isAllowedReflectionApi(descriptor: CallableDescriptor, containingClass: ClassDescriptor): Boolean {
         val name = descriptor.name
         return name.asString() in ANY_MEMBER_NAMES ||
-            name == OperatorNameConventions.INVOKE ||
-            name.asString() == "name" ||
-            (name.asString() == "get" || name.asString() == "set") && containingClass.isKPropertyClass()
+                name == OperatorNameConventions.INVOKE ||
+                name.asString() == "name" ||
+                (name.asString() == "get" || name.asString() == "set") && containingClass.isKPropertyClass()
     }
 
     private fun ClassDescriptor.isKPropertyClass() = kPropertyClasses.any { kProperty -> DescriptorUtils.isSubclass(this, kProperty) }

@@ -31,6 +31,7 @@ import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.util.PsiModificationTracker
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.DiagnosticFactory
@@ -44,17 +45,16 @@ import org.jetbrains.kotlin.idea.actions.createSingleImportActionForConstructor
 import org.jetbrains.kotlin.idea.analysis.analyzeInContext
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
-import org.jetbrains.kotlin.idea.caches.resolve.getResolveScope
+import org.jetbrains.kotlin.idea.caches.resolve.util.getResolveScope
 import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
 import org.jetbrains.kotlin.idea.core.KotlinIndicesHelper
 import org.jetbrains.kotlin.idea.core.isVisible
 import org.jetbrains.kotlin.idea.imports.canBeReferencedViaImport
 import org.jetbrains.kotlin.idea.imports.importableFqName
 import org.jetbrains.kotlin.idea.project.TargetPlatformDetector
+import org.jetbrains.kotlin.idea.project.languageVersionSettings
 import org.jetbrains.kotlin.idea.references.mainReference
-import org.jetbrains.kotlin.idea.util.CallTypeAndReceiver
-import org.jetbrains.kotlin.idea.util.getResolutionScope
-import org.jetbrains.kotlin.idea.util.receiverTypes
+import org.jetbrains.kotlin.idea.util.*
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.js.resolve.JsPlatform
 import org.jetbrains.kotlin.name.FqName
@@ -74,6 +74,7 @@ import org.jetbrains.kotlin.resolve.scopes.utils.addImportingScope
 import org.jetbrains.kotlin.resolve.scopes.utils.collectFunctions
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
 import org.jetbrains.kotlin.util.OperatorNameConventions
+import org.jetbrains.kotlin.utils.ifEmpty
 import java.util.*
 
 /**
@@ -114,8 +115,8 @@ internal abstract class ImportFixBase<T : KtExpression> protected constructor(
 
     override fun getFamilyName() = KotlinBundle.message("import.fix")
 
-    override fun isAvailable(project: Project, editor: Editor?, file: PsiFile)
-            = element != null && super.isAvailable(project, editor, file) && suggestions.isNotEmpty()
+    override fun isAvailable(project: Project, editor: Editor?, file: KtFile)
+            = element != null && suggestions.isNotEmpty()
 
     override fun invoke(project: Project, editor: Editor?, file: KtFile) {
         val element = element ?: return
@@ -126,9 +127,9 @@ internal abstract class ImportFixBase<T : KtExpression> protected constructor(
 
     override fun startInWriteAction() = true
 
-    private fun isOutdated() = modificationCountOnCreate != PsiModificationTracker.SERVICE.getInstance(project).modificationCount
+    fun isOutdated() = modificationCountOnCreate != PsiModificationTracker.SERVICE.getInstance(project).modificationCount
 
-    protected open fun createAction(project: Project, editor: Editor, element: KtExpression): KotlinAddImportAction {
+    open fun createAction(project: Project, editor: Editor, element: KtExpression): KotlinAddImportAction {
         return createSingleImportAction(project, editor, element, suggestions)
     }
 
@@ -300,17 +301,27 @@ internal class ImportFix(expression: KtSimpleNameExpression) : OrdinaryImportFix
         indicesHelper.getKotlinEnumsByName(name).filterTo(result, filterByCallType)
 
         val resolutionFacade = element.getResolutionFacade()
-        val actualReceiverTypes =
-                callTypeAndReceiver.receiverTypes(bindingContext, element, resolutionFacade.moduleDescriptor, resolutionFacade, false).orEmpty()
+        var actualReceiverTypes = callTypeAndReceiver
+                .receiverTypesWithIndex(bindingContext, element,
+                                        resolutionFacade.moduleDescriptor, resolutionFacade,
+                                        stableSmartCastsOnly = false,
+                                        withImplicitReceiversWhenExplicitPresent = true).orEmpty()
+
+        if (element.languageVersionSettings.supportsFeature(LanguageFeature.DslMarkersSupport)) {
+            actualReceiverTypes -= actualReceiverTypes.shadowedByDslMarkers()
+        }
+
+        val explicitReceiverTypes = actualReceiverTypes.filterNot { it.implicit }
+
+        val checkDispatchReceiver = when(callTypeAndReceiver) {
+            is CallTypeAndReceiver.OPERATOR, is CallTypeAndReceiver.INFIX -> true
+            else -> false
+        }
 
         val processor = { descriptor: CallableDescriptor ->
-            if (descriptor.canBeReferencedViaImport() && filterByCallType(descriptor)) {
-                val extensionReceiverType = descriptor.extensionReceiverParameter?.type
-
-                if ((actualReceiverTypes.isEmpty() && extensionReceiverType == null) ||
-                    (extensionReceiverType != null && actualReceiverTypes.any { it.isSubtypeOf(extensionReceiverType) })) {
-                    result.add(descriptor)
-                }
+            if (descriptor.canBeReferencedViaImport() && filterByCallType(descriptor)
+                && descriptor.isValidByReceiversFor(explicitReceiverTypes, actualReceiverTypes, checkDispatchReceiver)) {
+                result.add(descriptor)
             }
         }
 
@@ -330,6 +341,18 @@ internal class ImportFix(expression: KtSimpleNameExpression) : OrdinaryImportFix
         return result
     }
 
+
+    private fun CallableDescriptor.isValidByReceiversFor(explicitReceiverTypes: Collection<ReceiverType>,
+                                                         allReceiverTypes: Collection<ReceiverType>,
+                                                         checkDispatchReceiver: Boolean): Boolean {
+        val bothReceivers = listOfNotNull(extensionReceiverParameter, dispatchReceiverParameter.takeIf { checkDispatchReceiver })
+
+        val receiverTypesPerReceiver = generateSequence(explicitReceiverTypes.ifEmpty { allReceiverTypes }) { allReceiverTypes }
+
+        return bothReceivers
+                .zip(receiverTypesPerReceiver.asIterable())
+                .all { (receiver, possibleTypes) -> possibleTypes.any { it.type.isSubtypeOf(receiver.type) } }
+    }
 
     override fun fillCandidates(
             name: String,
@@ -602,13 +625,12 @@ internal object ImportForMissingOperatorFactory : ImportFixBase.Factory() {
 
 
 private fun KotlinIndicesHelper.getClassesByName(expressionForPlatform: KtExpression, name: String) =
-        when (TargetPlatformDetector.getPlatform(expressionForPlatform.containingKtFile)) {
-            JsPlatform -> getKotlinClasses({ it == name },
-                    // Enum entries should be contributes with members import fix
-                                           psiFilter = { ktDeclaration -> ktDeclaration !is KtEnumEntry },
-                                           kindFilter = { kind -> kind != ClassKind.ENUM_ENTRY })
-            JvmPlatform -> getJvmClassesByName(name)
-            else -> emptyList()
-        }
+    when (TargetPlatformDetector.getPlatform(expressionForPlatform.containingKtFile)) {
+        JvmPlatform -> getJvmClassesByName(name)
+        else -> getKotlinClasses({ it == name },
+            // Enum entries should be contributes with members import fix
+                                 psiFilter = { ktDeclaration -> ktDeclaration !is KtEnumEntry },
+                                 kindFilter = { kind -> kind != ClassKind.ENUM_ENTRY })
+    }
 
 private fun CallTypeAndReceiver<*, *>.toFilter() = { descriptor: DeclarationDescriptor -> this.callType.descriptorKindFilter.accepts(descriptor) }

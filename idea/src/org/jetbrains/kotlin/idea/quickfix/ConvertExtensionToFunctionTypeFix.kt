@@ -37,7 +37,7 @@ import org.jetbrains.kotlin.types.KotlinType
 
 class ConvertExtensionToFunctionTypeFix(element: KtTypeReference, type: KotlinType) : KotlinQuickFixAction<KtTypeReference>(element) {
 
-    private val targetTypeStringShort = type.renderType(IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_IN_TYPES)
+    private val targetTypeStringShort = type.renderType(IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_NO_ANNOTATIONS)
     private val targetTypeStringLong = type.renderType(IdeDescriptorRenderers.SOURCE_CODE)
 
     override fun getText() = "Convert supertype to '$targetTypeStringShort'"
@@ -51,7 +51,7 @@ class ConvertExtensionToFunctionTypeFix(element: KtTypeReference, type: KotlinTy
 
     private fun KotlinType.renderType(renderer: DescriptorRenderer) = buildString {
         append('(')
-        arguments.dropLast(1).map { renderer.renderType(it.type) }.joinTo(this@buildString, ", ")
+        arguments.dropLast(1).joinTo(this@buildString, ", ") { renderer.renderType(it.type) }
         append(") -> ")
         append(renderer.renderType(this@renderType.getReturnTypeFromFunctionType()))
     }

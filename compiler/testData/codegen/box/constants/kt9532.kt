@@ -1,5 +1,4 @@
 // TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS
 
 object A {
     const val a: String = "$"
@@ -7,7 +6,7 @@ object A {
     const val c = 10000
 
     val bNonConst = "1234$a"
-    val bNullable: String = "1234$a"
+    val bNullable: String? = "1234$a"
 }
 
 object B {
@@ -16,7 +15,7 @@ object B {
     const val c = 10000
 
     val bNonConst = "1234$a"
-    val bNullable: String = "1234$a"
+    val bNullable: String? = "1234$a"
 }
 
 fun box(): String {
@@ -26,8 +25,8 @@ fun box(): String {
 
     if (A.c !== B.c) return "Fail 3: A.c !== B.c"
 
-    if (A.bNonConst === B.bNonConst) return "Fail 5: A.bNonConst == B.bNonConst"
-    if (A.bNullable === B.bNullable) return "Fail 6: A.bNullable == B.bNullable"
+    if (A.bNonConst !== B.bNonConst) return "Fail 4: A.bNonConst !== B.bNonConst"
+    if (A.bNullable !== B.bNullable) return "Fail 5: A.bNullable !== B.bNullable"
 
     return "OK"
 }

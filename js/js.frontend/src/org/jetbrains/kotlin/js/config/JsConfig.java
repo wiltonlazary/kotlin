@@ -21,21 +21,20 @@ import com.intellij.openapi.vfs.StandardFileSystems;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.VirtualFileSystem;
-import com.intellij.util.PathUtil;
 import com.intellij.util.SmartList;
 import com.intellij.util.io.URLUtil;
-import kotlin.Unit;
 import kotlin.collections.CollectionsKt;
-import kotlin.jvm.functions.Function2;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.config.*;
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider;
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl;
+import org.jetbrains.kotlin.incremental.components.LookupTracker;
 import org.jetbrains.kotlin.js.resolve.JsPlatform;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.resolve.CompilerDeserializationConfiguration;
 import org.jetbrains.kotlin.serialization.js.JsModuleDescriptor;
+import org.jetbrains.kotlin.serialization.js.KotlinJavaScriptLibraryParts;
 import org.jetbrains.kotlin.serialization.js.KotlinJavascriptSerializationUtil;
 import org.jetbrains.kotlin.serialization.js.ModuleKind;
 import org.jetbrains.kotlin.storage.LockBasedStorageManager;
@@ -73,9 +72,25 @@ public class JsConfig {
 
     private boolean initialized = false;
 
+    @Nullable
+    private final List<JsModuleDescriptor<KotlinJavaScriptLibraryParts>> metadataCache;
+
+    @Nullable
+    private final Set<String> librariesToSkip;
+
     public JsConfig(@NotNull Project project, @NotNull CompilerConfiguration configuration) {
+        this(project, configuration, null, null);
+    }
+
+    public JsConfig(@NotNull Project project, @NotNull CompilerConfiguration configuration,
+            @Nullable List<JsModuleDescriptor<KotlinJavaScriptLibraryParts>> metadataCache,
+            @Nullable Set<String> librariesToSkip) {
         this.project = project;
-        this.configuration = configuration;
+        this.configuration = configuration.copy();
+        CommonConfigurationKeysKt.setLanguageVersionSettings(this.configuration, new ReleaseCoroutinesDisabledLanguageVersionSettings(
+                CommonConfigurationKeysKt.getLanguageVersionSettings(this.configuration)));
+        this.metadataCache = metadataCache;
+        this.librariesToSkip = librariesToSkip;
     }
 
     @NotNull
@@ -104,9 +119,34 @@ public class JsConfig {
     }
 
     @NotNull
+    public String getSourceMapPrefix() {
+        return configuration.get(JSConfigurationKeys.SOURCE_MAP_PREFIX, "");
+    }
+
+    @NotNull
+    public List<String> getSourceMapRoots() {
+        return configuration.get(JSConfigurationKeys.SOURCE_MAP_SOURCE_ROOTS, Collections.emptyList());
+    }
+
+    public boolean shouldGenerateRelativePathsInSourceMap() {
+        return getSourceMapPrefix().isEmpty() && getSourceMapRoots().isEmpty();
+    }
+
+    @NotNull
+    public SourceMapSourceEmbedding getSourceMapContentEmbedding() {
+        return configuration.get(JSConfigurationKeys.SOURCE_MAP_EMBED_SOURCES, SourceMapSourceEmbedding.INLINING);
+    }
+
+    @NotNull
     public List<String> getFriends() {
         if (getConfiguration().getBoolean(JSConfigurationKeys.FRIEND_PATHS_DISABLED)) return Collections.emptyList();
         return getConfiguration().getList(JSConfigurationKeys.FRIEND_PATHS);
+    }
+
+    public boolean isAtLeast(@NotNull LanguageVersion expected) {
+        LanguageVersion actual = CommonConfigurationKeysKt.getLanguageVersionSettings(configuration).getLanguageVersion();
+        return actual.getMajor() > expected.getMajor() ||
+               actual.getMajor() == expected.getMajor() && actual.getMinor() >= expected.getMinor();
     }
 
 
@@ -117,17 +157,12 @@ public class JsConfig {
     }
 
     public boolean checkLibFilesAndReportErrors(@NotNull JsConfig.Reporter report) {
-        return checkLibFilesAndReportErrors(report, null);
-    }
-
-    private boolean checkLibFilesAndReportErrors(@NotNull JsConfig.Reporter report, @Nullable Function2<VirtualFile, String, Unit> action) {
-        return checkLibFilesAndReportErrors(getLibraries(), report, action);
+        return checkLibFilesAndReportErrors(getLibraries(), report);
     }
 
     private boolean checkLibFilesAndReportErrors(
             @NotNull Collection<String> libraries,
-            @NotNull JsConfig.Reporter report,
-            @Nullable Function2<VirtualFile, String, Unit> action
+            @NotNull JsConfig.Reporter report
     ) {
         if (libraries.isEmpty()) {
             return false;
@@ -138,10 +173,11 @@ public class JsConfig {
 
         Set<String> modules = new HashSet<>();
 
-        boolean skipMetadataVersionCheck =
-                getLanguageVersionSettings(configuration).isFlagEnabled(AnalysisFlags.getSkipMetadataVersionCheck());
+        boolean skipMetadataVersionCheck = getLanguageVersionSettings(configuration).getFlag(AnalysisFlag.getSkipMetadataVersionCheck());
 
         for (String path : libraries) {
+            if (librariesToSkip != null && librariesToSkip.contains(path)) continue;
+
             VirtualFile file;
 
             File filePath = new File(path);
@@ -162,11 +198,13 @@ public class JsConfig {
                 return true;
             }
 
-            List<KotlinJavascriptMetadata> metadataList = KotlinJavascriptMetadataUtils.loadMetadata(filePath);
+            List<KotlinJavascriptMetadata> metadataList = KotlinJavascriptMetadataUtils.loadMetadata(path);
             if (metadataList.isEmpty()) {
                 report.warning("'" + path + "' is not a valid Kotlin Javascript library");
                 continue;
             }
+
+            Set<String> moduleNames = new LinkedHashSet<>();
 
             for (KotlinJavascriptMetadata metadata : metadataList) {
                 if (!metadata.getVersion().isCompatible() && !skipMetadataVersionCheck) {
@@ -175,30 +213,67 @@ public class JsConfig {
                                  ", expected version is " + JsMetadataVersion.INSTANCE);
                     return true;
                 }
-                if (!modules.add(metadata.getModuleName())) {
-                    report.warning("Module \"" + metadata.getModuleName() + "\" is defined in more than one file");
+
+                moduleNames.add(metadata.getModuleName());
+            }
+
+            for (String moduleName : moduleNames) {
+                if (!modules.add(moduleName)) {
+                    report.warning("Module \"" + moduleName + "\" is defined in more than one file");
                 }
             }
 
-            if (action != null) {
-                action.invoke(file, path);
+            if (modules.contains(getModuleId())) {
+                report.warning("Module \"" + getModuleId() + "\" depends on module with the same name");
+            }
+
+            Set<String> friendLibsSet = new HashSet<>(getFriends());
+            metadata.addAll(metadataList);
+            if (friendLibsSet.contains(path)){
+                friends.addAll(metadataList);
             }
         }
 
+        initialized = true;
         return false;
     }
 
     @NotNull
     public List<JsModuleDescriptor<ModuleDescriptorImpl>> getModuleDescriptors() {
         init();
-        if (moduleDescriptors != null) return moduleDescriptors;
+        return moduleDescriptors;
+    }
 
-        moduleDescriptors = new SmartList<>();
+    @NotNull
+    private List<JsModuleDescriptor<ModuleDescriptorImpl>> createModuleDescriptors() {
+        List<JsModuleDescriptor<ModuleDescriptorImpl>> moduleDescriptors = new SmartList<>();
         List<ModuleDescriptorImpl> kotlinModuleDescriptors = new ArrayList<>();
         for (KotlinJavascriptMetadata metadataEntry : metadata) {
             JsModuleDescriptor<ModuleDescriptorImpl> descriptor = createModuleDescriptor(metadataEntry);
             moduleDescriptors.add(descriptor);
             kotlinModuleDescriptors.add(descriptor.getData());
+        }
+
+        if (metadataCache != null) {
+            LanguageVersionSettings languageVersionSettings = CommonConfigurationKeysKt.getLanguageVersionSettings(configuration);
+            for (JsModuleDescriptor<KotlinJavaScriptLibraryParts> cached : metadataCache) {
+                ModuleDescriptorImpl moduleDescriptor = new ModuleDescriptorImpl(
+                        Name.special("<" + cached.getName() + ">"), storageManager, JsPlatform.INSTANCE.getBuiltIns()
+                );
+
+                JsModuleDescriptor<PackageFragmentProvider> rawDescriptor = KotlinJavascriptSerializationUtil.readModuleFromProto(
+                        cached, storageManager, moduleDescriptor,
+                        new CompilerDeserializationConfiguration(languageVersionSettings),
+                        LookupTracker.DO_NOTHING.INSTANCE
+                );
+
+                PackageFragmentProvider provider = rawDescriptor.getData();
+                moduleDescriptor.initialize(provider != null ? provider : PackageFragmentProvider.Empty.INSTANCE);
+
+                JsModuleDescriptor<ModuleDescriptorImpl> jsModuleDescriptor = cached.copy(moduleDescriptor);
+                moduleDescriptors.add(jsModuleDescriptor);
+                kotlinModuleDescriptors.add(jsModuleDescriptor.getData());
+            }
         }
 
         for (JsModuleDescriptor<ModuleDescriptorImpl> module : moduleDescriptors) {
@@ -214,9 +289,12 @@ public class JsConfig {
     @NotNull
     public List<JsModuleDescriptor<ModuleDescriptorImpl>> getFriendModuleDescriptors() {
         init();
-        if (friendModuleDescriptors != null) return friendModuleDescriptors;
+        return friendModuleDescriptors;
+    }
 
-        friendModuleDescriptors = new SmartList<>();
+    @NotNull
+    private List<JsModuleDescriptor<ModuleDescriptorImpl>> createFriendModuleDescriptors() {
+        List<JsModuleDescriptor<ModuleDescriptorImpl>> friendModuleDescriptors = new SmartList<>();
         for (KotlinJavascriptMetadata metadataEntry : friends) {
             JsModuleDescriptor<ModuleDescriptorImpl> descriptor = createModuleDescriptor(metadataEntry);
             friendModuleDescriptors.add(descriptor);
@@ -227,10 +305,8 @@ public class JsConfig {
         return friendModuleDescriptors;
     }
 
-    private void init() {
-        if (initialized) return;
-
-        if (!getLibraries().isEmpty()) {
+    public void init() {
+        if (!initialized) {
             JsConfig.Reporter reporter = new Reporter() {
                 @Override
                 public void error(@NotNull String message) {
@@ -238,33 +314,16 @@ public class JsConfig {
                 }
             };
 
-            boolean hasErrors = checkLibFilesAndReportErrors(getFriends(), reporter, (file, path) -> {
-                List<KotlinJavascriptMetadata> metaList = loadMetadata(file, "friendPath");
-                metadata.addAll(metaList);
-                friends.addAll(metaList);
-
-                return Unit.INSTANCE;
-            });
-
-
-            hasErrors |= checkLibFilesAndReportErrors(CollectionsKt.subtract(getLibraries(), getFriends()), reporter, (file, path) -> {
-                metadata.addAll(loadMetadata(file, "libraryPath"));
-
-
-                return Unit.INSTANCE;
-            });
-
-            assert !hasErrors : "hasErrors should be false";
+            checkLibFilesAndReportErrors(reporter);
         }
 
-        initialized = true;
-    }
+        if (moduleDescriptors == null) {
+            moduleDescriptors = createModuleDescriptors();
+        }
 
-    @NotNull
-    private static List<KotlinJavascriptMetadata> loadMetadata(@NotNull VirtualFile file, @NotNull String name) {
-        String libraryPath = PathUtil.getLocalPath(file);
-        assert libraryPath != null : name + " for " + file + " should not be null";
-        return  KotlinJavascriptMetadataUtils.loadMetadata(libraryPath);
+        if (friendModuleDescriptors == null) {
+            friendModuleDescriptors = createFriendModuleDescriptors();
+        }
     }
 
     private final IdentityHashMap<KotlinJavascriptMetadata, JsModuleDescriptor<ModuleDescriptorImpl>> factoryMap = new IdentityHashMap<>();
@@ -273,16 +332,18 @@ public class JsConfig {
         return factoryMap.computeIfAbsent(metadata, m -> {
             LanguageVersionSettings languageVersionSettings = CommonConfigurationKeysKt.getLanguageVersionSettings(configuration);
             assert m.getVersion().isCompatible() ||
-                   languageVersionSettings.isFlagEnabled(AnalysisFlags.getSkipMetadataVersionCheck()) :
+                   languageVersionSettings.getFlag(AnalysisFlag.getSkipMetadataVersionCheck()) :
                     "Expected JS metadata version " + JsMetadataVersion.INSTANCE + ", but actual metadata version is " + m.getVersion();
 
             ModuleDescriptorImpl moduleDescriptor = new ModuleDescriptorImpl(
                     Name.special("<" + m.getModuleName() + ">"), storageManager, JsPlatform.INSTANCE.getBuiltIns()
             );
 
+            LookupTracker lookupTracker = configuration.get(CommonConfigurationKeys.LOOKUP_TRACKER, LookupTracker.DO_NOTHING.INSTANCE);
             JsModuleDescriptor<PackageFragmentProvider> rawDescriptor = KotlinJavascriptSerializationUtil.readModule(
                     m.getBody(), storageManager, moduleDescriptor,
-                    new CompilerDeserializationConfiguration(languageVersionSettings)
+                    new CompilerDeserializationConfiguration(languageVersionSettings),
+                    lookupTracker
             );
 
             PackageFragmentProvider provider = rawDescriptor.getData();

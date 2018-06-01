@@ -24,8 +24,8 @@ import org.jetbrains.kotlin.cfg.pseudocode.instructions.InstructionImpl
 import org.jetbrains.kotlin.psi.*
 
 class VariableDeclarationInstruction(
-        element: KtDeclaration,
-        blockScope: BlockScope
+    element: KtDeclaration,
+    blockScope: BlockScope
 ) : InstructionWithNext(element, blockScope) {
     init {
         assert(element is KtVariableDeclaration || element is KtParameter || element is KtEnumEntry || element is KtObjectDeclaration) {
@@ -40,12 +40,10 @@ class VariableDeclarationInstruction(
         visitor.visitVariableDeclarationInstruction(this)
     }
 
-    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R {
-        return visitor.visitVariableDeclarationInstruction(this)
-    }
+    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R = visitor.visitVariableDeclarationInstruction(this)
 
     override fun toString(): String = "v(${render(element)})"
 
     override fun createCopy(): InstructionImpl =
-            VariableDeclarationInstruction(variableDeclarationElement, blockScope)
+        VariableDeclarationInstruction(variableDeclarationElement, blockScope)
 }

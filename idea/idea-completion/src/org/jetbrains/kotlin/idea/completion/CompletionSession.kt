@@ -23,32 +23,36 @@ import com.intellij.codeInsight.completion.CompletionUtil
 import com.intellij.codeInsight.completion.impl.CamelHumpMatcher
 import com.intellij.codeInsight.completion.impl.RealPrefixMatchingWeigher
 import com.intellij.codeInsight.lookup.LookupElement
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.patterns.PatternCondition
 import com.intellij.patterns.StandardPatterns
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.ProcessingContext
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.idea.caches.resolve.ModuleOrigin
-import org.jetbrains.kotlin.idea.caches.resolve.OriginCapability
+import org.jetbrains.kotlin.idea.caches.project.ModuleOrigin
+import org.jetbrains.kotlin.idea.caches.project.OriginCapability
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
-import org.jetbrains.kotlin.idea.caches.resolve.getResolveScope
+import org.jetbrains.kotlin.idea.caches.resolve.util.getResolveScope
 import org.jetbrains.kotlin.idea.codeInsight.ReferenceVariantsHelper
 import org.jetbrains.kotlin.idea.core.*
 import org.jetbrains.kotlin.idea.imports.importableFqName
 import org.jetbrains.kotlin.idea.project.TargetPlatformDetector
+import org.jetbrains.kotlin.idea.project.languageVersionSettings
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.util.*
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.parentsWithSelf
+import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.MultiTargetPlatform
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
+import org.jetbrains.kotlin.resolve.getMultiTargetPlatform
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
-import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
 import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
+import org.jetbrains.kotlin.types.typeUtil.isUnit
 import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
-import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstance
 import java.util.*
 
 class CompletionSessionConfiguration(
@@ -75,6 +79,10 @@ abstract class CompletionSession(
         protected val toFromOriginalFileMapper: ToFromOriginalFileMapper,
         resultSet: CompletionResultSet
 ) {
+    init {
+        CompletionBenchmarkSink.instance.onCompletionStarted(this)
+    }
+
     protected val position = parameters.position
     protected val file = position.containingFile as KtFile
     protected val resolutionFacade = file.getResolutionFacade()
@@ -104,7 +112,7 @@ abstract class CompletionSession(
         }
     }
 
-    protected val bindingContext = resolutionFacade.analyze(position.parentsWithSelf.firstIsInstance<KtElement>(), BodyResolveMode.PARTIAL_FOR_COMPLETION)
+    protected val bindingContext = CompletionBindingContextProvider.getInstance(project).getBindingContext(position, resolutionFacade)
     protected val inDescriptor = position.getResolutionScope(bindingContext, resolutionFacade).ownerDescriptor
 
     private val kotlinIdentifierStartPattern = StandardPatterns.character().javaIdentifierStart().andNot(singleCharPattern('$'))
@@ -129,23 +137,24 @@ abstract class CompletionSession(
                                                                     isVisibleFilter,
                                                                     NotPropertiesService.getNotProperties(position))
 
-    protected val callTypeAndReceiver: CallTypeAndReceiver<*, *>
-    protected val receiverTypes: Collection<ReceiverType>?
+    protected val callTypeAndReceiver = if (nameExpression == null) CallTypeAndReceiver.UNKNOWN else CallTypeAndReceiver.detect(nameExpression)
+    protected val receiverTypes = nameExpression?.let { detectReceiverTypes(bindingContext, nameExpression, callTypeAndReceiver) }
 
-    init {
-        val (callTypeAndReceiver, receiverTypes) = detectCallTypeAndReceiverTypes()
-        this.callTypeAndReceiver = callTypeAndReceiver
-        this.receiverTypes = receiverTypes
-    }
 
     protected val basicLookupElementFactory = BasicLookupElementFactory(project, InsertHandlerProvider(callTypeAndReceiver.callType) { expectedInfos })
 
     // LookupElementsCollector instantiation is deferred because virtual call to createSorter uses data from derived classes
     protected val collector: LookupElementsCollector by lazy(LazyThreadSafetyMode.NONE) {
-        LookupElementsCollector(prefixMatcher, parameters, resultSet, createSorter(), (file as? KtCodeFragment)?.extraCompletionFilter)
+        LookupElementsCollector(
+            { CompletionBenchmarkSink.instance.onFlush(this) },
+            prefixMatcher, parameters, resultSet,
+            createSorter(), (file as? KtCodeFragment)?.extraCompletionFilter,
+            moduleDescriptor.getMultiTargetPlatform() === MultiTargetPlatform.Common
+        )
     }
 
-    protected val searchScope: GlobalSearchScope = getResolveScope(parameters.originalFile as KtFile)
+    protected val searchScope: GlobalSearchScope =
+        getResolveScope(parameters.originalFile as KtFile)
 
     protected fun indicesHelper(mayIncludeInaccessible: Boolean): KotlinIndicesHelper {
         val filter = if (mayIncludeInaccessible) isVisibleFilter else isVisibleFilterCheckAlways
@@ -201,6 +210,17 @@ abstract class CompletionSession(
     }
 
     fun complete(): Boolean {
+        return try {
+            _complete().also {
+                CompletionBenchmarkSink.instance.onCompletionEnded(this, false)
+            }
+        } catch (pce: ProcessCanceledException) {
+            CompletionBenchmarkSink.instance.onCompletionEnded(this, true)
+            throw pce
+        }
+    }
+
+    private fun _complete(): Boolean {
         // we restart completion when prefix becomes "get" or "set" to ensure that properties get lower priority comparing to get/set functions (see KT-12299)
         val prefixPattern = StandardPatterns.string().with(object : PatternCondition<String>("get or set prefix") {
             override fun accepts(prefix: String, context: ProcessingContext?) = prefix == "get" || prefix == "set"
@@ -244,11 +264,11 @@ abstract class CompletionSession(
         sorter = sorter.weighAfter("stats", VariableOrFunctionWeigher, ImportedWeigher(importableFqNameClassifier))
 
         val preferContextElementsWeigher = PreferContextElementsWeigher(inDescriptor)
-        if (callTypeAndReceiver is CallTypeAndReceiver.SUPER_MEMBERS) { // for completion after "super." strictly prefer the current member
-            sorter = sorter.weighBefore("kotlin.deprecated", preferContextElementsWeigher)
+        sorter = if (callTypeAndReceiver is CallTypeAndReceiver.SUPER_MEMBERS) { // for completion after "super." strictly prefer the current member
+            sorter.weighBefore("kotlin.deprecated", preferContextElementsWeigher)
         }
         else {
-            sorter = sorter.weighBefore("kotlin.proximity", preferContextElementsWeigher)
+            sorter.weighBefore("kotlin.proximity", preferContextElementsWeigher)
         }
 
         sorter = sorter.weighBefore("middleMatching", PreferMatchingItemWeigher)
@@ -257,6 +277,12 @@ abstract class CompletionSession(
         sorter = sorter.weighAfter("lift.shorter", RealPrefixMatchingWeigher())
 
         sorter = sorter.weighAfter("kotlin.proximity", ByNameAlphabeticalWeigher, PreferLessParametersWeigher)
+
+        if (expectedInfos.all { it.fuzzyType?.type?.isUnit() == true }) {
+            sorter = sorter.weighBefore("prefix", PreferDslMembers)
+        } else {
+            sorter = sorter.weighAfter("kotlin.preferContextElements", PreferDslMembers)
+        }
 
         return sorter
     }
@@ -376,21 +402,22 @@ abstract class CompletionSession(
                                     callTypeAndReceiver.callType, inDescriptor, contextVariablesProvider)
     }
 
-    private fun detectCallTypeAndReceiverTypes(): Pair<CallTypeAndReceiver<*, *>, Collection<ReceiverType>?> {
-        if (nameExpression == null) {
-            return CallTypeAndReceiver.UNKNOWN to null
-        }
-
-        val callTypeAndReceiver = CallTypeAndReceiver.detect(nameExpression)
-
+    protected fun detectReceiverTypes(bindingContext: BindingContext,
+                                      nameExpression: KtSimpleNameExpression,
+                                      callTypeAndReceiver: CallTypeAndReceiver<*, *>): Collection<ReceiverType>? {
         var receiverTypes = callTypeAndReceiver.receiverTypesWithIndex(
                 bindingContext, nameExpression, moduleDescriptor, resolutionFacade,
-                stableSmartCastsOnly = true /* we don't include smart cast receiver types for "unstable" receiver value to mark members grayed */)
+                stableSmartCastsOnly = true, /* we don't include smart cast receiver types for "unstable" receiver value to mark members grayed */
+                withImplicitReceiversWhenExplicitPresent = true)
 
         if (callTypeAndReceiver is CallTypeAndReceiver.SAFE || isDebuggerContext) {
             receiverTypes = receiverTypes?.map { ReceiverType(it.type.makeNotNullable(), it.receiverIndex) }
         }
 
-        return callTypeAndReceiver to receiverTypes
+        if (receiverTypes != null && nameExpression.languageVersionSettings.supportsFeature(LanguageFeature.DslMarkersSupport)) {
+            receiverTypes -= receiverTypes.shadowedByDslMarkers()
+        }
+
+        return receiverTypes
     }
 }

@@ -17,20 +17,14 @@
 package org.jetbrains.kotlin.resolve.checkers
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.config.LanguageVersionSettings
-import org.jetbrains.kotlin.descriptors.CallableDescriptor
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.ClassifierDescriptor
-import org.jetbrains.kotlin.descriptors.SourceElement
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.Errors.*
-import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.calls.checkers.CallChecker
 import org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerContext
 import org.jetbrains.kotlin.resolve.calls.checkers.isComputingDeferredType
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
-import org.jetbrains.kotlin.serialization.deserialization.NotFoundClasses
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedMemberDescriptor
 import org.jetbrains.kotlin.types.KotlinType
@@ -95,16 +89,11 @@ object MissingDependencyClassChecker : CallChecker {
     }
 
     object ClassifierUsage : ClassifierUsageChecker {
-        override fun check(
-                targetDescriptor: ClassifierDescriptor,
-                trace: BindingTrace,
-                element: PsiElement,
-                languageVersionSettings: LanguageVersionSettings
-        ) {
-            diagnosticFor(targetDescriptor, element)?.let(trace::report)
+        override fun check(targetDescriptor: ClassifierDescriptor, element: PsiElement, context: ClassifierUsageCheckerContext) {
+            diagnosticFor(targetDescriptor, element)?.let(context.trace::report)
 
             val containerSource = (targetDescriptor as? DeserializedMemberDescriptor)?.containerSource
-            incompatibilityDiagnosticFor(containerSource, element)?.let(trace::report)
+            incompatibilityDiagnosticFor(containerSource, element)?.let(context.trace::report)
         }
     }
 }

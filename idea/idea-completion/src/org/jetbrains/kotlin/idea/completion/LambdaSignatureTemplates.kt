@@ -98,7 +98,7 @@ object LambdaSignatureTemplates {
     }
 
     fun signaturePresentation(lambdaType: KotlinType, presentationKind: SignaturePresentation): String {
-        fun typePresentation(type: KotlinType) = IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_IN_TYPES.renderType(type)
+        fun typePresentation(type: KotlinType) = IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_NO_ANNOTATIONS.renderType(type)
 
         fun parameterPresentation(parameterType: KotlinType): String {
             val name = parameterType.extractParameterNameFromFunctionTypeArgument()?.render()
@@ -109,9 +109,7 @@ object LambdaSignatureTemplates {
             }
         }
 
-        return functionParameterTypes(lambdaType)
-                       .map(::parameterPresentation)
-                       .joinToString(", ") + " ->"
+        return functionParameterTypes(lambdaType).joinToString(", ", transform = ::parameterPresentation) + " ->"
     }
 
     fun explicitParameterTypesRequired(file: KtFile, placeholderRange: TextRange, lambdaType: KotlinType): Boolean {

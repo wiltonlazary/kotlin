@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.cli.jvm.repl
 
 
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.cli.common.messages.AnalyzerWithCompilerReport
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.repl.*
@@ -26,7 +27,14 @@ import org.jetbrains.kotlin.codegen.ClassBuilderFactories
 import org.jetbrains.kotlin.codegen.KotlinCodegenFacade
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.psi.KtBlockExpression
+import org.jetbrains.kotlin.psi.KtExpression
+import org.jetbrains.kotlin.psi.KtScript
+import org.jetbrains.kotlin.psi.KtScriptInitializer
+import org.jetbrains.kotlin.psi.psiUtil.getChildOfType
+import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
+import org.jetbrains.kotlin.script.ScriptDependenciesProvider
 import java.io.File
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.write
@@ -34,10 +42,13 @@ import kotlin.concurrent.write
 // WARNING: not thread safe, assuming external synchronization
 
 open class GenericReplCompiler(disposable: Disposable,
-                               protected val scriptDefinition: KotlinScriptDefinition,
-                               protected val compilerConfiguration: CompilerConfiguration,
+                               scriptDefinition: KotlinScriptDefinition,
+                               private val compilerConfiguration: CompilerConfiguration,
                                messageCollector: MessageCollector
 ) : ReplCompiler {
+
+    constructor(scriptDefinition: KotlinScriptDefinition, compilerConfiguration: CompilerConfiguration, messageCollector: MessageCollector) :
+        this(Disposer.newDisposable(), scriptDefinition, compilerConfiguration, messageCollector)
 
     private val checker = GenericReplChecker(disposable, scriptDefinition, compilerConfiguration, messageCollector)
 
@@ -61,7 +72,7 @@ open class GenericReplCompiler(disposable: Disposable,
                 Pair(compilerState.lastLineState!!.psiFile, compilerState.lastLineState!!.errorHolder)
             }
 
-            val newDependencies = scriptDefinition.getDependenciesFor(psiFile, checker.environment.project, compilerState.lastDependencies)
+            val newDependencies = ScriptDependenciesProvider.getInstance(checker.environment.project).getScriptDependencies(psiFile)
             var classpathAddendum: List<File>? = null
             if (compilerState.lastDependencies != newDependencies) {
                 compilerState.lastDependencies = newDependencies
@@ -71,19 +82,19 @@ open class GenericReplCompiler(disposable: Disposable,
             val analysisResult = compilerState.analyzerEngine.analyzeReplLine(psiFile, codeLine)
             AnalyzerWithCompilerReport.reportDiagnostics(analysisResult.diagnostics, errorHolder)
             val scriptDescriptor = when (analysisResult) {
-                is ReplCodeAnalyzer.ReplLineAnalysisResult.WithErrors -> return ReplCompileResult.Error(errorHolder.renderedDiagnostics)
+                is ReplCodeAnalyzer.ReplLineAnalysisResult.WithErrors -> return ReplCompileResult.Error(errorHolder.renderMessage())
                 is ReplCodeAnalyzer.ReplLineAnalysisResult.Successful -> analysisResult.scriptDescriptor
                 else -> error("Unexpected result ${analysisResult::class.java}")
             }
 
-            val generationState = GenerationState(
+            val generationState = GenerationState.Builder(
                     psiFile.project,
-                    ClassBuilderFactories.binaries(false),
+                    ClassBuilderFactories.BINARIES,
                     compilerState.analyzerEngine.module,
                     compilerState.analyzerEngine.trace.bindingContext,
                     listOf(psiFile),
                     compilerConfiguration
-            )
+            ).build()
             generationState.replSpecific.scriptResultFieldName = SCRIPT_RESULT_FIELD_NAME
             generationState.replSpecific.earlierScriptsForReplInterpreter = compilerState.history.map { it.item }
             generationState.beforeCompile()
@@ -96,12 +107,24 @@ open class GenericReplCompiler(disposable: Disposable,
             val generatedClassname = makeScriptBaseName(codeLine)
             compilerState.history.push(LineId(codeLine), scriptDescriptor)
 
+            val expression = psiFile.getChildOfType<KtScript>()?.
+                    getChildOfType<KtBlockExpression>()?.
+                    getChildOfType<KtScriptInitializer>()?.
+                    getChildOfType<KtExpression>()
+
+            val type = expression?.let {
+                compilerState.analyzerEngine.trace.bindingContext.getType(it)
+            }?.let {
+                DescriptorRenderer.FQ_NAMES_IN_TYPES.renderType(it)
+            }
+
             return ReplCompileResult.CompiledClasses(LineId(codeLine),
                                                      compilerState.history.map { it.id },
                                                      generatedClassname,
                                                      generationState.factory.asList().map { CompiledClassData(it.relativePath, it.asByteArray()) },
                                                      generationState.replSpecific.hasResult,
-                                                     classpathAddendum ?: emptyList())
+                                                     classpathAddendum ?: emptyList(),
+                                                     type)
         }
     }
 

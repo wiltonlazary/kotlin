@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.idea.reporter
 
 import com.intellij.diagnostic.ITNReporter
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.IdeaLoggingEvent
 import com.intellij.openapi.diagnostic.SubmittedReportInfo
 import com.intellij.openapi.ui.Messages
@@ -33,10 +34,16 @@ class KotlinReportSubmitter : ITNReporter() {
     private var hasUpdate = false
     private var hasLatestVersion = false
 
-    override fun showErrorInRelease(event: IdeaLoggingEvent) = !hasUpdate
+    override fun showErrorInRelease(event: IdeaLoggingEvent): Boolean {
+        val notificationEnabled = "disabled" != System.getProperty("kotlin.fatal.error.notification", "enabled")
+        return notificationEnabled && (!hasUpdate || ApplicationManager.getApplication().isInternal)
+    }
 
     override fun submit(events: Array<IdeaLoggingEvent>, additionalInfo: String?, parentComponent: Component, consumer: Consumer<SubmittedReportInfo>): Boolean {
         if (hasUpdate) {
+            if (ApplicationManager.getApplication().isInternal) {
+                return super.submit(events, additionalInfo, parentComponent, consumer)
+            }
             return true
         }
 
@@ -47,9 +54,14 @@ class KotlinReportSubmitter : ITNReporter() {
         KotlinPluginUpdater.getInstance().runUpdateCheck { status ->
             if (status is PluginUpdateStatus.Update) {
                 hasUpdate = true
+
+                if (ApplicationManager.getApplication().isInternal) {
+                    super.submit(events, additionalInfo, parentComponent, consumer)
+                }
+
                 val rc = Messages.showDialog(parentComponent,
                                              "You're running Kotlin plugin version ${KotlinPluginUtil.getPluginVersion()}, " +
-                                                 "while the latest version is ${status.pluginDescriptor.version}",
+                                             "while the latest version is ${status.pluginDescriptor.version}",
                                              "Update Kotlin Plugin",
                                              arrayOf("Update", "Ignore"),
                                              0, Messages.getInformationIcon())

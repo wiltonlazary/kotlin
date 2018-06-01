@@ -1,3 +1,4 @@
+// !WITH_NEW_INFERENCE
 // !DIAGNOSTICS: -UNUSED_PARAMETER -UNUSED_ANONYMOUS_PARAMETER -UNUSED_VARIABLE
 // !CHECK_TYPE
 fun foo(block: () -> (() -> Int)) {}
@@ -10,31 +11,31 @@ fun test() {
     foo({ <!EXPECTED_TYPE_MISMATCH!>fun named3() = 1<!> })
 
     val x1 =
-        if (1 == 1)
-            // TODO: Diagnostic content could be better
-            <!SYNTAX!><!>fun named4(): Int {return 1}
-        <!SYNTAX!>else<!>
-            fun named5() = 1
+    <!INVALID_IF_AS_EXPRESSION!>if<!> (1 == 1)
+    // TODO: Diagnostic content could be better
+    <!SYNTAX!><!>fun named4(): Int {return 1}
+    <!SYNTAX!>else<!>
+    fun named5() = 1
 
     val x2 =
-            if (1 == 1) {
-                fun named6(): Int {
-                    return 1
-                }
-            }
-            else
-                <!SYNTAX!><!>fun named7() = 1
+    <!INVALID_IF_AS_EXPRESSION!>if<!> (1 == 1) {
+        fun named6(): Int {
+            return 1
+        }
+    }
+    else
+    <!SYNTAX!><!>fun named7() = 1
 
     val x3 = when (1) {
-        0 -> <!EXPECTED_TYPE_MISMATCH!>fun named8(): Int {return 1}<!>
-        else -> <!EXPECTED_TYPE_MISMATCH!>fun named9() = 1<!>
+        0 -> <!OI;EXPECTED_TYPE_MISMATCH!>fun <!NI;ANONYMOUS_FUNCTION_WITH_NAME!>named8<!>(): Int {return 1}<!>
+        else -> <!OI;EXPECTED_TYPE_MISMATCH!>fun <!NI;ANONYMOUS_FUNCTION_WITH_NAME!>named9<!>() = 1<!>
     }
 
     val x31 = when (1) {
         0 -> {
-            <!EXPECTED_TYPE_MISMATCH!>fun named10(): Int {return 1}<!>
+            <!OI;EXPECTED_TYPE_MISMATCH!>fun <!NI;ANONYMOUS_FUNCTION_WITH_NAME!>named10<!>(): Int {return 1}<!>
         }
-        else -> <!EXPECTED_TYPE_MISMATCH!>fun named11() = 1<!>
+        else -> <!OI;EXPECTED_TYPE_MISMATCH!>fun <!NI;ANONYMOUS_FUNCTION_WITH_NAME!>named11<!>() = 1<!>
     }
 
     val x4 = {

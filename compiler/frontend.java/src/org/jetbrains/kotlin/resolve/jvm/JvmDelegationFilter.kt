@@ -21,10 +21,11 @@ import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.deserialization.PLATFORM_DEPENDENT_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.load.java.descriptors.JavaMethodDescriptor
 import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.annotations.hasJvmDefaultAnnotation
 import org.jetbrains.kotlin.resolve.lazy.DelegationFilter
-import org.jetbrains.kotlin.serialization.deserialization.PLATFORM_DEPENDENT_ANNOTATION_FQ_NAME
 
 object JvmDelegationFilter : DelegationFilter {
 
@@ -33,7 +34,9 @@ object JvmDelegationFilter : DelegationFilter {
 
         //We always have only one implementation otherwise it's an error in kotlin and java
         val realMember = DescriptorUtils.unwrapFakeOverride(interfaceMember)
-        return !isJavaDefaultMethod(realMember) && !isBuiltInMemberMappedToJavaDefault(realMember)
+        return !isJavaDefaultMethod(realMember) &&
+                !realMember.hasJvmDefaultAnnotation() &&
+                !isBuiltInMemberMappedToJavaDefault(realMember)
     }
 
     private fun isJavaDefaultMethod(interfaceMember: CallableMemberDescriptor): Boolean {

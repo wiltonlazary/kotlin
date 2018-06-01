@@ -48,8 +48,8 @@ class Concat : IntrinsicMethod() {
         if (element is KtBinaryExpression && element.operationReference.getReferencedNameElementType() == KtTokens.PLUS) {
             // LHS + RHS
             genStringBuilderConstructor(v)
-            codegen.invokeAppend(element.left)
-            codegen.invokeAppend(element.right)
+            codegen.invokeAppend(v, element.left)
+            codegen.invokeAppend(v, element.right)
         }
         else {
             // LHS?.plus(RHS)
@@ -57,7 +57,7 @@ class Concat : IntrinsicMethod() {
             genStringBuilderConstructor(v)
             v.swap()
             genInvokeAppendMethod(v, returnType)
-            codegen.invokeAppend(arguments.get(0))
+            codegen.invokeAppend(v, arguments.get(0))
         }
 
         v.invokevirtual("java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false)
@@ -116,10 +116,8 @@ class Concat : IntrinsicMethod() {
                     }
                 }
 
-                override fun afterReceiverGeneration(v: InstructionAdapter) {
-                    v.visitTypeInsn(Opcodes.NEW, "java/lang/StringBuilder")
-                    v.dupX1()
-                    v.swap()
+                override fun afterReceiverGeneration(v: InstructionAdapter, frameMap: FrameMap) {
+                    v.generateNewInstanceDupAndPlaceBeforeStackTop(frameMap, AsmTypes.JAVA_STRING_TYPE, "java/lang/StringBuilder")
                     v.invokespecial("java/lang/StringBuilder", "<init>", "(Ljava/lang/String;)V", false)
                 }
 

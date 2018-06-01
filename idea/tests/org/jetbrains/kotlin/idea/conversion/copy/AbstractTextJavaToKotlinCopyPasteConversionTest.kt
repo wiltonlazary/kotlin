@@ -42,7 +42,7 @@ abstract class AbstractTextJavaToKotlinCopyPasteConversionTest : AbstractCopyPas
     }
 
     override fun tearDown() {
-        KotlinEditorOptions.getInstance().loadState(oldEditorOptions)
+        oldEditorOptions?.let { KotlinEditorOptions.getInstance().loadState(it) }
         super.tearDown()
     }
 
@@ -63,14 +63,8 @@ abstract class AbstractTextJavaToKotlinCopyPasteConversionTest : AbstractCopyPas
         configureTargetFile(testName + ".to.kt")
 
         ConvertTextJavaCopyPasteProcessor.conversionPerformed = false
-        ConvertTextJavaCopyPasteProcessor.convertOnCopyInsideIDE = true
 
-        try {
-            myFixture.performEditorAction(IdeActions.ACTION_PASTE)
-        }
-        finally {
-            ConvertTextJavaCopyPasteProcessor.convertOnCopyInsideIDE = false
-        }
+        myFixture.performEditorAction(IdeActions.ACTION_PASTE)
 
         kotlin.test.assertEquals(noConversionExpected, !ConvertTextJavaCopyPasteProcessor.conversionPerformed,
                                  if (noConversionExpected) "Conversion to Kotlin should not be suggested" else "No conversion to Kotlin suggested")

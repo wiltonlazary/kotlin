@@ -16,26 +16,22 @@
 
 package org.jetbrains.kotlin.idea.codeInliner
 
-import org.jetbrains.kotlin.descriptors.CallableDescriptor
-import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
-import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.core.asExpression
 import org.jetbrains.kotlin.idea.imports.importableFqName
 import org.jetbrains.kotlin.idea.intentions.InsertExplicitTypeArgumentsIntention
 import org.jetbrains.kotlin.idea.intentions.SpecifyExplicitLambdaSignatureIntention
-import org.jetbrains.kotlin.idea.refactoring.addTypeArgumentsIfNeeded
-import org.jetbrains.kotlin.idea.refactoring.getQualifiedTypeArgumentList
 import org.jetbrains.kotlin.idea.references.canBeResolvedViaImport
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.resolve.ResolutionFacade
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
 import org.jetbrains.kotlin.idea.util.getResolutionScope
-import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getReceiverExpression
 import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
+import org.jetbrains.kotlin.renderer.render
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.isReallySuccess
@@ -57,15 +53,27 @@ class CodeToInlineBuilder(
             mainExpression: KtExpression?,
             statementsBefore: List<KtExpression>,
             analyze: () -> BindingContext,
-            importFqNames: Collection<FqName> = emptyList()
+            reformat: Boolean
     ): CodeToInline {
-        val bindingContext = analyze()
+        var bindingContext = analyze()
 
-        val codeToInline = MutableCodeToInline(mainExpression, statementsBefore.toMutableList(), importFqNames.toMutableSet())
+        val descriptor = mainExpression.getResolvedCall(bindingContext)?.resultingDescriptor
+        val alwaysKeepMainExpression = when (descriptor) {
+            is PropertyDescriptor -> descriptor.getter?.isDefault == false
+            else -> false
+        }
+        val codeToInline = MutableCodeToInline(
+            mainExpression,
+            statementsBefore.toMutableList(),
+            mutableSetOf(),
+            alwaysKeepMainExpression
+        )
 
-        insertExplicitReceivers(codeToInline, bindingContext)
+        bindingContext = insertExplicitTypeArguments(codeToInline, bindingContext, analyze)
 
-        if (mainExpression != null && mainExpression in codeToInline) {
+        processReferences(codeToInline, bindingContext, reformat)
+
+        if (mainExpression != null) {
             val functionLiteralExpression = mainExpression.unpackFunctionLiteral(true)
             if (functionLiteralExpression != null) {
                 val functionLiteralParameterTypes = getParametersForFunctionLiteral(functionLiteralExpression, bindingContext)
@@ -75,14 +83,7 @@ class CodeToInlineBuilder(
                     }
                 }
             }
-            val typeArgumentsForCall = getQualifiedTypeArgumentList(mainExpression, bindingContext)
-            if (typeArgumentsForCall != null) {
-                codeToInline.addPostInsertionAction(mainExpression) { inlinedExpression ->
-                    addTypeArgumentsIfNeeded(inlinedExpression, typeArgumentsForCall)
-                }
-            }
         }
-
 
         return codeToInline.toNonMutable()
     }
@@ -91,7 +92,7 @@ class CodeToInlineBuilder(
         val lambdaDescriptor = context.get(BindingContext.FUNCTION, functionLiteralExpression.functionLiteral)
         if (lambdaDescriptor == null || ErrorUtils.containsErrorType(lambdaDescriptor)) return null
         return lambdaDescriptor.valueParameters.joinToString {
-            it.name.asString() + ": " + IdeDescriptorRenderers.SOURCE_CODE.renderType(it.type)
+            it.name.render() + ": " + IdeDescriptorRenderers.SOURCE_CODE.renderType(it.type)
         }
     }
 
@@ -124,14 +125,32 @@ class CodeToInlineBuilder(
         }
     }
 
-    private fun insertExplicitReceivers(codeToInline: MutableCodeToInline, bindingContext: BindingContext) {
+    private fun insertExplicitTypeArguments(codeToInline: MutableCodeToInline, bindingContext: BindingContext, analyze: () -> BindingContext): BindingContext {
+        val typeArgsToAdd = ArrayList<Pair<KtCallExpression, KtTypeArgumentList>>()
+        codeToInline.forEachDescendantOfType<KtCallExpression> {
+            if (InsertExplicitTypeArgumentsIntention.isApplicableTo(it, bindingContext)) {
+                typeArgsToAdd.add(it to InsertExplicitTypeArgumentsIntention.createTypeArguments(it, bindingContext)!!)
+            }
+        }
+
+        if (typeArgsToAdd.isEmpty()) return bindingContext
+
+        for ((callExpr, typeArgs) in typeArgsToAdd) {
+            callExpr.addAfter(typeArgs, callExpr.calleeExpression)
+        }
+
+        // reanalyze expression - new usages of type parameters may be added
+        return analyze()
+    }
+
+    private fun processReferences(codeToInline: MutableCodeToInline, bindingContext: BindingContext, reformat: Boolean) {
         val receiversToAdd = ArrayList<Pair<KtExpression, KtExpression>>()
 
         codeToInline.forEachDescendantOfType<KtSimpleNameExpression> { expression ->
             val target = bindingContext[BindingContext.REFERENCE_TARGET, expression] ?: return@forEachDescendantOfType
 
             //TODO: other types of references ('[]' etc)
-            if (expression.mainReference.canBeResolvedViaImport(target)) {
+            if (expression.mainReference.canBeResolvedViaImport(target, bindingContext)) {
                 codeToInline.fqNamesToImport.add(target.importableFqName!!)
             }
 
@@ -164,7 +183,8 @@ class CodeToInlineBuilder(
         for ((expr, receiverExpression) in receiversToAdd.asReversed()) {
             val expressionToReplace = expr.parent as? KtCallExpression ?: expr
             codeToInline.replaceExpression(expressionToReplace,
-                                           psiFactory.createExpressionByPattern("$0.$1", receiverExpression, expressionToReplace))
+                                           psiFactory.createExpressionByPattern("$0.$1", receiverExpression, expressionToReplace,
+                                                                                reformat = reformat))
         }
     }
 }

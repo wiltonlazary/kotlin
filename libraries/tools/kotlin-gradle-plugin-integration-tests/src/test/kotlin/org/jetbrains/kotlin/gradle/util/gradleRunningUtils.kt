@@ -4,10 +4,10 @@ import org.jetbrains.kotlin.gradle.BaseGradleIT
 import java.io.File
 
 class ProcessRunResult(
-        private val cmd: List<String>,
-        private val workingDir: File,
-        val exitCode: Int,
-        val output: String
+    private val cmd: List<String>,
+    private val workingDir: File,
+    val exitCode: Int,
+    val output: String
 ) {
     val isSuccessful: Boolean
         get() = exitCode == 0
@@ -21,10 +21,10 @@ Executing process was ${if (isSuccessful) "successful" else "unsuccessful"}
 }
 
 fun runProcess(
-        cmd: List<String>,
-        workingDir: File,
-        environmentVariables: Map<String, String> = mapOf(),
-        options: BaseGradleIT.BuildOptions? = null
+    cmd: List<String>,
+    workingDir: File,
+    environmentVariables: Map<String, String> = mapOf(),
+    options: BaseGradleIT.BuildOptions? = null
 ): ProcessRunResult {
     val builder = ProcessBuilder(cmd)
     builder.environment().putAll(environmentVariables)
@@ -46,11 +46,11 @@ fun runProcess(
     return ProcessRunResult(cmd, workingDir, exitCode, sb.toString())
 }
 
-fun createGradleCommand(tailParameters: List<String>): List<String> {
-    return if (isWindows())
-        listOf("cmd", "/C", "gradlew.bat") + tailParameters
+fun createGradleCommand(wrapperDir: File, tailParameters: List<String>): List<String> {
+    return if (isWindows)
+        listOf("cmd", "/C", "${wrapperDir.absolutePath}/gradlew.bat") + tailParameters
     else
-        listOf("/bin/bash", "./gradlew") + tailParameters
+        listOf("/bin/bash", "${wrapperDir.absolutePath}/gradlew") + tailParameters
 }
 
-private fun isWindows(): Boolean = System.getProperty("os.name")!!.contains("Windows")
+val isWindows: Boolean = System.getProperty("os.name")!!.contains("Windows")

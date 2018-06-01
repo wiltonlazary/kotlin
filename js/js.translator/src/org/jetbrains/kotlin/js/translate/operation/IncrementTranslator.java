@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,14 @@
 
 package org.jetbrains.kotlin.js.translate.operation;
 
+import com.intellij.psi.tree.IElementType;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.descriptors.CallableDescriptor;
 import org.jetbrains.kotlin.js.backend.ast.JsBinaryOperation;
 import org.jetbrains.kotlin.js.backend.ast.JsBinaryOperator;
 import org.jetbrains.kotlin.js.backend.ast.JsBlock;
 import org.jetbrains.kotlin.js.backend.ast.JsExpression;
 import org.jetbrains.kotlin.js.backend.ast.metadata.MetadataProperties;
-import org.jetbrains.kotlin.js.util.AstUtil;
-import com.intellij.psi.tree.IElementType;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.kotlin.descriptors.CallableDescriptor;
 import org.jetbrains.kotlin.js.translate.context.TemporaryVariable;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.general.AbstractTranslator;
@@ -34,6 +33,8 @@ import org.jetbrains.kotlin.psi.KtExpression;
 import org.jetbrains.kotlin.psi.KtUnaryExpression;
 import org.jetbrains.kotlin.resolve.calls.tasks.DynamicCallsKt;
 import org.jetbrains.kotlin.types.expressions.OperatorConventions;
+
+import java.util.Arrays;
 
 import static org.jetbrains.kotlin.js.translate.reference.AccessTranslationUtils.getAccessTranslator;
 import static org.jetbrains.kotlin.js.translate.utils.BindingUtils.getCallableDescriptorForOperationExpression;
@@ -90,10 +91,11 @@ public abstract class IncrementTranslator extends AbstractTranslator {
     private JsExpression asPrefix() {
         // code fragment: expr(a++)
         // generate: expr(a = a.inc(), a)
-        JsExpression getExpression = accessTranslator.translateAsGet();
-        JsExpression reassignment = variableReassignment(context().innerBlock(accessBlock), getExpression);
+        JsExpression getExpression = accessTranslator.translateAsGet().source(expression);
+        JsExpression reassignment = variableReassignment(context().innerBlock(accessBlock), getExpression)
+                .source(expression);
         accessBlock.getStatements().add(JsAstUtils.asSyntheticStatement(reassignment));
-        JsExpression getNewValue = accessTranslator.translateAsGet();
+        JsExpression getNewValue = accessTranslator.translateAsGet().source(expression);
 
         JsExpression result;
         if (accessBlock.getStatements().size() == 1) {
@@ -112,14 +114,15 @@ public abstract class IncrementTranslator extends AbstractTranslator {
     private JsExpression asPostfix() {
         // code fragment: expr(a++)
         // generate: expr( (t1 = a, t2 = t1, a = t1.inc(), t2) )
-        TemporaryVariable t1 = context().declareTemporary(accessTranslator.translateAsGet());
+        TemporaryVariable t1 = context().declareTemporary(accessTranslator.translateAsGet().source(expression), expression);
         accessBlock.getStatements().add(t1.assignmentStatement());
-        JsExpression variableReassignment = variableReassignment(context().innerBlock(accessBlock), t1.reference());
-        accessBlock.getStatements().add(JsAstUtils.asSyntheticStatement(variableReassignment));
+        JsExpression variableReassignment = variableReassignment(context().innerBlock(accessBlock), t1.reference())
+                .source(expression);
+        accessBlock.getStatements().add(JsAstUtils.asSyntheticStatement(variableReassignment.source(expression)));
 
         JsExpression result;
         if (accessBlock.getStatements().size() == 2) {
-            result = AstUtil.newSequence(t1.assignmentExpression(), variableReassignment, t1.reference());
+            result = JsAstUtils.newSequence(Arrays.asList(t1.assignmentExpression(), variableReassignment, t1.reference()));
         }
         else {
             context().getCurrentBlock().getStatements().addAll(accessBlock.getStatements());

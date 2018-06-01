@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.idea.framework
 
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.OrderRootType
 import com.intellij.openapi.roots.impl.libraries.LibraryEx
 import com.intellij.openapi.roots.libraries.Library
@@ -33,22 +34,17 @@ import java.util.jar.Attributes
 object JsLibraryStdDetectionUtil {
     private val IS_JS_LIBRARY_STD_LIB = Key.create<Boolean>("IS_JS_LIBRARY_STD_LIB")
 
-    fun hasJsStdlibJar(library: Library): Boolean {
-        if (library is LibraryEx && library.isDisposed) return false
-
-        if (!KotlinJavaScriptLibraryDetectionUtil.isKotlinJavaScriptLibrary(library)) return false
+    fun hasJsStdlibJar(library: Library, project: Project, ignoreKind: Boolean = false): Boolean {
+        if (library !is LibraryEx || library.isDisposed) return false
+        if (!ignoreKind && library.effectiveKind(project) !is JSLibraryKind) return false
 
         val classes = Arrays.asList(*library.getFiles(OrderRootType.CLASSES))
-        return getJsLibraryStdVersion(classes) != null
+        return getJsStdLibJar(classes) != null
     }
 
-    fun getJsLibraryStdVersion(classesRoots: List<VirtualFile>): String? {
-        if (JavaRuntimeDetectionUtil.getJavaRuntimeVersion(classesRoots) != null) {
-            // Prevent clashing with java runtime, in case when library collects all roots.
-            return null
-        }
-
-        val jar = getJsStdLibJar(classesRoots) ?: return null
+    fun getJsLibraryStdVersion(library: Library, project: Project): String? {
+        if ((library as LibraryEx).effectiveKind(project) !is JSLibraryKind) return null
+        val jar = getJsStdLibJar(library.getFiles(OrderRootType.CLASSES).toList()) ?: return null
 
         return JarUtil.getJarAttribute(VfsUtilCore.virtualToIoFile(jar), Attributes.Name.IMPLEMENTATION_VERSION)
     }
@@ -59,8 +55,8 @@ object JsLibraryStdDetectionUtil {
 
             val name = root.url.substringBefore("!/").substringAfterLast('/')
             if (name == PathUtil.JS_LIB_JAR_NAME || name == PathUtil.JS_LIB_10_JAR_NAME ||
-                    PathUtil.KOTLIN_STDLIB_JS_JAR_PATTERN.matcher(name).matches() ||
-                    PathUtil.KOTLIN_JS_LIBRARY_JAR_PATTERN.matcher(name).matches()) {
+                PathUtil.KOTLIN_STDLIB_JS_JAR_PATTERN.matcher(name).matches() ||
+                PathUtil.KOTLIN_JS_LIBRARY_JAR_PATTERN.matcher(name).matches()) {
 
                 val jar = VfsUtilCore.getVirtualFileForJar(root) ?: continue
                 var isJSStdLib = jar.getUserData(IS_JS_LIBRARY_STD_LIB)

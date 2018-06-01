@@ -23,17 +23,15 @@ import org.jetbrains.kotlin.cfg.pseudocode.instructions.InstructionVisitor
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.InstructionVisitorWithResult
 
 class MarkInstruction(
-        element: KtElement,
-        blockScope: BlockScope
+    element: KtElement,
+    blockScope: BlockScope
 ) : InstructionWithNext(element, blockScope) {
 
     override fun accept(visitor: InstructionVisitor) {
         visitor.visitMarkInstruction(this)
     }
 
-    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R {
-        return visitor.visitMarkInstruction(this)
-    }
+    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R = visitor.visitMarkInstruction(this)
 
     override fun createCopy() = MarkInstruction(element, blockScope)
 

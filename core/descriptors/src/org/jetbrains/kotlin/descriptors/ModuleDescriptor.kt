@@ -40,12 +40,15 @@ interface ModuleDescriptor : DeclarationDescriptor {
      */
     val allDependencyModules: List<ModuleDescriptor>
 
-    // All platform-specific modules depending on common 'this' module (result is empty if this is platform-specific itself)
-    val allImplementingModules: Set<ModuleDescriptor>
+    val expectedByModules: List<ModuleDescriptor>
 
     fun <T> getCapability(capability: Capability<T>): T?
 
     class Capability<T>(val name: String) {
         override fun toString() = name
     }
+
+    val isValid: Boolean
+
+    fun assertValid()
 }

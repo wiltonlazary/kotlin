@@ -17,6 +17,8 @@
 package org.jetbrains.kotlin.resolve.scopes.receivers
 
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.types.KotlinType
+import java.lang.UnsupportedOperationException
 
 /**
  * Describes any "this" receiver inside a class
@@ -28,7 +30,12 @@ interface ThisClassReceiver : ReceiverValue {
 /**
  * Same but implicit only
  */
-open class ImplicitClassReceiver(final override val classDescriptor: ClassDescriptor) : ThisClassReceiver, ImplicitReceiver {
+open class ImplicitClassReceiver(
+    final override val classDescriptor: ClassDescriptor,
+    original: ImplicitClassReceiver? = null
+) : ThisClassReceiver, ImplicitReceiver {
+
+    private val original = original ?: this
 
     override fun getType() = classDescriptor.defaultType
 
@@ -39,4 +46,9 @@ open class ImplicitClassReceiver(final override val classDescriptor: ClassDescri
     override fun hashCode() = classDescriptor.hashCode()
 
     override fun toString() = "Class{$type}"
+
+    override fun replaceType(newType: KotlinType) =
+            throw UnsupportedOperationException("Replace type should not be called for this receiver")
+
+    override fun getOriginal() = original
 }

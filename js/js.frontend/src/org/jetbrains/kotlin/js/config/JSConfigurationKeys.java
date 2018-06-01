@@ -17,9 +17,11 @@
 package org.jetbrains.kotlin.js.config;
 
 import org.jetbrains.kotlin.config.CompilerConfigurationKey;
+import org.jetbrains.kotlin.incremental.js.IncrementalDataProvider;
+import org.jetbrains.kotlin.incremental.js.IncrementalResultsConsumer;
 import org.jetbrains.kotlin.serialization.js.ModuleKind;
-import org.jetbrains.kotlin.serialization.js.PackagesWithHeaderMetadata;
 
+import java.io.File;
 import java.util.List;
 
 public class JSConfigurationKeys {
@@ -28,6 +30,18 @@ public class JSConfigurationKeys {
 
     public static final CompilerConfigurationKey<Boolean> SOURCE_MAP =
             CompilerConfigurationKey.create("generate source map");
+
+    public static final CompilerConfigurationKey<File> OUTPUT_DIR =
+            CompilerConfigurationKey.create("output directory");
+
+    public static final CompilerConfigurationKey<String> SOURCE_MAP_PREFIX =
+            CompilerConfigurationKey.create("prefix to add to paths in source map");
+
+    public static final CompilerConfigurationKey<List<String>> SOURCE_MAP_SOURCE_ROOTS =
+            CompilerConfigurationKey.create("base directories used to calculate relative paths for source map");
+
+    public static final CompilerConfigurationKey<SourceMapSourceEmbedding> SOURCE_MAP_EMBED_SOURCES =
+            CompilerConfigurationKey.create("embed source files into source map");
 
     public static final CompilerConfigurationKey<Boolean> META_INFO =
             CompilerConfigurationKey.create("generate .meta.js and .kjsm files");
@@ -41,10 +55,11 @@ public class JSConfigurationKeys {
     public static final CompilerConfigurationKey<Boolean> TYPED_ARRAYS_ENABLED =
             CompilerConfigurationKey.create("TypedArrays enabled");
 
-    public static final CompilerConfigurationKey<PackagesWithHeaderMetadata> FALLBACK_METADATA =
-            CompilerConfigurationKey.create("fallback metadata");
+    public static final CompilerConfigurationKey<IncrementalDataProvider> INCREMENTAL_DATA_PROVIDER =
+            CompilerConfigurationKey.create("incremental data provider");
 
-    public static final CompilerConfigurationKey<Boolean> SERIALIZE_FRAGMENTS = CompilerConfigurationKey.create("serialize fragments");
+    public static final CompilerConfigurationKey<IncrementalResultsConsumer> INCREMENTAL_RESULTS_CONSUMER =
+            CompilerConfigurationKey.create("incremental results consumer");
 
     public static final CompilerConfigurationKey<Boolean> FRIEND_PATHS_DISABLED =
             CompilerConfigurationKey.create("disable support for friend paths");

@@ -19,7 +19,6 @@ package org.jetbrains.kotlin.idea.quickfix
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
-import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiNameIdentifierOwner
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
@@ -27,12 +26,15 @@ import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.core.quickfix.QuickFixUtil
+import org.jetbrains.kotlin.idea.inspections.KotlinUniversalQuickFix
 import org.jetbrains.kotlin.idea.refactoring.canRefactor
 import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.containingClass
 import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
@@ -42,11 +44,10 @@ import org.jetbrains.kotlin.types.TypeUtils
 open class AddModifierFix(
         element: KtModifierListOwner,
         protected val modifier: KtModifierKeywordToken
-) : KotlinQuickFixAction<KtModifierListOwner>(element) {
-
+) : KotlinQuickFixAction<KtModifierListOwner>(element), KotlinUniversalQuickFix {
     override fun getText(): String {
         val element = element ?: return ""
-        if (modifier in modalityModifiers) {
+        if (modifier in modalityModifiers || modifier in KtTokens.VISIBILITY_MODIFIERS || modifier == KtTokens.CONST_KEYWORD) {
             return "Make ${getElementName(element)} ${modifier.value}"
         }
         return "Add '${modifier.value}' modifier"
@@ -56,11 +57,19 @@ open class AddModifierFix(
 
     override fun invoke(project: Project, editor: Editor?, file: KtFile) {
         element?.addModifier(modifier)
+
+        if (modifier == KtTokens.ABSTRACT_KEYWORD && (element is KtProperty || element is KtNamedFunction)) {
+            element?.containingClass()?.run {
+                if (!hasModifier(KtTokens.ABSTRACT_KEYWORD) && !hasModifier(KtTokens.SEALED_KEYWORD)) {
+                    addModifier(KtTokens.ABSTRACT_KEYWORD)
+                }
+            }
+        }
     }
 
-    override fun isAvailable(project: Project, editor: Editor?, file: PsiFile): Boolean {
+    override fun isAvailable(project: Project, editor: Editor?, file: KtFile): Boolean {
         val element = element ?: return false
-        return super.isAvailable(project, editor, file) && element.canRefactor()
+        return element.canRefactor()
     }
 
     companion object {
@@ -91,21 +100,36 @@ open class AddModifierFix(
             return object : KotlinSingleIntentionActionFactory() {
                 public override fun createAction(diagnostic: Diagnostic): IntentionAction? {
                     val modifierListOwner = QuickFixUtil.getParentElementOfType(diagnostic, modifierOwnerClass) ?: return null
-
-                    if (modifier == KtTokens.ABSTRACT_KEYWORD) {
-                        if (modifierListOwner is KtObjectDeclaration) return null
-                        if (modifierListOwner is KtEnumEntry) return null
-                        if (modifierListOwner is KtDeclaration && modifierListOwner !is KtClass) {
-                            val parentClassOrObject = modifierListOwner.containingClassOrObject ?: return null
-                            if (parentClassOrObject is KtObjectDeclaration) return null
-                            if (parentClassOrObject is KtEnumEntry) return null
-                        }
-                    }
-
-                    return AddModifierFix(modifierListOwner, modifier)
+                    return createIfApplicable(modifierListOwner, modifier)
                 }
             }
         }
+
+        fun createIfApplicable(modifierListOwner: KtModifierListOwner, modifier: KtModifierKeywordToken): AddModifierFix? {
+            when (modifier) {
+                ABSTRACT_KEYWORD, OPEN_KEYWORD -> {
+                    if (modifierListOwner is KtObjectDeclaration) return null
+                    if (modifierListOwner is KtEnumEntry) return null
+                    if (modifierListOwner is KtDeclaration && modifierListOwner !is KtClass) {
+                        val parentClassOrObject = modifierListOwner.containingClassOrObject ?: return null
+                        if (parentClassOrObject is KtObjectDeclaration) return null
+                        if (parentClassOrObject is KtEnumEntry) return null
+                    }
+                }
+                INNER_KEYWORD -> {
+                    if (modifierListOwner is KtObjectDeclaration) return null
+                    if (modifierListOwner is KtClass) {
+                        if (modifierListOwner.isInterface() ||
+                            modifierListOwner.isSealed() ||
+                            modifierListOwner.isEnum() ||
+                            modifierListOwner.isData() ||
+                            modifierListOwner.isAnnotation()) return null
+                    }
+                }
+            }
+            return AddModifierFix(modifierListOwner, modifier)
+        }
+
     }
 
     object MakeClassOpenFactory : KotlinSingleIntentionActionFactory() {
@@ -126,8 +150,7 @@ open class AddModifierFix(
             val property = Errors.MUST_BE_INITIALIZED_OR_BE_ABSTRACT.cast(diagnostic).psiElement
             if (!property.isVar) return null
 
-            val context = property.analyze()
-            val descriptor = context[BindingContext.DECLARATION_TO_DESCRIPTOR, property] ?: return null
+            val descriptor = property.resolveToDescriptorIfAny(BodyResolveMode.FULL) ?: return null
             val type = (descriptor as? PropertyDescriptor)?.type ?: return null
 
             if (TypeUtils.isNullableType(type)) return null

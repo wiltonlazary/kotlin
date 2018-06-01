@@ -1,8 +1,12 @@
+/*
+ * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * that can be found in the license/LICENSE.txt file.
+ */
+
 package test.collections
 
 import kotlin.test.*
 import test.*
-import org.junit.Test
 
 class MapTest {
 
@@ -95,6 +99,18 @@ class MapTest {
 
         assertEquals(6, list.size)
         assertEquals("beverage,beer,location,Mells,name,James", list.joinToString(","))
+    }
+
+    @Test fun iterateAndMutate() {
+        val map = mutableMapOf("beverage" to "beer", "location" to "Mells", "name" to "James")
+        val it = map.iterator()
+        for (e in it) {
+            when (e.key) {
+                "beverage" -> e.setValue("juice")
+                "location" -> it.remove()
+            }
+        }
+        assertEquals(mapOf("beverage" to "juice", "name" to "James"), map)
     }
 
 

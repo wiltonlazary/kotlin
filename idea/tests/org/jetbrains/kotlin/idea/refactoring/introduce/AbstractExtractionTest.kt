@@ -37,8 +37,10 @@ import com.intellij.refactoring.introduceParameter.Util
 import com.intellij.refactoring.util.CommonRefactoringUtil
 import com.intellij.refactoring.util.DocCommentPolicy
 import com.intellij.refactoring.util.occurrences.ExpressionOccurrenceManager
+import com.intellij.testFramework.fixtures.CodeInsightTestFixture
 import com.intellij.testFramework.fixtures.JavaCodeInsightTestFixture
 import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import org.jetbrains.kotlin.compatibility.projectDisposableEx
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.idea.codeInsight.CodeInsightUtils
 import org.jetbrains.kotlin.idea.refactoring.checkConflictsInteractively
@@ -60,6 +62,7 @@ import org.jetbrains.kotlin.idea.refactoring.memberInfo.extractClassMembers
 import org.jetbrains.kotlin.idea.refactoring.selectElement
 import org.jetbrains.kotlin.idea.test.ConfigLibraryUtil
 import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase
+import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCaseBase
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
 import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
@@ -252,76 +255,7 @@ abstract class AbstractExtractionTest : KotlinLightCodeInsightFixtureTestCase() 
     }
 
     protected fun doExtractFunctionTest(path: String) {
-        doTest(path) { file ->
-            file as KtFile
-
-            val explicitPreviousSibling = file.findElementByCommentPrefix("// SIBLING:")
-            val fileText = file.getText() ?: ""
-            val expectedNames = InTextDirectivesUtils.findListWithPrefixes(fileText, "// SUGGESTED_NAMES: ")
-            val expectedReturnTypes = InTextDirectivesUtils.findListWithPrefixes(fileText, "// SUGGESTED_RETURN_TYPES: ")
-            val expectedDescriptors =
-                    InTextDirectivesUtils.findLinesWithPrefixesRemoved(fileText, "// PARAM_DESCRIPTOR: ").joinToString()
-            val expectedTypes =
-                    InTextDirectivesUtils.findLinesWithPrefixesRemoved(fileText, "// PARAM_TYPES: ").map { "[$it]" }.joinToString()
-
-            val extractionOptions = InTextDirectivesUtils.findListWithPrefixes(fileText, "// OPTIONS: ").let {
-                if (it.isNotEmpty()) {
-                    @Suppress("UNCHECKED_CAST")
-                    val args = it.map { it.toBoolean() }.toTypedArray() as Array<Any?>
-                    ExtractionOptions::class.java.constructors.first { it.parameterTypes.size == args.size }.newInstance(*args) as ExtractionOptions
-                } else ExtractionOptions.DEFAULT
-            }
-
-            val renderer = DescriptorRenderer.FQ_NAMES_IN_TYPES
-
-            val editor = fixture.editor
-            val handler = ExtractKotlinFunctionHandler(
-                    helper = object : ExtractionEngineHelper(EXTRACT_FUNCTION) {
-                        override fun adjustExtractionData(data: ExtractionData): ExtractionData {
-                            return data.copy(options = extractionOptions)
-                        }
-
-                        override fun configureAndRun(
-                                project: Project,
-                                editor: Editor,
-                                descriptorWithConflicts: ExtractableCodeDescriptorWithConflicts,
-                                onFinish: (ExtractionResult) -> Unit
-                        ) {
-                            val descriptor = descriptorWithConflicts.descriptor
-                            val actualNames = descriptor.suggestedNames
-                            val actualReturnTypes = descriptor.controlFlow.possibleReturnTypes.map {
-                                IdeDescriptorRenderers.SOURCE_CODE.renderType(it)
-                            }
-                            val allParameters = listOfNotNull(descriptor.receiverParameter) + descriptor.parameters
-                            val actualDescriptors = allParameters.map { renderer.render(it.originalDescriptor) }.joinToString()
-                            val actualTypes = allParameters.map {
-                                it.getParameterTypeCandidates(false).map { renderer.renderType(it) }.joinToString(", ", "[", "]")
-                            }.joinToString()
-
-                            if (actualNames.size != 1 || expectedNames.isNotEmpty()) {
-                                assertEquals(expectedNames, actualNames, "Expected names mismatch.")
-                            }
-                            if (actualReturnTypes.size != 1 || expectedReturnTypes.isNotEmpty()) {
-                                assertEquals(expectedReturnTypes, actualReturnTypes, "Expected return types mismatch.")
-                            }
-                            assertEquals("Expected descriptors mismatch.", expectedDescriptors, actualDescriptors)
-                            assertEquals("Expected types mismatch.", expectedTypes, actualTypes)
-
-                            val newDescriptor = if (descriptor.name == "") {
-                                descriptor.copy(suggestedNames = Collections.singletonList("__dummyTestFun__"))
-                            }
-                            else {
-                                descriptor
-                            }
-
-                            doRefactor(ExtractionGeneratorConfiguration(newDescriptor, ExtractionGeneratorOptions.DEFAULT), onFinish)
-                        }
-                    }
-            )
-            handler.selectElements(editor, file) { elements, previousSibling ->
-                handler.doInvoke(editor, file, elements, explicitPreviousSibling ?: previousSibling)
-            }
-        }
+        doTest(path) { file -> doExtractFunction(myFixture, file as KtFile) }
     }
 
     protected fun doIntroduceTypeParameterTest(path: String) {
@@ -397,8 +331,8 @@ abstract class AbstractExtractionTest : KotlinLightCodeInsightFixtureTestCase() 
 
     protected fun doTest(path: String, checkAdditionalAfterdata: Boolean = false, action: (PsiFile) -> Unit) {
         val mainFile = File(path)
-        val afterFile = File("$path.after")
-        val conflictFile = File("$path.conflicts")
+
+        PluginTestCaseBase.addJdk(myFixture.projectDisposableEx, PluginTestCaseBase::mockJdk)
 
         fixture.testDataPath = "${KotlinTestUtils.getHomeDirectory()}/${mainFile.parent}"
 
@@ -408,40 +342,127 @@ abstract class AbstractExtractionTest : KotlinLightCodeInsightFixtureTestCase() 
             name != mainFileName && name.startsWith("$mainFileBaseName.") && (name.endsWith(".kt") || name.endsWith(".java"))
         }
         val extraFilesToPsi = extraFiles.associateBy { fixture.configureByFile(it.name) }
-        val file = fixture.configureByFile(mainFileName)
+        val fileText = FileUtil.loadFile(File(path), true)
 
-        val addKotlinRuntime = InTextDirectivesUtils.findStringWithPrefixes(file.text, "// WITH_RUNTIME") != null
+        val addKotlinRuntime = InTextDirectivesUtils.findStringWithPrefixes(fileText, "// WITH_RUNTIME") != null
         if (addKotlinRuntime) {
             ConfigLibraryUtil.configureKotlinRuntimeAndSdk(myModule, PluginTestCaseBase.mockJdk())
         }
 
         try {
-            action(file)
-
-            assert(!conflictFile.exists()) { "Conflict file $conflictFile should not exist" }
-            KotlinTestUtils.assertEqualsToFile(afterFile, file.text!!)
-
-            if (checkAdditionalAfterdata) {
-                for ((extraPsiFile, extraFile) in extraFilesToPsi) {
-                    KotlinTestUtils.assertEqualsToFile(File("${extraFile.path}.after"), extraPsiFile.text)
-                }
-            }
-        }
-        catch(e: ConflictsInTestsException) {
-            val message = e.messages.sorted().joinToString(" ").replace("\n", " ")
-            KotlinTestUtils.assertEqualsToFile(conflictFile, message)
-        }
-        catch(e: CommonRefactoringUtil.RefactoringErrorHintException) {
-            KotlinTestUtils.assertEqualsToFile(conflictFile, e.message!!)
-        }
-        catch(e: RuntimeException) { // RuntimeException is thrown by IDEA code in CodeInsightUtils.java
-            if (e::class.java != RuntimeException::class.java) throw e
-            KotlinTestUtils.assertEqualsToFile(conflictFile, e.message!!)
+            checkExtract(ExtractTestFiles(path, fixture.configureByFile(mainFileName), extraFilesToPsi), checkAdditionalAfterdata, action)
         }
         finally {
             if (addKotlinRuntime) {
                 ConfigLibraryUtil.unConfigureKotlinRuntimeAndSdk(myModule, PluginTestCaseBase.mockJdk())
             }
         }
+    }
+}
+
+class ExtractTestFiles(
+        val mainFile: PsiFile,
+        val afterFile: File,
+        val conflictFile: File,
+        val extraFilesToPsi: Map<PsiFile, File> = emptyMap()) {
+    constructor(path: String, mainFile: PsiFile, extraFilesToPsi: Map<PsiFile, File> = emptyMap()) :
+            this(mainFile, File("$path.after"), File("$path.conflicts"), extraFilesToPsi)
+}
+
+fun checkExtract(files: ExtractTestFiles, checkAdditionalAfterdata: Boolean = false, action: (PsiFile) -> Unit) {
+    val conflictFile = files.conflictFile
+    val afterFile = files.afterFile
+
+    try {
+        action(files.mainFile)
+
+        assert(!conflictFile.exists()) { "Conflict file $conflictFile should not exist" }
+        KotlinTestUtils.assertEqualsToFile(afterFile, files.mainFile.text!!)
+
+        if (checkAdditionalAfterdata) {
+            for ((extraPsiFile, extraFile) in files.extraFilesToPsi) {
+                KotlinTestUtils.assertEqualsToFile(File("${extraFile.path}.after"), extraPsiFile.text)
+            }
+        }
+    }
+    catch(e: ConflictsInTestsException) {
+        val message = e.messages.sorted().joinToString(" ").replace("\n", " ")
+        KotlinTestUtils.assertEqualsToFile(conflictFile, message)
+    }
+    catch(e: CommonRefactoringUtil.RefactoringErrorHintException) {
+        KotlinTestUtils.assertEqualsToFile(conflictFile, e.message!!)
+    }
+    catch(e: RuntimeException) { // RuntimeException is thrown by IDEA code in CodeInsightUtils.java
+        if (e::class.java != RuntimeException::class.java) throw e
+        KotlinTestUtils.assertEqualsToFile(conflictFile, e.message!!)
+    }
+}
+
+fun doExtractFunction(fixture: CodeInsightTestFixture, file: KtFile) {
+    val explicitPreviousSibling = file.findElementByCommentPrefix("// SIBLING:")
+    val fileText = file.getText() ?: ""
+    val expectedNames = InTextDirectivesUtils.findListWithPrefixes(fileText, "// SUGGESTED_NAMES: ")
+    val expectedReturnTypes = InTextDirectivesUtils.findListWithPrefixes(fileText, "// SUGGESTED_RETURN_TYPES: ")
+    val expectedDescriptors =
+            InTextDirectivesUtils.findLinesWithPrefixesRemoved(fileText, "// PARAM_DESCRIPTOR: ").joinToString()
+    val expectedTypes =
+            InTextDirectivesUtils.findLinesWithPrefixesRemoved(fileText, "// PARAM_TYPES: ").map { "[$it]" }.joinToString()
+
+    val extractionOptions = InTextDirectivesUtils.findListWithPrefixes(fileText, "// OPTIONS: ").let {
+        if (it.isNotEmpty()) {
+            @Suppress("UNCHECKED_CAST")
+            val args = it.map { it.toBoolean() }.toTypedArray() as Array<Any?>
+            ExtractionOptions::class.java.constructors.first { it.parameterTypes.size == args.size }.newInstance(*args) as ExtractionOptions
+        } else ExtractionOptions.DEFAULT
+    }
+
+    val renderer = DescriptorRenderer.FQ_NAMES_IN_TYPES
+
+    val editor = fixture.editor
+    val handler = ExtractKotlinFunctionHandler(
+            helper = object : ExtractionEngineHelper(EXTRACT_FUNCTION) {
+                override fun adjustExtractionData(data: ExtractionData): ExtractionData {
+                    return data.copy(options = extractionOptions)
+                }
+
+                override fun configureAndRun(
+                        project: Project,
+                        editor: Editor,
+                        descriptorWithConflicts: ExtractableCodeDescriptorWithConflicts,
+                        onFinish: (ExtractionResult) -> Unit
+                ) {
+                    val descriptor = descriptorWithConflicts.descriptor
+                    val actualNames = descriptor.suggestedNames
+                    val actualReturnTypes = descriptor.controlFlow.possibleReturnTypes.map {
+                        IdeDescriptorRenderers.SOURCE_CODE.renderType(it)
+                    }
+                    val allParameters = listOfNotNull(descriptor.receiverParameter) + descriptor.parameters
+                    val actualDescriptors = allParameters.map { renderer.render(it.originalDescriptor) }.joinToString()
+                    val actualTypes = allParameters.map {
+                        it.getParameterTypeCandidates(false).map { renderer.renderType(it) }.joinToString(", ", "[", "]")
+                    }.joinToString()
+
+                    if (actualNames.size != 1 || expectedNames.isNotEmpty()) {
+                        assertEquals(expectedNames, actualNames, "Expected names mismatch.")
+                    }
+                    if (actualReturnTypes.size != 1 || expectedReturnTypes.isNotEmpty()) {
+                        assertEquals(expectedReturnTypes, actualReturnTypes, "Expected return types mismatch.")
+                    }
+                    KotlinLightCodeInsightFixtureTestCaseBase.assertEquals("Expected descriptors mismatch.", expectedDescriptors, actualDescriptors)
+                    KotlinLightCodeInsightFixtureTestCaseBase.assertEquals("Expected types mismatch.", expectedTypes, actualTypes)
+
+                    val newDescriptor = if (descriptor.name == "") {
+                        descriptor.copy(suggestedNames = Collections.singletonList("__dummyTestFun__"))
+                    }
+                    else {
+                        descriptor
+                    }
+
+                    doRefactor(ExtractionGeneratorConfiguration(newDescriptor, ExtractionGeneratorOptions.DEFAULT), onFinish)
+                }
+            }
+    )
+    handler.selectElements(editor, file) { elements, previousSibling ->
+        handler.doInvoke(editor, file, elements, explicitPreviousSibling ?: previousSibling)
     }
 }

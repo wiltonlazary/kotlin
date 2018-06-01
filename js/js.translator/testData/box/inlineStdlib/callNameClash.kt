@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1127
 package foo
 
 // CHECK_NOT_CALLED: with_dbz3ex

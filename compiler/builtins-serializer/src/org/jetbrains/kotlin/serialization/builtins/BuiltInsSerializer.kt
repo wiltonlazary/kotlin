@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.cli.common.messages.*
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoots
+import org.jetbrains.kotlin.cli.metadata.MetadataSerializer
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.addKotlinSourceRoots
@@ -36,7 +37,7 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
-import org.jetbrains.kotlin.serialization.MetadataSerializer
+import org.jetbrains.kotlin.serialization.KotlinSerializerExtensionBase
 import org.jetbrains.kotlin.storage.LockBasedStorageManager
 import java.io.File
 
@@ -73,7 +74,8 @@ class BuiltInsSerializer(dependOnOldBuiltIns: Boolean) : MetadataSerializer(depe
     }
 
     private fun createMessageCollector() = object : GroupingMessageCollector(
-            PrintingMessageCollector(System.err, MessageRenderer.PLAIN_RELATIVE_PATHS, /* verbose = */ false)
+            PrintingMessageCollector(System.err, MessageRenderer.PLAIN_RELATIVE_PATHS, false),
+            false
     ) {
         override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation?) {
             // Only report diagnostics without a particular location because there's plenty of errors in built-in sources
@@ -101,6 +103,8 @@ class BuiltInsSerializer(dependOnOldBuiltIns: Boolean) : MetadataSerializer(depe
             ).run()
         }
     }
+
+    override fun createSerializerExtension(): KotlinSerializerExtensionBase = BuiltInsSerializerExtension()
 
     // Serialize metadata for kotlin.Cloneable manually for compatibility with kotlin-reflect 1.0 which expects this metadata to be there.
     // Since Kotlin 1.1, we always discard this class during deserialization (see ClassDeserializer.kt).

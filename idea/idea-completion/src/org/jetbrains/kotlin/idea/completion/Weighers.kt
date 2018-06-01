@@ -43,6 +43,13 @@ object PriorityWeigher : LookupElementWeigher("kotlin.priority") {
             = element.getUserData(ITEM_PRIORITY_KEY) ?: ItemPriority.DEFAULT
 }
 
+object PreferDslMembers : LookupElementWeigher("kotlin.preferDsl") {
+    override fun weigh(element: LookupElement, context: WeighingContext): Boolean {
+        if (element.isDslMember == true) return false // high priority
+        return true // lower priority
+    }
+}
+
 class NotImportedWeigher(private val classifier: ImportableFqNameClassifier) : LookupElementWeigher("kotlin.notImported") {
     private enum class Weight {
         default,
@@ -214,7 +221,7 @@ object PreferGetSetMethodsToPropertyWeigher : LookupElementWeigher("kotlin.prefe
         val prefixMatcher = context.itemMatcher(element)
         if (prefixMatcher.prefixMatches(property.name.asString())) return 0
         val matchedLookupStrings = element.allLookupStrings.filter { prefixMatcher.prefixMatches(it) }
-        if (matchedLookupStrings.all { it.startsWith("get") || it.startsWith("set") }) return 1 else return 0
+        return if (matchedLookupStrings.all { it.startsWith("get") || it.startsWith("set") }) 1 else 0
     }
 }
 

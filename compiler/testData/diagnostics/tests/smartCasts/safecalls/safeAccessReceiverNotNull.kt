@@ -1,3 +1,5 @@
+// !WITH_NEW_INFERENCE
+// !LANGUAGE: -SafeCastCheckBoundSmartCasts -BooleanElvisBoundSmartCasts
 // A set of examples for
 // "If the result of a safe call is not null, understand that its receiver is not null"
 // and some other improvements for nullability detection
@@ -128,7 +130,7 @@ class Invokable(val x: String) {
 class InvokableProperty(val i: Invokable)
 
 fun checkInvokable(ip: InvokableProperty?) {
-    if (ip?.<!UNSAFE_IMPLICIT_INVOKE_CALL!>i<!>() == "Hello") {
+    if (ip?.<!OI;UNSAFE_IMPLICIT_INVOKE_CALL!>i<!>() == "Hello") {
         <!DEBUG_INFO_SMARTCAST!>ip<!>.hashCode()
     }
 }

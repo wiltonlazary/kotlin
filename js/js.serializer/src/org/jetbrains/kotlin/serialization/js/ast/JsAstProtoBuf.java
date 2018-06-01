@@ -138,6 +138,125 @@ public final class JsAstProtoBuf {
     // @@protoc_insertion_point(enum_scope:org.jetbrains.kotlin.serialization.js.ast.InlineStrategy)
   }
 
+  /**
+   * Protobuf enum {@code org.jetbrains.kotlin.serialization.js.ast.SpecialFunction}
+   */
+  public enum SpecialFunction
+      implements org.jetbrains.kotlin.protobuf.Internal.EnumLite {
+    /**
+     * <code>DEFINE_INLINE_FUNCTION = 1;</code>
+     */
+    DEFINE_INLINE_FUNCTION(0, 1),
+    /**
+     * <code>WRAP_FUNCTION = 2;</code>
+     */
+    WRAP_FUNCTION(1, 2),
+    /**
+     * <code>TO_BOXED_CHAR = 3;</code>
+     */
+    TO_BOXED_CHAR(2, 3),
+    /**
+     * <code>UNBOX_CHAR = 4;</code>
+     */
+    UNBOX_CHAR(3, 4),
+    /**
+     * <code>SUSPEND_CALL = 5;</code>
+     */
+    SUSPEND_CALL(4, 5),
+    /**
+     * <code>COROUTINE_RESULT = 6;</code>
+     */
+    COROUTINE_RESULT(5, 6),
+    /**
+     * <code>COROUTINE_CONTROLLER = 7;</code>
+     */
+    COROUTINE_CONTROLLER(6, 7),
+    /**
+     * <code>COROUTINE_RECEIVER = 8;</code>
+     */
+    COROUTINE_RECEIVER(7, 8),
+    /**
+     * <code>SET_COROUTINE_RESULT = 9;</code>
+     */
+    SET_COROUTINE_RESULT(8, 9),
+    ;
+
+    /**
+     * <code>DEFINE_INLINE_FUNCTION = 1;</code>
+     */
+    public static final int DEFINE_INLINE_FUNCTION_VALUE = 1;
+    /**
+     * <code>WRAP_FUNCTION = 2;</code>
+     */
+    public static final int WRAP_FUNCTION_VALUE = 2;
+    /**
+     * <code>TO_BOXED_CHAR = 3;</code>
+     */
+    public static final int TO_BOXED_CHAR_VALUE = 3;
+    /**
+     * <code>UNBOX_CHAR = 4;</code>
+     */
+    public static final int UNBOX_CHAR_VALUE = 4;
+    /**
+     * <code>SUSPEND_CALL = 5;</code>
+     */
+    public static final int SUSPEND_CALL_VALUE = 5;
+    /**
+     * <code>COROUTINE_RESULT = 6;</code>
+     */
+    public static final int COROUTINE_RESULT_VALUE = 6;
+    /**
+     * <code>COROUTINE_CONTROLLER = 7;</code>
+     */
+    public static final int COROUTINE_CONTROLLER_VALUE = 7;
+    /**
+     * <code>COROUTINE_RECEIVER = 8;</code>
+     */
+    public static final int COROUTINE_RECEIVER_VALUE = 8;
+    /**
+     * <code>SET_COROUTINE_RESULT = 9;</code>
+     */
+    public static final int SET_COROUTINE_RESULT_VALUE = 9;
+
+
+    public final int getNumber() { return value; }
+
+    public static SpecialFunction valueOf(int value) {
+      switch (value) {
+        case 1: return DEFINE_INLINE_FUNCTION;
+        case 2: return WRAP_FUNCTION;
+        case 3: return TO_BOXED_CHAR;
+        case 4: return UNBOX_CHAR;
+        case 5: return SUSPEND_CALL;
+        case 6: return COROUTINE_RESULT;
+        case 7: return COROUTINE_CONTROLLER;
+        case 8: return COROUTINE_RECEIVER;
+        case 9: return SET_COROUTINE_RESULT;
+        default: return null;
+      }
+    }
+
+    public static org.jetbrains.kotlin.protobuf.Internal.EnumLiteMap<SpecialFunction>
+        internalGetValueMap() {
+      return internalValueMap;
+    }
+    private static org.jetbrains.kotlin.protobuf.Internal.EnumLiteMap<SpecialFunction>
+        internalValueMap =
+          new org.jetbrains.kotlin.protobuf.Internal.EnumLiteMap<SpecialFunction>() {
+            public SpecialFunction findValueByNumber(int number) {
+              return SpecialFunction.valueOf(number);
+            }
+          };
+
+    private final int value;
+
+    private SpecialFunction(int index, int value) {
+      this.value = value;
+    }
+
+    // @@protoc_insertion_point(enum_scope:org.jetbrains.kotlin.serialization.js.ast.SpecialFunction)
+  }
+
   public interface LocationOrBuilder extends
       // @@protoc_insertion_point(interface_extends:org.jetbrains.kotlin.serialization.js.ast.Location)
       org.jetbrains.kotlin.protobuf.MessageLiteOrBuilder {
@@ -625,6 +744,15 @@ public final class JsAstProtoBuf {
     org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SideEffects getSideEffects();
 
     /**
+     * <code>optional int32 local_alias = 5;</code>
+     */
+    boolean hasLocalAlias();
+    /**
+     * <code>optional int32 local_alias = 5;</code>
+     */
+    int getLocalAlias();
+
+    /**
      * <code>optional int32 simple_name_reference = 22;</code>
      */
     boolean hasSimpleNameReference();
@@ -896,6 +1024,11 @@ public final class JsAstProtoBuf {
                 bitField0_ |= 0x00000008;
                 sideEffects_ = value;
               }
+              break;
+            }
+            case 40: {
+              bitField0_ |= 0x00000010;
+              localAlias_ = input.readInt32();
               break;
             }
             case 176: {
@@ -1302,6 +1435,21 @@ public final class JsAstProtoBuf {
       return sideEffects_;
     }
 
+    public static final int LOCAL_ALIAS_FIELD_NUMBER = 5;
+    private int localAlias_;
+    /**
+     * <code>optional int32 local_alias = 5;</code>
+     */
+    public boolean hasLocalAlias() {
+      return ((bitField0_ & 0x00000010) == 0x00000010);
+    }
+    /**
+     * <code>optional int32 local_alias = 5;</code>
+     */
+    public int getLocalAlias() {
+      return localAlias_;
+    }
+
     public static final int SIMPLE_NAME_REFERENCE_FIELD_NUMBER = 22;
     /**
      * <code>optional int32 simple_name_reference = 22;</code>
@@ -1664,6 +1812,7 @@ public final class JsAstProtoBuf {
       location_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.getDefaultInstance();
       synthetic_ = false;
       sideEffects_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SideEffects.AFFECTS_STATE;
+      localAlias_ = 0;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -1774,6 +1923,9 @@ public final class JsAstProtoBuf {
       if (((bitField0_ & 0x00000008) == 0x00000008)) {
         output.writeEnum(4, sideEffects_.getNumber());
       }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        output.writeInt32(5, localAlias_);
+      }
       if (expressionCase_ == 22) {
         output.writeInt32(
             22, (int)((java.lang.Integer) expression_));
@@ -1865,6 +2017,10 @@ public final class JsAstProtoBuf {
       if (((bitField0_ & 0x00000008) == 0x00000008)) {
         size += org.jetbrains.kotlin.protobuf.CodedOutputStream
           .computeEnumSize(4, sideEffects_.getNumber());
+      }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        size += org.jetbrains.kotlin.protobuf.CodedOutputStream
+          .computeInt32Size(5, localAlias_);
       }
       if (expressionCase_ == 22) {
         size += org.jetbrains.kotlin.protobuf.CodedOutputStream
@@ -2056,6 +2212,8 @@ public final class JsAstProtoBuf {
         bitField0_ = (bitField0_ & ~0x00000004);
         sideEffects_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SideEffects.AFFECTS_STATE;
         bitField0_ = (bitField0_ & ~0x00000008);
+        localAlias_ = 0;
+        bitField0_ = (bitField0_ & ~0x00000010);
         expressionCase_ = 0;
         expression_ = null;
         return this;
@@ -2097,6 +2255,10 @@ public final class JsAstProtoBuf {
           to_bitField0_ |= 0x00000008;
         }
         result.sideEffects_ = sideEffects_;
+        if (((from_bitField0_ & 0x00000010) == 0x00000010)) {
+          to_bitField0_ |= 0x00000010;
+        }
+        result.localAlias_ = localAlias_;
         if (expressionCase_ == 22) {
           result.expression_ = expression_;
         }
@@ -2178,6 +2340,9 @@ public final class JsAstProtoBuf {
         }
         if (other.hasSideEffects()) {
           setSideEffects(other.getSideEffects());
+        }
+        if (other.hasLocalAlias()) {
+          setLocalAlias(other.getLocalAlias());
         }
         switch (other.getExpressionCase()) {
           case SIMPLE_NAME_REFERENCE: {
@@ -2549,6 +2714,38 @@ public final class JsAstProtoBuf {
       public Builder clearSideEffects() {
         bitField0_ = (bitField0_ & ~0x00000008);
         sideEffects_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SideEffects.AFFECTS_STATE;
+        
+        return this;
+      }
+
+      private int localAlias_ ;
+      /**
+       * <code>optional int32 local_alias = 5;</code>
+       */
+      public boolean hasLocalAlias() {
+        return ((bitField0_ & 0x00000010) == 0x00000010);
+      }
+      /**
+       * <code>optional int32 local_alias = 5;</code>
+       */
+      public int getLocalAlias() {
+        return localAlias_;
+      }
+      /**
+       * <code>optional int32 local_alias = 5;</code>
+       */
+      public Builder setLocalAlias(int value) {
+        bitField0_ |= 0x00000010;
+        localAlias_ = value;
+        
+        return this;
+      }
+      /**
+       * <code>optional int32 local_alias = 5;</code>
+       */
+      public Builder clearLocalAlias() {
+        bitField0_ = (bitField0_ & ~0x00000010);
+        localAlias_ = 0;
         
         return this;
       }
@@ -20474,6 +20671,24 @@ public final class JsAstProtoBuf {
      * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Expression initial_value = 2;</code>
      */
     org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Expression getInitialValue();
+
+    /**
+     * <code>optional int32 fileId = 3;</code>
+     */
+    boolean hasFileId();
+    /**
+     * <code>optional int32 fileId = 3;</code>
+     */
+    int getFileId();
+
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+     */
+    boolean hasLocation();
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+     */
+    org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location getLocation();
   }
   /**
    * Protobuf type {@code org.jetbrains.kotlin.serialization.js.ast.VarDeclaration}
@@ -20543,6 +20758,24 @@ public final class JsAstProtoBuf {
               bitField0_ |= 0x00000002;
               break;
             }
+            case 24: {
+              bitField0_ |= 0x00000004;
+              fileId_ = input.readInt32();
+              break;
+            }
+            case 34: {
+              org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.Builder subBuilder = null;
+              if (((bitField0_ & 0x00000008) == 0x00000008)) {
+                subBuilder = location_.toBuilder();
+              }
+              location_ = input.readMessage(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.PARSER, extensionRegistry);
+              if (subBuilder != null) {
+                subBuilder.mergeFrom(location_);
+                location_ = subBuilder.buildPartial();
+              }
+              bitField0_ |= 0x00000008;
+              break;
+            }
           }
         }
       } catch (org.jetbrains.kotlin.protobuf.InvalidProtocolBufferException e) {
@@ -20607,9 +20840,41 @@ public final class JsAstProtoBuf {
       return initialValue_;
     }
 
+    public static final int FILEID_FIELD_NUMBER = 3;
+    private int fileId_;
+    /**
+     * <code>optional int32 fileId = 3;</code>
+     */
+    public boolean hasFileId() {
+      return ((bitField0_ & 0x00000004) == 0x00000004);
+    }
+    /**
+     * <code>optional int32 fileId = 3;</code>
+     */
+    public int getFileId() {
+      return fileId_;
+    }
+
+    public static final int LOCATION_FIELD_NUMBER = 4;
+    private org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location location_;
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+     */
+    public boolean hasLocation() {
+      return ((bitField0_ & 0x00000008) == 0x00000008);
+    }
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+     */
+    public org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location getLocation() {
+      return location_;
+    }
+
     private void initFields() {
       nameId_ = 0;
       initialValue_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Expression.getDefaultInstance();
+      fileId_ = 0;
+      location_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.getDefaultInstance();
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -20627,6 +20892,12 @@ public final class JsAstProtoBuf {
           return false;
         }
       }
+      if (hasLocation()) {
+        if (!getLocation().isInitialized()) {
+          memoizedIsInitialized = 0;
+          return false;
+        }
+      }
       memoizedIsInitialized = 1;
       return true;
     }
@@ -20639,6 +20910,12 @@ public final class JsAstProtoBuf {
       }
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
         output.writeMessage(2, initialValue_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        output.writeInt32(3, fileId_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        output.writeMessage(4, location_);
       }
       output.writeRawBytes(unknownFields);
     }
@@ -20656,6 +20933,14 @@ public final class JsAstProtoBuf {
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
         size += org.jetbrains.kotlin.protobuf.CodedOutputStream
           .computeMessageSize(2, initialValue_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        size += org.jetbrains.kotlin.protobuf.CodedOutputStream
+          .computeInt32Size(3, fileId_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        size += org.jetbrains.kotlin.protobuf.CodedOutputStream
+          .computeMessageSize(4, location_);
       }
       size += unknownFields.size();
       memoizedSerializedSize = size;
@@ -20755,6 +21040,10 @@ public final class JsAstProtoBuf {
         bitField0_ = (bitField0_ & ~0x00000001);
         initialValue_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Expression.getDefaultInstance();
         bitField0_ = (bitField0_ & ~0x00000002);
+        fileId_ = 0;
+        bitField0_ = (bitField0_ & ~0x00000004);
+        location_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.getDefaultInstance();
+        bitField0_ = (bitField0_ & ~0x00000008);
         return this;
       }
 
@@ -20786,6 +21075,14 @@ public final class JsAstProtoBuf {
           to_bitField0_ |= 0x00000002;
         }
         result.initialValue_ = initialValue_;
+        if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
+          to_bitField0_ |= 0x00000004;
+        }
+        result.fileId_ = fileId_;
+        if (((from_bitField0_ & 0x00000008) == 0x00000008)) {
+          to_bitField0_ |= 0x00000008;
+        }
+        result.location_ = location_;
         result.bitField0_ = to_bitField0_;
         return result;
       }
@@ -20797,6 +21094,12 @@ public final class JsAstProtoBuf {
         }
         if (other.hasInitialValue()) {
           mergeInitialValue(other.getInitialValue());
+        }
+        if (other.hasFileId()) {
+          setFileId(other.getFileId());
+        }
+        if (other.hasLocation()) {
+          mergeLocation(other.getLocation());
         }
         setUnknownFields(
             getUnknownFields().concat(other.unknownFields));
@@ -20810,6 +21113,12 @@ public final class JsAstProtoBuf {
         }
         if (hasInitialValue()) {
           if (!getInitialValue().isInitialized()) {
+            
+            return false;
+          }
+        }
+        if (hasLocation()) {
+          if (!getLocation().isInitialized()) {
             
             return false;
           }
@@ -20925,6 +21234,98 @@ public final class JsAstProtoBuf {
         initialValue_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Expression.getDefaultInstance();
 
         bitField0_ = (bitField0_ & ~0x00000002);
+        return this;
+      }
+
+      private int fileId_ ;
+      /**
+       * <code>optional int32 fileId = 3;</code>
+       */
+      public boolean hasFileId() {
+        return ((bitField0_ & 0x00000004) == 0x00000004);
+      }
+      /**
+       * <code>optional int32 fileId = 3;</code>
+       */
+      public int getFileId() {
+        return fileId_;
+      }
+      /**
+       * <code>optional int32 fileId = 3;</code>
+       */
+      public Builder setFileId(int value) {
+        bitField0_ |= 0x00000004;
+        fileId_ = value;
+        
+        return this;
+      }
+      /**
+       * <code>optional int32 fileId = 3;</code>
+       */
+      public Builder clearFileId() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        fileId_ = 0;
+        
+        return this;
+      }
+
+      private org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location location_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.getDefaultInstance();
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public boolean hasLocation() {
+        return ((bitField0_ & 0x00000008) == 0x00000008);
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location getLocation() {
+        return location_;
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public Builder setLocation(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location value) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        location_ = value;
+
+        bitField0_ |= 0x00000008;
+        return this;
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public Builder setLocation(
+          org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.Builder builderForValue) {
+        location_ = builderForValue.build();
+
+        bitField0_ |= 0x00000008;
+        return this;
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public Builder mergeLocation(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location value) {
+        if (((bitField0_ & 0x00000008) == 0x00000008) &&
+            location_ != org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.getDefaultInstance()) {
+          location_ =
+            org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.newBuilder(location_).mergeFrom(value).buildPartial();
+        } else {
+          location_ = value;
+        }
+
+        bitField0_ |= 0x00000008;
+        return this;
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public Builder clearLocation() {
+        location_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.getDefaultInstance();
+
+        bitField0_ = (bitField0_ & ~0x00000008);
         return this;
       }
 
@@ -23727,6 +24128,24 @@ public final class JsAstProtoBuf {
      * <code>repeated .org.jetbrains.kotlin.serialization.js.ast.Statement statement = 2;</code>
      */
     int getStatementCount();
+
+    /**
+     * <code>optional int32 fileId = 3;</code>
+     */
+    boolean hasFileId();
+    /**
+     * <code>optional int32 fileId = 3;</code>
+     */
+    int getFileId();
+
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+     */
+    boolean hasLocation();
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+     */
+    org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location getLocation();
   }
   /**
    * Protobuf type {@code org.jetbrains.kotlin.serialization.js.ast.SwitchEntry}
@@ -23797,6 +24216,24 @@ public final class JsAstProtoBuf {
                 mutable_bitField0_ |= 0x00000002;
               }
               statement_.add(input.readMessage(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement.PARSER, extensionRegistry));
+              break;
+            }
+            case 24: {
+              bitField0_ |= 0x00000002;
+              fileId_ = input.readInt32();
+              break;
+            }
+            case 34: {
+              org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.Builder subBuilder = null;
+              if (((bitField0_ & 0x00000004) == 0x00000004)) {
+                subBuilder = location_.toBuilder();
+              }
+              location_ = input.readMessage(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.PARSER, extensionRegistry);
+              if (subBuilder != null) {
+                subBuilder.mergeFrom(location_);
+                location_ = subBuilder.buildPartial();
+              }
+              bitField0_ |= 0x00000004;
               break;
             }
           }
@@ -23886,9 +24323,41 @@ public final class JsAstProtoBuf {
       return statement_.get(index);
     }
 
+    public static final int FILEID_FIELD_NUMBER = 3;
+    private int fileId_;
+    /**
+     * <code>optional int32 fileId = 3;</code>
+     */
+    public boolean hasFileId() {
+      return ((bitField0_ & 0x00000002) == 0x00000002);
+    }
+    /**
+     * <code>optional int32 fileId = 3;</code>
+     */
+    public int getFileId() {
+      return fileId_;
+    }
+
+    public static final int LOCATION_FIELD_NUMBER = 4;
+    private org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location location_;
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+     */
+    public boolean hasLocation() {
+      return ((bitField0_ & 0x00000004) == 0x00000004);
+    }
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+     */
+    public org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location getLocation() {
+      return location_;
+    }
+
     private void initFields() {
       label_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Expression.getDefaultInstance();
       statement_ = java.util.Collections.emptyList();
+      fileId_ = 0;
+      location_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.getDefaultInstance();
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -23908,6 +24377,12 @@ public final class JsAstProtoBuf {
           return false;
         }
       }
+      if (hasLocation()) {
+        if (!getLocation().isInitialized()) {
+          memoizedIsInitialized = 0;
+          return false;
+        }
+      }
       memoizedIsInitialized = 1;
       return true;
     }
@@ -23920,6 +24395,12 @@ public final class JsAstProtoBuf {
       }
       for (int i = 0; i < statement_.size(); i++) {
         output.writeMessage(2, statement_.get(i));
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        output.writeInt32(3, fileId_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        output.writeMessage(4, location_);
       }
       output.writeRawBytes(unknownFields);
     }
@@ -23937,6 +24418,14 @@ public final class JsAstProtoBuf {
       for (int i = 0; i < statement_.size(); i++) {
         size += org.jetbrains.kotlin.protobuf.CodedOutputStream
           .computeMessageSize(2, statement_.get(i));
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        size += org.jetbrains.kotlin.protobuf.CodedOutputStream
+          .computeInt32Size(3, fileId_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        size += org.jetbrains.kotlin.protobuf.CodedOutputStream
+          .computeMessageSize(4, location_);
       }
       size += unknownFields.size();
       memoizedSerializedSize = size;
@@ -24036,6 +24525,10 @@ public final class JsAstProtoBuf {
         bitField0_ = (bitField0_ & ~0x00000001);
         statement_ = java.util.Collections.emptyList();
         bitField0_ = (bitField0_ & ~0x00000002);
+        fileId_ = 0;
+        bitField0_ = (bitField0_ & ~0x00000004);
+        location_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.getDefaultInstance();
+        bitField0_ = (bitField0_ & ~0x00000008);
         return this;
       }
 
@@ -24068,6 +24561,14 @@ public final class JsAstProtoBuf {
           bitField0_ = (bitField0_ & ~0x00000002);
         }
         result.statement_ = statement_;
+        if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
+          to_bitField0_ |= 0x00000002;
+        }
+        result.fileId_ = fileId_;
+        if (((from_bitField0_ & 0x00000008) == 0x00000008)) {
+          to_bitField0_ |= 0x00000004;
+        }
+        result.location_ = location_;
         result.bitField0_ = to_bitField0_;
         return result;
       }
@@ -24087,6 +24588,12 @@ public final class JsAstProtoBuf {
           }
           
         }
+        if (other.hasFileId()) {
+          setFileId(other.getFileId());
+        }
+        if (other.hasLocation()) {
+          mergeLocation(other.getLocation());
+        }
         setUnknownFields(
             getUnknownFields().concat(other.unknownFields));
         return this;
@@ -24101,6 +24608,12 @@ public final class JsAstProtoBuf {
         }
         for (int i = 0; i < getStatementCount(); i++) {
           if (!getStatement(i).isInitialized()) {
+            
+            return false;
+          }
+        }
+        if (hasLocation()) {
+          if (!getLocation().isInitialized()) {
             
             return false;
           }
@@ -24309,6 +24822,98 @@ public final class JsAstProtoBuf {
         ensureStatementIsMutable();
         statement_.remove(index);
 
+        return this;
+      }
+
+      private int fileId_ ;
+      /**
+       * <code>optional int32 fileId = 3;</code>
+       */
+      public boolean hasFileId() {
+        return ((bitField0_ & 0x00000004) == 0x00000004);
+      }
+      /**
+       * <code>optional int32 fileId = 3;</code>
+       */
+      public int getFileId() {
+        return fileId_;
+      }
+      /**
+       * <code>optional int32 fileId = 3;</code>
+       */
+      public Builder setFileId(int value) {
+        bitField0_ |= 0x00000004;
+        fileId_ = value;
+        
+        return this;
+      }
+      /**
+       * <code>optional int32 fileId = 3;</code>
+       */
+      public Builder clearFileId() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        fileId_ = 0;
+        
+        return this;
+      }
+
+      private org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location location_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.getDefaultInstance();
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public boolean hasLocation() {
+        return ((bitField0_ & 0x00000008) == 0x00000008);
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location getLocation() {
+        return location_;
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public Builder setLocation(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location value) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        location_ = value;
+
+        bitField0_ |= 0x00000008;
+        return this;
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public Builder setLocation(
+          org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.Builder builderForValue) {
+        location_ = builderForValue.build();
+
+        bitField0_ |= 0x00000008;
+        return this;
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public Builder mergeLocation(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location value) {
+        if (((bitField0_ & 0x00000008) == 0x00000008) &&
+            location_ != org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.getDefaultInstance()) {
+          location_ =
+            org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.newBuilder(location_).mergeFrom(value).buildPartial();
+        } else {
+          location_ = value;
+        }
+
+        bitField0_ |= 0x00000008;
+        return this;
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Location location = 4;</code>
+       */
+      public Builder clearLocation() {
+        location_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Location.getDefaultInstance();
+
+        bitField0_ = (bitField0_ & ~0x00000008);
         return this;
       }
 
@@ -25396,13 +26001,13 @@ public final class JsAstProtoBuf {
       org.jetbrains.kotlin.protobuf.MessageLiteOrBuilder {
 
     /**
-     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Vars variables = 1;</code>
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Statement variables = 1;</code>
      */
     boolean hasVariables();
     /**
-     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Vars variables = 1;</code>
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Statement variables = 1;</code>
      */
-    org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars getVariables();
+    org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement getVariables();
 
     /**
      * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Expression expression = 2;</code>
@@ -25500,13 +26105,13 @@ public final class JsAstProtoBuf {
               break;
             }
             case 10: {
-              org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars.Builder subBuilder = null;
+              org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement.Builder subBuilder = null;
               if (initCase_ == 1) {
-                subBuilder = ((org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars) init_).toBuilder();
+                subBuilder = ((org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement) init_).toBuilder();
               }
-              init_ = input.readMessage(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars.PARSER, extensionRegistry);
+              init_ = input.readMessage(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement.PARSER, extensionRegistry);
               if (subBuilder != null) {
-                subBuilder.mergeFrom((org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars) init_);
+                subBuilder.mergeFrom((org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement) init_);
                 init_ = subBuilder.buildPartial();
               }
               initCase_ = 1;
@@ -25646,19 +26251,19 @@ public final class JsAstProtoBuf {
 
     public static final int VARIABLES_FIELD_NUMBER = 1;
     /**
-     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Vars variables = 1;</code>
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Statement variables = 1;</code>
      */
     public boolean hasVariables() {
       return initCase_ == 1;
     }
     /**
-     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Vars variables = 1;</code>
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Statement variables = 1;</code>
      */
-    public org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars getVariables() {
+    public org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement getVariables() {
       if (initCase_ == 1) {
-         return (org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars) init_;
+         return (org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement) init_;
       }
-      return org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars.getDefaultInstance();
+      return org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement.getDefaultInstance();
     }
 
     public static final int EXPRESSION_FIELD_NUMBER = 2;
@@ -25791,7 +26396,7 @@ public final class JsAstProtoBuf {
                         throws java.io.IOException {
       getSerializedSize();
       if (initCase_ == 1) {
-        output.writeMessage(1, (org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars) init_);
+        output.writeMessage(1, (org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement) init_);
       }
       if (initCase_ == 2) {
         output.writeMessage(2, (org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Expression) init_);
@@ -25819,7 +26424,7 @@ public final class JsAstProtoBuf {
       size = 0;
       if (initCase_ == 1) {
         size += org.jetbrains.kotlin.protobuf.CodedOutputStream
-          .computeMessageSize(1, (org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars) init_);
+          .computeMessageSize(1, (org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement) init_);
       }
       if (initCase_ == 2) {
         size += org.jetbrains.kotlin.protobuf.CodedOutputStream
@@ -26095,24 +26700,24 @@ public final class JsAstProtoBuf {
       private int bitField0_;
 
       /**
-       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Vars variables = 1;</code>
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Statement variables = 1;</code>
        */
       public boolean hasVariables() {
         return initCase_ == 1;
       }
       /**
-       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Vars variables = 1;</code>
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Statement variables = 1;</code>
        */
-      public org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars getVariables() {
+      public org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement getVariables() {
         if (initCase_ == 1) {
-          return (org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars) init_;
+          return (org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement) init_;
         }
-        return org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars.getDefaultInstance();
+        return org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement.getDefaultInstance();
       }
       /**
-       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Vars variables = 1;</code>
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Statement variables = 1;</code>
        */
-      public Builder setVariables(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars value) {
+      public Builder setVariables(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement value) {
         if (value == null) {
           throw new NullPointerException();
         }
@@ -26122,22 +26727,22 @@ public final class JsAstProtoBuf {
         return this;
       }
       /**
-       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Vars variables = 1;</code>
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Statement variables = 1;</code>
        */
       public Builder setVariables(
-          org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars.Builder builderForValue) {
+          org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement.Builder builderForValue) {
         init_ = builderForValue.build();
 
         initCase_ = 1;
         return this;
       }
       /**
-       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Vars variables = 1;</code>
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Statement variables = 1;</code>
        */
-      public Builder mergeVariables(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars value) {
+      public Builder mergeVariables(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement value) {
         if (initCase_ == 1 &&
-            init_ != org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars.getDefaultInstance()) {
-          init_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars.newBuilder((org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Vars) init_)
+            init_ != org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement.getDefaultInstance()) {
+          init_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement.newBuilder((org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.Statement) init_)
               .mergeFrom(value).buildPartial();
         } else {
           init_ = value;
@@ -26147,7 +26752,7 @@ public final class JsAstProtoBuf {
         return this;
       }
       /**
-       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Vars variables = 1;</code>
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.Statement variables = 1;</code>
        */
       public Builder clearVariables() {
         if (initCase_ == 1) {
@@ -32517,6 +33122,19 @@ public final class JsAstProtoBuf {
     int getSuperNameId();
 
     /**
+     * <code>repeated int32 interface_name_id = 4;</code>
+     */
+    java.util.List<java.lang.Integer> getInterfaceNameIdList();
+    /**
+     * <code>repeated int32 interface_name_id = 4;</code>
+     */
+    int getInterfaceNameIdCount();
+    /**
+     * <code>repeated int32 interface_name_id = 4;</code>
+     */
+    int getInterfaceNameId(int index);
+
+    /**
      * <code>optional .org.jetbrains.kotlin.serialization.js.ast.GlobalBlock post_declaration_block = 3;</code>
      */
     boolean hasPostDeclarationBlock();
@@ -32598,6 +33216,27 @@ public final class JsAstProtoBuf {
               bitField0_ |= 0x00000004;
               break;
             }
+            case 32: {
+              if (!((mutable_bitField0_ & 0x00000004) == 0x00000004)) {
+                interfaceNameId_ = new java.util.ArrayList<java.lang.Integer>();
+                mutable_bitField0_ |= 0x00000004;
+              }
+              interfaceNameId_.add(input.readInt32());
+              break;
+            }
+            case 34: {
+              int length = input.readRawVarint32();
+              int limit = input.pushLimit(length);
+              if (!((mutable_bitField0_ & 0x00000004) == 0x00000004) && input.getBytesUntilLimit() > 0) {
+                interfaceNameId_ = new java.util.ArrayList<java.lang.Integer>();
+                mutable_bitField0_ |= 0x00000004;
+              }
+              while (input.getBytesUntilLimit() > 0) {
+                interfaceNameId_.add(input.readInt32());
+              }
+              input.popLimit(limit);
+              break;
+            }
           }
         }
       } catch (org.jetbrains.kotlin.protobuf.InvalidProtocolBufferException e) {
@@ -32606,6 +33245,9 @@ public final class JsAstProtoBuf {
         throw new org.jetbrains.kotlin.protobuf.InvalidProtocolBufferException(
             e.getMessage()).setUnfinishedMessage(this);
       } finally {
+        if (((mutable_bitField0_ & 0x00000004) == 0x00000004)) {
+          interfaceNameId_ = java.util.Collections.unmodifiableList(interfaceNameId_);
+        }
         try {
           unknownFieldsCodedOutput.flush();
         } catch (java.io.IOException e) {
@@ -32662,6 +33304,28 @@ public final class JsAstProtoBuf {
       return superNameId_;
     }
 
+    public static final int INTERFACE_NAME_ID_FIELD_NUMBER = 4;
+    private java.util.List<java.lang.Integer> interfaceNameId_;
+    /**
+     * <code>repeated int32 interface_name_id = 4;</code>
+     */
+    public java.util.List<java.lang.Integer>
+        getInterfaceNameIdList() {
+      return interfaceNameId_;
+    }
+    /**
+     * <code>repeated int32 interface_name_id = 4;</code>
+     */
+    public int getInterfaceNameIdCount() {
+      return interfaceNameId_.size();
+    }
+    /**
+     * <code>repeated int32 interface_name_id = 4;</code>
+     */
+    public int getInterfaceNameId(int index) {
+      return interfaceNameId_.get(index);
+    }
+
     public static final int POST_DECLARATION_BLOCK_FIELD_NUMBER = 3;
     private org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.GlobalBlock postDeclarationBlock_;
     /**
@@ -32680,6 +33344,7 @@ public final class JsAstProtoBuf {
     private void initFields() {
       nameId_ = 0;
       superNameId_ = 0;
+      interfaceNameId_ = java.util.Collections.emptyList();
       postDeclarationBlock_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.GlobalBlock.getDefaultInstance();
     }
     private byte memoizedIsInitialized = -1;
@@ -32714,6 +33379,9 @@ public final class JsAstProtoBuf {
       if (((bitField0_ & 0x00000004) == 0x00000004)) {
         output.writeMessage(3, postDeclarationBlock_);
       }
+      for (int i = 0; i < interfaceNameId_.size(); i++) {
+        output.writeInt32(4, interfaceNameId_.get(i));
+      }
       output.writeRawBytes(unknownFields);
     }
 
@@ -32734,6 +33402,15 @@ public final class JsAstProtoBuf {
       if (((bitField0_ & 0x00000004) == 0x00000004)) {
         size += org.jetbrains.kotlin.protobuf.CodedOutputStream
           .computeMessageSize(3, postDeclarationBlock_);
+      }
+      {
+        int dataSize = 0;
+        for (int i = 0; i < interfaceNameId_.size(); i++) {
+          dataSize += org.jetbrains.kotlin.protobuf.CodedOutputStream
+            .computeInt32SizeNoTag(interfaceNameId_.get(i));
+        }
+        size += dataSize;
+        size += 1 * getInterfaceNameIdList().size();
       }
       size += unknownFields.size();
       memoizedSerializedSize = size;
@@ -32833,8 +33510,10 @@ public final class JsAstProtoBuf {
         bitField0_ = (bitField0_ & ~0x00000001);
         superNameId_ = 0;
         bitField0_ = (bitField0_ & ~0x00000002);
-        postDeclarationBlock_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.GlobalBlock.getDefaultInstance();
+        interfaceNameId_ = java.util.Collections.emptyList();
         bitField0_ = (bitField0_ & ~0x00000004);
+        postDeclarationBlock_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.GlobalBlock.getDefaultInstance();
+        bitField0_ = (bitField0_ & ~0x00000008);
         return this;
       }
 
@@ -32866,7 +33545,12 @@ public final class JsAstProtoBuf {
           to_bitField0_ |= 0x00000002;
         }
         result.superNameId_ = superNameId_;
-        if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
+        if (((bitField0_ & 0x00000004) == 0x00000004)) {
+          interfaceNameId_ = java.util.Collections.unmodifiableList(interfaceNameId_);
+          bitField0_ = (bitField0_ & ~0x00000004);
+        }
+        result.interfaceNameId_ = interfaceNameId_;
+        if (((from_bitField0_ & 0x00000008) == 0x00000008)) {
           to_bitField0_ |= 0x00000004;
         }
         result.postDeclarationBlock_ = postDeclarationBlock_;
@@ -32881,6 +33565,16 @@ public final class JsAstProtoBuf {
         }
         if (other.hasSuperNameId()) {
           setSuperNameId(other.getSuperNameId());
+        }
+        if (!other.interfaceNameId_.isEmpty()) {
+          if (interfaceNameId_.isEmpty()) {
+            interfaceNameId_ = other.interfaceNameId_;
+            bitField0_ = (bitField0_ & ~0x00000004);
+          } else {
+            ensureInterfaceNameIdIsMutable();
+            interfaceNameId_.addAll(other.interfaceNameId_);
+          }
+          
         }
         if (other.hasPostDeclarationBlock()) {
           mergePostDeclarationBlock(other.getPostDeclarationBlock());
@@ -32987,12 +33681,78 @@ public final class JsAstProtoBuf {
         return this;
       }
 
+      private java.util.List<java.lang.Integer> interfaceNameId_ = java.util.Collections.emptyList();
+      private void ensureInterfaceNameIdIsMutable() {
+        if (!((bitField0_ & 0x00000004) == 0x00000004)) {
+          interfaceNameId_ = new java.util.ArrayList<java.lang.Integer>(interfaceNameId_);
+          bitField0_ |= 0x00000004;
+         }
+      }
+      /**
+       * <code>repeated int32 interface_name_id = 4;</code>
+       */
+      public java.util.List<java.lang.Integer>
+          getInterfaceNameIdList() {
+        return java.util.Collections.unmodifiableList(interfaceNameId_);
+      }
+      /**
+       * <code>repeated int32 interface_name_id = 4;</code>
+       */
+      public int getInterfaceNameIdCount() {
+        return interfaceNameId_.size();
+      }
+      /**
+       * <code>repeated int32 interface_name_id = 4;</code>
+       */
+      public int getInterfaceNameId(int index) {
+        return interfaceNameId_.get(index);
+      }
+      /**
+       * <code>repeated int32 interface_name_id = 4;</code>
+       */
+      public Builder setInterfaceNameId(
+          int index, int value) {
+        ensureInterfaceNameIdIsMutable();
+        interfaceNameId_.set(index, value);
+        
+        return this;
+      }
+      /**
+       * <code>repeated int32 interface_name_id = 4;</code>
+       */
+      public Builder addInterfaceNameId(int value) {
+        ensureInterfaceNameIdIsMutable();
+        interfaceNameId_.add(value);
+        
+        return this;
+      }
+      /**
+       * <code>repeated int32 interface_name_id = 4;</code>
+       */
+      public Builder addAllInterfaceNameId(
+          java.lang.Iterable<? extends java.lang.Integer> values) {
+        ensureInterfaceNameIdIsMutable();
+        org.jetbrains.kotlin.protobuf.AbstractMessageLite.Builder.addAll(
+            values, interfaceNameId_);
+        
+        return this;
+      }
+      /**
+       * <code>repeated int32 interface_name_id = 4;</code>
+       */
+      public Builder clearInterfaceNameId() {
+        interfaceNameId_ = java.util.Collections.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000004);
+        
+        return this;
+      }
+
       private org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.GlobalBlock postDeclarationBlock_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.GlobalBlock.getDefaultInstance();
       /**
        * <code>optional .org.jetbrains.kotlin.serialization.js.ast.GlobalBlock post_declaration_block = 3;</code>
        */
       public boolean hasPostDeclarationBlock() {
-        return ((bitField0_ & 0x00000004) == 0x00000004);
+        return ((bitField0_ & 0x00000008) == 0x00000008);
       }
       /**
        * <code>optional .org.jetbrains.kotlin.serialization.js.ast.GlobalBlock post_declaration_block = 3;</code>
@@ -33009,7 +33769,7 @@ public final class JsAstProtoBuf {
         }
         postDeclarationBlock_ = value;
 
-        bitField0_ |= 0x00000004;
+        bitField0_ |= 0x00000008;
         return this;
       }
       /**
@@ -33019,14 +33779,14 @@ public final class JsAstProtoBuf {
           org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.GlobalBlock.Builder builderForValue) {
         postDeclarationBlock_ = builderForValue.build();
 
-        bitField0_ |= 0x00000004;
+        bitField0_ |= 0x00000008;
         return this;
       }
       /**
        * <code>optional .org.jetbrains.kotlin.serialization.js.ast.GlobalBlock post_declaration_block = 3;</code>
        */
       public Builder mergePostDeclarationBlock(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.GlobalBlock value) {
-        if (((bitField0_ & 0x00000004) == 0x00000004) &&
+        if (((bitField0_ & 0x00000008) == 0x00000008) &&
             postDeclarationBlock_ != org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.GlobalBlock.getDefaultInstance()) {
           postDeclarationBlock_ =
             org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.GlobalBlock.newBuilder(postDeclarationBlock_).mergeFrom(value).buildPartial();
@@ -33034,7 +33794,7 @@ public final class JsAstProtoBuf {
           postDeclarationBlock_ = value;
         }
 
-        bitField0_ |= 0x00000004;
+        bitField0_ |= 0x00000008;
         return this;
       }
       /**
@@ -33043,7 +33803,7 @@ public final class JsAstProtoBuf {
       public Builder clearPostDeclarationBlock() {
         postDeclarationBlock_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.GlobalBlock.getDefaultInstance();
 
-        bitField0_ = (bitField0_ & ~0x00000004);
+        bitField0_ = (bitField0_ & ~0x00000008);
         return this;
       }
 
@@ -34472,6 +35232,33 @@ public final class JsAstProtoBuf {
      * <code>optional int32 identifier = 2;</code>
      */
     int getIdentifier();
+
+    /**
+     * <code>optional int32 local_name_id = 3;</code>
+     */
+    boolean hasLocalNameId();
+    /**
+     * <code>optional int32 local_name_id = 3;</code>
+     */
+    int getLocalNameId();
+
+    /**
+     * <code>optional bool imported = 4 [default = false];</code>
+     */
+    boolean hasImported();
+    /**
+     * <code>optional bool imported = 4 [default = false];</code>
+     */
+    boolean getImported();
+
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.SpecialFunction special_function = 5;</code>
+     */
+    boolean hasSpecialFunction();
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.SpecialFunction special_function = 5;</code>
+     */
+    org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction getSpecialFunction();
   }
   /**
    * Protobuf type {@code org.jetbrains.kotlin.serialization.js.ast.Name}
@@ -34531,6 +35318,28 @@ public final class JsAstProtoBuf {
             case 16: {
               bitField0_ |= 0x00000002;
               identifier_ = input.readInt32();
+              break;
+            }
+            case 24: {
+              bitField0_ |= 0x00000004;
+              localNameId_ = input.readInt32();
+              break;
+            }
+            case 32: {
+              bitField0_ |= 0x00000008;
+              imported_ = input.readBool();
+              break;
+            }
+            case 40: {
+              int rawValue = input.readEnum();
+              org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction value = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction.valueOf(rawValue);
+              if (value == null) {
+                unknownFieldsCodedOutput.writeRawVarint32(tag);
+                unknownFieldsCodedOutput.writeRawVarint32(rawValue);
+              } else {
+                bitField0_ |= 0x00000010;
+                specialFunction_ = value;
+              }
               break;
             }
           }
@@ -34597,9 +35406,57 @@ public final class JsAstProtoBuf {
       return identifier_;
     }
 
+    public static final int LOCAL_NAME_ID_FIELD_NUMBER = 3;
+    private int localNameId_;
+    /**
+     * <code>optional int32 local_name_id = 3;</code>
+     */
+    public boolean hasLocalNameId() {
+      return ((bitField0_ & 0x00000004) == 0x00000004);
+    }
+    /**
+     * <code>optional int32 local_name_id = 3;</code>
+     */
+    public int getLocalNameId() {
+      return localNameId_;
+    }
+
+    public static final int IMPORTED_FIELD_NUMBER = 4;
+    private boolean imported_;
+    /**
+     * <code>optional bool imported = 4 [default = false];</code>
+     */
+    public boolean hasImported() {
+      return ((bitField0_ & 0x00000008) == 0x00000008);
+    }
+    /**
+     * <code>optional bool imported = 4 [default = false];</code>
+     */
+    public boolean getImported() {
+      return imported_;
+    }
+
+    public static final int SPECIAL_FUNCTION_FIELD_NUMBER = 5;
+    private org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction specialFunction_;
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.SpecialFunction special_function = 5;</code>
+     */
+    public boolean hasSpecialFunction() {
+      return ((bitField0_ & 0x00000010) == 0x00000010);
+    }
+    /**
+     * <code>optional .org.jetbrains.kotlin.serialization.js.ast.SpecialFunction special_function = 5;</code>
+     */
+    public org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction getSpecialFunction() {
+      return specialFunction_;
+    }
+
     private void initFields() {
       temporary_ = false;
       identifier_ = 0;
+      localNameId_ = 0;
+      imported_ = false;
+      specialFunction_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction.DEFINE_INLINE_FUNCTION;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -34624,6 +35481,15 @@ public final class JsAstProtoBuf {
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
         output.writeInt32(2, identifier_);
       }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        output.writeInt32(3, localNameId_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        output.writeBool(4, imported_);
+      }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        output.writeEnum(5, specialFunction_.getNumber());
+      }
       output.writeRawBytes(unknownFields);
     }
 
@@ -34640,6 +35506,18 @@ public final class JsAstProtoBuf {
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
         size += org.jetbrains.kotlin.protobuf.CodedOutputStream
           .computeInt32Size(2, identifier_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        size += org.jetbrains.kotlin.protobuf.CodedOutputStream
+          .computeInt32Size(3, localNameId_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        size += org.jetbrains.kotlin.protobuf.CodedOutputStream
+          .computeBoolSize(4, imported_);
+      }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        size += org.jetbrains.kotlin.protobuf.CodedOutputStream
+          .computeEnumSize(5, specialFunction_.getNumber());
       }
       size += unknownFields.size();
       memoizedSerializedSize = size;
@@ -34739,6 +35617,12 @@ public final class JsAstProtoBuf {
         bitField0_ = (bitField0_ & ~0x00000001);
         identifier_ = 0;
         bitField0_ = (bitField0_ & ~0x00000002);
+        localNameId_ = 0;
+        bitField0_ = (bitField0_ & ~0x00000004);
+        imported_ = false;
+        bitField0_ = (bitField0_ & ~0x00000008);
+        specialFunction_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction.DEFINE_INLINE_FUNCTION;
+        bitField0_ = (bitField0_ & ~0x00000010);
         return this;
       }
 
@@ -34770,6 +35654,18 @@ public final class JsAstProtoBuf {
           to_bitField0_ |= 0x00000002;
         }
         result.identifier_ = identifier_;
+        if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
+          to_bitField0_ |= 0x00000004;
+        }
+        result.localNameId_ = localNameId_;
+        if (((from_bitField0_ & 0x00000008) == 0x00000008)) {
+          to_bitField0_ |= 0x00000008;
+        }
+        result.imported_ = imported_;
+        if (((from_bitField0_ & 0x00000010) == 0x00000010)) {
+          to_bitField0_ |= 0x00000010;
+        }
+        result.specialFunction_ = specialFunction_;
         result.bitField0_ = to_bitField0_;
         return result;
       }
@@ -34781,6 +35677,15 @@ public final class JsAstProtoBuf {
         }
         if (other.hasIdentifier()) {
           setIdentifier(other.getIdentifier());
+        }
+        if (other.hasLocalNameId()) {
+          setLocalNameId(other.getLocalNameId());
+        }
+        if (other.hasImported()) {
+          setImported(other.getImported());
+        }
+        if (other.hasSpecialFunction()) {
+          setSpecialFunction(other.getSpecialFunction());
         }
         setUnknownFields(
             getUnknownFields().concat(other.unknownFields));
@@ -34874,6 +35779,105 @@ public final class JsAstProtoBuf {
       public Builder clearIdentifier() {
         bitField0_ = (bitField0_ & ~0x00000002);
         identifier_ = 0;
+        
+        return this;
+      }
+
+      private int localNameId_ ;
+      /**
+       * <code>optional int32 local_name_id = 3;</code>
+       */
+      public boolean hasLocalNameId() {
+        return ((bitField0_ & 0x00000004) == 0x00000004);
+      }
+      /**
+       * <code>optional int32 local_name_id = 3;</code>
+       */
+      public int getLocalNameId() {
+        return localNameId_;
+      }
+      /**
+       * <code>optional int32 local_name_id = 3;</code>
+       */
+      public Builder setLocalNameId(int value) {
+        bitField0_ |= 0x00000004;
+        localNameId_ = value;
+        
+        return this;
+      }
+      /**
+       * <code>optional int32 local_name_id = 3;</code>
+       */
+      public Builder clearLocalNameId() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        localNameId_ = 0;
+        
+        return this;
+      }
+
+      private boolean imported_ ;
+      /**
+       * <code>optional bool imported = 4 [default = false];</code>
+       */
+      public boolean hasImported() {
+        return ((bitField0_ & 0x00000008) == 0x00000008);
+      }
+      /**
+       * <code>optional bool imported = 4 [default = false];</code>
+       */
+      public boolean getImported() {
+        return imported_;
+      }
+      /**
+       * <code>optional bool imported = 4 [default = false];</code>
+       */
+      public Builder setImported(boolean value) {
+        bitField0_ |= 0x00000008;
+        imported_ = value;
+        
+        return this;
+      }
+      /**
+       * <code>optional bool imported = 4 [default = false];</code>
+       */
+      public Builder clearImported() {
+        bitField0_ = (bitField0_ & ~0x00000008);
+        imported_ = false;
+        
+        return this;
+      }
+
+      private org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction specialFunction_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction.DEFINE_INLINE_FUNCTION;
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.SpecialFunction special_function = 5;</code>
+       */
+      public boolean hasSpecialFunction() {
+        return ((bitField0_ & 0x00000010) == 0x00000010);
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.SpecialFunction special_function = 5;</code>
+       */
+      public org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction getSpecialFunction() {
+        return specialFunction_;
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.SpecialFunction special_function = 5;</code>
+       */
+      public Builder setSpecialFunction(org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction value) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        bitField0_ |= 0x00000010;
+        specialFunction_ = value;
+        
+        return this;
+      }
+      /**
+       * <code>optional .org.jetbrains.kotlin.serialization.js.ast.SpecialFunction special_function = 5;</code>
+       */
+      public Builder clearSpecialFunction() {
+        bitField0_ = (bitField0_ & ~0x00000010);
+        specialFunction_ = org.jetbrains.kotlin.serialization.js.ast.JsAstProtoBuf.SpecialFunction.DEFINE_INLINE_FUNCTION;
         
         return this;
       }

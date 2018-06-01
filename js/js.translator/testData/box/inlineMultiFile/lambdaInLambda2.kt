@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1114
 /*
  * Copy of JVM-backend test
  * Found at: compiler/testData/codegen/boxInline/lambdaTransformation/lambdaInLambda2.1.kt

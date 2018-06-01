@@ -33,8 +33,9 @@ import org.jetbrains.kotlin.asJava.unwrapped
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
-import org.jetbrains.kotlin.idea.caches.resolve.analyzeFully
-import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
+import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithAllCompilerChecks
+import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
+import org.jetbrains.kotlin.idea.caches.resolve.unsafeResolveToDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
 import org.jetbrains.kotlin.idea.codeInsight.shorten.addDelayedImportRequest
 import org.jetbrains.kotlin.idea.imports.importableFqName
@@ -42,6 +43,7 @@ import org.jetbrains.kotlin.idea.refactoring.fqName.isImported
 import org.jetbrains.kotlin.idea.references.KtSimpleNameReference
 import org.jetbrains.kotlin.idea.references.KtSimpleNameReference.ShorteningMode
 import org.jetbrains.kotlin.idea.references.mainReference
+import org.jetbrains.kotlin.load.java.descriptors.JavaCallableMemberDescriptor
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
@@ -53,6 +55,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.*
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitClassReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver
+import org.jetbrains.kotlin.types.expressions.DoubleColonLHS
 import org.jetbrains.kotlin.utils.addIfNotNull
 import java.util.*
 
@@ -69,12 +72,20 @@ sealed class ContainerInfo {
         override fun matches(descriptor: DeclarationDescriptor): Boolean {
             return descriptor is PackageFragmentDescriptor && descriptor.fqName == fqName
         }
+
+        override fun equals(other: Any?) = other is Package && other.fqName == fqName
+
+        override fun hashCode() = fqName.hashCode()
     }
 
     class Class(override val fqName: FqName) : ContainerInfo() {
         override fun matches(descriptor: DeclarationDescriptor): Boolean {
             return descriptor is ClassDescriptor && descriptor.importableFqName == fqName
         }
+
+        override fun equals(other: Any?) = other is Class && other.fqName == fqName
+
+        override fun hashCode() = fqName.hashCode()
     }
 }
 
@@ -123,6 +134,17 @@ fun KtElement.processInternalReferencesToUpdateOnPackageNameChange(
         val isExtension = isCallable && refExpr.isExtensionRef(bindingContext)
         val isCallableReference = isCallableReference(refExpr.mainReference)
 
+        val declaration by lazy {
+            var result = DescriptorToSourceUtilsIde.getAnyDeclaration(project, descriptor) ?: return@lazy null
+
+            if (descriptor.isCompanionObject()
+                && bindingContext[BindingContext.SHORT_REFERENCE_TO_COMPANION_OBJECT, refExpr] != null) {
+                result = (result as KtObjectDeclaration).containingClassOrObject ?: result
+            }
+
+            result
+        }
+
         if (isCallable) {
             if (!isCallableReference) {
                 if (isExtension && containingDescriptor is ClassDescriptor) {
@@ -137,15 +159,9 @@ fun KtElement.processInternalReferencesToUpdateOnPackageNameChange(
 
             if (!isExtension) {
                 if (!(containingDescriptor is PackageFragmentDescriptor
-                      || containingDescriptor is ClassDescriptor && containingDescriptor.kind == ClassKind.OBJECT)) return null
+                      || containingDescriptor is ClassDescriptor && containingDescriptor.kind == ClassKind.OBJECT
+                      || descriptor is JavaCallableMemberDescriptor && ((declaration as? PsiMember)?.hasModifierProperty(PsiModifier.STATIC) ?: false))) return null
             }
-        }
-
-        var declaration = DescriptorToSourceUtilsIde.getAnyDeclaration(project, descriptor) ?: return null
-
-        if (descriptor.isCompanionObject()
-            && bindingContext[BindingContext.SHORT_REFERENCE_TO_COMPANION_OBJECT, refExpr] != null) {
-            declaration = (declaration as KtObjectDeclaration).containingClassOrObject ?: declaration
         }
 
         if (!DescriptorUtils.getFqName(descriptor).isSafe) return null
@@ -166,6 +182,8 @@ fun KtElement.processInternalReferencesToUpdateOnPackageNameChange(
         val isImported = isImported(descriptor)
         if (isImported && this is KtFile) return null
 
+        if (declaration == null) return null
+
         if (isExtension || containerFqName != null || isImported) return {
             createMoveUsageInfoIfPossible(it.mainReference, declaration, false, true)
         }
@@ -173,7 +191,8 @@ fun KtElement.processInternalReferencesToUpdateOnPackageNameChange(
         return null
     }
 
-    val bindingContext = analyzeFully()
+    @Suppress("DEPRECATION")
+    val bindingContext = analyzeWithAllCompilerChecks().bindingContext
     forEachDescendantOfType<KtReferenceExpression> { refExpr ->
         if (refExpr !is KtSimpleNameExpression || refExpr.parent is KtThisExpression) return@forEachDescendantOfType
 
@@ -181,7 +200,7 @@ fun KtElement.processInternalReferencesToUpdateOnPackageNameChange(
     }
 }
 
-internal var KtSimpleNameExpression.internalUsageInfo: UsageInfo? by CopyableUserDataProperty(Key.create("INTERNAL_USAGE_INFO"))
+internal var KtSimpleNameExpression.internalUsageInfo: UsageInfo? by CopyablePsiUserDataProperty(Key.create("INTERNAL_USAGE_INFO"))
 
 internal fun markInternalUsages(usages: Collection<UsageInfo>) {
     usages.forEach { (it.element as? KtSimpleNameExpression)?.internalUsageInfo = it }
@@ -242,6 +261,35 @@ class QualifiableMoveRenameUsageInfo(
     }
 }
 
+interface DeferredKotlinMoveUsage : KotlinMoveUsage {
+    fun resolve(newElement: PsiElement): UsageInfo?
+}
+
+class CallableReferenceMoveRenameUsageInfo(
+    element: PsiElement,
+    reference: PsiReference,
+    referencedElement: PsiElement,
+    val originalFile: PsiFile,
+    val addImportToOriginalFile: Boolean,
+    override val isInternal: Boolean
+) : MoveRenameUsageInfo(element, reference, reference.rangeInElement.startOffset, reference.rangeInElement.endOffset, referencedElement, false), DeferredKotlinMoveUsage {
+    override fun refresh(refExpr: KtSimpleNameExpression, referencedElement: PsiElement): UsageInfo? {
+        return CallableReferenceMoveRenameUsageInfo(refExpr, refExpr.mainReference, referencedElement, originalFile, addImportToOriginalFile, isInternal)
+    }
+
+    override fun resolve(newElement: PsiElement): UsageInfo? {
+        val target = newElement.unwrapped
+        val element = element ?: return null
+        val reference = reference ?: return null
+        val referencedElement = referencedElement ?: return null
+        if (target != null && target.isTopLevelKtOrJavaMember()) {
+            element.getStrictParentOfType<KtCallableReferenceExpression>()?.receiverExpression?.delete()
+            return UnqualifiableMoveRenameUsageInfo(element, reference, referencedElement, element.containingFile!!, addImportToOriginalFile, isInternal)
+        }
+        return QualifiableMoveRenameUsageInfo(element, reference, referencedElement, isInternal)
+    }
+}
+
 fun createMoveUsageInfoIfPossible(
         reference: PsiReference,
         referencedElement: PsiElement,
@@ -256,6 +304,9 @@ fun createMoveUsageInfoIfPossible(
         ReferenceKind.UNQUALIFIABLE -> UnqualifiableMoveRenameUsageInfo(
                 element, reference, referencedElement, element.containingFile!!, addImportToOriginalFile, isInternal
         )
+        ReferenceKind.CALLABLE_REFERENCE -> CallableReferenceMoveRenameUsageInfo(
+                element, reference, referencedElement, element.containingFile!!, addImportToOriginalFile, isInternal
+        )
         else -> null
     }
 }
@@ -263,6 +314,7 @@ fun createMoveUsageInfoIfPossible(
 private enum class ReferenceKind {
     QUALIFIABLE,
     UNQUALIFIABLE,
+    CALLABLE_REFERENCE,
     IRRELEVANT
 }
 
@@ -283,7 +335,11 @@ private fun getReferenceKind(reference: PsiReference, referencedElement: PsiElem
     if (element.isExtensionRef() && reference.element.getNonStrictParentOfType<KtImportDirective>() == null) return ReferenceKind.UNQUALIFIABLE
 
     element.getParentOfTypeAndBranch<KtCallableReferenceExpression> { callableReference }?.let {
-        if (it.receiverExpression != null) return ReferenceKind.IRRELEVANT
+        val receiverExpression = it.receiverExpression
+        if (receiverExpression != null) {
+            val lhs = it.analyze(BodyResolveMode.PARTIAL)[BindingContext.DOUBLE_COLON_LHS, receiverExpression]
+            return if (lhs is DoubleColonLHS.Type) ReferenceKind.CALLABLE_REFERENCE else ReferenceKind.IRRELEVANT
+        }
         if (target is KtDeclaration && target.parent is KtFile) return ReferenceKind.UNQUALIFIABLE
         if (target is PsiMember && target.containingClass == null) return ReferenceKind.UNQUALIFIABLE
     }
@@ -347,20 +403,28 @@ private fun postProcessMoveUsage(
         nonCodeUsages: ArrayList<NonCodeUsageInfo>,
         shorteningMode: ShorteningMode
 ) {
+    if (usage is NonCodeUsageInfo) {
+        nonCodeUsages.add(usage)
+        return
+    }
+
+    if (usage !is MoveRenameUsageInfo) return
+
+    val oldElement = usage.referencedElement!!
+    val newElement = mapToNewOrThis(oldElement, oldToNewElementsMapping)
+
     when (usage) {
-        is NonCodeUsageInfo -> {
-            nonCodeUsages.add(usage)
+        is DeferredKotlinMoveUsage -> {
+            val newUsage = usage.resolve(newElement)  ?: return
+            postProcessMoveUsage(newUsage, oldToNewElementsMapping, nonCodeUsages, shorteningMode)
         }
 
         is UnqualifiableMoveRenameUsageInfo -> {
             val file = with(usage) { if (addImportToOriginalFile) originalFile else mapToNewOrThis(originalFile, oldToNewElementsMapping) } as KtFile
-            val declaration = mapToNewOrThis(usage.referencedElement!!, oldToNewElementsMapping)
-            addDelayedImportRequest(declaration, file)
+            addDelayedImportRequest(newElement, file)
         }
 
-        is MoveRenameUsageInfo -> {
-            val oldElement = usage.referencedElement!!
-            val newElement = mapToNewOrThis(oldElement, oldToNewElementsMapping)
+        else -> {
             val reference = (usage.element as? KtSimpleNameExpression)?.mainReference ?: usage.reference
             processReference(reference, newElement, shorteningMode, oldElement)
         }
@@ -422,7 +486,7 @@ fun postProcessMoveUsages(
 
 var KtFile.updatePackageDirective: Boolean? by UserDataProperty(Key.create("UPDATE_PACKAGE_DIRECTIVE"))
 
-sealed class OuterInstanceReferenceUsageInfo(element: PsiElement, val isIndirectOuter: Boolean) : UsageInfo(element) {
+sealed class OuterInstanceReferenceUsageInfo(element: PsiElement, private val isIndirectOuter: Boolean) : UsageInfo(element) {
     open fun reportConflictIfAny(conflicts: MultiMap<PsiElement, String>): Boolean {
         val element = element ?: return false
 
@@ -445,7 +509,7 @@ sealed class OuterInstanceReferenceUsageInfo(element: PsiElement, val isIndirect
     class ImplicitReceiver(
             callElement: KtElement,
             isIndirectOuter: Boolean,
-            val isDoubleReceiver: Boolean
+            private val isDoubleReceiver: Boolean
     ) : OuterInstanceReferenceUsageInfo(callElement, isIndirectOuter) {
         val callElement: KtElement?
             get() = element as? KtElement
@@ -474,9 +538,9 @@ sealed class OuterInstanceReferenceUsageInfo(element: PsiElement, val isIndirect
 fun traverseOuterInstanceReferences(member: KtNamedDeclaration, stopAtFirst: Boolean, body: (OuterInstanceReferenceUsageInfo) -> Unit = {}): Boolean {
     if (member is KtObjectDeclaration || member is KtClass && !member.isInner()) return false
 
-    val context = member.analyzeFully()
+    val context = member.analyzeWithContent()
     val containingClassOrObject = member.containingClassOrObject ?: return false
-    val outerClassDescriptor = containingClassOrObject.resolveToDescriptor() as ClassDescriptor
+    val outerClassDescriptor = containingClassOrObject.unsafeResolveToDescriptor() as ClassDescriptor
     var found = false
     member.accept(
             object : PsiRecursiveElementWalkingVisitor() {

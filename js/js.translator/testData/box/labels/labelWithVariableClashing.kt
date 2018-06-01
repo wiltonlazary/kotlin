@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1114
 package foo
 
 // CHECK_LABELS_COUNT: function=test1 name=loop count=1

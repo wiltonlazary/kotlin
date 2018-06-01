@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.idea.quickfix.createFromUsage.createCallable
 
+import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.psi.SmartPsiElementPointer
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.idea.quickfix.IntentionActionPriority
@@ -29,13 +30,13 @@ import org.jetbrains.kotlin.psi.KtElement
 import java.util.*
 
 abstract class CreateCallableMemberFromUsageFactory<E : KtElement>(
-        val extensionsSupported: Boolean = true
+        private val extensionsSupported: Boolean = true
 ) : KotlinIntentionActionFactoryWithDelegate<E, List<CallableInfo>>() {
     private fun newCallableQuickFix(
             originalElementPointer: SmartPsiElementPointer<E>,
             priority: IntentionActionPriority,
             quickFixDataFactory: () -> List<CallableInfo>?,
-            quickFixFactory: (E, List<CallableInfo>) -> CreateFromUsageFixBase<E>?
+            quickFixFactory: (E, List<CallableInfo>) -> IntentionAction?
     ): QuickFixWithDelegateFactory {
         return QuickFixWithDelegateFactory(priority) {
             val data = quickFixDataFactory().orEmpty()

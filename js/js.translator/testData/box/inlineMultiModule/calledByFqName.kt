@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1119
 // MODULE: lib
 // FILE: lib.kt
 package utils

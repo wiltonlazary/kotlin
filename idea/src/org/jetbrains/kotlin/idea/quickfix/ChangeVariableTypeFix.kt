@@ -20,14 +20,13 @@ import com.intellij.codeInsight.intention.HighPriorityAction
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
-import com.intellij.psi.PsiFile
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
-import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.caches.resolve.unsafeResolveToDescriptor
 import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.idea.core.quickfix.QuickFixUtil
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
@@ -42,19 +41,19 @@ import java.util.*
 
 open class ChangeVariableTypeFix(element: KtVariableDeclaration, type: KotlinType) : KotlinQuickFixAction<KtVariableDeclaration>(element) {
     private val typeContainsError = ErrorUtils.containsErrorType(type)
-    private val typePresentation = IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_IN_TYPES.renderType(type)
-    private val typeSourceCode = IdeDescriptorRenderers.SOURCE_CODE.renderType(type)
+    private val typePresentation = IdeDescriptorRenderers.SOURCE_CODE_TYPES_WITH_SHORT_NAMES.renderType(type)
+    private val typeSourceCode = IdeDescriptorRenderers.SOURCE_CODE_TYPES.renderType(type)
 
     open fun variablePresentation(): String? {
         val element = element!!
         val name = element.name
-        if (name != null) {
-            val container = element.resolveToDescriptor().containingDeclaration as? ClassDescriptor
+        return if (name != null) {
+            val container = element.unsafeResolveToDescriptor().containingDeclaration as? ClassDescriptor
             val containerName = container?.name?.takeUnless { it.isSpecial }?.asString()
-            return if (containerName != null) "'$containerName.$name'" else "'$name'"
+            if (containerName != null) "'$containerName.$name'" else "'$name'"
         }
         else {
-            return null
+            null
         }
     }
 
@@ -62,11 +61,11 @@ open class ChangeVariableTypeFix(element: KtVariableDeclaration, type: KotlinTyp
         if (element == null) return ""
 
         val variablePresentation = variablePresentation()
-        if (variablePresentation != null) {
-            return "Change type of $variablePresentation to '$typePresentation'"
+        return if (variablePresentation != null) {
+            "Change type of $variablePresentation to '$typePresentation'"
         }
         else {
-            return "Change type to '$typePresentation'"
+            "Change type to '$typePresentation'"
         }
     }
 
@@ -84,8 +83,8 @@ open class ChangeVariableTypeFix(element: KtVariableDeclaration, type: KotlinTyp
     override fun getFamilyName()
             = KotlinBundle.message("change.type.family")
 
-    override fun isAvailable(project: Project, editor: Editor?, file: PsiFile)
-            = !typeContainsError && super.isAvailable(project, editor, file)
+    override fun isAvailable(project: Project, editor: Editor?, file: KtFile)
+            = !typeContainsError
 
     override fun invoke(project: Project, editor: Editor?, file: KtFile) {
         val element = element ?: return

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,8 +28,10 @@ import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
+import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.core.KotlinNameSuggester
 import org.jetbrains.kotlin.idea.core.NewDeclarationNameValidator
+import org.jetbrains.kotlin.idea.core.isVisible
 import org.jetbrains.kotlin.idea.inspections.IntentionBasedInspection
 import org.jetbrains.kotlin.idea.project.languageVersionSettings
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
@@ -156,7 +158,7 @@ class DestructureIntention : SelfTargetingRangeIntention<KtDeclaration>(
                         else -> null
                     }
                 }
-                is KtVariableDeclaration -> parent
+                is KtProperty -> parent.takeIf { isLocal }
                 is KtFunctionLiteral -> if (!hasParameterSpecification() && lambdaSupported) this else null
                 else -> null
             }
@@ -333,6 +335,10 @@ class DestructureIntention : SelfTargetingRangeIntention<KtDeclaration>(
             if (property != null && property.isVar) return null
 
             val descriptor = qualifiedExpression.getResolvedCall(context)?.resultingDescriptor ?: return null
+            if (!descriptor.isVisible(dataClassUsage, qualifiedExpression.receiverExpression,
+                                      context, dataClassUsage.containingKtFile.getResolutionFacade())) {
+                return null
+            }
             return SingleUsageData(descriptor = descriptor, usageToReplace = qualifiedExpression, declarationToDrop = property)
         }
 

@@ -41,7 +41,7 @@ public interface FunctionDescriptor extends CallableMemberDescriptor {
     FunctionDescriptor substitute(@NotNull TypeSubstitutor substitutor);
 
     /**
-     * This method should be used with q Wgreat care, because if descriptor is substituted one, calling 'getOverriddenDescriptors'
+     * This method should be used with a great care, because if descriptor is substituted one, calling 'getOverriddenDescriptors'
      * may force lazy computation, that's unnecessary in most cases.
      * So, if 'getOriginal().getOverriddenDescriptors()' is enough for you, please use it instead.
      * @return
@@ -110,6 +110,7 @@ public interface FunctionDescriptor extends CallableMemberDescriptor {
         @Override
         CopyBuilder<D> setCopyOverrides(boolean copyOverrides);
 
+        @Override
         @NotNull
         CopyBuilder<D> setName(@NotNull Name name);
 
@@ -117,6 +118,7 @@ public interface FunctionDescriptor extends CallableMemberDescriptor {
         CopyBuilder<D> setValueParameters(@NotNull List<ValueParameterDescriptor> parameters);
 
         @NotNull
+        @Override
         CopyBuilder<D> setTypeParameters(@NotNull List<TypeParameterDescriptor> parameters);
 
         @NotNull
@@ -130,7 +132,8 @@ public interface FunctionDescriptor extends CallableMemberDescriptor {
         CopyBuilder<D> setDispatchReceiverParameter(@Nullable ReceiverParameterDescriptor dispatchReceiverParameter);
 
         @NotNull
-        CopyBuilder<D> setOriginal(@Nullable FunctionDescriptor original);
+        @Override
+        CopyBuilder<D> setOriginal(@Nullable CallableMemberDescriptor original);
 
         @NotNull
         CopyBuilder<D> setSignatureChange();
@@ -139,10 +142,10 @@ public interface FunctionDescriptor extends CallableMemberDescriptor {
         CopyBuilder<D> setPreserveSourceElement();
 
         @NotNull
-        CopyBuilder<D> setSource(@NotNull SourceElement source);
+        CopyBuilder<D> setDropOriginalInContainingParts();
 
         @NotNull
-        CopyBuilder<D> setDropOriginalInContainingParts();
+        CopyBuilder<D> setDropSuspend();
 
         @NotNull
         CopyBuilder<D> setHiddenToOvercomeSignatureClash();

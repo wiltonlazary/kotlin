@@ -16,8 +16,11 @@
 
 package org.jetbrains.kotlin.codegen.optimization.boxing
 
+import org.jetbrains.kotlin.codegen.optimization.OptimizationMethodVisitor
+import org.jetbrains.kotlin.codegen.optimization.common.debugText
 import org.jetbrains.kotlin.codegen.optimization.common.isLoadOperation
 import org.jetbrains.kotlin.codegen.optimization.common.isMeaningful
+import org.jetbrains.kotlin.codegen.optimization.fixStack.peekWords
 import org.jetbrains.kotlin.codegen.optimization.fixStack.top
 import org.jetbrains.kotlin.codegen.optimization.removeNodeGetNext
 import org.jetbrains.kotlin.codegen.optimization.transformer.MethodTransformer
@@ -31,6 +34,7 @@ import java.util.*
 
 class PopBackwardPropagationTransformer : MethodTransformer() {
     override fun transform(internalClassName: String, methodNode: MethodNode) {
+        if (!OptimizationMethodVisitor.canBeOptimizedUsingSourceInterpreter(methodNode)) return
         Transformer(methodNode).transform()
     }
 
@@ -40,11 +44,11 @@ class PopBackwardPropagationTransformer : MethodTransformer() {
         }
 
         private inline fun Transformation(crossinline body: (AbstractInsnNode) -> Unit): Transformation =
-                object : Transformation {
-                    override fun apply(insn: AbstractInsnNode) {
-                        body(insn)
-                    }
+            object : Transformation {
+                override fun apply(insn: AbstractInsnNode) {
+                    body(insn)
                 }
+            }
 
         private val REPLACE_WITH_NOP = Transformation { insnList.set(it, createRemovableNopInsn()) }
         private val REPLACE_WITH_POP1 = Transformation { insnList.set(it, InsnNode(Opcodes.POP)) }
@@ -63,7 +67,7 @@ class PopBackwardPropagationTransformer : MethodTransformer() {
         private val frames by lazy { analyzeMethodBody() }
 
         fun transform() {
-            if (!insns.any { it.isPurePush() }) return
+            if (insns.none { it.isPop() || it.isPurePush() }) return
 
             computeTransformations()
             for ((insn, transformation) in transformations.entries) {
@@ -72,46 +76,93 @@ class PopBackwardPropagationTransformer : MethodTransformer() {
             postprocessNops()
         }
 
-        private fun analyzeMethodBody(): Array<out Frame<SourceValue>?> =
-                Analyzer<SourceValue>(object : SourceInterpreter() {
-                    override fun naryOperation(insn: AbstractInsnNode, values: MutableList<out SourceValue>): SourceValue {
-                        for (value in values) {
-                            value.insns.markAsDontTouch()
-                        }
-                        return super.naryOperation(insn, values)
-                    }
+        private fun analyzeMethodBody(): Array<out Frame<SourceValue>?> {
+            val frames = Analyzer<SourceValue>(HazardsTrackingInterpreter()).analyze("fake", methodNode)
 
-                    override fun copyOperation(insn: AbstractInsnNode, value: SourceValue): SourceValue {
-                        value.insns.markAsDontTouch()
-                        return super.copyOperation(insn, value)
-                    }
+            postprocessStackHazards(frames)
 
-                    override fun unaryOperation(insn: AbstractInsnNode, value: SourceValue): SourceValue {
-                        if (insn.opcode != Opcodes.CHECKCAST && !insn.isPrimitiveTypeConversion()) {
-                            value.insns.markAsDontTouch()
-                        }
-                        return super.unaryOperation(insn, value)
-                    }
+            return frames
+        }
 
-                    override fun binaryOperation(insn: AbstractInsnNode, value1: SourceValue, value2: SourceValue): SourceValue {
-                        value1.insns.markAsDontTouch()
-                        value2.insns.markAsDontTouch()
-                        return super.binaryOperation(insn, value1, value2)
-                    }
+        private fun postprocessStackHazards(frames: Array<out Frame<SourceValue>?>) {
+            val insns = methodNode.instructions.toArray()
+            for (i in frames.indices) {
+                val frame = frames[i] ?: continue
+                val insn = insns[i]
 
-                    override fun ternaryOperation(insn: AbstractInsnNode, value1: SourceValue, value2: SourceValue, value3: SourceValue): SourceValue {
-                        value1.insns.markAsDontTouch()
-                        value2.insns.markAsDontTouch()
-                        value3.insns.markAsDontTouch()
-                        return super.ternaryOperation(insn, value1, value2, value3)
+                when (insn.opcode) {
+                    Opcodes.POP2 -> {
+                        val top2 = frame.peekWords(2) ?: throwIncorrectBytecode(insn, frame)
+                        top2.forEach { it.insns.markAsDontTouch() }
                     }
+                    Opcodes.DUP_X1 -> {
+                        val top2 = frame.peekWords(1, 1) ?: throwIncorrectBytecode(insn, frame)
+                        top2.forEach { it.insns.markAsDontTouch() }
+                    }
+                    Opcodes.DUP2_X1 -> {
+                        val top3 = frame.peekWords(2, 1) ?: throwIncorrectBytecode(insn, frame)
+                        top3.forEach { it.insns.markAsDontTouch() }
+                    }
+                    Opcodes.DUP_X2 -> {
+                        val top3 = frame.peekWords(1, 2) ?: throwIncorrectBytecode(insn, frame)
+                        top3.forEach { it.insns.markAsDontTouch() }
+                    }
+                    Opcodes.DUP2_X2 -> {
+                        val top4 = frame.peekWords(2, 2) ?: throwIncorrectBytecode(insn, frame)
+                        top4.forEach { it.insns.markAsDontTouch() }
+                    }
+                }
+            }
+        }
 
-                    private fun Collection<AbstractInsnNode>.markAsDontTouch() {
-                        forEach {
-                            dontTouchInsnIndices[insnList.indexOf(it)] = true
-                        }
-                    }
-                }).analyze("fake", methodNode)
+        private fun throwIncorrectBytecode(insn: AbstractInsnNode?, frame: Frame<SourceValue>): Nothing {
+            throw AssertionError("Incorrect bytecode at ${methodNode.instructions.indexOf(insn)}: ${insn.debugText} $frame")
+        }
+
+        private inner class HazardsTrackingInterpreter : SourceInterpreter() {
+            override fun naryOperation(insn: AbstractInsnNode, values: MutableList<out SourceValue>): SourceValue {
+                for (value in values) {
+                    value.insns.markAsDontTouch()
+                }
+                return super.naryOperation(insn, values)
+            }
+
+            override fun copyOperation(insn: AbstractInsnNode, value: SourceValue): SourceValue {
+                value.insns.markAsDontTouch()
+                return super.copyOperation(insn, value)
+            }
+
+            override fun unaryOperation(insn: AbstractInsnNode, value: SourceValue): SourceValue {
+                if (insn.opcode != Opcodes.CHECKCAST && !insn.isPrimitiveTypeConversion()) {
+                    value.insns.markAsDontTouch()
+                }
+                return super.unaryOperation(insn, value)
+            }
+
+            override fun binaryOperation(insn: AbstractInsnNode, value1: SourceValue, value2: SourceValue): SourceValue {
+                value1.insns.markAsDontTouch()
+                value2.insns.markAsDontTouch()
+                return super.binaryOperation(insn, value1, value2)
+            }
+
+            override fun ternaryOperation(
+                insn: AbstractInsnNode,
+                value1: SourceValue,
+                value2: SourceValue,
+                value3: SourceValue
+            ): SourceValue {
+                value1.insns.markAsDontTouch()
+                value2.insns.markAsDontTouch()
+                value3.insns.markAsDontTouch()
+                return super.ternaryOperation(insn, value1, value2, value3)
+            }
+        }
+
+        private fun Collection<AbstractInsnNode>.markAsDontTouch() {
+            forEach {
+                dontTouchInsnIndices[insnList.indexOf(it)] = true
+            }
+        }
 
 
         private fun computeTransformations() {
@@ -147,8 +198,7 @@ class PopBackwardPropagationTransformer : MethodTransformer() {
                     if (sources.all { !isDontTouch(it) } && sources.any { isTransformableCheckcastOperand(it, resultType) }) {
                         transformations[insn] = replaceWithNopTransformation()
                         sources.forEach { propagatePopBackwards(it, inputTop.size) }
-                    }
-                    else {
+                    } else {
                         transformations[insn] = insertPopAfterTransformation(poppedValueSize)
                     }
                 }
@@ -168,8 +218,7 @@ class PopBackwardPropagationTransformer : MethodTransformer() {
                     if (sources.all { !isDontTouch(it) }) {
                         transformations[insn] = replaceWithNopTransformation()
                         sources.forEach { propagatePopBackwards(it, inputTop.size) }
-                    }
-                    else {
+                    } else {
                         transformations[insn] = replaceWithPopTransformation(poppedValueSize)
                     }
                 }
@@ -206,8 +255,7 @@ class PopBackwardPropagationTransformer : MethodTransformer() {
             while (node != null && node != end) {
                 if (node in removableNops && !keepNop) {
                     node = insnList.removeNodeGetNext(node)
-                }
-                else {
+                } else {
                     if (node.isMeaningful) keepNop = false
                     node = node.next
                 }
@@ -215,24 +263,24 @@ class PopBackwardPropagationTransformer : MethodTransformer() {
         }
 
         private fun replaceWithPopTransformation(size: Int): Transformation =
-                when (size) {
-                    1 -> REPLACE_WITH_POP1
-                    2 -> REPLACE_WITH_POP2
-                    else -> throw AssertionError("Unexpected pop value size: $size")
-                }
+            when (size) {
+                1 -> REPLACE_WITH_POP1
+                2 -> REPLACE_WITH_POP2
+                else -> throw AssertionError("Unexpected pop value size: $size")
+            }
 
         private fun insertPopAfterTransformation(size: Int): Transformation =
-                when (size) {
-                    1 -> INSERT_POP1_AFTER
-                    2 -> INSERT_POP2_AFTER
-                    else -> throw AssertionError("Unexpected pop value size: $size")
-                }
+            when (size) {
+                1 -> INSERT_POP1_AFTER
+                2 -> INSERT_POP2_AFTER
+                else -> throw AssertionError("Unexpected pop value size: $size")
+            }
 
         private fun replaceWithNopTransformation(): Transformation =
-                REPLACE_WITH_NOP
+            REPLACE_WITH_NOP
 
         private fun createRemovableNopInsn() =
-                InsnNode(Opcodes.NOP).apply { removableNops.add(this) }
+            InsnNode(Opcodes.NOP).apply { removableNops.add(this) }
 
         private fun getInputTop(insn: AbstractInsnNode): SourceValue {
             val i = insnList.indexOf(insn)
@@ -241,25 +289,28 @@ class PopBackwardPropagationTransformer : MethodTransformer() {
         }
 
         private fun isTransformableCheckcastOperand(it: AbstractInsnNode, resultType: String) =
-                it.isPrimitiveBoxing() && (it as MethodInsnNode).owner == resultType
+            it.isPrimitiveBoxing() && (it as MethodInsnNode).owner == resultType
 
         private fun isTransformablePopOperand(insn: AbstractInsnNode) =
-                insn.opcode == Opcodes.CHECKCAST || insn.isPrimitiveBoxing() || insn.isPurePush()
+            insn.opcode == Opcodes.CHECKCAST || insn.isPrimitiveBoxing() || insn.isPurePush()
 
         private fun isDontTouch(insn: AbstractInsnNode) =
-                dontTouchInsnIndices[insnList.indexOf(insn)]
+            dontTouchInsnIndices[insnList.indexOf(insn)]
     }
 
 }
 
 fun AbstractInsnNode.isPurePush() =
-        isLoadOperation() ||
-        opcode in Opcodes.ACONST_NULL .. Opcodes.LDC + 2 ||
-        isUnitInstance()
+    isLoadOperation() ||
+            opcode in Opcodes.ACONST_NULL..Opcodes.LDC + 2 ||
+            isUnitInstance()
+
+fun AbstractInsnNode.isPop() =
+    opcode == Opcodes.POP || opcode == Opcodes.POP2
 
 fun AbstractInsnNode.isUnitInstance() =
-        opcode == Opcodes.GETSTATIC &&
-        this is FieldInsnNode && owner == "kotlin/Unit" && name == "INSTANCE"
+    opcode == Opcodes.GETSTATIC &&
+            this is FieldInsnNode && owner == "kotlin/Unit" && name == "INSTANCE"
 
 fun AbstractInsnNode.isPrimitiveTypeConversion() =
-        opcode in Opcodes.I2L .. Opcodes.I2S
+    opcode in Opcodes.I2L..Opcodes.I2S

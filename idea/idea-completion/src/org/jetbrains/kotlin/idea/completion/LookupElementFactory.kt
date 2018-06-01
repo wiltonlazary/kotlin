@@ -34,12 +34,13 @@ import org.jetbrains.kotlin.idea.util.ReceiverType
 import org.jetbrains.kotlin.idea.util.toFuzzyType
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.renderer.render
+import org.jetbrains.kotlin.resolve.calls.components.hasDefaultValue
 import org.jetbrains.kotlin.resolve.calls.util.getValueParametersCountFromFunctionType
-import org.jetbrains.kotlin.resolve.descriptorUtil.hasDefaultValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExtension
 import org.jetbrains.kotlin.resolve.descriptorUtil.overriddenTreeUniqueAsSequence
 import org.jetbrains.kotlin.resolve.descriptorUtil.parentsWithSelf
 import org.jetbrains.kotlin.resolve.findOriginalTopMostOverriddenDescriptors
+import org.jetbrains.kotlin.resolve.scopes.receivers.TransientReceiver
 import org.jetbrains.kotlin.synthetic.SamAdapterExtensionFunctionDescriptor
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
 import org.jetbrains.kotlin.types.KotlinType
@@ -47,6 +48,7 @@ import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
 import org.jetbrains.kotlin.util.OperatorNameConventions
 import org.jetbrains.kotlin.utils.addIfNotNull
+import org.jetbrains.kotlin.utils.ifEmpty
 import java.util.*
 
 interface AbstractLookupElementFactory {
@@ -209,9 +211,9 @@ class LookupElementFactory(
         if (descriptor.valueParameters.isEmpty()) return null
         if (descriptor.findOriginalTopMostOverriddenDescriptors().none { it in superFunctions }) return null
 
-        val argumentText = descriptor.valueParameters.map {
+        val argumentText = descriptor.valueParameters.joinToString(", ") {
             (if (it.varargElementType != null) "*" else "") + it.name.render()
-        }.joinToString(", ") //TODO: use code formatting settings
+        } //TODO: use code formatting settings
 
         val lookupElement = createFunctionCallElementWithArguments(descriptor, argumentText, true)
         lookupElement.assignPriority(ItemPriority.SUPER_METHOD_WITH_ARGUMENTS)
@@ -347,9 +349,26 @@ class LookupElementFactory(
             receiverTypes: Collection<ReceiverType>,
             onReceiverTypeMismatch: CallableWeight?
     ): CallableWeight? {
-        val receiverParameter = extensionReceiverParameter
-                                ?: dispatchReceiverParameter
-                                ?: return null
+
+        val bothReceivers = listOfNotNull(extensionReceiverParameter, dispatchReceiverParameter)
+
+        val receiverTypesForFirstReceiver = receiverTypes.filterNot { it.implicit }.ifEmpty { receiverTypes }
+
+        val weights = bothReceivers.zip(generateSequence(receiverTypesForFirstReceiver) { receiverTypes }.asIterable())
+                .map { (receiverParameter, receiverTypes) ->
+                    callableWeightBasedOnReceiver(receiverTypes, onReceiverTypeMismatch, receiverParameter)
+                }
+
+        if (weights.any { it == onReceiverTypeMismatch }) return onReceiverTypeMismatch
+        return weights.firstOrNull()
+    }
+
+    private fun CallableDescriptor.callableWeightBasedOnReceiver(
+            receiverTypes: Collection<ReceiverType>,
+            onReceiverTypeMismatch: CallableWeight?,
+            receiverParameter: ReceiverParameterDescriptor
+    ): CallableWeight? {
+        if ((receiverParameter.value as? TransientReceiver)?.type?.isFunctionType == true) return null
 
         val matchingReceiverIndices = HashSet<Int>()
         var bestReceiverType: ReceiverType? = null
@@ -381,20 +400,17 @@ class LookupElementFactory(
         return CallableWeight(bestWeight, receiverIndexToUse)
     }
 
-    private fun CallableDescriptor.callableWeightForReceiverType(receiverType: KotlinType, receiverParameterType: KotlinType): CallableWeightEnum? {
-        if (TypeUtils.equalTypes(receiverType, receiverParameterType)) {
-            return when {
-                isExtensionForTypeParameter() -> CallableWeightEnum.typeParameterExtension
-                isExtension -> CallableWeightEnum.thisTypeExtension
-                else -> CallableWeightEnum.thisClassMember
-            }
+    private fun CallableDescriptor.callableWeightForReceiverType(
+            receiverType: KotlinType,
+            receiverParameterType: KotlinType
+    ): CallableWeightEnum? = when {
+        TypeUtils.equalTypes(receiverType, receiverParameterType) -> when {
+            isExtensionForTypeParameter() -> CallableWeightEnum.typeParameterExtension
+            isExtension -> CallableWeightEnum.thisTypeExtension
+            else -> CallableWeightEnum.thisClassMember
         }
-        else if (receiverType.isSubtypeOf(receiverParameterType)) {
-            return if (isExtension) CallableWeightEnum.baseTypeExtension else CallableWeightEnum.baseClassMember
-        }
-        else {
-            return null
-        }
+        receiverType.isSubtypeOf(receiverParameterType) -> if (isExtension) CallableWeightEnum.baseTypeExtension else CallableWeightEnum.baseClassMember
+        else -> null
     }
 
     private fun CallableDescriptor.isExtensionForTypeParameter(): Boolean {

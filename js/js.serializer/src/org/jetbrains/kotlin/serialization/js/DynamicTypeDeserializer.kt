@@ -16,7 +16,7 @@
 
 package org.jetbrains.kotlin.serialization.js
 
-import org.jetbrains.kotlin.serialization.ProtoBuf
+import org.jetbrains.kotlin.metadata.ProtoBuf
 import org.jetbrains.kotlin.serialization.deserialization.FlexibleTypeDeserializer
 import org.jetbrains.kotlin.types.ErrorUtils
 import org.jetbrains.kotlin.types.KotlinType
@@ -30,12 +30,12 @@ object DynamicTypeDeserializer : FlexibleTypeDeserializer {
 
     override fun create(proto: ProtoBuf.Type, flexibleId: String, lowerBound: SimpleType, upperBound: SimpleType): KotlinType {
         if (flexibleId != id) return ErrorUtils.createErrorType("Unexpected id: $flexibleId. ($lowerBound..$upperBound)")
-        if (StrictEqualityTypeChecker.strictEqualTypes(lowerBound, lowerBound.builtIns.nothingType) &&
-            StrictEqualityTypeChecker.strictEqualTypes(upperBound, upperBound.builtIns.nullableAnyType)) {
-            return createDynamicType(lowerBound.builtIns)
+        return if (StrictEqualityTypeChecker.strictEqualTypes(lowerBound, lowerBound.builtIns.nothingType) &&
+                   StrictEqualityTypeChecker.strictEqualTypes(upperBound, upperBound.builtIns.nullableAnyType)) {
+            createDynamicType(lowerBound.builtIns)
         }
         else {
-            return ErrorUtils.createErrorType("Illegal type range for dynamic type: $lowerBound..$upperBound")
+            ErrorUtils.createErrorType("Illegal type range for dynamic type: $lowerBound..$upperBound")
         }
     }
 }

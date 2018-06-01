@@ -59,11 +59,11 @@ tailrec fun <T : Any> LookupElement.putUserDataDeep(key: Key<T>, value: T?) {
 }
 
 tailrec fun <T : Any> LookupElement.getUserDataDeep(key: Key<T>): T? {
-    if (this is LookupElementDecorator<*>) {
-        return getDelegate().getUserDataDeep(key)
+    return if (this is LookupElementDecorator<*>) {
+        getDelegate().getUserDataDeep(key)
     }
     else {
-        return getUserData(key)
+        getUserData(key)
     }
 }
 
@@ -79,6 +79,7 @@ enum class ItemPriority {
 }
 
 val ITEM_PRIORITY_KEY = Key<ItemPriority>("ITEM_PRIORITY_KEY")
+var LookupElement.isDslMember: Boolean? by UserDataProperty(Key.create("DSL_LOOKUP_ITEM"))
 
 fun LookupElement.assignPriority(priority: ItemPriority): LookupElement {
     putUserData(ITEM_PRIORITY_KEY, priority)
@@ -298,16 +299,16 @@ fun breakOrContinueExpressionItems(position: KtElement, breakOrContinue: String)
 fun BasicLookupElementFactory.createLookupElementForType(type: KotlinType): LookupElement? {
     if (type.isError) return null
 
-    if (type.isFunctionType) {
-        val text = IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_IN_TYPES.renderType(type)
+    return if (type.isFunctionType) {
+        val text = IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_NO_ANNOTATIONS.renderType(type)
         val baseLookupElement = LookupElementBuilder.create(text).withIcon(KotlinIcons.LAMBDA)
-        return BaseTypeLookupElement(type, baseLookupElement)
+        BaseTypeLookupElement(type, baseLookupElement)
     }
     else {
         val classifier = type.constructor.declarationDescriptor ?: return null
         val baseLookupElement = createLookupElement(classifier, qualifyNestedClasses = true, includeClassTypeArguments = false)
 
-        val itemText = IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_IN_TYPES.renderType(type)
+        val itemText = IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_NO_ANNOTATIONS.renderType(type)
 
         val typeLookupElement = object : BaseTypeLookupElement(type, baseLookupElement) {
             override fun renderElement(presentation: LookupElementPresentation) {
@@ -317,7 +318,7 @@ fun BasicLookupElementFactory.createLookupElementForType(type: KotlinType): Look
         }
 
         // if type is simply classifier without anything else, use classifier's lookup element to avoid duplicates (works after "as" in basic completion)
-        return if (typeLookupElement.fullText == IdeDescriptorRenderers.SOURCE_CODE.renderClassifierName(classifier))
+        if (typeLookupElement.fullText == IdeDescriptorRenderers.SOURCE_CODE.renderClassifierName(classifier))
             baseLookupElement
         else
             typeLookupElement
@@ -421,4 +422,7 @@ fun OffsetMap.tryGetOffset(key: OffsetKey): Int? {
     }
 }
 
-var KtCodeFragment.extraCompletionFilter: ((LookupElement) -> Boolean)? by CopyableUserDataProperty(Key.create("EXTRA_COMPLETION_FILTER"))
+var KtCodeFragment.extraCompletionFilter: ((LookupElement) -> Boolean)? by CopyablePsiUserDataProperty(Key.create("EXTRA_COMPLETION_FILTER"))
+
+val DeclarationDescriptor.isArtificialImportAliasedDescriptor: Boolean
+    get() = original.name != name

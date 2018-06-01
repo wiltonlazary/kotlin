@@ -20,21 +20,26 @@ import org.jetbrains.kotlin.daemon.client.CompilerCallbackServicesFacadeServer
 import org.jetbrains.kotlin.daemon.client.reportFromDaemon
 import org.jetbrains.kotlin.daemon.common.JpsCompilerServicesFacade
 import org.jetbrains.kotlin.daemon.common.SOCKET_ANY_FREE_PORT
+import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCompilationComponents
 import org.jetbrains.kotlin.progress.CompilationCanceledStatus
 import java.io.Serializable
 
 internal class JpsCompilerServicesFacadeImpl(
-        private val env: JpsCompilerEnvironment,
-        port: Int = SOCKET_ANY_FREE_PORT
-) : CompilerCallbackServicesFacadeServer(env.services.get(IncrementalCompilationComponents::class.java),
-                                         env.services.get(CompilationCanceledStatus::class.java),
-                                         port),
-        JpsCompilerServicesFacade {
+    private val env: JpsCompilerEnvironment,
+    port: Int = SOCKET_ANY_FREE_PORT
+) : CompilerCallbackServicesFacadeServer(
+    env.services.get(IncrementalCompilationComponents::class.java),
+    env.services.get(LookupTracker::class.java),
+    env.services.get(CompilationCanceledStatus::class.java),
+    port
+),
+    JpsCompilerServicesFacade {
 
     override fun report(category: Int, severity: Int, message: String?, attachment: Serializable?) {
         env.messageCollector.reportFromDaemon(
-                { outFile, srcFiles -> env.outputItemsCollector.add(srcFiles, outFile) },
-                category, severity, message, attachment)
+            { outFile, srcFiles -> env.outputItemsCollector.add(srcFiles, outFile) },
+            category, severity, message, attachment
+        )
     }
 }

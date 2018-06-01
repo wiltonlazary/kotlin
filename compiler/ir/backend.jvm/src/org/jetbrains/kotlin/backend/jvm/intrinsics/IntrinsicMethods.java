@@ -27,8 +27,10 @@ import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.name.FqNameUnsafe;
 import org.jetbrains.kotlin.name.Name;
+import org.jetbrains.kotlin.resolve.jvm.AsmTypes;
 import org.jetbrains.kotlin.resolve.jvm.JvmPrimitiveType;
 import org.jetbrains.kotlin.types.expressions.OperatorConventions;
+import org.jetbrains.org.objectweb.asm.Type;
 
 import static org.jetbrains.kotlin.builtins.KotlinBuiltIns.*;
 import static org.jetbrains.org.objectweb.asm.Opcodes.*;
@@ -63,7 +65,6 @@ public class IntrinsicMethods {
     public IntrinsicMethods() {
         intrinsicsMap.registerIntrinsic(KOTLIN_JVM, RECEIVER_PARAMETER_FQ_NAME, "javaClass", -1, JavaClassProperty.INSTANCE);
         intrinsicsMap.registerIntrinsic(KOTLIN_JVM, KotlinBuiltIns.FQ_NAMES.kClass, "java", -1, new KClassJavaProperty());
-        intrinsicsMap.registerIntrinsic(KotlinBuiltIns.FQ_NAMES.kCallable.toSafe(), null, "name", -1, new KCallableNameProperty());
         intrinsicsMap.registerIntrinsic(new FqName("kotlin.jvm.internal.unsafe"), null, "monitorEnter", 1, MonitorInstruction.MONITOR_ENTER);
         intrinsicsMap.registerIntrinsic(new FqName("kotlin.jvm.internal.unsafe"), null, "monitorExit", 1, MonitorInstruction.MONITOR_EXIT);
         intrinsicsMap.registerIntrinsic(KOTLIN_JVM, KotlinBuiltIns.FQ_NAMES.array, "isArrayOf", 0, new IsArrayOf());
@@ -93,7 +94,13 @@ public class IntrinsicMethods {
 
         for (PrimitiveType type : PrimitiveType.values()) {
             FqName typeFqName = type.getTypeFqName();
-            declareIntrinsicFunction(typeFqName, "equals", 1, EQUALS);
+            Type asmPrimitiveType = AsmTypes.valueTypeForPrimitive(type);
+            if (asmPrimitiveType == Type.FLOAT_TYPE || asmPrimitiveType == Type.DOUBLE_TYPE) {
+                declareIntrinsicFunction(typeFqName, "equals", 1, new TotalOrderEquals(asmPrimitiveType));
+            }
+            else {
+                declareIntrinsicFunction(typeFqName, "equals", 1, EQUALS);
+            }
             declareIntrinsicFunction(typeFqName, "hashCode", 0, HASH_CODE);
             declareIntrinsicFunction(typeFqName, "toString", 0, TO_STRING);
 

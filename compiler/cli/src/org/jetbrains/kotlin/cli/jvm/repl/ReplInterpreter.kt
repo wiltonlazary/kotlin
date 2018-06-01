@@ -22,8 +22,11 @@ import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.common.repl.*
-import org.jetbrains.kotlin.cli.jvm.config.jvmClasspathRoots
+import org.jetbrains.kotlin.cli.jvm.config.JvmClasspathRoot
+import org.jetbrains.kotlin.cli.jvm.config.JvmModulePathRoot
+import org.jetbrains.kotlin.cli.jvm.repl.configuration.ReplConfiguration
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
 import java.io.PrintWriter
 import java.net.URLClassLoader
@@ -33,15 +36,19 @@ class ReplInterpreter(
         disposable: Disposable,
         private val configuration: CompilerConfiguration,
         private val replConfiguration: ReplConfiguration
-): ReplConfiguration by replConfiguration {
-
+) {
     private val lineNumber = AtomicInteger()
 
     private val previousIncompleteLines = arrayListOf<String>()
-    private val classLoader: ReplClassLoader = run {
-        val classpath = configuration.jvmClasspathRoots.map { it.toURI().toURL() }
-        ReplClassLoader(URLClassLoader(classpath.toTypedArray(), null))
+
+    private val classpathRoots = configuration.getList(JVMConfigurationKeys.CONTENT_ROOTS).mapNotNull { root ->
+        when (root) {
+            is JvmModulePathRoot -> root.file // TODO: only add required modules
+            is JvmClasspathRoot -> root.file
+            else -> null
+        }
     }
+    private val classLoader = ReplClassLoader(URLClassLoader(classpathRoots.map { it.toURI().toURL() }.toTypedArray(), null))
 
     private val messageCollector = object : MessageCollector {
         private var hasErrors = false
@@ -52,7 +59,7 @@ class ReplInterpreter(
         }
 
         override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation?) {
-            val msg = messageRenderer.render(severity, message, location)
+            val msg = messageRenderer.render(severity, message, location).trimEnd()
             with (replConfiguration.writer) {
                 when (severity) {
                     CompilerMessageSeverity.EXCEPTION -> sendInternalErrorReport(msg)
@@ -69,8 +76,12 @@ class ReplInterpreter(
     }
 
     // TODO: add script definition with project-based resolving for IDEA repl
-    private val scriptCompiler: ReplCompiler by lazy { GenericReplCompiler(disposable, REPL_LINE_AS_SCRIPT_DEFINITION, configuration, messageCollector) }
-    private val scriptEvaluator: ReplFullEvaluator by lazy { GenericReplCompilingEvaluator(scriptCompiler, configuration.jvmClasspathRoots, classLoader, null, ReplRepeatingMode.REPEAT_ANY_PREVIOUS) }
+    private val scriptCompiler: ReplCompiler by lazy {
+        GenericReplCompiler(disposable, REPL_LINE_AS_SCRIPT_DEFINITION, configuration, messageCollector)
+    }
+    private val scriptEvaluator: ReplFullEvaluator by lazy {
+        GenericReplCompilingEvaluator(scriptCompiler, classpathRoots, classLoader, null, ReplRepeatingMode.REPEAT_ANY_PREVIOUS)
+    }
 
     private val evalState by lazy { scriptEvaluator.createState() }
 
@@ -81,12 +92,12 @@ class ReplInterpreter(
         try {
 
             val evalRes = scriptEvaluator.compileAndEval(evalState, ReplCodeLine(lineNumber.getAndIncrement(), 0, fullText), null, object : InvokeWrapper {
-                override fun <T> invoke(body: () -> T): T = executeUserCode { body() }
+                override fun <T> invoke(body: () -> T): T = replConfiguration.executionInterceptor.execute(body)
             })
 
             when {
                 evalRes !is ReplEvalResult.Incomplete -> previousIncompleteLines.clear()
-                allowIncompleteLines -> previousIncompleteLines.add(line)
+                replConfiguration.allowIncompleteLines -> previousIncompleteLines.add(line)
                 else -> return ReplEvalResult.Error.CompileTime("incomplete code")
             }
             return evalRes
@@ -96,16 +107,6 @@ class ReplInterpreter(
             classLoader.dumpClasses(writer)
             writer.flush()
             throw e
-        }
-    }
-
-    private fun <T> executeUserCode(body: () -> T): T {
-        try {
-            onUserCodeExecuting(true)
-            return body()
-        }
-        finally {
-            onUserCodeExecuting(false)
         }
     }
 

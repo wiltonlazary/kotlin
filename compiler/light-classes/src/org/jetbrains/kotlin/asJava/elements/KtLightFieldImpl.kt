@@ -60,21 +60,15 @@ sealed class KtLightFieldImpl<D : PsiField>(
     }
 
     override fun equals(other: Any?): Boolean =
-            other is KtLightFieldImpl<*> &&
-            this.name == other.name &&
-            this.containingClass == other.containingClass
+            this === other ||
+            (other is KtLightFieldImpl<*> &&
+             this.name == other.name &&
+             this.containingClass == other.containingClass)
 
     override fun hashCode() = 31 * containingClass.hashCode() + name.hashCode()
 
     override fun computeConstantValue(visitedVars: MutableSet<PsiVariable>?): Any? {
         return (clsDelegate as PsiVariableEx).computeConstantValue(visitedVars)
-    }
-
-    override fun isEquivalentTo(another: PsiElement?): Boolean {
-        if (another is KtLightField && this == another) {
-            return true
-        }
-        return super.isEquivalentTo(another)
     }
 
     override fun copy() = Factory.create(lightMemberOrigin?.copy(), clsDelegate, containingClass)
@@ -112,18 +106,14 @@ sealed class KtLightFieldImpl<D : PsiField>(
             KtLightFieldImpl<PsiField>(origin, computeDelegate, containingClass, dummyDelegate)
 
     companion object Factory {
-        fun create(origin: LightMemberOrigin?, delegate: PsiField, containingClass: KtLightClass): KtLightField {
-            when (delegate) {
-                is PsiEnumConstant -> {
-                    return KtLightEnumConstant(origin, { delegate }, containingClass, null)
-                }
-                else -> return KtLightFieldForDeclaration(origin, { delegate }, containingClass, null)
-            }
+        fun create(origin: LightMemberOrigin?, delegate: PsiField, containingClass: KtLightClass): KtLightField = when (delegate) {
+            is PsiEnumConstant -> KtLightEnumConstant(origin, { delegate }, containingClass, null)
+            else -> KtLightFieldForDeclaration(origin, { delegate }, containingClass, null)
         }
 
         fun lazy(
                 dummyDelegate: PsiField,
-                origin: LightMemberOriginForDeclaration,
+                origin: LightMemberOriginForDeclaration?,
                 containingClass: KtLightClass,
                 computeRealDelegate: () -> PsiField
         ): KtLightField {

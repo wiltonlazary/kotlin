@@ -17,12 +17,14 @@
 package org.jetbrains.kotlin.load.kotlin.incremental
 
 import org.jetbrains.kotlin.descriptors.PackagePartProvider
-import org.jetbrains.kotlin.load.kotlin.ModuleMapping
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCache
+import org.jetbrains.kotlin.load.kotlin.loadModuleMapping
+import org.jetbrains.kotlin.metadata.jvm.deserialization.ModuleMapping
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration
 import org.jetbrains.kotlin.storage.StorageManager
 
-internal class IncrementalPackagePartProvider(
+class IncrementalPackagePartProvider(
         private val parent: PackagePartProvider,
         incrementalCaches: List<IncrementalCache>,
         storageManager: StorageManager
@@ -31,7 +33,7 @@ internal class IncrementalPackagePartProvider(
 
     private val moduleMappings = storageManager.createLazyValue {
         incrementalCaches.map { cache ->
-            ModuleMapping.create(cache.getModuleMappingData(), "<incremental>", deserializationConfiguration)
+            ModuleMapping.loadModuleMapping(cache.getModuleMappingData(), "<incremental>", deserializationConfiguration)
         }
     }
 
@@ -42,4 +44,8 @@ internal class IncrementalPackagePartProvider(
 
     // TODO
     override fun findMetadataPackageParts(packageFqName: String): List<String> = TODO()
+
+    override fun getAnnotationsOnBinaryModule(moduleName: String): List<ClassId> {
+        return parent.getAnnotationsOnBinaryModule(moduleName)
+    }
 }

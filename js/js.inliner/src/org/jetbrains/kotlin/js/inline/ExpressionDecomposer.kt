@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,7 +63,9 @@ internal class ExpressionDecomposer private constructor(
             val decomposer = with (statement) {
                 val extractable = match(canBeExtractedByInliner)
                 val containsExtractable = withParentsOfNodes(extractable)
-                val nodesWithSideEffect = match { it !is JsLiteral.JsValueLiteral }
+                val nodesWithSideEffect = match {
+                    !(it is JsLiteral.JsValueLiteral || (it is JsExpression && it.sideEffects == SideEffectKind.PURE))
+                }
                 val containsNodeWithSideEffect = withParentsOfNodes(nodesWithSideEffect)
 
                 ExpressionDecomposer(containsExtractable, containsNodeWithSideEffect)
@@ -81,7 +83,7 @@ internal class ExpressionDecomposer private constructor(
 
         for (jsVar in vars) {
             if (jsVar in containsExtractable && prevVars.isNotEmpty()) {
-                addStatement(JsVars(prevVars, x.isMultiline))
+                addStatement(JsVars(prevVars, x.isMultiline).apply { source = prevVars.first().source })
                 prevVars = SmartList<JsVars.JsVar>()
             }
 
@@ -89,8 +91,11 @@ internal class ExpressionDecomposer private constructor(
             prevVars.add(jsVar)
         }
 
-        vars.clear()
-        vars.addAll(prevVars)
+        if (vars.size != prevVars.size) {
+            vars.clear()
+            vars.addAll(prevVars)
+            x.source = prevVars.first().source
+        }
         return false
     }
 
@@ -139,7 +144,7 @@ internal class ExpressionDecomposer private constructor(
             }
 
             body = additionalStatements.toStatement()
-            test = JsLiteral.TRUE
+            test = JsBooleanLiteral(true)
         }
     }
 
@@ -168,7 +173,7 @@ internal class ExpressionDecomposer private constructor(
             additionalStatements.toStatement()
         }
 
-        addStatement(JsIf(test, arg2Eval))
+        addStatement(JsIf(test, arg2Eval).also { it.source = source })
         ctx.replaceMe(tmp.nameRef)
     }
 
@@ -232,7 +237,7 @@ internal class ExpressionDecomposer private constructor(
         test = accept(test)
         if (then !in containsExtractable && otherwise !in containsExtractable) return
 
-        val tmp = Temporary()
+        val tmp = Temporary(sourceInfo = source)
         addStatement(tmp.variable)
 
         val thenBlock = withNewAdditionalStatements {
@@ -248,6 +253,7 @@ internal class ExpressionDecomposer private constructor(
         }
 
         val lazyEval = JsIf(test, thenBlock, elseBlock)
+        lazyEval.source = source
         lazyEval.synthetic = true
         addStatement(lazyEval)
         ctx.replaceMe(tmp.nameRef)
@@ -361,20 +367,23 @@ internal class ExpressionDecomposer private constructor(
         return tmp.nameRef
     }
 
-    private inner class Temporary(val value: JsExpression? = null) {
+    private inner class Temporary(val value: JsExpression? = null, val sourceInfo: Any? = null) {
         val name: JsName = JsScope.declareTemporary()
 
         val variable: JsVars = newVar(name, value).apply {
             synthetic = true
             name.staticRef = value
+            source = sourceInfo ?: value?.source
         }
 
         val nameRef: JsExpression
             get() = name.makeRef()
 
         fun assign(value: JsExpression): JsStatement {
-            val statement = JsExpressionStatement(assignment(nameRef, value)).apply { synthetic = true }
-            return statement
+            return JsExpressionStatement(assignment(nameRef, value)).apply {
+                synthetic = true
+                expression.source = sourceInfo ?: value.source
+            }
         }
     }
 
@@ -404,8 +413,8 @@ internal open class JsExpressionVisitor() : JsVisitorWithContextImpl() {
     override fun visit(x: JsCase, ctx: JsContext<JsNode>): Boolean = false
     override fun visit(x: JsDefault, ctx: JsContext<JsNode>): Boolean = false
     override fun visit(x: JsEmpty, ctx: JsContext<JsNode>): Boolean = false
-    override fun visit(x: JsLiteral.JsBooleanLiteral, ctx: JsContext<JsNode>): Boolean = false
-    override fun visit(x: JsLiteral.JsThisRef, ctx: JsContext<JsNode>): Boolean = false
+    override fun visit(x: JsBooleanLiteral, ctx: JsContext<JsNode>): Boolean = false
+    override fun visit(x: JsThisRef, ctx: JsContext<JsNode>): Boolean = false
     override fun visit(x: JsNullLiteral, ctx: JsContext<JsNode>): Boolean = false
     override fun visit(x: JsNumberLiteral, ctx: JsContext<JsNode>): Boolean = false
     override fun visit(x: JsRegExp, ctx: JsContext<JsNode>): Boolean = false

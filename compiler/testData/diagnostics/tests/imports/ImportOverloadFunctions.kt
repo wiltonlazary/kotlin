@@ -1,4 +1,5 @@
 // !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_VARIABLE
+// !WITH_NEW_INFERENCE
 // FILE: 1.kt
 package k
 
@@ -27,8 +28,8 @@ import k.all
 
 fun test() {
     <!INVISIBLE_MEMBER!>zero<!>()
-    <!NONE_APPLICABLE!>zero<!>(1)
-    <!NONE_APPLICABLE!>zero<!>("")
+    <!INVISIBLE_MEMBER!>zero<!>(1)
+    <!INVISIBLE_MEMBER!>zero<!>("")
 
     one()
     one(<!TOO_MANY_ARGUMENTS!>1<!>)

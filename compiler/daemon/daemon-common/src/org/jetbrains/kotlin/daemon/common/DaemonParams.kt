@@ -50,6 +50,7 @@ val COMPILE_DAEMON_FORCE_SHUTDOWN_DEFAULT_TIMEOUT_MS: Long = 10000L // 10 secs
 val COMPILE_DAEMON_TIMEOUT_INFINITE_MS: Long = 0L
 val COMPILE_DAEMON_IS_READY_MESSAGE = "Kotlin compile daemon is ready"
 
+val COMPILE_DAEMON_CUSTOM_RUN_FILES_PATH_FOR_TESTS: String = "kotlin.daemon.custom.run.files.path.for.tests"
 val COMPILE_DAEMON_DEFAULT_RUN_DIR_PATH: String get() =
     FileSystem.getRuntimeStateFilesPath("kotlin", "daemon")
 
@@ -225,8 +226,9 @@ data class DaemonOptions(
 
 // TODO: consider implementing generic approach to it or may be replace getters with ones returning default if necessary
 val DaemonOptions.runFilesPathOrDefault: String
-    get() = if (runFilesPath.isBlank()) COMPILE_DAEMON_DEFAULT_RUN_DIR_PATH else runFilesPath
-
+    get() = System.getProperty(COMPILE_DAEMON_CUSTOM_RUN_FILES_PATH_FOR_TESTS)
+            ?: runFilesPath.takeUnless { it.isBlank() }
+            ?: COMPILE_DAEMON_DEFAULT_RUN_DIR_PATH
 
 fun Iterable<String>.distinctStringsDigest(): ByteArray =
         MessageDigest.getInstance(CLASSPATH_ID_DIGEST)
@@ -257,15 +259,44 @@ data class CompilerId(
 
 fun isDaemonEnabled(): Boolean = System.getProperty(COMPILE_DAEMON_ENABLED_PROPERTY) != null
 
-
 fun configureDaemonJVMOptions(opts: DaemonJVMOptions,
                               vararg additionalParams: String,
                               inheritMemoryLimits: Boolean,
+                              inheritOtherJvmOptions: Boolean,
+                              inheritAdditionalProperties: Boolean
+): DaemonJVMOptions =
+        configureDaemonJVMOptions(opts, additionalParams.asIterable(), inheritMemoryLimits, inheritOtherJvmOptions, inheritAdditionalProperties)
+
+// TODO: expose sources for testability and test properly
+fun configureDaemonJVMOptions(opts: DaemonJVMOptions,
+                              additionalParams: Iterable<String>,
+                              inheritMemoryLimits: Boolean,
+                              inheritOtherJvmOptions: Boolean,
                               inheritAdditionalProperties: Boolean
 ): DaemonJVMOptions {
-    // note: sequence matters, explicit override in COMPILE_DAEMON_JVM_OPTIONS_PROPERTY should be done after inputArguments processing
-    if (inheritMemoryLimits) {
-        ManagementFactory.getRuntimeMXBean().inputArguments.filterExtractProps(opts.mappers, "-")
+    // note: sequence matters, e.g. explicit override in COMPILE_DAEMON_JVM_OPTIONS_PROPERTY should be done after inputArguments processing
+    if (inheritMemoryLimits || inheritOtherJvmOptions) {
+        val jvmArguments = ManagementFactory.getRuntimeMXBean().inputArguments
+        val targetOptions = if (inheritMemoryLimits) opts else DaemonJVMOptions()
+        val otherArgs = jvmArguments.filterExtractProps(targetOptions.mappers, prefix = "-")
+
+        if (inheritMemoryLimits && opts.maxMemory.isBlank()) {
+            val maxMemBytes = Runtime.getRuntime().maxMemory()
+            // rounding up
+            val maxMemMegabytes = maxMemBytes / (1024 * 1024) + if (maxMemBytes % (1024 * 1024) == 0L) 0 else 1
+            opts.maxMemory = "${maxMemMegabytes}m"
+        }
+
+        if (inheritOtherJvmOptions) {
+            opts.jvmParams.addAll(
+                    otherArgs.filterNot {
+                        it.startsWith("agentlib") ||
+                        it.startsWith("D" + COMPILE_DAEMON_LOG_PATH_PROPERTY) ||
+                        it.startsWith("D" + KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY) ||
+                        it.startsWith("D" + COMPILE_DAEMON_JVM_OPTIONS_PROPERTY) ||
+                        it.startsWith("D" + COMPILE_DAEMON_OPTIONS_PROPERTY)
+                    })
+        }
     }
     System.getProperty(COMPILE_DAEMON_JVM_OPTIONS_PROPERTY)?.let {
         opts.jvmParams.addAll(
@@ -275,7 +306,10 @@ fun configureDaemonJVMOptions(opts: DaemonJVMOptions,
                   .filterExtractProps(opts.mappers, "-", opts.restMapper))
     }
 
+    // assuming that from the conflicting options the last one is taken
+    // TODO: compare and override
     opts.jvmParams.addAll(additionalParams)
+
     if (inheritAdditionalProperties) {
         System.getProperty(COMPILE_DAEMON_LOG_PATH_PROPERTY)?.let { opts.jvmParams.add("D$COMPILE_DAEMON_LOG_PATH_PROPERTY=\"$it\"") }
         System.getProperty(KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY)?.let { opts.jvmParams.add("D$KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY") }
@@ -285,12 +319,14 @@ fun configureDaemonJVMOptions(opts: DaemonJVMOptions,
 
 
 fun configureDaemonJVMOptions(vararg additionalParams: String,
-                                     inheritMemoryLimits: Boolean,
-                                     inheritAdditionalProperties: Boolean
+                              inheritMemoryLimits: Boolean,
+                              inheritOtherJvmOptions: Boolean,
+                              inheritAdditionalProperties: Boolean
 ): DaemonJVMOptions =
         configureDaemonJVMOptions(DaemonJVMOptions(),
                                   additionalParams = *additionalParams,
                                   inheritMemoryLimits = inheritMemoryLimits,
+                                  inheritOtherJvmOptions = inheritOtherJvmOptions,
                                   inheritAdditionalProperties = inheritAdditionalProperties)
 
 

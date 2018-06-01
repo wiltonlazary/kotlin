@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1222
 package foo
 
 inline fun bar(f: () -> Int): Array<Int> = arrayOf(f())

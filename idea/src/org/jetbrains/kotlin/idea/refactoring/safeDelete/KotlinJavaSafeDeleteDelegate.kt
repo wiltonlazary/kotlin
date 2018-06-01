@@ -24,13 +24,12 @@ import com.intellij.refactoring.safeDelete.usageInfo.SafeDeleteReferenceSimpleDe
 import com.intellij.usageView.UsageInfo
 import org.jetbrains.kotlin.asJava.unwrapped
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.idea.references.KtReference
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.isAncestor
 import org.jetbrains.kotlin.psi.psiUtil.parameterIndex
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
-import org.jetbrains.kotlin.idea.caches.resolve.analyze
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
 
 class KotlinJavaSafeDeleteDelegate : JavaSafeDeleteDelegate {
     override fun createUsageInfoForParameter(
@@ -45,9 +44,7 @@ class KotlinJavaSafeDeleteDelegate : JavaSafeDeleteDelegate {
         val calleeExpression = callExpression.calleeExpression
         if (!(calleeExpression is KtReferenceExpression && calleeExpression.isAncestor(element))) return
 
-        val bindingContext = element.analyze()
-
-        val descriptor = bindingContext.get(BindingContext.REFERENCE_TARGET, calleeExpression) ?: return
+        val descriptor = calleeExpression.resolveToCall()?.resultingDescriptor ?: return
 
         val originalDeclaration = method.unwrapped
         if (originalDeclaration !is PsiMethod && originalDeclaration !is KtDeclaration) return
@@ -58,7 +55,7 @@ class KotlinJavaSafeDeleteDelegate : JavaSafeDeleteDelegate {
 
         val namedArguments = args.filter { arg -> arg is KtValueArgument && arg.getArgumentName()?.text == parameter.name }
         if (!namedArguments.isEmpty()) {
-            usages.add(SafeDeleteValueArgumentListUsageInfo(namedArguments.first(), parameter))
+            usages.add(SafeDeleteValueArgumentListUsageInfo(parameter, namedArguments.first()))
             return
         }
 
@@ -69,7 +66,7 @@ class KotlinJavaSafeDeleteDelegate : JavaSafeDeleteDelegate {
 
         val argCount = args.size
         if (parameterIndex < argCount) {
-            usages.add(SafeDeleteValueArgumentListUsageInfo((args[parameterIndex] as KtValueArgument), parameter))
+            usages.add(SafeDeleteValueArgumentListUsageInfo(parameter, args[parameterIndex] as KtValueArgument))
         } else {
             val lambdaArgs = callExpression.lambdaArguments
             val lambdaIndex = parameterIndex - argCount

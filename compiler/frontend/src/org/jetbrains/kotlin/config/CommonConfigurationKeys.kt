@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,9 @@
 
 package org.jetbrains.kotlin.config
 
+import org.jetbrains.kotlin.incremental.components.ExpectActualTracker
+import org.jetbrains.kotlin.incremental.components.LookupTracker
+
 object CommonConfigurationKeys {
     @JvmField
     val LANGUAGE_VERSION_SETTINGS = CompilerConfigurationKey<LanguageVersionSettings>("language version settings")
@@ -28,6 +31,12 @@ object CommonConfigurationKeys {
 
     @JvmField
     val REPORT_OUTPUT_FILES = CompilerConfigurationKey<Boolean>("report output files")
+
+    @JvmField
+    val LOOKUP_TRACKER = CompilerConfigurationKey.create<LookupTracker>("lookup tracker")
+
+    @JvmField
+    val EXPECT_ACTUAL_TRACKER = CompilerConfigurationKey.create<ExpectActualTracker>("expect actual tracker")
 }
 
 var CompilerConfiguration.languageVersionSettings: LanguageVersionSettings

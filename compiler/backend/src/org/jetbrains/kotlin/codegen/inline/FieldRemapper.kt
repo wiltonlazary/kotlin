@@ -35,7 +35,7 @@ open class FieldRemapper(
     protected open fun canProcess(fieldOwner: String, fieldName: String, isFolding: Boolean): Boolean {
         return fieldOwner == originalLambdaInternalName &&
                //don't process general field of anonymous objects
-               InlineCodegenUtil.isCapturedFieldName(fieldName)
+               isCapturedFieldName(fieldName)
     }
 
     fun foldFieldAccessChainIfNeeded(capturedFieldAccess: List<AbstractInsnNode>, node: MethodNode): AbstractInsnNode? =
@@ -44,8 +44,15 @@ open class FieldRemapper(
             else
                 foldFieldAccessChainIfNeeded(capturedFieldAccess, 1, node)
 
-    //TODO: seems that this method is redundant but it added from safety purposes before new milestone
-    open fun processNonAload0FieldAccessChains(isInlinedLambda: Boolean): Boolean = false
+    /**constructors could access outer not through
+     * ALOAD 0 //this
+     * GETFIELD this$0 //outer
+     * GETFIELD this$0 //outer of outer
+     * but directly through constructor parameter
+     * ALOAD X //outer
+     * GETFIELD this$0 //outer of outer
+    */
+    open fun shouldProcessNonAload0FieldAccessChains(): Boolean = false
 
     private fun foldFieldAccessChainIfNeeded(
             capturedFieldAccess: List<AbstractInsnNode>,
@@ -61,7 +68,7 @@ open class FieldRemapper(
 
         val insnNode = capturedFieldAccess[currentInstruction] as FieldInsnNode
         if (canProcess(insnNode.owner, insnNode.name, true)) {
-            insnNode.name = InlineCodegenUtil.CAPTURED_FIELD_FOLD_PREFIX + getFieldNameForFolding(insnNode)
+            insnNode.name = Companion.foldName(getFieldNameForFolding(insnNode))
             insnNode.opcode = Opcodes.GETSTATIC
 
             node.remove(InsnSequence(capturedFieldAccess[0], insnNode))
@@ -88,4 +95,9 @@ open class FieldRemapper(
 
     open fun getFieldForInline(node: FieldInsnNode, prefix: StackValue?): StackValue? =
             MethodInliner.findCapturedField(node, this).remapValue
+
+    companion object {
+        fun foldName(fieldName: String) =
+                CAPTURED_FIELD_FOLD_PREFIX + fieldName
+    }
 }

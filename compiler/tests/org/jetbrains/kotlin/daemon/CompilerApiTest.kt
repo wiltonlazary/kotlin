@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.daemon
 
+import com.intellij.openapi.application.ApplicationManager
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
@@ -29,6 +30,7 @@ import org.jetbrains.kotlin.daemon.common.*
 import org.jetbrains.kotlin.integration.KotlinIntegrationTestBase
 import org.jetbrains.kotlin.scripts.captureOut
 import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.testFramework.KtUsefulTestCase
 import org.junit.Assert
 import java.io.File
 import java.net.URLClassLoader
@@ -45,15 +47,21 @@ class CompilerApiTest : KotlinIntegrationTestBase() {
     val compilerId by lazy(LazyThreadSafetyMode.NONE) { CompilerId.makeCompilerId(compilerClassPath) }
 
     private fun compileLocally(messageCollector: TestMessageCollector, vararg args: String): Pair<Int, Collection<OutputMessageUtil.Output>> {
-        val code = K2JVMCompiler().exec(messageCollector,
-                                        Services.EMPTY,
-                                        K2JVMCompilerArguments().apply { K2JVMCompiler().parseArguments(args, this) }).code
-        val outputs = messageCollector.messages.filter { it.severity == CompilerMessageSeverity.OUTPUT }.mapNotNull {
-            OutputMessageUtil.parseOutputMessage(it.message)?.let { outs ->
-                outs.outputFile?.let { OutputMessageUtil.Output(outs.sourceFiles, it) }
+        val application = ApplicationManager.getApplication()
+        try {
+            val code = K2JVMCompiler().exec(messageCollector,
+                                            Services.EMPTY,
+                                            K2JVMCompilerArguments().apply { K2JVMCompiler().parseArguments(args, this) }).code
+            val outputs = messageCollector.messages.filter { it.severity == CompilerMessageSeverity.OUTPUT }.mapNotNull {
+                OutputMessageUtil.parseOutputMessage(it.message)?.let { outs ->
+                    outs.outputFile?.let { OutputMessageUtil.Output(outs.sourceFiles, it) }
+                }
             }
+            return code to outputs
         }
-        return code to outputs
+        finally {
+            KtUsefulTestCase.resetApplicationToNull(application)
+        }
     }
 
     private fun compileOnDaemon(clientAliveFile: File, compilerId: CompilerId, daemonJVMOptions: DaemonJVMOptions, daemonOptions: DaemonOptions,
@@ -92,20 +100,6 @@ class CompilerApiTest : KotlinIntegrationTestBase() {
         }
     }
 
-    fun testScriptResolverEnvironmentArgsParsing() {
-
-        fun args(body: K2JVMCompilerArguments.() -> Unit): K2JVMCompilerArguments =
-                K2JVMCompilerArguments().apply(body)
-
-        val longStr = (1..100).joinToString { """\" $it aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \\""" }
-        val unescapeRe = """\\(["\\])""".toRegex()
-        val messageCollector = TestMessageCollector()
-        Assert.assertEquals(hashMapOf("abc" to "def", "11" to "ab cd \\ \"", "long" to unescapeRe.replace(longStr, "\$1")),
-                            K2JVMCompiler.createScriptResolverEnvironment(
-                                args { scriptResolverEnvironment = arrayOf("abc=def", """11="ab cd \\ \""""", "long=\"$longStr\"") },
-                                messageCollector))
-    }
-
     fun testHelloAppLocal() {
         val messageCollector = TestMessageCollector()
         val jar = tmpdir.absolutePath + File.separator + "hello.jar"
@@ -123,12 +117,10 @@ class CompilerApiTest : KotlinIntegrationTestBase() {
                                               verbose = true,
                                               reportPerf = true)
 
-            KotlinCompilerClient.shutdownCompileService(compilerId, daemonOptions)
-
             val logFile = createTempFile("kotlin-daemon-test.", ".log")
 
             val daemonJVMOptions = configureDaemonJVMOptions("D$COMPILE_DAEMON_LOG_PATH_PROPERTY=\"${logFile.loggerCompatiblePath}\"",
-                                                             inheritMemoryLimits = false, inheritAdditionalProperties = false)
+                                                             inheritMemoryLimits = false, inheritOtherJvmOptions = false, inheritAdditionalProperties = false)
             val jar = tmpdir.absolutePath + File.separator + "hello.jar"
 
             try {
@@ -164,12 +156,10 @@ class CompilerApiTest : KotlinIntegrationTestBase() {
                                               verbose = true,
                                               reportPerf = true)
 
-            KotlinCompilerClient.shutdownCompileService(compilerId, daemonOptions)
-
             val logFile = createTempFile("kotlin-daemon-test.", ".log")
 
             val daemonJVMOptions = configureDaemonJVMOptions("D$COMPILE_DAEMON_LOG_PATH_PROPERTY=\"${logFile.loggerCompatiblePath}\"",
-                                                             inheritMemoryLimits = false, inheritAdditionalProperties = false)
+                                                             inheritMemoryLimits = false, inheritOtherJvmOptions = false, inheritAdditionalProperties = false)
             try {
                 val (code, outputs) = compileOnDaemon(
                         flagFile, compilerId, daemonJVMOptions, daemonOptions, TestMessageCollector(),
@@ -202,4 +192,16 @@ class TestMessageCollector : MessageCollector {
     }
 
     override fun hasErrors(): Boolean = messages.any { it.severity == CompilerMessageSeverity.EXCEPTION || it.severity == CompilerMessageSeverity.ERROR }
+
+    override fun toString(): String {
+        return messages.joinToString("\n") { "${it.severity}: ${it.message}${it.location?.let{" at $it"} ?: ""}" }
+    }
 }
+
+fun TestMessageCollector.assertHasMessage(msg: String, desiredSeverity: CompilerMessageSeverity? = null) {
+    assert(messages.any { it.message.contains(msg) && (desiredSeverity == null || it.severity == desiredSeverity) }) {
+        "Expecting message \"$msg\" with severity ${desiredSeverity?.toString() ?: "Any"}, actual:\n" +
+        messages.joinToString("\n") { it.severity.toString() + ": " + it.message }
+    }
+}
+

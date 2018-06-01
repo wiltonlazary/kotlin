@@ -65,16 +65,17 @@ class ConvertTextJavaCopyPasteProcessor : CopyPastePostProcessor<TextBlockTransf
     }
 
     override fun collectTransferableData(file: PsiFile, editor: Editor, startOffsets: IntArray, endOffsets: IntArray): List<TextBlockTransferableData> {
+        if (file is KtFile) return listOf(CopiedKotlinCode(file.text, startOffsets, endOffsets))
         return emptyList()
     }
 
     override fun extractTransferableData(content: Transferable): List<TextBlockTransferableData> {
         try {
             if (content.isDataFlavorSupported(DataFlavor.stringFlavor)) {
-                // check if it's copied from within IDEA
-                if (!Companion.convertOnCopyInsideIDE && content.transferDataFlavors.any { TextBlockTransferableData::class.java.isAssignableFrom(it.representationClass) }) {
-                    return emptyList()
-                }
+
+                if (content.isDataFlavorSupported(CopiedKotlinCode.DATA_FLAVOR) ||
+                    /* Handled by ConvertJavaCopyPasteProcessor */
+                    content.isDataFlavorSupported(CopiedJavaCode.DATA_FLAVOR)) return emptyList()
 
                 val text = content.getTransferData(DataFlavor.stringFlavor) as String
                 return listOf(MyTransferableData(text))
@@ -110,7 +111,7 @@ class ConvertTextJavaCopyPasteProcessor : CopyPastePostProcessor<TextBlockTransf
 
         val convertedText = dataForConversion.convertCodeToKotlin(project).text
 
-        runWriteAction {
+        val newBounds = runWriteAction {
 
             val importsInsertOffset = targetFile.importList?.endOffset ?: 0
             if (targetFile.importDirectives.isEmpty() && importsInsertOffset > 0)
@@ -124,14 +125,13 @@ class ConvertTextJavaCopyPasteProcessor : CopyPastePostProcessor<TextBlockTransf
             val endOffsetAfterCopy = startOffset + convertedText.length
             editor.caretModel.moveToOffset(endOffsetAfterCopy)
 
-            val newBounds = TextRange(startOffset, startOffset + convertedText.length)
-
-            psiDocumentManager.commitAllDocuments()
-
-            AfterConversionPass(project, J2kPostProcessor(formatCode = true)).run(targetFile, newBounds)
-
-            conversionPerformed = true
+            TextRange(startOffset, startOffset + convertedText.length)
         }
+
+        psiDocumentManager.commitAllDocuments()
+        AfterConversionPass(project, J2kPostProcessor(formatCode = true)).run(targetFile, newBounds)
+
+        conversionPerformed = true
     }
 
     private fun DataForConversion.convertCodeToKotlin(project: Project): ConversionResult {
@@ -261,7 +261,7 @@ class ConvertTextJavaCopyPasteProcessor : CopyPastePostProcessor<TextBlockTransf
             }
         }
 
-        val copiedJavaCode = when (context) {
+        return when (context) {
             JavaContext.TOP_LEVEL -> createCopiedJavaCode(prefix, "$", text)
 
             JavaContext.CLASS_BODY -> createCopiedJavaCode(prefix, "$classDef {\n$\n}", text)
@@ -270,8 +270,6 @@ class ConvertTextJavaCopyPasteProcessor : CopyPastePostProcessor<TextBlockTransf
 
             JavaContext.EXPRESSION -> createCopiedJavaCode(prefix, "$classDef {\nObject field = $\n}", text)
         }
-
-        return copiedJavaCode
     }
 
     private fun createCopiedJavaCode(prefix: String, templateWithoutPrefix: String, text: String): CopiedJavaCode {
@@ -284,6 +282,5 @@ class ConvertTextJavaCopyPasteProcessor : CopyPastePostProcessor<TextBlockTransf
 
     companion object {
         @TestOnly var conversionPerformed: Boolean = false
-        @TestOnly var convertOnCopyInsideIDE: Boolean = false
     }
 }

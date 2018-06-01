@@ -25,6 +25,7 @@ import com.intellij.usageView.UsageViewShortNameLocation
 import com.intellij.xml.breadcrumbs.BreadcrumbsInfoProvider
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.idea.KotlinLanguage
+import org.jetbrains.kotlin.idea.intentions.branchedTransformations.isElseIf
 import org.jetbrains.kotlin.idea.intentions.loopToCallChain.unwrapIfLabeled
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getCallNameExpression
@@ -364,12 +365,12 @@ class KotlinBreadcrumbsInfoProvider : BreadcrumbsInfoProvider() {
                     val condition = conditions.firstOrNull() ?: return "->"
                     val firstConditionText = condition.buildText(kind)
 
-                    if (conditions.size == 1) {
-                        return firstConditionText + " ->"
+                    return if (conditions.size == 1) {
+                        firstConditionText + " ->"
                     }
                     else {
                         //TODO: show all conditions for tooltip
-                        return (if (firstConditionText.endsWith(ellipsis)) firstConditionText else firstConditionText + ",$ellipsis") + " ->"
+                        (if (firstConditionText.endsWith(ellipsis)) firstConditionText else firstConditionText + ",$ellipsis") + " ->"
                     }
                 }
             }
@@ -433,12 +434,12 @@ class KotlinBreadcrumbsInfoProvider : BreadcrumbsInfoProvider() {
 
     override fun getParent(e: PsiElement): PsiElement? {
         val node = e.node ?: return null
-        when (node.elementType) {
+        return when (node.elementType) {
             KtNodeTypes.PROPERTY_ACCESSOR ->
-                return e.parent.parent
+                e.parent.parent
 
             else ->
-                return e.parent
+                e.parent
         }
     }
 
@@ -468,8 +469,6 @@ class KotlinBreadcrumbsInfoProvider : BreadcrumbsInfoProvider() {
         }
 
         val ellipsis = "${Typography.ellipsis}"
-
-        fun KtIfExpression.isElseIf() = parent.node.elementType == KtNodeTypes.ELSE
 
         fun KtContainerNode.bodyOwner(): KtExpression? {
             return if (node.elementType == KtNodeTypes.BODY) parent as KtExpression else null

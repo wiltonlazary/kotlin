@@ -113,9 +113,9 @@ object LabelResolver {
     }
 
     private fun resolveNamedLabel(
-            labelName: Name,
-            labelExpression: KtSimpleNameExpression,
-            trace: BindingTrace
+        labelName: Name,
+        labelExpression: KtSimpleNameExpression,
+        trace: BindingTrace
     ): KtElement? {
         val list = getElementsByLabelName(labelName, labelExpression)
         if (list.isEmpty()) return null
@@ -128,60 +128,60 @@ object LabelResolver {
     }
 
     fun resolveThisOrSuperLabel(
-            expression: KtInstanceExpressionWithLabel,
-            context: ResolutionContext<*>,
-            labelName: Name
+        expression: KtInstanceExpressionWithLabel,
+        context: ResolutionContext<*>,
+        labelName: Name
     ): LabeledReceiverResolutionResult {
         val referenceExpression = expression.instanceReference
         val targetLabel = expression.getTargetLabel() ?: error(expression)
 
         val declarationsByLabel = context.scope.getDeclarationsByLabel(labelName)
         val size = declarationsByLabel.size
-        if (size == 1) {
-            val declarationDescriptor = declarationsByLabel.single()
-            val thisReceiver = when (declarationDescriptor) {
-                is ClassDescriptor -> declarationDescriptor.thisAsReceiverParameter
-                is FunctionDescriptor -> declarationDescriptor.extensionReceiverParameter
-                is PropertyDescriptor -> declarationDescriptor.extensionReceiverParameter
-                else -> throw UnsupportedOperationException("Unsupported descriptor: " + declarationDescriptor) // TODO
-            }
-
-            val element = DescriptorToSourceUtils.descriptorToDeclaration(declarationDescriptor) ?: error("No PSI element for descriptor: " + declarationDescriptor)
-            context.trace.record(LABEL_TARGET, targetLabel, element)
-            context.trace.record(REFERENCE_TARGET, referenceExpression, declarationDescriptor)
-
-            if (declarationDescriptor is ClassDescriptor) {
-                if (!DescriptorResolver.checkHasOuterClassInstance(context.scope, context.trace, targetLabel, declarationDescriptor)) {
-                    return LabeledReceiverResolutionResult.labelResolutionFailed()
+        when (size) {
+            1 -> {
+                val declarationDescriptor = declarationsByLabel.single()
+                val thisReceiver = when (declarationDescriptor) {
+                    is ClassDescriptor -> declarationDescriptor.thisAsReceiverParameter
+                    is FunctionDescriptor -> declarationDescriptor.extensionReceiverParameter
+                    is PropertyDescriptor -> declarationDescriptor.extensionReceiverParameter
+                    else -> throw UnsupportedOperationException("Unsupported descriptor: " + declarationDescriptor) // TODO
                 }
-            }
 
-            return LabeledReceiverResolutionResult.labelResolutionSuccess(thisReceiver)
-        }
-        else if (size == 0) {
-            val element = resolveNamedLabel(labelName, targetLabel, context.trace)
-            val declarationDescriptor = context.trace.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, element]
-            if (declarationDescriptor is FunctionDescriptor) {
-                val thisReceiver = declarationDescriptor.extensionReceiverParameter
-                if (thisReceiver != null) {
-                    context.trace.record(LABEL_TARGET, targetLabel, element)
-                    context.trace.record(REFERENCE_TARGET, referenceExpression, declarationDescriptor)
+                val element = DescriptorToSourceUtils.descriptorToDeclaration(declarationDescriptor)
+                        ?: error("No PSI element for descriptor: " + declarationDescriptor)
+                context.trace.record(LABEL_TARGET, targetLabel, element)
+                context.trace.record(REFERENCE_TARGET, referenceExpression, declarationDescriptor)
+
+                if (declarationDescriptor is ClassDescriptor) {
+                    if (!DescriptorResolver.checkHasOuterClassInstance(context.scope, context.trace, targetLabel, declarationDescriptor)) {
+                        return LabeledReceiverResolutionResult.labelResolutionFailed()
+                    }
                 }
+
                 return LabeledReceiverResolutionResult.labelResolutionSuccess(thisReceiver)
             }
-            else {
-                context.trace.report(UNRESOLVED_REFERENCE.on(targetLabel, targetLabel))
+            0 -> {
+                val element = resolveNamedLabel(labelName, targetLabel, context.trace)
+                val declarationDescriptor = context.trace.bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, element]
+                if (declarationDescriptor is FunctionDescriptor) {
+                    val thisReceiver = declarationDescriptor.extensionReceiverParameter
+                    if (thisReceiver != null) {
+                        context.trace.record(LABEL_TARGET, targetLabel, element)
+                        context.trace.record(REFERENCE_TARGET, referenceExpression, declarationDescriptor)
+                    }
+                    return LabeledReceiverResolutionResult.labelResolutionSuccess(thisReceiver)
+                } else {
+                    context.trace.report(UNRESOLVED_REFERENCE.on(targetLabel, targetLabel))
+                }
             }
-        }
-        else {
-            BindingContextUtils.reportAmbiguousLabel(context.trace, targetLabel, declarationsByLabel)
+            else -> BindingContextUtils.reportAmbiguousLabel(context.trace, targetLabel, declarationsByLabel)
         }
         return LabeledReceiverResolutionResult.labelResolutionFailed()
     }
 
     class LabeledReceiverResolutionResult private constructor(
-            val code: LabeledReceiverResolutionResult.Code,
-            private val receiverParameterDescriptor: ReceiverParameterDescriptor?
+        val code: LabeledReceiverResolutionResult.Code,
+        private val receiverParameterDescriptor: ReceiverParameterDescriptor?
     ) {
         enum class Code {
             LABEL_RESOLUTION_ERROR,

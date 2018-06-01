@@ -21,9 +21,9 @@ import org.jetbrains.kotlin.psi.KtElement
 import java.util.*
 
 class SubroutineExitInstruction(
-        val subroutine: KtElement,
-        blockScope: BlockScope,
-        val isError: Boolean
+    val subroutine: KtElement,
+    blockScope: BlockScope,
+    val isError: Boolean
 ) : InstructionImpl(blockScope) {
     private var _sink: SubroutineSinkInstruction? = null
 
@@ -40,12 +40,10 @@ class SubroutineExitInstruction(
         visitor.visitSubroutineExit(this)
     }
 
-    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R {
-        return visitor.visitSubroutineExit(this)
-    }
+    override fun <R> accept(visitor: InstructionVisitorWithResult<R>): R = visitor.visitSubroutineExit(this)
 
     override fun toString(): String = if (isError) "<ERROR>" else "<END>"
 
     override fun createCopy(): InstructionImpl =
-            SubroutineExitInstruction(subroutine, blockScope, isError)
+        SubroutineExitInstruction(subroutine, blockScope, isError)
 }

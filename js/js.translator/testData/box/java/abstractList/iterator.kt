@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1171
 package foo
 
 class MyList<T>(vararg val data: T) : AbstractList<T>() {

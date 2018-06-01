@@ -18,9 +18,11 @@ package org.jetbrains.kotlin.descriptors;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.types.TypeSubstitution;
 
 import java.util.Collection;
+import java.util.List;
 
 public interface CallableMemberDescriptor extends CallableDescriptor, MemberDescriptor {
     @NotNull
@@ -71,6 +73,9 @@ public interface CallableMemberDescriptor extends CallableDescriptor, MemberDesc
         CopyBuilder<D> setKind(@NotNull Kind kind);
 
         @NotNull
+        CopyBuilder<D> setTypeParameters(@NotNull List<TypeParameterDescriptor> parameters);
+
+        @NotNull
         CopyBuilder<D> setDispatchReceiverParameter(@Nullable ReceiverParameterDescriptor dispatchReceiverParameter);
 
         @NotNull
@@ -78,6 +83,12 @@ public interface CallableMemberDescriptor extends CallableDescriptor, MemberDesc
 
         @NotNull
         CopyBuilder<D> setCopyOverrides(boolean copyOverrides);
+
+        @NotNull
+        CopyBuilder<D> setName(@NotNull Name name);
+
+        @NotNull
+        CopyBuilder<D> setOriginal(@Nullable CallableMemberDescriptor original);
 
         @Nullable
         D build();

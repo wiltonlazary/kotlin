@@ -18,13 +18,12 @@ package org.jetbrains.kotlin.javac
 
 import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.StandardFileSystems
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.CommonClassNames
+import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.search.EverythingGlobalScope
 import com.intellij.psi.search.GlobalSearchScope
 import com.sun.source.tree.CompilationUnitTree
-import com.sun.source.util.TreePath
-import com.sun.tools.javac.api.JavacTrees
 import com.sun.tools.javac.code.Flags
 import com.sun.tools.javac.code.Symbol
 import com.sun.tools.javac.code.Symtab
@@ -35,29 +34,20 @@ import com.sun.tools.javac.model.JavacElements
 import com.sun.tools.javac.model.JavacTypes
 import com.sun.tools.javac.tree.JCTree
 import com.sun.tools.javac.util.Context
-import com.sun.tools.javac.util.List as JavacList
+import com.sun.tools.javac.util.Log
 import com.sun.tools.javac.util.Names
 import com.sun.tools.javac.util.Options
-import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
-import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
-import org.jetbrains.kotlin.cli.jvm.config.jvmClasspathRoots
-import org.jetbrains.kotlin.config.JVMConfigurationKeys
+import org.jetbrains.kotlin.javac.resolve.ClassifierResolver
+import org.jetbrains.kotlin.javac.resolve.IdentifierResolver
+import org.jetbrains.kotlin.javac.resolve.KotlinClassifiersCache
+import org.jetbrains.kotlin.javac.resolve.classId
 import org.jetbrains.kotlin.javac.wrappers.symbols.SymbolBasedClass
 import org.jetbrains.kotlin.javac.wrappers.symbols.SymbolBasedClassifierType
 import org.jetbrains.kotlin.javac.wrappers.symbols.SymbolBasedPackage
-import org.jetbrains.kotlin.load.java.structure.JavaClass
-import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.name.isSubpackageOf
-import org.jetbrains.kotlin.name.parentOrNull
+import org.jetbrains.kotlin.javac.wrappers.trees.*
+import org.jetbrains.kotlin.load.java.structure.*
+import org.jetbrains.kotlin.name.*
 import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.javac.wrappers.trees.TreeBasedClass
-import org.jetbrains.kotlin.javac.wrappers.trees.TreeBasedPackage
-import org.jetbrains.kotlin.javac.wrappers.trees.TreePathResolverCache
-import org.jetbrains.kotlin.javac.wrappers.trees.computeClassId
-import org.jetbrains.kotlin.load.java.structure.JavaClassifier
-import org.jetbrains.kotlin.load.java.structure.JavaPackage
-import org.jetbrains.kotlin.name.ClassId
 import java.io.Closeable
 import java.io.File
 import javax.lang.model.element.Element
@@ -65,40 +55,49 @@ import javax.lang.model.type.TypeMirror
 import javax.tools.JavaFileManager
 import javax.tools.JavaFileObject
 import javax.tools.StandardLocation
+import com.sun.tools.javac.util.List as JavacList
 
-class JavacWrapper(javaFiles: Collection<File>,
-                   kotlinFiles: Collection<KtFile>,
-                   arguments: Array<String>?,
-                   private val environment: KotlinCoreEnvironment) : Closeable {
+class JavacWrapper(
+        javaFiles: Collection<File>,
+        kotlinFiles: Collection<KtFile>,
+        arguments: Array<String>?,
+        jvmClasspathRoots: List<File>,
+        bootClasspath: List<File>?,
+        sourcePath: List<File>?,
+        val kotlinResolver: JavacWrapperKotlinResolver,
+        private val compileJava: Boolean,
+        private val outputDirectory: File?,
+        private val context: Context
+) : Closeable {
+    private val localFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL)!!
+    private val jarFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.JAR_PROTOCOL)!!
 
     companion object {
         fun getInstance(project: Project): JavacWrapper = ServiceManager.getService(project, JavacWrapper::class.java)
     }
 
-    private fun createCommonClassifierType(fqName: String) =
-            findClassInSymbols(fqName)?.let {
+    private fun createCommonClassifierType(classId: ClassId) =
+            findClassInSymbols(classId)?.let {
                 SymbolBasedClassifierType(it.element.asType(), this)
             }
 
     val JAVA_LANG_OBJECT by lazy {
-        createCommonClassifierType(CommonClassNames.JAVA_LANG_OBJECT)
+        createCommonClassifierType(classId("java.lang", "Object"))
     }
 
     val JAVA_LANG_ENUM by lazy {
-        createCommonClassifierType(CommonClassNames.JAVA_LANG_ENUM)
+        findClassInSymbols(classId("java.lang", "Enum"))
     }
 
     val JAVA_LANG_ANNOTATION_ANNOTATION by lazy {
-        createCommonClassifierType(CommonClassNames.JAVA_LANG_ANNOTATION_ANNOTATION)
+        createCommonClassifierType(classId("java.lang.annotation", "Annotation"))
     }
 
-    private val messageCollector = environment.configuration[CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY]
-
-    private val context = Context()
-
     init {
-        messageCollector?.let { JavacLogger.preRegister(context, it) }
-        arguments?.toList()?.let { JavacOptionsMapper.map(Options.instance(context), it) }
+        Options.instance(context).let { options ->
+            JavacOptionsMapper.setUTF8Encoding(options)
+            arguments?.toList()?.let { JavacOptionsMapper.map(options, it) }
+        }
     }
 
     private val javac = object : JavaCompiler(context) {
@@ -108,56 +107,68 @@ class JavacWrapper(javaFiles: Collection<File>,
     private val fileManager = context[JavaFileManager::class.java] as JavacFileManager
 
     init {
+        // keep javadoc comments
+        javac.keepComments = true
         // use rt.jar instead of lib/ct.sym
         fileManager.setSymbolFileEnabled(false)
-        fileManager.setLocation(StandardLocation.CLASS_PATH, environment.configuration.jvmClasspathRoots)
+        bootClasspath?.let {
+            val cp = fileManager.getLocation(StandardLocation.PLATFORM_CLASS_PATH) + jvmClasspathRoots
+            fileManager.setLocation(StandardLocation.PLATFORM_CLASS_PATH, it)
+            fileManager.setLocation(StandardLocation.CLASS_PATH, cp)
+        } ?: fileManager.setLocation(StandardLocation.CLASS_PATH, jvmClasspathRoots)
+        sourcePath?.let {
+            fileManager.setLocation(StandardLocation.SOURCE_PATH, sourcePath)
+        }
     }
 
     private val names = Names.instance(context)
     private val symbols = Symtab.instance(context)
-    private val trees = JavacTrees.instance(context)
     private val elements = JavacElements.instance(context)
     private val types = JavacTypes.instance(context)
     private val fileObjects = fileManager.getJavaFileObjectsFromFiles(javaFiles).toJavacList()
     private val compilationUnits: JavacList<JCTree.JCCompilationUnit> = fileObjects.map(javac::parse).toJavacList()
 
-    private val javaClasses = compilationUnits
-            .flatMap { unit ->
-                unit.typeDecls.flatMap { classDecl ->
-                    TreeBasedClass(classDecl as JCTree.JCClassDecl,
-                                   trees.getPath(unit, classDecl),
-                                   this,
-                                   unit.sourceFile).withInnerClasses()
-                }
-            }
-            .associateBy(JavaClass::fqName)
-
-    private val javaClassesAssociatedByClassId =
-            javaClasses.values.associateBy { it.computeClassId() }
+    private val treeBasedJavaClasses = compilationUnits.flatMap { unit ->
+        unit.typeDecls.map { classDeclaration ->
+            val packageName = unit.packageName?.toString() ?: ""
+            val className = (classDeclaration as JCTree.JCClassDecl).simpleName.toString()
+            val classId = classId(packageName, className)
+            classId to TreeBasedClass(classDeclaration, unit, this, classId, null)
+        }
+    }.toMap()
 
     private val javaPackages = compilationUnits
-            .mapNotNullTo(hashSetOf()) { unit ->
+            .mapTo(hashSetOf<TreeBasedPackage>()) { unit ->
                 unit.packageName?.toString()?.let { packageName ->
-                    TreeBasedPackage(packageName, this, unit.sourcefile)
-                }
+                    TreeBasedPackage(packageName, this, unit)
+                } ?: TreeBasedPackage("<root>", this, unit)
             }
             .associateBy(TreeBasedPackage::fqName)
 
-    private val kotlinClassifiersCache = KotlinClassifiersCache(if (javaFiles.isNotEmpty()) kotlinFiles else emptyList(), this)
-    private val treePathResolverCache = TreePathResolverCache(this)
-    private val symbolBasedClassesCache = hashMapOf<String, SymbolBasedClass?>()
+    private val packageSourceAnnotations = compilationUnits
+            .filter {
+                it.sourceFile.isNameCompatible("package-info", JavaFileObject.Kind.SOURCE) &&
+                it.packageName != null
+            }.associateBy({ FqName(it.packageName!!.toString()) }) { compilationUnit ->
+        compilationUnit.packageAnnotations
+    }
+
+    private val classifierResolver = ClassifierResolver(this)
+    private val identifierResolver = IdentifierResolver(this)
+    private val kotlinClassifiersCache by lazy { KotlinClassifiersCache(if (javaFiles.isNotEmpty()) kotlinFiles else emptyList(), this) }
     private val symbolBasedPackagesCache = hashMapOf<String, SymbolBasedPackage?>()
+    private val symbolBasedClassesCache = hashMapOf<ClassId, SymbolBasedClass>()
 
     fun compile(outDir: File? = null): Boolean = with(javac) {
+        if (!compileJava) return true
         if (errorCount() > 0) return false
 
         val javaFilesNumber = fileObjects.length()
         if (javaFilesNumber == 0) return true
 
         fileManager.setClassPathForCompilation(outDir)
-        messageCollector?.report(CompilerMessageSeverity.INFO,
-                                 "Compiling $javaFilesNumber Java source files" +
-                                 " to [${fileManager.getLocation(StandardLocation.CLASS_OUTPUT)?.firstOrNull()?.path}]")
+        context.get(Log.outKey)?.println("Compiling $javaFilesNumber Java source files" +
+                                         " to [${fileManager.getLocation(StandardLocation.CLASS_OUTPUT)?.firstOrNull()?.path}]")
         compile(fileObjects)
         errorCount() == 0
     }
@@ -167,25 +178,32 @@ class JavacWrapper(javaFiles: Collection<File>,
         javac.close()
     }
 
-    fun findClass(fqName: FqName, scope: GlobalSearchScope = EverythingGlobalScope()): JavaClass? {
-        javaClasses[fqName]?.let { javaClass ->
-            javaClass.virtualFile?.let { if (it in scope) return javaClass }
-        }
-
-        findClassInSymbols(fqName.asString())?.let { javaClass ->
-            javaClass.virtualFile?.let { if (it in scope) return javaClass }
-        }
-
-        return null
-    }
-
     fun findClass(classId: ClassId, scope: GlobalSearchScope = EverythingGlobalScope()): JavaClass? {
-        javaClassesAssociatedByClassId[classId]?.let { javaClass ->
+        if (classId.isNestedClass) {
+            val pathSegments = classId.relativeClassName.pathSegments().map { it.asString() }
+            val outerClassId = ClassId(classId.packageFqName, Name.identifier(pathSegments.first()))
+            var outerClass = findClass(outerClassId, scope) ?: return null
+
+            pathSegments.drop(1).forEach {
+                outerClass = outerClass.findInnerClass(Name.identifier(it)) ?: return null
+            }
+
+            return outerClass
+        }
+
+        treeBasedJavaClasses[classId]?.let { javaClass ->
             javaClass.virtualFile?.let { if (it in scope) return javaClass }
+        }
+
+        if (symbolBasedClassesCache.containsKey(classId)) {
+            val javaClass = symbolBasedClassesCache[classId]
+            javaClass?.virtualFile?.let { file ->
+                if (file in scope) return javaClass
+            }
         }
 
         findPackageInSymbols(classId.packageFqName.asString())?.let {
-            (it.element as Symbol.PackageSymbol).findClass(classId.relativeClassName.asString())?.let { javaClass ->
+            (it.element as Symbol.PackageSymbol).findClass(classId)?.let { javaClass ->
                 javaClass.virtualFile?.let { file ->
                     if (file in scope) return javaClass
                 }
@@ -196,7 +214,7 @@ class JavacWrapper(javaFiles: Collection<File>,
         return null
     }
 
-    fun findPackage(fqName: FqName, scope: GlobalSearchScope): JavaPackage? {
+    fun findPackage(fqName: FqName, scope: GlobalSearchScope = EverythingGlobalScope()): JavaPackage? {
         javaPackages[fqName]?.let { javaPackage ->
             javaPackage.virtualFile?.let { file ->
                 if (file in scope) return javaPackage
@@ -214,19 +232,23 @@ class JavacWrapper(javaFiles: Collection<File>,
                     .filterKeys { it.isSubpackageOf(fqName) && it != fqName }
                     .map { it.value }
 
+    fun getPackageAnnotationsFromSources(fqName: FqName): List<JCTree.JCAnnotation> =
+            packageSourceAnnotations[fqName] ?: emptyList()
+
     fun findClassesFromPackage(fqName: FqName): List<JavaClass> =
-            javaClasses
-                    .filterKeys { it?.parentOrNull() == fqName }
-                    .flatMap { it.value.withInnerClasses() } +
+            treeBasedJavaClasses
+                    .filterKeys { it.packageFqName == fqName }
+                    .map { treeBasedJavaClasses[it.key]!! } +
             elements.getPackageElement(fqName.asString())
                     ?.members()
                     ?.elements
                     ?.filterIsInstance(Symbol.ClassSymbol::class.java)
-                    ?.map { SymbolBasedClass(it, this, it.classfile) }
+                    ?.map { SymbolBasedClass(it, this, null, it.classfile) }
                     .orEmpty()
 
     fun knownClassNamesInPackage(fqName: FqName): Set<String> =
-            javaClasses.filterKeys { it?.parentOrNull() == fqName }
+            treeBasedJavaClasses
+                    .filterKeys { it.packageFqName == fqName }
                     .mapTo(hashSetOf()) { it.value.name.asString() } +
             elements.getPackageElement(fqName.asString())
                     ?.members_field
@@ -235,41 +257,46 @@ class JavacWrapper(javaFiles: Collection<File>,
                     ?.map { it.name.toString() }
                     .orEmpty()
 
-    fun getTreePath(tree: JCTree, compilationUnit: CompilationUnitTree): TreePath =
-            trees.getPath(compilationUnit, tree)
-
-    fun getKotlinClassifier(fqName: FqName): JavaClass? =
-            kotlinClassifiersCache.getKotlinClassifier(fqName)
+    fun getKotlinClassifier(classId: ClassId): JavaClass? =
+            kotlinClassifiersCache.getKotlinClassifier(classId)
 
     fun isDeprecated(element: Element) = elements.isDeprecated(element)
 
     fun isDeprecated(typeMirror: TypeMirror) = isDeprecated(types.asElement(typeMirror))
 
-    fun resolve(treePath: TreePath): JavaClassifier? =
-            treePathResolverCache.resolve(treePath)
+    fun resolve(tree: JCTree, compilationUnit: CompilationUnitTree, containingElement: JavaElement): JavaClassifier? =
+            classifierResolver.resolve(tree, compilationUnit, containingElement)
+
+    fun resolveField(tree: JCTree, compilationUnit: CompilationUnitTree, containingClass: JavaClass): JavaField? =
+            identifierResolver.resolve(tree, compilationUnit, containingClass)
 
     fun toVirtualFile(javaFileObject: JavaFileObject): VirtualFile? =
             javaFileObject.toUri().let { uri ->
                 if (uri.scheme == "jar") {
-                    environment.findJarFile(uri.schemeSpecificPart.substring("file:".length))
+                    jarFileSystem.findFileByPath(uri.schemeSpecificPart.substring("file:".length))
                 }
                 else {
-                    environment.findLocalFile(uri.schemeSpecificPart)
+                    localFileSystem.findFileByPath(uri.schemeSpecificPart)
                 }
             }
 
+    fun hasKotlinPackage(fqName: FqName) =
+            if (kotlinClassifiersCache.hasPackage(fqName)) {
+                fqName
+            }
+            else {
+                null
+            }
+
+    fun isDeprecatedInJavaDoc(tree: JCTree, compilationUnit: CompilationUnitTree) =
+            (compilationUnit as JCTree.JCCompilationUnit).docComments?.getCommentTree(tree)?.comment?.isDeprecated == true
+
     private inline fun <reified T> Iterable<T>.toJavacList() = JavacList.from(this)
 
-    private fun findClassInSymbols(fqName: String): SymbolBasedClass? {
-        if (symbolBasedClassesCache.containsKey(fqName)) return symbolBasedClassesCache[fqName]
-
-        elements.getTypeElement(fqName)?.let { symbol ->
-            SymbolBasedClass(symbol, this, symbol.classfile)
-        }.let { symbolBasedClass ->
-            symbolBasedClassesCache[fqName] = symbolBasedClass
-            return symbolBasedClass
-        }
-    }
+    private fun findClassInSymbols(classId: ClassId): SymbolBasedClass? =
+            elements.getTypeElement(classId.asSingleFqName().asString())?.let { symbol ->
+                SymbolBasedClass(symbol, this, classId, symbol.classfile)
+            }
 
     private fun findPackageInSymbols(fqName: String): SymbolBasedPackage? {
         if (symbolBasedPackagesCache.containsKey(fqName)) return symbolBasedPackagesCache[fqName]
@@ -283,7 +310,7 @@ class JavacWrapper(javaFiles: Collection<File>,
     }
 
     private fun JavacFileManager.setClassPathForCompilation(outDir: File?) = apply {
-        (outDir ?: environment.configuration[JVMConfigurationKeys.OUTPUT_DIRECTORY])?.let { outputDir ->
+        (outDir ?: outputDirectory)?.let { outputDir ->
             outputDir.mkdirs()
             fileManager.setLocation(StandardLocation.CLASS_OUTPUT, listOf(outputDir))
         }
@@ -313,12 +340,10 @@ class JavacWrapper(javaFiles: Collection<File>,
 
     }
 
-    private fun TreeBasedClass.withInnerClasses(): List<TreeBasedClass> =
-            listOf(this) + innerClasses.values.flatMap { it.withInnerClasses() }
-
-    private fun Symbol.PackageSymbol.findClass(name: String): SymbolBasedClass? {
+    private fun Symbol.PackageSymbol.findClass(classId: ClassId): SymbolBasedClass? {
+        val name = classId.relativeClassName.asString()
         val nameParts = name.replace("$", ".").split(".")
-        var symbol = members_field.getElementsByName(names.fromString(nameParts.first()))
+        var symbol = members_field?.getElementsByName(names.fromString(nameParts.first()))
                              ?.firstOrNull() as? Symbol.ClassSymbol ?: return null
         if (nameParts.size > 1) {
             symbol.complete()
@@ -328,7 +353,8 @@ class JavacWrapper(javaFiles: Collection<File>,
             }
         }
 
-        return symbol.let { SymbolBasedClass(it, this@JavacWrapper, it.classfile) }
+        return symbol.let { SymbolBasedClass(it, this@JavacWrapper, classId, it.classfile) }
+                .apply { symbolBasedClassesCache[classId] = this }
     }
 
 }

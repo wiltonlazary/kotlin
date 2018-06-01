@@ -34,9 +34,9 @@ abstract class BoxedBasicValue(type: Type) : StrictBasicValue(type) {
 
 
 class CleanBoxedValue(
-        boxedType: Type,
-        boxingInsn: AbstractInsnNode,
-        progressionIterator: ProgressionIteratorBasicValue?
+    boxedType: Type,
+    boxingInsn: AbstractInsnNode,
+    progressionIterator: ProgressionIteratorBasicValue?
 ) : BoxedBasicValue(boxedType) {
     override val descriptor = BoxedValueDescriptor(boxedType, boxingInsn, progressionIterator)
 
@@ -45,7 +45,7 @@ class CleanBoxedValue(
 }
 
 
-class TaintedBoxedValue(val boxedBasicValue: CleanBoxedValue) : BoxedBasicValue(boxedBasicValue.type) {
+class TaintedBoxedValue(private val boxedBasicValue: CleanBoxedValue) : BoxedBasicValue(boxedBasicValue.type) {
     override val descriptor get() = boxedBasicValue.descriptor
 
     override fun taint(): BoxedBasicValue = this
@@ -53,9 +53,9 @@ class TaintedBoxedValue(val boxedBasicValue: CleanBoxedValue) : BoxedBasicValue(
 
 
 class BoxedValueDescriptor(
-        val boxedType: Type,
-        val boxingInsn: AbstractInsnNode,
-        val progressionIterator: ProgressionIteratorBasicValue?
+    private val boxedType: Type,
+    val boxingInsn: AbstractInsnNode,
+    val progressionIterator: ProgressionIteratorBasicValue?
 ) {
     private val associatedInsns = HashSet<AbstractInsnNode>()
     private val unboxingWithCastInsns = HashSet<Pair<AbstractInsnNode, Type>>()
@@ -76,14 +76,14 @@ class BoxedValueDescriptor(
     }
 
     fun getVariablesIndexes(): List<Int> =
-            ArrayList(associatedVariables)
+        ArrayList(associatedVariables)
 
     fun addMergedWith(descriptor: BoxedValueDescriptor) {
         mergedWith.add(descriptor)
     }
 
     fun getMergedWith(): Iterable<BoxedValueDescriptor> =
-            mergedWith
+        mergedWith
 
     fun markAsUnsafeToRemove() {
         isSafeToRemove = false
@@ -98,7 +98,7 @@ class BoxedValueDescriptor(
     }
 
     fun getUnboxingWithCastInsns(): Set<Pair<AbstractInsnNode, Type>> =
-            unboxingWithCastInsns
+        unboxingWithCastInsns
 }
 
 

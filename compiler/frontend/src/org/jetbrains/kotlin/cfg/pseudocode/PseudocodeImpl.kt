@@ -16,7 +16,8 @@
 
 package org.jetbrains.kotlin.cfg.pseudocode
 
-import com.google.common.collect.*
+import com.google.common.collect.HashMultimap
+import com.google.common.collect.Multimap
 import com.intellij.util.containers.BidirectionalMap
 import org.jetbrains.kotlin.cfg.Label
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.*
@@ -26,10 +27,7 @@ import org.jetbrains.kotlin.cfg.pseudocode.instructions.eval.MergeInstruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.jumps.AbstractJumpInstruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.jumps.ConditionalJumpInstruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.jumps.NondeterministicJumpInstruction
-import org.jetbrains.kotlin.cfg.pseudocode.instructions.special.LocalFunctionDeclarationInstruction
-import org.jetbrains.kotlin.cfg.pseudocode.instructions.special.SubroutineEnterInstruction
-import org.jetbrains.kotlin.cfg.pseudocode.instructions.special.SubroutineExitInstruction
-import org.jetbrains.kotlin.cfg.pseudocode.instructions.special.SubroutineSinkInstruction
+import org.jetbrains.kotlin.cfg.pseudocode.instructions.special.*
 import org.jetbrains.kotlin.cfg.pseudocodeTraverser.TraversalOrder.BACKWARD
 import org.jetbrains.kotlin.cfg.pseudocodeTraverser.TraversalOrder.FORWARD
 import org.jetbrains.kotlin.cfg.pseudocodeTraverser.TraverseInstructionResult
@@ -37,16 +35,16 @@ import org.jetbrains.kotlin.cfg.pseudocodeTraverser.traverseFollowingInstruction
 import org.jetbrains.kotlin.psi.KtElement
 import java.util.*
 
-class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode {
+class PseudocodeImpl(override val correspondingElement: KtElement, override val isInlined: Boolean) : Pseudocode {
 
     internal val mutableInstructionList = ArrayList<Instruction>()
     override val instructions = ArrayList<Instruction>()
 
     private val elementsToValues = BidirectionalMap<KtElement, PseudoValue>()
 
-    private val valueUsages = Maps.newHashMap<PseudoValue, MutableList<Instruction>>()
-    private val mergedValues = Maps.newHashMap<PseudoValue, Set<PseudoValue>>()
-    private val sideEffectFree = Sets.newHashSet<Instruction>()
+    private val valueUsages = hashMapOf<PseudoValue, MutableList<Instruction>>()
+    private val mergedValues = hashMapOf<PseudoValue, Set<PseudoValue>>()
+    private val sideEffectFree = hashSetOf<Instruction>()
 
     override var parent: Pseudocode? = null
         private set
@@ -54,6 +52,8 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
     override val localDeclarations: Set<LocalFunctionDeclarationInstruction> by lazy {
         getLocalDeclarations(this)
     }
+
+    val reachableInstructions = hashSetOf<Instruction>()
 
     private val representativeInstructions = HashMap<KtElement, KtElementInstruction>()
 
@@ -76,8 +76,11 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
 
     private var postPrecessed = false
 
+    override var containsDoWhile: Boolean = false
+        internal set
+
     private fun getLocalDeclarations(pseudocode: Pseudocode): Set<LocalFunctionDeclarationInstruction> {
-        val localDeclarations = Sets.newLinkedHashSet<LocalFunctionDeclarationInstruction>()
+        val localDeclarations = linkedSetOf<LocalFunctionDeclarationInstruction>()
         for (instruction in (pseudocode as PseudocodeImpl).mutableInstructionList) {
             if (instruction is LocalFunctionDeclarationInstruction) {
                 localDeclarations.add(instruction)
@@ -87,7 +90,7 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
         return localDeclarations
     }
 
-    val rootPseudocode: Pseudocode
+    override val rootPseudocode: Pseudocode
         get() {
             var parent = parent
             while (parent != null) {
@@ -105,27 +108,29 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
 
     override val reversedInstructions: List<Instruction>
         get() {
-            val traversedInstructions = Sets.newLinkedHashSet<Instruction>()
-            traverseFollowingInstructions(sinkInstruction, traversedInstructions, BACKWARD, null)
+            val traversedInstructions = linkedSetOf<Instruction>()
+            traverseFollowingInstructions(
+                if (this.isInlined) instructions.last() else sinkInstruction,
+                traversedInstructions,
+                BACKWARD,
+                null
+            )
             if (traversedInstructions.size < instructions.size) {
-                val simplyReversedInstructions = Lists.newArrayList(instructions)
-                Collections.reverse(simplyReversedInstructions)
+                val simplyReversedInstructions = instructions.reversed()
                 for (instruction in simplyReversedInstructions) {
                     if (!traversedInstructions.contains(instruction)) {
                         traverseFollowingInstructions(instruction, traversedInstructions, BACKWARD, null)
                     }
                 }
             }
-            return Lists.newArrayList(traversedInstructions)
+            return traversedInstructions.toList()
         }
 
     override val instructionsIncludingDeadCode: List<Instruction>
         get() = mutableInstructionList
 
     //for tests only
-    fun getLabels(): List<PseudocodeLabel> {
-        return labels
-    }
+    fun getLabels(): List<PseudocodeLabel> = labels
 
     fun addExitInstruction(exitInstruction: SubroutineExitInstruction) {
         addInstruction(exitInstruction)
@@ -181,7 +186,7 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
 
     override fun getElementValue(element: KtElement?) = elementsToValues[element]
 
-    override fun getValueElements(value: PseudoValue?) = elementsToValues.getKeysByValue(value) ?: emptyList()
+    override fun getValueElements(value: PseudoValue?): List<KtElement> = elementsToValues.getKeysByValue(value) ?: emptyList()
 
     override fun getUsages(value: PseudoValue?) = valueUsages[value] ?: mutableListOf()
 
@@ -194,8 +199,8 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
     fun bindLabel(label: PseudocodeLabel) {
         assert(this == label.pseudocode) {
             "Attempt to bind label $label to instruction from different pseudocode: " +
-            "\nowner pseudocode = ${label.pseudocode.mutableInstructionList}, " +
-            "\nbound pseudocode = ${this.mutableInstructionList}"
+                    "\nowner pseudocode = ${label.pseudocode.mutableInstructionList}, " +
+                    "\nbound pseudocode = ${this.mutableInstructionList}"
         }
         label.targetInstructionIndex = mutableInstructionList.size
     }
@@ -214,8 +219,8 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
     private fun addValueUsage(value: PseudoValue, usage: Instruction) {
         if (usage is MergeInstruction) return
         valueUsages.getOrPut(
-                value
-        ) { Lists.newArrayList<Instruction>() }.add(usage)
+            value
+        ) { arrayListOf() }.add(usage)
     }
 
     fun postProcess() {
@@ -223,24 +228,17 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
         postPrecessed = true
         errorInstruction.sink = sinkInstruction
         exitInstruction.sink = sinkInstruction
-        var index = 0
-        for (instruction in mutableInstructionList) {
-            //recursively invokes 'postProcess' for local declarations
-            processInstruction(instruction, index)
-            index++
-        }
-        if (parent != null) return
 
-        // Collecting reachable instructions should be done after processing all instructions
-        // (including instructions in local declarations) to avoid being in incomplete state.
-        collectAndCacheReachableInstructions()
-        for (localFunctionDeclarationInstruction in localDeclarations) {
-            (localFunctionDeclarationInstruction.body as PseudocodeImpl).collectAndCacheReachableInstructions()
+        for ((index, instruction) in mutableInstructionList.withIndex()) {
+            //recursively invokes 'postProcess' for local declarations, thus it needs global set of reachable instructions
+            instruction.processInstruction(index)
         }
+
+        collectAndCacheReachableInstructions()
     }
 
     private fun collectAndCacheReachableInstructions() {
-        val reachableInstructions = collectReachableInstructions()
+        collectReachableInstructions()
         for (instruction in mutableInstructionList) {
             if (reachableInstructions.contains(instruction)) {
                 instructions.add(instruction)
@@ -249,8 +247,8 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
         markDeadInstructions()
     }
 
-    private fun processInstruction(instruction: Instruction, currentPosition: Int) {
-        instruction.accept(object : InstructionVisitor() {
+    private fun Instruction.processInstruction(currentPosition: Int) {
+        accept(object : InstructionVisitor() {
             override fun visitInstructionWithNext(instruction: InstructionWithNext) {
                 instruction.next = getNextPosition(currentPosition)
             }
@@ -273,8 +271,7 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
                 if (instruction.onTrue) {
                     instruction.nextOnFalse = nextInstruction
                     instruction.nextOnTrue = jumpTarget
-                }
-                else {
+                } else {
                     instruction.nextOnFalse = jumpTarget
                     instruction.nextOnTrue = nextInstruction
                 }
@@ -286,6 +283,15 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
                 body.parent = this@PseudocodeImpl
                 body.postProcess()
                 instruction.next = sinkInstruction
+            }
+
+            override fun visitInlinedLocalFunctionDeclarationInstruction(instruction: InlinedLocalFunctionDeclarationInstruction) {
+                val body = instruction.body as PseudocodeImpl
+                body.parent = this@PseudocodeImpl
+                body.postProcess()
+                // Don't add edge to next instruction if flow can't reach exit of inlined declaration
+                instruction.next =
+                        if (body.instructions.contains(body.exitInstruction)) getNextPosition(currentPosition) else sinkInstruction
             }
 
             override fun visitSubroutineExit(instruction: SubroutineExitInstruction) {
@@ -302,29 +308,30 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
         })
     }
 
-    private fun collectReachableInstructions(): Set<Instruction> {
-        val visited = Sets.newHashSet<Instruction>()
-        traverseFollowingInstructions(enterInstruction, visited, FORWARD
+    private fun collectReachableInstructions() {
+        val reachableFromThisPseudocode = hashSetOf<Instruction>()
+        traverseFollowingInstructions(
+            enterInstruction, reachableFromThisPseudocode, FORWARD
         ) { instruction ->
             if (instruction is MagicInstruction && instruction.kind === MagicKind.EXHAUSTIVE_WHEN_ELSE) {
                 return@traverseFollowingInstructions TraverseInstructionResult.SKIP
             }
             TraverseInstructionResult.CONTINUE
         }
-        if (!visited.contains(exitInstruction)) {
-            visited.add(exitInstruction)
+
+        // Don't force-add EXIT and ERROR for inlined pseudocodes because for such
+        // declarations those instructions has special semantic
+        if (!isInlined) {
+            reachableFromThisPseudocode.add(exitInstruction)
+            reachableFromThisPseudocode.add(errorInstruction)
+            reachableFromThisPseudocode.add(sinkInstruction)
         }
-        if (!visited.contains(errorInstruction)) {
-            visited.add(errorInstruction)
-        }
-        if (!visited.contains(sinkInstruction)) {
-            visited.add(sinkInstruction)
-        }
-        return visited
+
+        reachableFromThisPseudocode.forEach { (it.owner as PseudocodeImpl).reachableInstructions.add(it) }
     }
 
     private fun markDeadInstructions() {
-        val instructionSet = Sets.newHashSet(instructions)
+        val instructionSet = instructions.toHashSet()
         for (instruction in mutableInstructionList) {
             if (!instructionSet.contains(instruction)) {
                 (instruction as? InstructionImpl)?.markedAsDead = true
@@ -335,9 +342,7 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
         }
     }
 
-    private fun getJumpTarget(targetLabel: Label): Instruction {
-        return targetLabel.resolveToInstruction()
-    }
+    private fun getJumpTarget(targetLabel: Label): Instruction = targetLabel.resolveToInstruction()
 
     private fun getNextPosition(currentPosition: Int): Instruction {
         val targetPosition = currentPosition + 1
@@ -346,33 +351,31 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
     }
 
     override fun copy(): PseudocodeImpl {
-        val result = PseudocodeImpl(correspondingElement)
+        val result = PseudocodeImpl(correspondingElement, isInlined)
         result.repeatWhole(this)
         return result
     }
 
-    override fun instructionForElement(element: KtElement): KtElementInstruction? {
-        return representativeInstructions[element]
-    }
+    override fun instructionForElement(element: KtElement): KtElementInstruction? = representativeInstructions[element]
 
     private fun repeatWhole(originalPseudocode: PseudocodeImpl) {
         repeatInternal(originalPseudocode, null, null, 0)
         parent = originalPseudocode.parent
     }
 
-    fun repeatPart(startLabel: Label, finishLabel: Label, labelCount: Int): Int {
-        return repeatInternal(startLabel.pseudocode as PseudocodeImpl, startLabel, finishLabel, labelCount)
-    }
+    fun repeatPart(startLabel: Label, finishLabel: Label, labelCount: Int): Int =
+        repeatInternal(startLabel.pseudocode as PseudocodeImpl, startLabel, finishLabel, labelCount)
 
     private fun repeatInternal(
-            originalPseudocode: PseudocodeImpl,
-            startLabel: Label?, finishLabel: Label?,
-            labelCountArg: Int): Int {
+        originalPseudocode: PseudocodeImpl,
+        startLabel: Label?, finishLabel: Label?,
+        labelCountArg: Int
+    ): Int {
         var labelCount = labelCountArg
         val startIndex = startLabel?.targetInstructionIndex ?: 0
         val finishIndex = finishLabel?.targetInstructionIndex ?: originalPseudocode.mutableInstructionList.size
 
-        val originalToCopy = Maps.newLinkedHashMap<Label, PseudocodeLabel>()
+        val originalToCopy = linkedMapOf<Label, PseudocodeLabel>()
         val originalLabelsForInstruction = HashMultimap.create<Instruction, Label>()
         for (label in originalPseudocode.labels) {
             val index = label.targetInstructionIndex
@@ -381,7 +384,7 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
 
             if (label === startLabel || label === finishLabel) continue
 
-            if (startIndex <= index && index <= finishIndex) {
+            if (index in startIndex..finishIndex) {
                 originalToCopy.put(label, label.copy(this, labelCount++))
                 originalLabelsForInstruction.put(getJumpTarget(label), label)
             }
@@ -389,7 +392,7 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
         for (label in originalToCopy.values) {
             labels.add(label)
         }
-        for (index in startIndex..finishIndex - 1) {
+        for (index in startIndex until finishIndex) {
             val originalInstruction = originalPseudocode.mutableInstructionList[index]
             repeatLabelsBindingForInstruction(originalInstruction, originalToCopy, originalLabelsForInstruction)
             val copy = copyInstruction(originalInstruction, originalToCopy)
@@ -404,18 +407,21 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
                 internalSinkInstruction = copy
             }
         }
-        if (finishIndex < mutableInstructionList.size) {
-            repeatLabelsBindingForInstruction(originalPseudocode.mutableInstructionList[finishIndex],
-                                              originalToCopy,
-                                              originalLabelsForInstruction)
+        if (finishIndex < originalPseudocode.mutableInstructionList.size) {
+            repeatLabelsBindingForInstruction(
+                originalPseudocode.mutableInstructionList[finishIndex],
+                originalToCopy,
+                originalLabelsForInstruction
+            )
         }
         return labelCount
     }
 
     private fun repeatLabelsBindingForInstruction(
-            originalInstruction: Instruction,
-            originalToCopy: Map<Label, PseudocodeLabel>,
-            originalLabelsForInstruction: Multimap<Instruction, Label>) {
+        originalInstruction: Instruction,
+        originalToCopy: Map<Label, PseudocodeLabel>,
+        originalLabelsForInstruction: Multimap<Instruction, Label>
+    ) {
         for (originalLabel in originalLabelsForInstruction.get(originalInstruction)) {
             bindLabel(originalToCopy[originalLabel]!!)
         }
@@ -437,7 +443,7 @@ class PseudocodeImpl(override val correspondingElement: KtElement) : Pseudocode 
     }
 
     private fun copyLabels(labels: Collection<Label>, originalToCopy: Map<Label, PseudocodeLabel>): MutableList<Label> {
-        val newLabels = Lists.newArrayList<Label>()
+        val newLabels = arrayListOf<Label>()
         for (label in labels) {
             val newLabel = originalToCopy[label]
             newLabels.add(newLabel ?: label)

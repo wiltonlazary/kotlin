@@ -24,6 +24,7 @@ import com.intellij.lang.annotation.Annotation
 import com.intellij.lang.annotation.AnnotationHolder
 import com.intellij.lang.annotation.Annotator
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.colors.CodeInsightColors
 import com.intellij.openapi.editor.colors.TextAttributesKey
@@ -37,14 +38,18 @@ import com.intellij.util.containers.MultiMap
 import com.intellij.xml.util.XmlStringUtil
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.diagnostics.Diagnostic
+import org.jetbrains.kotlin.diagnostics.DiagnosticFactory
 import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.diagnostics.Severity
 import org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages
-import org.jetbrains.kotlin.idea.actions.internal.KotlinInternalMode
-import org.jetbrains.kotlin.idea.caches.resolve.analyzeFullyAndGetResult
+import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithAllCompilerChecks
+import org.jetbrains.kotlin.idea.inspections.KotlinUniversalQuickFix
 import org.jetbrains.kotlin.idea.quickfix.QuickFixes
 import org.jetbrains.kotlin.idea.references.mainReference
-import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.psi.KtReferenceExpression
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics
 import org.jetbrains.kotlin.types.KotlinType
@@ -58,7 +63,7 @@ open class KotlinPsiChecker : Annotator, HighlightRangeExtension {
 
         if (!KotlinHighlightingUtil.shouldHighlight(file)) return
 
-        val analysisResult = file.analyzeFullyAndGetResult()
+        val analysisResult = file.analyzeWithAllCompilerChecks()
         if (analysisResult.isError()) {
             throw ProcessCanceledException(analysisResult.error)
         }
@@ -110,12 +115,12 @@ open class KotlinPsiChecker : Annotator, HighlightRangeExtension {
 
 private fun createQuickFixes(similarDiagnostics: Collection<Diagnostic>): MultiMap<Diagnostic, IntentionAction> {
     val first = similarDiagnostics.minBy { it.toString() }
-    val factory = similarDiagnostics.first().factory
+    val factory = similarDiagnostics.first().getRealDiagnosticFactory()
 
     val actions = MultiMap<Diagnostic, IntentionAction>()
 
     val intentionActionsFactories = QuickFixes.getInstance().getActionFactories(factory)
-    for (intentionActionsFactory in intentionActionsFactories.filterNotNull()) {
+    for (intentionActionsFactory in intentionActionsFactories) {
         val allProblemsActions = intentionActionsFactory.createActionsForAllProblems(similarDiagnostics)
         if (!allProblemsActions.isEmpty()) {
             actions.putValues(first, allProblemsActions)
@@ -136,6 +141,14 @@ private fun createQuickFixes(similarDiagnostics: Collection<Diagnostic>): MultiM
     return actions
 }
 
+private fun Diagnostic.getRealDiagnosticFactory(): DiagnosticFactory<*> =
+        when (factory) {
+            Errors.PLUGIN_ERROR -> Errors.PLUGIN_ERROR.cast(this).a.factory
+            Errors.PLUGIN_WARNING -> Errors.PLUGIN_WARNING.cast(this).a.factory
+            Errors.PLUGIN_INFO -> Errors.PLUGIN_INFO.cast(this).a.factory
+            else -> factory
+        }
+
 private object NoDeclarationDescriptorsChecker {
     private val LOG = Logger.getInstance(NoDeclarationDescriptorsChecker::class.java)
 
@@ -148,7 +161,6 @@ private object NoDeclarationDescriptorsChecker {
             checkType(field.genericType, field)
         }
 
-        @Suppress("UNNECESSARY_SAFE_CALL") // Wrong UNNECESSARY_SAFE_CALL
         quickFixClass.superclass?.let { check(it) }
     }
 
@@ -257,13 +269,28 @@ private class ElementAnnotator(private val element: PsiElement,
     }
 
     private fun setUpAnnotations(diagnostics: List<Diagnostic>, data: AnnotationPresentationInfo) {
-        val fixesMap = createQuickFixes(diagnostics)
+        val fixesMap = try {
+            createQuickFixes(diagnostics)
+        }
+        catch (e: Exception) {
+            if (e is ControlFlowException) {
+                throw e
+            }
+            LOG.error(e)
+            MultiMap<Diagnostic, IntentionAction>()
+        }
+
         for (range in data.ranges) {
             for (diagnostic in diagnostics) {
                 val annotation = data.create(diagnostic, range, holder)
                 val fixes = fixesMap[diagnostic]
 
-                fixes.forEach { annotation.registerFix(it) }
+                fixes.forEach {
+                    when (it) {
+                        is KotlinUniversalQuickFix -> annotation.registerUniversalFix(it, null, null)
+                        is IntentionAction -> annotation.registerFix(it)
+                    }
+                }
 
                 if (diagnostic.severity == Severity.WARNING) {
                     annotation.problemGroup = KotlinSuppressableWarningProblemGroup(diagnostic.factory)
@@ -275,6 +302,10 @@ private class ElementAnnotator(private val element: PsiElement,
                 }
             }
         }
+    }
+
+    companion object {
+        val LOG = Logger.getInstance(ElementAnnotator::class.java)
     }
 }
 
@@ -316,13 +347,13 @@ private class AnnotationPresentationInfo(
 
     private fun getMessage(diagnostic: Diagnostic): String {
         var message = IdeErrorMessages.render(diagnostic)
-        if (KotlinInternalMode.enabled || ApplicationManager.getApplication().isUnitTestMode) {
+        if (ApplicationManager.getApplication().isInternal || ApplicationManager.getApplication().isUnitTestMode) {
             val factoryName = diagnostic.factory.name
-            if (message.startsWith("<html>")) {
-                message = "<html>[$factoryName] ${message.substring("<html>".length)}"
+            message = if (message.startsWith("<html>")) {
+                "<html>[$factoryName] ${message.substring("<html>".length)}"
             }
             else {
-                message = "[$factoryName] $message"
+                "[$factoryName] $message"
             }
         }
         if (!message.startsWith("<html>")) {
@@ -333,7 +364,7 @@ private class AnnotationPresentationInfo(
 
     private fun getDefaultMessage(diagnostic: Diagnostic): String {
         val message = DefaultErrorMessages.render(diagnostic)
-        if (KotlinInternalMode.enabled || ApplicationManager.getApplication().isUnitTestMode) {
+        if (ApplicationManager.getApplication().isInternal || ApplicationManager.getApplication().isUnitTestMode) {
             return "[${diagnostic.factory.name}] $message"
         }
         return message

@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1113
 package foo
 
 fun testIf(flag: Boolean): Int = js("""

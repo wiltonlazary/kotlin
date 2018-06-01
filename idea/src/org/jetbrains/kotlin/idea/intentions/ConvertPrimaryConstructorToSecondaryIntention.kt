@@ -72,7 +72,11 @@ class ConvertPrimaryConstructorToSecondaryIntention : SelfTargetingIntention<KtP
         for (property in klass.getProperties()) {
             if (property.isIndependent(klass, context)) continue
             if (property.typeReference == null) {
-                SpecifyTypeExplicitlyIntention().applyTo(property, editor)
+                with (SpecifyTypeExplicitlyIntention()) {
+                    if (applicabilityRange(property) != null) {
+                        applyTo(property, editor)
+                    }
+                }
             }
             val initializer = property.initializer!!
             initializerMap[property] = initializer.text
@@ -143,7 +147,7 @@ class ConvertPrimaryConstructorToSecondaryIntention : SelfTargetingIntention<KtP
         element.delete()
     }
 
-    fun convertValueParametersToProperties(
+    private fun convertValueParametersToProperties(
             element: KtPrimaryConstructor, klass: KtClass, factory: KtPsiFactory, anchorBefore: PsiElement?
     ) {
         for (valueParameter in element.valueParameters.reversed()) {

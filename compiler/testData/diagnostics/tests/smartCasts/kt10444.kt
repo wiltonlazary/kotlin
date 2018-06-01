@@ -1,15 +1,16 @@
+// !WITH_NEW_INFERENCE
 // !DIAGNOSTICS: -UNUSED_PARAMETER
 // KT-10444 Do not ignore smart (unchecked) casts to the same classifier
 
 class Qwe<T : Any>(val a: T?) {
     fun test1(obj: Any) {
-        <!UNCHECKED_CAST!>obj as Qwe<T><!>
+        obj <!UNCHECKED_CAST!>as Qwe<T><!>
         check(<!DEBUG_INFO_SMARTCAST!>obj<!>.a)
     }
 
     fun test1(obj: Qwe<*>) {
-        <!UNCHECKED_CAST!>obj as Qwe<T><!>
-        check(<!DEBUG_INFO_SMARTCAST!>obj<!>.a)
+        obj <!UNCHECKED_CAST!>as Qwe<T><!>
+        check(<!OI;DEBUG_INFO_SMARTCAST!>obj<!>.a)
     }
 
     fun check(a: T?) {

@@ -17,11 +17,18 @@
 package org.jetbrains.kotlin.config
 
 import com.intellij.util.PathUtil
+import com.intellij.util.xmlb.SerializationFilter
 import com.intellij.util.xmlb.SkipDefaultsSerializationFilter
 import com.intellij.util.xmlb.XmlSerializer
 import org.jdom.DataConversionException
 import org.jdom.Element
+import org.jdom.Text
 import org.jetbrains.kotlin.cli.common.arguments.*
+import org.jetbrains.kotlin.load.java.JvmAbi
+import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
+import java.lang.reflect.Modifier
+import kotlin.reflect.KClass
+import kotlin.reflect.full.superclasses
 
 fun Element.getOption(name: String) = getChildren("option").firstOrNull { it.getAttribute("name").value == name }
 
@@ -52,7 +59,7 @@ private fun readV1Config(element: Element): KotlinFacetSettings {
         val jvmArgumentsElement = compilerInfoElement?.getOptionBody("k2jvmCompilerArguments")
         val jsArgumentsElement = compilerInfoElement?.getOptionBody("k2jsCompilerArguments")
 
-        val compilerArguments = targetPlatform.createCompilerArguments()
+        val compilerArguments = targetPlatform.createCompilerArguments { freeArgs = ArrayList() }
 
         commonArgumentsElement?.let { XmlSerializer.deserializeInto(compilerArguments, it) }
         when (compilerArguments) {
@@ -67,6 +74,8 @@ private fun readV1Config(element: Element): KotlinFacetSettings {
         if (apiLevel != null) {
             compilerArguments.apiVersion = apiLevel
         }
+
+        compilerArguments.detectVersionAutoAdvance()
 
         if (useProjectSettings != null) {
             this.useProjectSettings = useProjectSettings
@@ -85,19 +94,38 @@ private fun readV1Config(element: Element): KotlinFacetSettings {
     }
 }
 
+fun Element.getFacetPlatformByConfigurationElement(): TargetPlatformKind<*> {
+    val platformName = getAttributeValue("platform")
+    return TargetPlatformKind.ALL_PLATFORMS.firstOrNull { it.description == platformName } ?: TargetPlatformKind.DEFAULT_PLATFORM
+}
+
 private fun readV2AndLaterConfig(element: Element): KotlinFacetSettings {
     return KotlinFacetSettings().apply {
         element.getAttributeValue("useProjectSettings")?.let { useProjectSettings = it.toBoolean() }
-        val platformName = element.getAttributeValue("platform")
-        val platformKind = TargetPlatformKind.ALL_PLATFORMS.firstOrNull { it.description == platformName } ?: TargetPlatformKind.DEFAULT_PLATFORM
+        val platformKind = element.getFacetPlatformByConfigurationElement()
+        element.getChild("implements")?.let {
+            val items = it.getChildren("implement")
+            implementedModuleNames = if (items.isNotEmpty()) {
+                items.mapNotNull { (it.content.firstOrNull() as? Text)?.textTrim }
+            } else {
+                listOfNotNull((it.content.firstOrNull() as? Text)?.textTrim)
+            }
+        }
         element.getChild("compilerSettings")?.let {
             compilerSettings = CompilerSettings()
             XmlSerializer.deserializeInto(compilerSettings!!, it)
         }
         element.getChild("compilerArguments")?.let {
-            compilerArguments = platformKind.createCompilerArguments()
+            compilerArguments = platformKind.createCompilerArguments { freeArgs = ArrayList() }
             XmlSerializer.deserializeInto(compilerArguments!!, it)
+            compilerArguments!!.detectVersionAutoAdvance()
         }
+        productionOutputPath = element.getChild("productionOutputPath")?.let {
+            PathUtil.toSystemDependentName((it.content.firstOrNull() as? Text)?.textTrim)
+        } ?: (compilerArguments as? K2JSCompilerArguments)?.outputFile
+        testOutputPath = element.getChild("testOutputPath")?.let {
+            PathUtil.toSystemDependentName((it.content.firstOrNull() as? Text)?.textTrim)
+        } ?: (compilerArguments as? K2JSCompilerArguments)?.outputFile
     }
 }
 
@@ -132,12 +160,12 @@ fun deserializeFacetSettings(element: Element): KotlinFacetSettings {
         1 -> readV1Config(element)
         2 -> readV2Config(element)
         KotlinFacetSettings.CURRENT_VERSION -> readLatestConfig(element)
-        else -> KotlinFacetSettings() // Reset facet configuration if versions don't match
-    }
+        else -> return KotlinFacetSettings() // Reset facet configuration if versions don't match
+    }.apply { this.version = version }
 }
 
 fun CommonCompilerArguments.convertPathsToSystemIndependent() {
-    pluginClasspaths?.forEachIndexed { index, s -> pluginClasspaths[index] = PathUtil.toSystemIndependentName(s) }
+    pluginClasspaths?.forEachIndexed { index, s -> pluginClasspaths!![index] = PathUtil.toSystemIndependentName(s) }
 
     when (this) {
         is K2JVMCompilerArguments -> {
@@ -145,7 +173,7 @@ fun CommonCompilerArguments.convertPathsToSystemIndependent() {
             classpath = PathUtil.toSystemIndependentName(classpath)
             jdkHome = PathUtil.toSystemIndependentName(jdkHome)
             kotlinHome = PathUtil.toSystemIndependentName(kotlinHome)
-            friendPaths?.forEachIndexed { index, s -> friendPaths[index] = PathUtil.toSystemIndependentName(s) }
+            friendPaths?.forEachIndexed { index, s -> friendPaths!![index] = PathUtil.toSystemIndependentName(s) }
             declarationsOutputPath = PathUtil.toSystemIndependentName(declarationsOutputPath)
         }
 
@@ -166,28 +194,136 @@ fun CompilerSettings.convertPathsToSystemIndependent() {
     outputDirectoryForJsLibraryFiles = PathUtil.toSystemIndependentName(outputDirectoryForJsLibraryFiles)
 }
 
-fun KotlinFacetSettings.serializeFacetSettings(element: Element) {
+private fun KClass<*>.superClass() = superclasses.firstOrNull { !it.java.isInterface }
+
+private fun Class<*>.computeNormalPropertyOrdering(): Map<String, Int> {
+    val result = LinkedHashMap<String, Int>()
+    var count = 0
+    generateSequence(this) { it.superclass }.forEach { clazz ->
+        for (field in clazz.declaredFields) {
+            if (field.modifiers and Modifier.STATIC != 0) continue
+
+            var propertyName = field.name
+            if (propertyName.endsWith(JvmAbi.DELEGATED_PROPERTY_NAME_SUFFIX)) {
+                propertyName = propertyName.dropLast(JvmAbi.DELEGATED_PROPERTY_NAME_SUFFIX.length)
+            }
+
+            result[propertyName] = count++
+        }
+    }
+    return result
+}
+
+private val allNormalOrderings = HashMap<Class<*>, Map<String, Int>>()
+
+private val Class<*>.normalOrdering
+    get() = synchronized(allNormalOrderings) { allNormalOrderings.getOrPut(this) { computeNormalPropertyOrdering() } }
+
+// Replacing fields with delegated properties leads to unexpected reordering of entries in facet configuration XML
+// It happens due to XmlSerializer using different orderings for field- and method-based accessors
+// This code restores the original ordering
+private fun Element.restoreNormalOrdering(bean: Any) {
+    val normalOrdering = bean.javaClass.normalOrdering
+    val elementsToReorder = this.getContent<Element> { it is Element && it.getAttribute("name")?.value in normalOrdering }
+    elementsToReorder
+            .sortedBy { normalOrdering[it.getAttribute("name")?.value!!] }
+            .forEachIndexed { index, element -> elementsToReorder[index] = element.clone() }
+}
+
+private fun buildChildElement(element: Element, tag: String, bean: Any, filter: SerializationFilter): Element {
+    return Element(tag).apply {
+        XmlSerializer.serializeInto(bean, this, filter)
+        restoreNormalOrdering(bean)
+        element.addContent(this)
+    }
+}
+
+private fun KotlinFacetSettings.writeLatestConfig(element: Element) {
     val filter = SkipDefaultsSerializationFilter()
 
-    element.setAttribute("version", KotlinFacetSettings.CURRENT_VERSION.toString())
     targetPlatformKind?.let {
         element.setAttribute("platform", it.description)
     }
     if (!useProjectSettings) {
         element.setAttribute("useProjectSettings", useProjectSettings.toString())
     }
+    if (implementedModuleNames.isNotEmpty()) {
+        element.addContent(
+                Element("implements").apply {
+                    val singleModule = implementedModuleNames.singleOrNull()
+                    if (singleModule != null) {
+                        addContent(singleModule)
+                    } else {
+                        implementedModuleNames.map { addContent(Element("implement").apply { addContent(it) }) }
+                    }
+                }
+        )
+    }
+    productionOutputPath?.let {
+        if (it != (compilerArguments as? K2JSCompilerArguments)?.outputFile) {
+            element.addContent(Element("productionOutputPath").apply { addContent(PathUtil.toSystemIndependentName(it)) })
+        }
+    }
+    testOutputPath?.let {
+        if (it != (compilerArguments as? K2JSCompilerArguments)?.outputFile) {
+            element.addContent(Element("testOutputPath").apply { addContent(PathUtil.toSystemIndependentName(it)) })
+        }
+    }
     compilerSettings?.let { copyBean(it) }?.let {
         it.convertPathsToSystemIndependent()
-        Element("compilerSettings").apply {
-            XmlSerializer.serializeInto(it, this, filter)
-            element.addContent(this)
-        }
+        buildChildElement(element, "compilerSettings", it, filter)
     }
     compilerArguments?.let { copyBean(it) }?.let {
         it.convertPathsToSystemIndependent()
-        Element("compilerArguments").apply {
-            XmlSerializer.serializeInto(it, this, filter)
-            element.addContent(this)
+        val compilerArgumentsXml = buildChildElement(element, "compilerArguments", it, filter)
+        compilerArgumentsXml.dropVersionsIfNecessary(it)
+    }
+}
+
+fun CommonCompilerArguments.detectVersionAutoAdvance() {
+    autoAdvanceLanguageVersion = languageVersion == null
+    autoAdvanceApiVersion = apiVersion == null
+}
+
+fun Element.dropVersionsIfNecessary(settings: CommonCompilerArguments) {
+    // Do not serialize language/api version if they correspond to the default language version
+    if (settings.autoAdvanceLanguageVersion) {
+        getOption("languageVersion")?.detach()
+    }
+
+    if (settings.autoAdvanceApiVersion) {
+        getOption("apiVersion")?.detach()
+    }
+}
+
+// Special treatment of v2 may be dropped after transition to IDEA 172
+private fun KotlinFacetSettings.writeV2Config(element: Element) {
+    writeLatestConfig(element)
+    element.getChild("compilerArguments")?.let {
+        it.getOption("coroutinesState")?.detach()
+        val coroutineOption = when (compilerArguments?.coroutinesState) {
+            CommonCompilerArguments.ENABLE -> "coroutinesEnable"
+            CommonCompilerArguments.WARN -> "coroutinesWarn"
+            CommonCompilerArguments.ERROR -> "coroutinesError"
+            else -> null
         }
+        if (coroutineOption != null) {
+            Element("option").apply {
+                setAttribute("name", coroutineOption)
+                setAttribute("value", "true")
+                it.addContent(this)
+            }
+        }
+    }
+}
+
+fun KotlinFacetSettings.serializeFacetSettings(element: Element) {
+    val versionToWrite = if (version == 2) version else KotlinFacetSettings.CURRENT_VERSION
+    element.setAttribute("version", versionToWrite.toString())
+    if (versionToWrite == 2) {
+        writeV2Config(element)
+    }
+    else {
+        writeLatestConfig(element)
     }
 }

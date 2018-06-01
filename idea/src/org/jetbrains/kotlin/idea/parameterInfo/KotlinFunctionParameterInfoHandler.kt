@@ -32,8 +32,10 @@ import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.core.OptionalParametersHelper
 import org.jetbrains.kotlin.idea.core.resolveCandidates
 import org.jetbrains.kotlin.idea.resolve.ResolutionFacade
+import org.jetbrains.kotlin.idea.util.ShadowedDeclarationsFilter
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.load.java.descriptors.SamAdapterDescriptor
+import org.jetbrains.kotlin.load.java.NULLABILITY_ANNOTATIONS
+import org.jetbrains.kotlin.load.java.sam.SamAdapterDescriptor
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.allChildren
 import org.jetbrains.kotlin.psi.psiUtil.parents
@@ -43,10 +45,11 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.calls.callUtil.getCall
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.components.hasDefaultValue
 import org.jetbrains.kotlin.resolve.calls.model.ArgumentMatch
 import org.jetbrains.kotlin.resolve.calls.util.DelegatingCall
-import org.jetbrains.kotlin.resolve.descriptorUtil.hasDefaultValue
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.containsError
@@ -81,7 +84,7 @@ abstract class KotlinParameterInfoWithCallHandlerBase<TArgumentList : KtElement,
     }
 
     private fun findCall(argumentList: TArgumentList, bindingContext: BindingContext): Call? {
-        return (argumentList.parent as KtElement).getCall(bindingContext)
+        return (argumentList.parent as? KtElement)?.getCall(bindingContext)
     }
 
     override fun getActualParameterDelimiterType() = KtTokens.COMMA
@@ -117,9 +120,18 @@ abstract class KotlinParameterInfoWithCallHandlerBase<TArgumentList : KtElement,
         val bindingContext = argumentList.analyze(BodyResolveMode.PARTIAL)
         val call = findCall(argumentList, bindingContext) ?: return null
 
-        val candidates = call.resolveCandidates(bindingContext, file.getResolutionFacade())
+        val resolutionFacade = file.getResolutionFacade()
+        val candidates =
+                call.resolveCandidates(bindingContext, resolutionFacade)
+                        .map { it.resultingDescriptor }
+                        .distinctBy { it.original }
 
-        context.itemsToShow = candidates.map { it.resultingDescriptor.original }.distinct().toTypedArray()
+        val shadowedDeclarationsFilter = ShadowedDeclarationsFilter(bindingContext,
+                                                                    resolutionFacade,
+                                                                    call.callElement,
+                                                                    call.explicitReceiver as? ReceiverValue)
+
+        context.itemsToShow = shadowedDeclarationsFilter.filter(candidates).toTypedArray()
         return argumentList
     }
 
@@ -242,6 +254,14 @@ abstract class KotlinParameterInfoWithCallHandlerBase<TArgumentList : KtElement,
     private fun renderParameter(parameter: ValueParameterDescriptor, includeName: Boolean, named: Boolean, project: Project): String {
         return buildString {
             if (named) append("[")
+
+            parameter
+                .annotations
+                .getAllAnnotations()
+                .filterNot { it.annotation.fqName in NULLABILITY_ANNOTATIONS }
+                .forEach {
+                    it.annotation.fqName?.let { append("@${it.shortName().asString()} ") }
+                }
 
             if (parameter.varargElementType != null) {
                 append("vararg ")

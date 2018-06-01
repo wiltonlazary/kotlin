@@ -23,6 +23,7 @@ import com.intellij.util.ProcessingContext
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToParameterDescriptorIfAny
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtParameter
@@ -74,13 +75,14 @@ open class KotlinFunctionPattern : PsiElementPattern<KtFunction, KotlinFunctionP
         }
     }
 
-    fun definedInClass(fqName: String): KotlinFunctionPattern {
-        return withPatternCondition("kotlinFunctionPattern-definedInClass") { function, _ ->
-            if (function.parent is KtFile) return@withPatternCondition false
-
-            function.containingClassOrObject?.fqName?.asString() == fqName
+    class DefinedInClassCondition(val fqName: String) : PatternCondition<KtFunction>("kotlinFunctionPattern-definedInClass") {
+        override fun accepts(element: KtFunction, context: ProcessingContext?): Boolean {
+            if (element.parent is KtFile) return false
+            return element.containingClassOrObject?.fqName?.asString() == fqName
         }
     }
+
+    fun definedInClass(fqName: String): KotlinFunctionPattern = with(DefinedInClassCondition(fqName))
 
     fun definedInPackage(packageFqName: String): KotlinFunctionPattern {
         return withPatternCondition("kotlinFunctionPattern-definedInPackage") { function, _ ->
@@ -99,7 +101,8 @@ class KtParameterPattern : PsiElementPattern<KtParameter, KtParameterPattern>(Kt
             override fun processValues(ktParameter: KtParameter,
                                        context: ProcessingContext,
                                        processor: PairProcessor<KtFunction, ProcessingContext>): Boolean {
-                return processor.process(ktParameter.ownerFunction, context)
+                val function = ktParameter.ownerFunction as? KtFunction ?: return true
+                return processor.process(function, context)
             }
 
             override fun accepts(ktParameter: KtParameter, context: ProcessingContext): Boolean {
@@ -117,10 +120,9 @@ class KtParameterPattern : PsiElementPattern<KtParameter, KtParameterPattern>(Kt
         return withPatternCondition("KtParameterPattern-withAnnotation") { ktParameter, _ ->
             if (ktParameter.annotationEntries.isEmpty()) return@withPatternCondition false
 
-            val parameterDescriptor = ktParameter.resolveToDescriptorIfAny() as? ValueParameterDescriptor ?: return@withPatternCondition false
-
-            parameterDescriptor.annotations.any { annotation ->
-                DescriptorRenderer.FQ_NAMES_IN_TYPES.renderType(annotation.type) == fqName
+            val parameterDescriptor = ktParameter.resolveToParameterDescriptorIfAny()
+            parameterDescriptor is ValueParameterDescriptor && parameterDescriptor.annotations.any { annotation ->
+                annotation.fqName?.asString() == fqName
             }
         }
     }

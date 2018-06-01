@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
+ * Copyright 2010-2017 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,15 +27,15 @@ import org.jetbrains.kotlin.js.translate.general.Translation
 import org.jetbrains.kotlin.js.translate.utils.*
 import org.jetbrains.kotlin.js.translate.utils.TranslationUtils.simpleReturnFunction
 import org.jetbrains.kotlin.js.translate.utils.TranslationUtils.translateFunctionAsEcma5PropertyDescriptor
-import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDelegatedSuperTypeEntry
+import org.jetbrains.kotlin.psi.KtPureClassOrObject
 import org.jetbrains.kotlin.psi.KtSuperTypeListEntry
 import org.jetbrains.kotlin.resolve.DelegationResolver
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExtensionProperty
 
 class DelegationTranslator(
-        classDeclaration: KtClassOrObject,
+        classDeclaration: KtPureClassOrObject,
         context: TranslationContext
 ) : AbstractTranslator(context) {
 
@@ -76,28 +76,33 @@ class DelegationTranslator(
                 val context = context().innerBlock()
                 val delegateInitExpr = Translation.translateAsExpression(expression, context)
                 statements += context.dynamicContext().jsBlock().statements
-                val lhs = JsAstUtils.pureFqn(field.name, JsLiteral.THIS)
-                statements += JsAstUtils.assignment(lhs, delegateInitExpr).makeStmt()
+                val lhs = JsAstUtils.pureFqn(field.name, JsThisRef())
+                statements += JsAstUtils.assignment(lhs, delegateInitExpr)
+                        .apply { source = specifier }
+                        .makeStmt()
             }
         }
     }
 
     fun generateDelegated() {
         for (specifier in delegationBySpecifiers) {
-            generateDelegates(getSuperClass(specifier), fields[specifier]!!)
+            getSuperClass(specifier)?.let {
+                generateDelegates(specifier, it, fields[specifier]!!)
+            }
         }
     }
 
-    private fun getSuperClass(specifier: KtSuperTypeListEntry): ClassDescriptor =
+    private fun getSuperClass(specifier: KtSuperTypeListEntry): ClassDescriptor? =
             CodegenUtil.getSuperClassBySuperTypeListEntry(specifier, bindingContext())
+            ?: error("ClassDescriptor of superType should not be null: ${specifier.text}")
 
-    private fun generateDelegates(toClass: ClassDescriptor, field: Field) {
+    private fun generateDelegates(specifier: KtSuperTypeListEntry, toClass: ClassDescriptor, field: Field) {
         for ((descriptor, overriddenDescriptor) in DelegationResolver.getDelegates(classDescriptor, toClass)) {
             when (descriptor) {
                 is PropertyDescriptor ->
-                    generateDelegateCallForPropertyMember(descriptor, field.name)
+                    generateDelegateCallForPropertyMember(specifier, descriptor, field.name)
                 is FunctionDescriptor ->
-                    generateDelegateCallForFunctionMember(descriptor, overriddenDescriptor as FunctionDescriptor, field.name)
+                    generateDelegateCallForFunctionMember(specifier, descriptor, overriddenDescriptor as FunctionDescriptor, field.name)
                 else ->
                     throw IllegalArgumentException("Expected property or function $descriptor")
             }
@@ -105,13 +110,14 @@ class DelegationTranslator(
     }
 
     private fun generateDelegateCallForPropertyMember(
+            specifier: KtSuperTypeListEntry,
             descriptor: PropertyDescriptor,
             delegateName: JsName
     ) {
         val propertyName: String = descriptor.name.asString()
 
         fun generateDelegateGetterFunction(getterDescriptor: PropertyGetterDescriptor): JsFunction {
-            val delegateRef = JsNameRef(delegateName, JsLiteral.THIS)
+            val delegateRef = JsNameRef(delegateName, JsThisRef())
 
             val returnExpression: JsExpression = if (DescriptorUtils.isExtension(descriptor)) {
                 val getterName = context().getNameForDescriptor(getterDescriptor)
@@ -122,7 +128,10 @@ class DelegationTranslator(
                 JsNameRef(propertyName, delegateRef)
             }
 
+            returnExpression.source(specifier)
+
             val jsFunction = simpleReturnFunction(context().getScopeForDescriptor(getterDescriptor.containingDeclaration), returnExpression)
+            jsFunction.source = specifier
             if (DescriptorUtils.isExtension(descriptor)) {
                 val receiverName = jsFunction.scope.declareName(Namer.getReceiverParameterName())
                 jsFunction.parameters.add(JsParameter(receiverName))
@@ -133,12 +142,13 @@ class DelegationTranslator(
         fun generateDelegateSetterFunction(setterDescriptor: PropertySetterDescriptor): JsFunction {
             val jsFunction = JsFunction(context().program().rootScope,
                                         "setter for " + setterDescriptor.name.asString())
+            jsFunction.source = specifier
 
             assert(setterDescriptor.valueParameters.size == 1) { "Setter must have 1 parameter" }
             val defaultParameter = JsParameter(JsScope.declareTemporary())
             val defaultParameterRef = defaultParameter.name.makeRef()
 
-            val delegateRef = JsNameRef(delegateName, JsLiteral.THIS)
+            val delegateRef = JsNameRef(delegateName, JsThisRef())
 
             // TODO: remove explicit type annotation when Kotlin compiler works this out
             val setExpression: JsExpression = if (DescriptorUtils.isExtension(descriptor)) {
@@ -154,7 +164,7 @@ class DelegationTranslator(
             }
 
             jsFunction.parameters.add(defaultParameter)
-            jsFunction.body = JsBlock(setExpression.makeStmt())
+            jsFunction.body = JsBlock(setExpression.apply { source = specifier }.makeStmt())
             return jsFunction
         }
 
@@ -191,11 +201,13 @@ class DelegationTranslator(
 
 
     private fun generateDelegateCallForFunctionMember(
+            specifier: KtSuperTypeListEntry,
             descriptor: FunctionDescriptor,
             overriddenDescriptor: FunctionDescriptor,
             delegateName: JsName
     ) {
-        val delegateRef = JsNameRef(delegateName, JsLiteral.THIS)
-        context().addDeclarationStatement(generateDelegateCall(classDescriptor, descriptor, overriddenDescriptor, delegateRef, context()))
+        val delegateRef = JsNameRef(delegateName, JsThisRef())
+        val statement = generateDelegateCall(classDescriptor, descriptor, overriddenDescriptor, delegateRef, context().newDeclaration(overriddenDescriptor), true, specifier)
+        context().addDeclarationStatement(statement)
     }
 }

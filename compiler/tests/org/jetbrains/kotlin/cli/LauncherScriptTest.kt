@@ -20,7 +20,6 @@ import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.util.ExecUtil
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.text.StringUtil
-import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.TestCaseWithTmpdir
 import org.jetbrains.kotlin.utils.PathUtil
@@ -36,14 +35,14 @@ class LauncherScriptTest : TestCaseWithTmpdir() {
             workDirectory: File? = null
     ) {
         val executableFileName = if (SystemInfo.isWindows) "$executableName.bat" else executableName
-        val launcherFile = File(PathUtil.getKotlinPathsForDistDirectory().homePath, "bin/$executableFileName")
+        val launcherFile = File(PathUtil.kotlinPathsForDistDirectory.homePath, "bin/$executableFileName")
         assertTrue("Launcher script not found, run 'ant dist': ${launcherFile.absolutePath}", launcherFile.exists())
 
         val cmd = GeneralCommandLine(launcherFile.absolutePath, *args)
         workDirectory?.let(cmd::withWorkDirectory)
         val processOutput = ExecUtil.execAndGetOutput(cmd)
         val stdout = StringUtil.convertLineSeparators(processOutput.stdout)
-        val stderr = StringUtil.convertLineSeparators(processOutput.stderr)
+        val stderr = StringUtil.convertLineSeparators(processOutput.stderr).replace("Picked up [_A-Z]+:.*\n".toRegex(), "")
         val exitCode = processOutput.exitCode
 
         try {

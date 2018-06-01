@@ -16,6 +16,8 @@
 
 package org.jetbrains.kotlin.gradle.utils
 
+import org.gradle.util.GradleVersion
+
 internal data class ParsedGradleVersion(val major: Int, val minor: Int) : Comparable<ParsedGradleVersion> {
     override fun compareTo(other: ParsedGradleVersion): Int {
         val majorCompare = major.compareTo(other.major)
@@ -43,7 +45,7 @@ internal data class ParsedGradleVersion(val major: Int, val minor: Int) : Compar
                     ?.let { if (it.all { (it?.value?.length ?: 0).let { it > 0 && it < 4 }}) it else null }
 
             val versions = matches?.mapNotNull { it?.value?.parseIntOrNull() } ?: emptyList()
-            if (versions.size == 2 && versions.all { it > 0 }) {
+            if (versions.size == 2 && versions.all { it >= 0 }) {
                 val (major, minor) = versions
                 return ParsedGradleVersion(major, minor)
             }
@@ -52,3 +54,7 @@ internal data class ParsedGradleVersion(val major: Int, val minor: Int) : Compar
         }
     }
 }
+
+fun isGradleVersionAtLeast(major: Int, minor: Int) =
+        ParsedGradleVersion.parse(GradleVersion.current().version)
+                ?.let { it >= ParsedGradleVersion(major, minor) } ?: false

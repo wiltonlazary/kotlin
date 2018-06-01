@@ -19,9 +19,14 @@ package org.jetbrains.kotlin.idea.spring.tests.gutter
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.intellij.codeInsight.daemon.LineMarkerProviders
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
 import icons.SpringApiIcons
+import junit.framework.Assert
+import junit.framework.AssertionFailedError
+import org.jetbrains.kotlin.compatibility.projectDisposableEx
+import org.jetbrains.kotlin.idea.KotlinLanguage
 import org.jetbrains.kotlin.idea.jsonUtils.getString
 import org.jetbrains.kotlin.idea.spring.tests.SpringTestFixtureExtension
 import org.jetbrains.kotlin.idea.test.ConfigLibraryUtil
@@ -46,6 +51,8 @@ abstract class AbstractSpringClassAnnotatorTest : KotlinLightCodeInsightFixtureT
 
         val config = JsonParser().parse(FileUtil.loadFile(configFile, true)) as JsonObject
 
+        PluginTestCaseBase.addJdk(myFixture.projectDisposableEx, PluginTestCaseBase::mockJdk)
+
         val withRuntime = config["withRuntime"]?.asBoolean ?: false
         if (withRuntime) {
             ConfigLibraryUtil.configureKotlinRuntimeAndSdk(myModule, PluginTestCaseBase.mockJdk())
@@ -53,26 +60,28 @@ abstract class AbstractSpringClassAnnotatorTest : KotlinLightCodeInsightFixtureT
 
         try {
             val springConfigFiles = (config["springConfig"] as JsonArray).map { it.asString }
-
             myFixture.testDataPath = testRoot.absolutePath
-            TestFixtureExtension.getFixture<SpringTestFixtureExtension>()!!.configureFileSet(myFixture, springConfigFiles)
             for (file in testRoot.listFiles()) {
                 val name = file.name
-                if (name in springConfigFiles) continue
-                if (file.isDirectory) myFixture.copyDirectoryToProject(name, name) else myFixture.copyFileToProject(name)
+                if (file.isDirectory) myFixture.copyDirectoryToProject(name, name) else myFixture.configureByFile(name)
             }
+            TestFixtureExtension.getFixture<SpringTestFixtureExtension>()!!.configureFileSet(myFixture, springConfigFiles)
 
             val fileName = config.getString("file")
             val iconName = config.getString("icon")
-            val icon = SpringApiIcons::class.java.getField(iconName)[null]
+            val icon = SpringApiIcons.Gutter::class.java.getField(iconName)[null]
 
-            val gutterMark = myFixture.findGutter(fileName)!!.let {
+            val gutter = myFixture.findGutter(fileName) ?: throw AssertionError("no gutter for '$fileName'")
+            val gutterMark = gutter.let {
                 if (it.icon == icon) it
-                else myFixture.findGuttersAtCaret().first { it.icon == icon }
+                else myFixture.findGuttersAtCaret().let { gutters ->
+                    gutters.firstOrNull() { it.icon == icon }
+                    ?: throw AssertionFailedError("no $icon in gutters: ${gutters.map { it.icon }}")
+                }
             }
 
             val tooltip = config.getString("tooltip")
-            assert(gutterMark.tooltipText == tooltip)
+            Assert.assertEquals(tooltip, gutterMark.tooltipText)
 
             val naming = config.getString("naming")
             val targets = (config["targets"] as JsonArray).map { it.asString }

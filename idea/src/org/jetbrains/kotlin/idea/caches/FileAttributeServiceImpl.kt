@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.idea.caches
 
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileWithId
 import com.intellij.openapi.vfs.newvfs.FileAttribute
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.io.DataInputOutputUtil
@@ -26,8 +27,8 @@ import java.io.DataOutput
 class FileAttributeServiceImpl : FileAttributeService {
     val attributes: MutableMap<String, FileAttribute> = ContainerUtil.newConcurrentMap()
 
-    override fun register(id: String, version: Int) {
-        attributes[id] = FileAttribute(id, version, true)
+    override fun register(id: String, version: Int, fixedSize: Boolean) {
+        attributes[id] = FileAttribute(id, version, fixedSize)
     }
 
     override fun <T: Enum<T>> writeEnumAttribute(id: String, file: VirtualFile, value: T): CachedAttributeData<T> {
@@ -55,7 +56,7 @@ class FileAttributeServiceImpl : FileAttributeService {
         }
     }
 
-    private inline fun <T> write(file: VirtualFile, id: String, value: T, writeValueFun: (DataOutput, T) -> Unit): CachedAttributeData<T> {
+    override fun <T> write(file: VirtualFile, id: String, value: T, writeValueFun: (DataOutput, T) -> Unit): CachedAttributeData<T> {
         val attribute = attributes[id] ?: throw IllegalArgumentException("Attribute with $id wasn't registered")
 
         val data = CachedAttributeData(value, timeStamp = file.timeStamp)
@@ -68,8 +69,9 @@ class FileAttributeServiceImpl : FileAttributeService {
         return data
     }
 
-    private inline fun <T> read(file: VirtualFile, id: String, readValueFun: (DataInput) -> T): CachedAttributeData<T>? {
+    override fun <T> read(file: VirtualFile, id: String, readValueFun: (DataInput) -> T): CachedAttributeData<T>? {
         val attribute = attributes[id] ?: throw IllegalArgumentException("Attribute with $id wasn't registered")
+        if (file !is VirtualFileWithId) return null
 
         val stream = attribute.readAttribute(file) ?: return null
         return stream.use {

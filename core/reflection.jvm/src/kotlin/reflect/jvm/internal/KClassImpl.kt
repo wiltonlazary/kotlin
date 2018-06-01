@@ -17,23 +17,27 @@
 package kotlin.reflect.jvm.internal
 
 import org.jetbrains.kotlin.builtins.CompanionObjectMapping
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.load.java.JvmAbi
-import org.jetbrains.kotlin.load.java.structure.reflect.functionClassArity
-import org.jetbrains.kotlin.load.java.structure.reflect.wrapperByPrimitive
 import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
-import org.jetbrains.kotlin.load.kotlin.reflect.ReflectKotlinClass
+import org.jetbrains.kotlin.metadata.jvm.JvmProtoBuf
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
-import org.jetbrains.kotlin.serialization.deserialization.findClassAcrossModuleDependencies
+import org.jetbrains.kotlin.serialization.deserialization.MemberDeserializer
+import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedClassDescriptor
+import org.jetbrains.kotlin.utils.compact
 import kotlin.jvm.internal.TypeIntrinsics
 import kotlin.reflect.*
-import kotlin.reflect.jvm.internal.KotlinReflectionInternalError
 import kotlin.reflect.jvm.internal.KDeclarationContainerImpl.MemberBelonginess.DECLARED
 import kotlin.reflect.jvm.internal.KDeclarationContainerImpl.MemberBelonginess.INHERITED
+import kotlin.reflect.jvm.internal.components.ReflectKotlinClass
+import kotlin.reflect.jvm.internal.structure.functionClassArity
+import kotlin.reflect.jvm.internal.structure.wrapperByPrimitive
 
 internal class KClassImpl<T : Any>(override val jClass: Class<T>) : KDeclarationContainerImpl(), KClass<T>, KClassifierImpl {
     inner class Data : KDeclarationContainerImpl.Data() {
@@ -115,7 +119,9 @@ internal class KClassImpl<T : Any>(override val jClass: Class<T>) : KDeclaration
         }
 
         val supertypes: List<KType> by ReflectProperties.lazySoft {
-            descriptor.typeConstructor.supertypes.map { kotlinType ->
+            val kotlinTypes = descriptor.typeConstructor.supertypes
+            val result = ArrayList<KTypeImpl>(kotlinTypes.size)
+            kotlinTypes.mapTo(result) { kotlinType ->
                 KTypeImpl(kotlinType) {
                     val superClass = kotlinType.constructor.declarationDescriptor
                     if (superClass !is ClassDescriptor) throw KotlinReflectionInternalError("Supertype not a class: $superClass")
@@ -133,6 +139,13 @@ internal class KClassImpl<T : Any>(override val jClass: Class<T>) : KDeclaration
                     }
                 }
             }
+            if (!KotlinBuiltIns.isSpecialClassWithNoSupertypes(descriptor) && result.all {
+                val classKind = DescriptorUtils.getClassDescriptorForType(it.type).kind
+                classKind == ClassKind.INTERFACE || classKind == ClassKind.ANNOTATION_CLASS
+            }) {
+                result += KTypeImpl(descriptor.builtIns.anyType) { Any::class.java }
+            }
+            result.compact()
         }
 
         val declaredNonStaticMembers: Collection<KCallableImpl<*>>
@@ -184,6 +197,23 @@ internal class KClassImpl<T : Any>(override val jClass: Class<T>) : KDeclaration
     override fun getFunctions(name: Name): Collection<FunctionDescriptor> =
             memberScope.getContributedFunctions(name, NoLookupLocation.FROM_REFLECTION) +
             staticScope.getContributedFunctions(name, NoLookupLocation.FROM_REFLECTION)
+
+    override fun getLocalProperty(index: Int): PropertyDescriptor? {
+        // TODO: also check that this is a synthetic class (Metadata.k == 3)
+        if (jClass.simpleName == JvmAbi.DEFAULT_IMPLS_CLASS_NAME) {
+            jClass.declaringClass?.let { interfaceClass ->
+                if (interfaceClass.isInterface) {
+                    return (interfaceClass.kotlin as KClassImpl<*>).getLocalProperty(index)
+                }
+            }
+        }
+
+        return (descriptor as? DeserializedClassDescriptor)?.let { descriptor ->
+            val proto = descriptor.classProto.getExtension(JvmProtoBuf.classLocalVariable, index)
+            val nameResolver = descriptor.c.nameResolver
+            deserializeToDescriptor(jClass, proto, nameResolver, descriptor.c.typeTable, MemberDeserializer::loadProperty)
+        }
+    }
 
     override val simpleName: String? get() = data().simpleName
 

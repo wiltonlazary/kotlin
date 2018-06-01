@@ -24,6 +24,8 @@ import org.jetbrains.kotlin.asJava.builder.LightElementOrigin
 import org.jetbrains.kotlin.asJava.builder.LightMemberOrigin
 import org.jetbrains.kotlin.asJava.builder.LightMemberOriginForDeclaration
 import org.jetbrains.kotlin.asJava.classes.KtLightClass
+import org.jetbrains.kotlin.asJava.classes.KtLightClassForSourceDeclaration
+import org.jetbrains.kotlin.asJava.classes.isPossiblyAffectedByAllOpen
 import org.jetbrains.kotlin.asJava.classes.lazyPub
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtDeclaration
@@ -62,6 +64,14 @@ abstract class KtLightMemberImpl<out D : PsiMember>(
     override fun getDocComment() = (clsDelegate as PsiDocCommentOwner).docComment
 
     override fun isDeprecated() = (clsDelegate as PsiDocCommentOwner).isDeprecated
+
+    override fun isEquivalentTo(another: PsiElement?): Boolean {
+        val isEquivalentByOrigin =
+                another is KtLightMember<*> &&
+                lightMemberOrigin?.isEquivalentTo(another.lightMemberOrigin) == true
+
+        return isEquivalentByOrigin || this == another
+    }
 }
 
 internal fun getMemberOrigin(member: PsiMember): LightMemberOriginForDeclaration? {
@@ -79,7 +89,10 @@ private class KtLightMemberModifierList(
 ) : KtLightModifierList<KtLightMember<*>>(owner) {
     override fun hasModifierProperty(name: String) = when {
         name == PsiModifier.ABSTRACT && isImplementationInInterface() -> false
+        // pretend this method behaves like a default method
         name == PsiModifier.DEFAULT && isImplementationInInterface() -> true
+        name == PsiModifier.FINAL && ((owner.containingClass as? KtLightClassForSourceDeclaration)?.isPossiblyAffectedByAllOpen() ?: false) ->
+            clsDelegate.hasModifierProperty(name)
         dummyDelegate != null -> {
             when {
                 name in visibilityModifiers && isMethodOverride() ->
@@ -89,6 +102,10 @@ private class KtLightMemberModifierList(
         }
         else -> clsDelegate.hasModifierProperty(name)
     }
+
+    override fun hasExplicitModifier(name: String) =
+            // kotlin methods can't be truly default atm, that way we can avoid being reported on by diagnostics, namely android lint
+            if (name == PsiModifier.DEFAULT) false else super.hasExplicitModifier(name)
 
     private fun isMethodOverride() = owner is KtLightMethod && owner.kotlinOrigin?.hasModifier(KtTokens.OVERRIDE_KEYWORD) ?: false
 

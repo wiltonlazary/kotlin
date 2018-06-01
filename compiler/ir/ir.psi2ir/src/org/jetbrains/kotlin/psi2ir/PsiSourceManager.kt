@@ -35,9 +35,9 @@ class PsiSourceManager : SourceManager {
 
             maxOffset = document.textLength
 
-            lineStartOffsets = (0 .. document.lineCount - 1)
-                    .map { document.getLineStartOffset(it) }
-                    .toIntArray()
+            lineStartOffsets = (0..document.lineCount - 1)
+                .map { document.getLineStartOffset(it) }
+                .toIntArray()
         }
 
         override fun getLineNumber(offset: Int): Int {
@@ -53,17 +53,17 @@ class PsiSourceManager : SourceManager {
         }
 
         override fun getSourceRangeInfo(beginOffset: Int, endOffset: Int): SourceRangeInfo =
-                SourceRangeInfo(
-                        filePath = getRecognizableName(),
-                        startOffset = beginOffset,
-                        startLineNumber = getLineNumber(beginOffset),
-                        startColumnNumber = getColumnNumber(beginOffset),
-                        endOffset = endOffset,
-                        endLineNumber = getLineNumber(endOffset),
-                        endColumnNumber = getColumnNumber(endOffset)
-                )
+            SourceRangeInfo(
+                filePath = getRecognizableName(),
+                startOffset = beginOffset,
+                startLineNumber = getLineNumber(beginOffset),
+                startColumnNumber = getColumnNumber(beginOffset),
+                endOffset = endOffset,
+                endLineNumber = getLineNumber(endOffset),
+                endColumnNumber = getColumnNumber(endOffset)
+            )
 
-        fun getRecognizableName(): String = psiFileName
+        private fun getRecognizableName(): String = psiFileName
 
         override val name: String get() = getRecognizableName()
 
@@ -74,7 +74,7 @@ class PsiSourceManager : SourceManager {
     private val fileEntriesByIrFile = HashMap<IrFile, PsiFileEntry>()
     private val ktFileByFileEntry = HashMap<PsiFileEntry, KtFile>()
 
-    fun createFileEntry(ktFile: KtFile): PsiFileEntry {
+    private fun createFileEntry(ktFile: KtFile): PsiFileEntry {
         if (ktFile in fileEntriesByKtFile) error("PsiFileEntry is already created for $ktFile")
         val newEntry = PsiFileEntry(ktFile)
         fileEntriesByKtFile[ktFile] = newEntry
@@ -87,14 +87,14 @@ class PsiSourceManager : SourceManager {
     }
 
     fun getOrCreateFileEntry(ktFile: KtFile): PsiFileEntry =
-            fileEntriesByKtFile.getOrElse(ktFile) { createFileEntry(ktFile) }
+        fileEntriesByKtFile.getOrElse(ktFile) { createFileEntry(ktFile) }
 
     fun getKtFile(fileEntry: PsiFileEntry): KtFile? =
-            ktFileByFileEntry[fileEntry]
+        ktFileByFileEntry[fileEntry]
 
     fun getKtFile(irFile: IrFile): KtFile? =
-            (irFile.fileEntry as? PsiFileEntry)?.let { ktFileByFileEntry[it] }
+        (irFile.fileEntry as? PsiFileEntry)?.let { ktFileByFileEntry[it] }
 
     override fun getFileEntry(irFile: IrFile): SourceManager.FileEntry =
-            fileEntriesByIrFile[irFile]!!
+        fileEntriesByIrFile[irFile]!!
 }

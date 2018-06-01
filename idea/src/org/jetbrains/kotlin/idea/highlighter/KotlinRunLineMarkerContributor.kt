@@ -18,11 +18,10 @@ package org.jetbrains.kotlin.idea.highlighter
 
 import com.intellij.execution.lineMarker.ExecutorAction
 import com.intellij.execution.lineMarker.RunLineMarkerContributor
+import com.intellij.icons.AllIcons
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.idea.KotlinIcons
 import org.jetbrains.kotlin.idea.MainFunctionDetector
-import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptor
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.psi.KtNamedFunction
 
 
@@ -32,12 +31,12 @@ class KotlinRunLineMarkerContributor : RunLineMarkerContributor() {
 
         if (function.nameIdentifier != element) return null
 
-        val detector = MainFunctionDetector { function ->
-            function.resolveToDescriptor() as FunctionDescriptor
+        val detector = MainFunctionDetector { someFunction ->
+            someFunction.resolveToDescriptorIfAny()
         }
 
         if (detector.isMain(function)) {
-            return RunLineMarkerContributor.Info(KotlinIcons.SMALL_LOGO_13, null, ExecutorAction.getActions(0))
+            return RunLineMarkerContributor.Info(AllIcons.RunConfigurations.TestState.Run, null, ExecutorAction.getActions(0))
         }
 
         return null

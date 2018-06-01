@@ -16,12 +16,11 @@
 
 package org.jetbrains.kotlin.utils
 
-import org.jetbrains.kotlin.serialization.deserialization.BinaryVersion
+import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion
 import java.io.DataInputStream
 import java.io.File
 import java.io.InputStream
-import javax.xml.bind.DatatypeConverter.parseBase64Binary
-import javax.xml.bind.DatatypeConverter.printBase64Binary
+import java.util.*
 
 class KotlinJavascriptMetadata(val version: JsMetadataVersion, val moduleName: String, val body: ByteArray)
 
@@ -33,7 +32,7 @@ class JsMetadataVersion(vararg numbers: Int) : BinaryVersion(*numbers) {
 
     companion object {
         @JvmField
-        val INSTANCE = JsMetadataVersion(1, 0, 1)
+        val INSTANCE = JsMetadataVersion(1, 2, 1)
 
         @JvmField
         val INVALID_VERSION = JsMetadataVersion()
@@ -57,6 +56,7 @@ class JsMetadataVersion(vararg numbers: Int) : BinaryVersion(*numbers) {
 object KotlinJavascriptMetadataUtils {
     const val JS_EXT: String = ".js"
     const val META_JS_SUFFIX: String = ".meta.js"
+    const val JS_MAP_EXT: String = ".js.map"
     private val KOTLIN_JAVASCRIPT_METHOD_NAME = "kotlin_module_metadata"
     private val KOTLIN_JAVASCRIPT_METHOD_NAME_PATTERN = "\\.kotlin_module_metadata\\(".toPattern()
 
@@ -72,14 +72,15 @@ object KotlinJavascriptMetadataUtils {
             KOTLIN_JAVASCRIPT_METHOD_NAME_PATTERN.matcher(text).find() && METADATA_PATTERN.matcher(text).find()
 
     fun formatMetadataAsString(moduleName: String, content: ByteArray): String =
-        "// Kotlin.$KOTLIN_JAVASCRIPT_METHOD_NAME(${JsMetadataVersion.INSTANCE.toInteger()}, \"$moduleName\", \"${printBase64Binary(content)}\");\n"
+        "// Kotlin.$KOTLIN_JAVASCRIPT_METHOD_NAME(${JsMetadataVersion.INSTANCE.toInteger()}, \"$moduleName\", " +
+        "\"${Base64.getEncoder().encodeToString(content)}\");\n"
 
     @JvmStatic
     fun loadMetadata(file: File): List<KotlinJavascriptMetadata> {
         assert(file.exists()) { "Library $file not found" }
         val metadataList = arrayListOf<KotlinJavascriptMetadata>()
-        JsLibraryUtils.traverseJsLibrary(file) { content, _ ->
-            parseMetadata(content, metadataList)
+        JsLibraryUtils.traverseJsLibrary(file) { library ->
+            parseMetadata(library.content, metadataList)
         }
 
         return metadataList
@@ -98,7 +99,7 @@ object KotlinJavascriptMetadataUtils {
             val abiVersion = JsMetadataVersion.fromInteger(matcher.group(1).toInt())
             val moduleName = matcher.group(3)
             val data = matcher.group(5)
-            metadataList.add(KotlinJavascriptMetadata(abiVersion, moduleName, parseBase64Binary(data)))
+            metadataList.add(KotlinJavascriptMetadata(abiVersion, moduleName, Base64.getDecoder().decode(data)))
         }
     }
 }

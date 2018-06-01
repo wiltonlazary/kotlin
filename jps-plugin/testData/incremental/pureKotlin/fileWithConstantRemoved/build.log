@@ -6,6 +6,8 @@ Cleaning output files:
 End of files
 Compiling files:
 End of files
+Marked as dirty by Kotlin:
+  src/usage.kt
 Exit code: ADDITIONAL_PASS_REQUIRED
 ------------------------------------------
 Cleaning output files:
@@ -19,4 +21,4 @@ Exit code: ABORT
 ------------------------------------------
 COMPILATION FAILED
 Unresolved reference: test
-An annotation parameter must be a compile-time constant
+An annotation argument must be a compile-time constant

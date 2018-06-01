@@ -16,55 +16,25 @@
 
 package org.jetbrains.kotlin.idea.caches.resolve
 
-import com.intellij.openapi.module.Module
-import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime
-import org.jetbrains.kotlin.config.TargetPlatformKind
-import org.jetbrains.kotlin.idea.project.PluginJetFilesProvider
+import org.jetbrains.kotlin.idea.multiplatform.setupMppProjectFromDirStructure
 import org.jetbrains.kotlin.idea.stubs.AbstractMultiHighlightingTest
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
-import org.junit.Assert
+import java.io.File
 
 abstract class AbstractMultiModuleHighlightingTest : AbstractMultiHighlightingTest() {
 
-    override val testPath = PluginTestCaseBase.getTestDataPathBase() + "/multiModuleHighlighting/"
-
-    protected fun doMultiPlatformTest(
-            vararg platforms: TargetPlatformKind<*>,
-            withStdlibCommon: Boolean = false,
-            configureModule: (Module, TargetPlatformKind<*>) -> Unit = { _, _ -> },
-            useFullJdk: Boolean = false
+    protected open fun checkHighlightingInAllFiles(
+        shouldCheckFile: () -> Boolean = { !file.text.contains("// !CHECK_HIGHLIGHTING") }
     ) {
-        val commonModule = module("common", useFullJdk = useFullJdk)
-        commonModule.createFacet(TargetPlatformKind.Common)
-        if (withStdlibCommon) {
-            commonModule.addLibrary(ForTestCompileRuntime.stdlibCommonForTests())
+        checkFiles(shouldCheckFile) {
+            checkHighlighting(myEditor, true, false)
         }
+    }
 
-        for (platform in platforms) {
-            val path = when (platform) {
-                is TargetPlatformKind.Jvm -> "jvm"
-                is TargetPlatformKind.JavaScript -> "js"
-                else -> error("Unsupported platform: $platform")
-            }
-            val platformModule = module(path, useFullJdk = useFullJdk)
-            platformModule.createFacet(platform)
-            platformModule.enableMultiPlatform()
-            platformModule.addDependency(commonModule)
-            configureModule(platformModule, platform)
-        }
-
+    protected open fun doTest(path: String) {
+        setupMppProjectFromDirStructure(File(path))
         checkHighlightingInAllFiles()
     }
 
-    protected fun checkHighlightingInAllFiles(nameFilter: (fileName: String) -> Boolean = { true }) {
-        var atLeastOneFile = false
-        PluginJetFilesProvider.allFilesInProject(myProject!!).forEach { file ->
-            if (nameFilter(file.name) && !file.text.contains("// !CHECK_HIGHLIGHTING")) {
-                atLeastOneFile = true
-                configureByExistingFile(file.virtualFile!!)
-                checkHighlighting(myEditor, true, false)
-            }
-        }
-        Assert.assertTrue(atLeastOneFile)
-    }
+    override fun getTestDataPath() = "${PluginTestCaseBase.getTestDataPathBase()}/multiModuleHighlighting/multiplatform/"
 }

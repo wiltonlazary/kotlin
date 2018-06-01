@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.idea;
 
+import com.google.common.collect.Lists;
 import com.intellij.openapi.editor.Caret;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.rt.execution.junit.FileComparisonFailure;
@@ -26,7 +27,6 @@ import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase;
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
 import org.jetbrains.kotlin.test.TagsTestDataUtil;
-import org.testng.collections.Lists;
 
 import java.io.File;
 
@@ -108,9 +108,30 @@ public class WordSelectionTest extends KotlinLightCodeInsightFixtureTestCase {
         doTest();
     }
 
+    public void testLambdaArgument1() {
+        doTest();
+    }
+    public void testLambdaArgument2() {
+        doTest();
+    }
+    public void testLambdaArgument3() {
+        doTest();
+    }
+    public void testLambdaArgument4() {
+        doTest();
+    }
+
     public void testArrayBrackets() {
         doTest();
     }
+
+    public void testDeclarationWithComment1() { doTest(); }
+    public void testDeclarationWithComment2() { doTest(); }
+    public void testDeclarationWithComment3() { doTest(); }
+    public void testDeclarationWithComment4() { doTest(); }
+
+    public void testLeftBrace() { doTest(); }
+    public void testRightBrace() { doTest(); }
 
     private void doTest() {
         String dirName = getTestName(false);

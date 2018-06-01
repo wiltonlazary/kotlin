@@ -36,11 +36,14 @@ abstract class SumTransformationBase(
     override fun generateCode(chainedCallGenerator: ChainedCallGenerator): KtExpression {
         val call = generateCall(chainedCallGenerator)
 
-        if (initialization.initializer.isZeroConstant()) {
-            return call
+        return if (initialization.initializer.isZeroConstant()) {
+            call
         }
         else {
-            return KtPsiFactory(call).createExpressionByPattern("$0 + $1", initialization.initializer, call)
+            KtPsiFactory(call).createExpressionByPattern(
+                    "$0 + $1", initialization.initializer, call,
+                    reformat = chainedCallGenerator.reformat
+            )
         }
     }
 
@@ -95,7 +98,7 @@ abstract class SumTransformationBase(
             }
 
             val byExpression = if (conversionFunctionName != null)
-                KtPsiFactory(value).createExpressionByPattern("$0.$conversionFunctionName()", value)
+                KtPsiFactory(value).createExpressionByPattern("$0.$conversionFunctionName()", value, reformat = state.reformat)
             else
                 value
 
@@ -171,7 +174,7 @@ class SumByTransformation(
         get() = "$functionName{}"
 
     override fun generateCall(chainedCallGenerator: ChainedCallGenerator): KtExpression {
-        val lambda = generateLambda(inputVariable, byExpression)
+        val lambda = generateLambda(inputVariable, byExpression, chainedCallGenerator.reformat)
         return chainedCallGenerator.generate("$functionName $0:'{}'", lambda)
     }
 }

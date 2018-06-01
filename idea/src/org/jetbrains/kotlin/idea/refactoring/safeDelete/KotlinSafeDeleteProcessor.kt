@@ -19,13 +19,13 @@ package org.jetbrains.kotlin.idea.refactoring.safeDelete
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.Condition
 import com.intellij.openapi.util.Conditions
-import com.intellij.psi.PsiClass
-import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiMethod
-import com.intellij.psi.PsiParameter
+import com.intellij.openapi.util.Key
+import com.intellij.psi.*
 import com.intellij.psi.search.searches.ReferencesSearch
+import com.intellij.refactoring.RefactoringBundle
 import com.intellij.refactoring.safeDelete.JavaSafeDeleteProcessor
 import com.intellij.refactoring.safeDelete.NonCodeUsageSearchInfo
 import com.intellij.refactoring.safeDelete.usageInfo.SafeDeleteOverrideAnnotation
@@ -33,28 +33,48 @@ import com.intellij.refactoring.safeDelete.usageInfo.SafeDeleteOverridingMethodU
 import com.intellij.refactoring.safeDelete.usageInfo.SafeDeleteReferenceJavaDeleteUsageInfo
 import com.intellij.refactoring.safeDelete.usageInfo.SafeDeleteReferenceSimpleDeleteUsageInfo
 import com.intellij.usageView.UsageInfo
+import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.asJava.*
+import org.jetbrains.kotlin.asJava.elements.KtLightField
+import org.jetbrains.kotlin.asJava.elements.KtLightFieldImpl
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
 import org.jetbrains.kotlin.idea.core.deleteElementAndCleanParent
 import org.jetbrains.kotlin.idea.refactoring.checkSuperMethods
 import org.jetbrains.kotlin.idea.refactoring.formatClass
 import org.jetbrains.kotlin.idea.refactoring.formatFunction
+import org.jetbrains.kotlin.idea.refactoring.withExpectedActuals
+import org.jetbrains.kotlin.idea.refactoring.isTrueJavaMethod
 import org.jetbrains.kotlin.idea.references.KtReference
-import org.jetbrains.kotlin.idea.search.usagesSearch.buildProcessDelegationCallConstructorUsagesTask
+import org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinReferencesSearchOptions
+import org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinReferencesSearchParameters
+import org.jetbrains.kotlin.idea.search.usagesSearch.constructor
 import org.jetbrains.kotlin.idea.search.usagesSearch.processDelegationCallConstructorUsages
+import org.jetbrains.kotlin.idea.util.actualsForExpected
+import org.jetbrains.kotlin.idea.util.liftToExpected
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfTypeAndBranch
+import org.jetbrains.kotlin.psi.psiUtil.parameterIndex
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.utils.SmartSet
 import org.jetbrains.kotlin.utils.ifEmpty
 import java.util.*
 
 class KotlinSafeDeleteProcessor : JavaSafeDeleteProcessor() {
+    companion object {
+        @set:TestOnly
+        internal var Project.ALLOW_LIFTING_ACTUAL_PARAMETER_TO_EXPECTED
+                by NotNullableUserDataProperty(Key.create("ALLOW_LIFTING_ACTUAL_PARAMETER_TO_EXPECTED"), true)
+
+        private var KtDeclaration.dropActualModifier: Boolean? by UserDataProperty(Key.create("DROP_ACTUAL_MODIFIER"))
+    }
+
     override fun handlesElement(element: PsiElement): Boolean = element.canDeleteElement()
 
     override fun findUsages(
@@ -68,13 +88,66 @@ class KotlinSafeDeleteProcessor : JavaSafeDeleteProcessor() {
             deleteSet.any { element -> JavaSafeDeleteProcessor.isInside(it, element.unwrapped) }
         }
 
-        fun getSearchInfo(element: PsiElement): NonCodeUsageSearchInfo {
-            return NonCodeUsageSearchInfo(getIgnoranceCondition(), element)
+        fun getSearchInfo(element: PsiElement) = NonCodeUsageSearchInfo(getIgnoranceCondition(), element)
+
+        fun searchKotlinDeclarationReferences(declaration: KtDeclaration): Sequence<PsiReference> {
+            val elementsToSearch = if (declaration is KtParameter) declaration.withExpectedActuals() else listOf(declaration)
+            return elementsToSearch.asSequence().flatMap {
+                val searchParameters = KotlinReferencesSearchParameters(
+                        it,
+                        it.useScope,
+                        kotlinOptions = KotlinReferencesSearchOptions(acceptCallableOverrides = true)
+                )
+                ReferencesSearch.search(searchParameters)
+                        .asSequence()
+                        .filterNot { reference -> getIgnoranceCondition().value(reference.element) }
+            }
         }
+
+        fun findKotlinParameterUsages(parameter: KtParameter) {
+            val ownerFunction = parameter.ownerFunction as? KtFunction ?: return
+            val index = parameter.parameterIndex()
+            for (reference in searchKotlinDeclarationReferences(ownerFunction)) {
+                val callee = reference.element as? KtExpression ?: continue
+                val resolvedCall = callee.resolveToCall(BodyResolveMode.FULL) ?: continue
+                val parameterDescriptor = resolvedCall.candidateDescriptor.valueParameters.getOrNull(index) ?: continue
+                val resolvedArgument = resolvedCall.valueArguments[parameterDescriptor] ?: continue
+                val arguments = resolvedArgument.arguments.filterIsInstance<KtValueArgument>()
+                if (arguments.isEmpty()) continue
+
+                usages.add(SafeDeleteValueArgumentListUsageInfo(parameter, *arguments.toTypedArray()))
+            }
+        }
+
+        fun findKotlinDeclarationUsages(declaration: KtDeclaration): NonCodeUsageSearchInfo {
+            searchKotlinDeclarationReferences(declaration).mapNotNullTo(usages) { reference ->
+                val refElement = reference.element ?: return@mapNotNullTo null
+                refElement.getNonStrictParentOfType<KtImportDirective>()?.let { importDirective ->
+                    SafeDeleteImportDirectiveUsageInfo(importDirective, element)
+                } ?: SafeDeleteReferenceSimpleDeleteUsageInfo(refElement, declaration, false)
+            }
+
+            if (declaration is KtParameter) {
+                findKotlinParameterUsages(declaration)
+            }
+
+            return getSearchInfo(declaration)
+        }
+
+        fun asLightElements(ktElements: Array<out PsiElement>) =
+                ktElements.flatMap { (it as? KtElement)?.toLightElements() ?: listOf(it) }.toTypedArray()
 
         fun findUsagesByJavaProcessor(element: PsiElement, forceReferencedElementUnwrapping: Boolean): NonCodeUsageSearchInfo? {
             val javaUsages = ArrayList<UsageInfo>()
-            val searchInfo = super.findUsages(element, allElementsToDelete, javaUsages)
+
+            val elementToPassToJava = when (element) {
+                is KtLightFieldImpl<*> -> object : KtLightField by element {
+                    // Suppress walking through initializer compiled PSI (it doesn't contain any reference expressions anyway)
+                    override fun getInitializer() = null
+                }
+                else -> element
+            }
+            val searchInfo = super.findUsages(elementToPassToJava, asLightElements(allElementsToDelete), javaUsages)
 
             javaUsages.filterIsInstance<SafeDeleteOverridingMethodUsageInfo>().mapNotNullTo(deleteSet) { it.element }
 
@@ -89,10 +162,13 @@ class KotlinSafeDeleteProcessor : JavaSafeDeleteProcessor() {
 
                     is SafeDeleteOverrideAnnotation ->
                         usageInfo.smartPointer.element?.let { usageElement ->
-                            if (usageElement.toLightMethods().all { method -> method.findSuperMethods().size == 0 }) {
-                                KotlinSafeDeleteOverrideAnnotation(usageElement, usageInfo.referencedElement)
+                            when {
+                                usageElement.isTrueJavaMethod() -> usageInfo
+                                usageElement.toLightMethods().all { method -> method.findSuperMethods().isEmpty() } -> {
+                                    KotlinSafeDeleteOverrideAnnotation(usageElement, usageInfo.referencedElement) as UsageInfo
+                                }
+                                else -> null
                             }
-                            else null
                         }
 
                     is SafeDeleteReferenceJavaDeleteUsageInfo ->
@@ -125,26 +201,17 @@ class KotlinSafeDeleteProcessor : JavaSafeDeleteProcessor() {
                         .fold(insideDeleted) { condition1, condition2 -> Conditions.or(condition1, condition2) }
 
         fun findUsagesByJavaProcessor(ktDeclaration: KtDeclaration): NonCodeUsageSearchInfo {
+            val lightElements = ktDeclaration.toLightElements()
+            if (lightElements.isEmpty()) {
+                return findKotlinDeclarationUsages(ktDeclaration)
+            }
             return NonCodeUsageSearchInfo(
                     findUsagesByJavaProcessor(
-                            ktDeclaration.toLightElements().asSequence(),
+                            lightElements.asSequence(),
                             getIgnoranceCondition()
                     ),
                     ktDeclaration
             )
-        }
-
-        fun findKotlinDeclarationUsages(declaration: KtDeclaration): NonCodeUsageSearchInfo {
-            ReferencesSearch.search(declaration, declaration.useScope)
-                    .asSequence()
-                    .filterNot { reference -> getIgnoranceCondition().value(reference.element) }
-                    .mapTo(usages) { reference ->
-                        reference.element.getNonStrictParentOfType<KtImportDirective>()?.let { importDirective ->
-                            SafeDeleteImportDirectiveUsageInfo(importDirective, element)
-                        } ?: SafeDeleteReferenceSimpleDeleteUsageInfo(element, declaration, false)
-                    }
-
-            return getSearchInfo(declaration)
         }
 
         fun findTypeParameterUsages(parameter: KtTypeParameter) {
@@ -172,8 +239,9 @@ class KotlinSafeDeleteProcessor : JavaSafeDeleteProcessor() {
 
         fun findDelegationCallUsages(element: PsiElement) {
             val constructors = when (element) {
-                is PsiClass -> element.constructors
-                is PsiMethod -> arrayOf(element)
+                is KtClass -> element.allConstructors
+                is PsiClass -> element.constructors.toList()
+                is PsiMethod -> listOf(element)
                 else -> return
             }
             for (constructor in constructors) {
@@ -188,21 +256,15 @@ class KotlinSafeDeleteProcessor : JavaSafeDeleteProcessor() {
 
         return when (element) {
             is KtClassOrObject -> {
-                if (element is KtEnumEntry) {
-                    LightClassUtil.getLightClassBackingField(element)?.let { findUsagesByJavaProcessor(it, false) }
-                }
-
-                element.toLightClass()?.let { klass ->
-                    findDelegationCallUsages(klass)
-                    findUsagesByJavaProcessor(klass, false)
-                }
+                findDelegationCallUsages(element)
+                findKotlinDeclarationUsages(element)
             }
 
             is KtSecondaryConstructor -> {
                 element.getRepresentativeLightMethod()?.let { method ->
                     findDelegationCallUsages(method)
                     findUsagesByJavaProcessor(method, false)
-                }
+                } ?: findKotlinDeclarationUsages(element)
             }
 
             is KtNamedFunction -> {
@@ -210,15 +272,23 @@ class KotlinSafeDeleteProcessor : JavaSafeDeleteProcessor() {
                     findKotlinDeclarationUsages(element)
                 }
                 else {
-                    element.toLightMethods().map { method -> findUsagesByJavaProcessor(method, false) }.firstOrNull()
+                    val lightMethods = element.toLightMethods()
+                    if (lightMethods.isNotEmpty()) {
+                        lightMethods.map { method -> findUsagesByJavaProcessor(method, false) }.firstOrNull()
+                    }
+                    else {
+                        findKotlinDeclarationUsages(element)
+                    }
                 }
             }
 
-            is PsiMethod ->
+            is PsiMethod -> {
                 findUsagesByJavaProcessor(element, false)
+            }
 
-            is PsiClass ->
+            is PsiClass -> {
                 findUsagesByJavaProcessor(element, false)
+            }
 
             is KtProperty -> {
                 if (element.isLocal) {
@@ -237,6 +307,10 @@ class KotlinSafeDeleteProcessor : JavaSafeDeleteProcessor() {
             is KtParameter ->
                 findUsagesByJavaProcessor(element)
 
+            is KtTypeAlias -> {
+                findKotlinDeclarationUsages(element)
+            }
+
             else -> null
         } ?: getSearchInfo(element)
     }
@@ -251,13 +325,13 @@ class KotlinSafeDeleteProcessor : JavaSafeDeleteProcessor() {
 
             val bindingContext = (element as KtElement).analyze()
 
-            val declarationDescriptor = bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, element)
-            if (declarationDescriptor !is CallableMemberDescriptor) return null
+            val declarationDescriptor =
+                    bindingContext[BindingContext.DECLARATION_TO_DESCRIPTOR, element] as? CallableMemberDescriptor ?: return null
 
             return declarationDescriptor.overriddenDescriptors
                     .asSequence()
                     .filter { overridenDescriptor -> overridenDescriptor.modality == Modality.ABSTRACT }
-                    .mapTo(ArrayList<String>()) { overridenDescriptor ->
+                    .mapTo(ArrayList()) { overridenDescriptor ->
                         KotlinBundle.message(
                                 "x.implements.y",
                                 formatFunction(declarationDescriptor, true),
@@ -305,6 +379,18 @@ class KotlinSafeDeleteProcessor : JavaSafeDeleteProcessor() {
     }
 
     override fun prepareForDeletion(element: PsiElement) {
+        if (element is KtDeclaration) {
+            element.actualsForExpected().forEach {
+                if (it is KtParameter) {
+                    (it.parent as? KtParameterList)?.removeParameter(it)
+                }
+                else {
+                    it.removeModifier(KtTokens.IMPL_KEYWORD)
+                    it.removeModifier(KtTokens.ACTUAL_KEYWORD)
+                }
+            }
+        }
+
         when (element) {
             is PsiMethod -> element.cleanUpOverrides()
 
@@ -321,19 +407,48 @@ class KotlinSafeDeleteProcessor : JavaSafeDeleteProcessor() {
             is KtTypeParameter ->
                 element.deleteElementAndCleanParent()
 
-            is KtParameter ->
+            is KtParameter -> {
+                element.ownerFunction?.let {
+                    if (it.dropActualModifier == true) {
+                        it.removeModifier(KtTokens.IMPL_KEYWORD)
+                        it.removeModifier(KtTokens.ACTUAL_KEYWORD)
+                        it.dropActualModifier = null
+                    }
+                }
                 (element.parent as KtParameterList).removeParameter(element)
+            }
         }
+    }
+
+    private fun shouldAllowPropagationToExpected(parameter: KtParameter): Boolean {
+        if (ApplicationManager.getApplication().isUnitTestMode) return parameter.project.ALLOW_LIFTING_ACTUAL_PARAMETER_TO_EXPECTED
+
+        return Messages.showYesNoDialog(
+                "Do you want to delete this parameter in expected declaration and all related actual ones?",
+                RefactoringBundle.message("safe.delete.title"),
+                Messages.getQuestionIcon()
+        ) == Messages.YES
     }
 
     override fun getElementsToSearch(
             element: PsiElement, module: Module?, allElementsToDelete: Collection<PsiElement>
     ): Collection<PsiElement>? {
         when (element) {
-            is KtParameter ->
+            is KtParameter -> {
+                val expectParameter = element.liftToExpected() as? KtParameter
+                if (expectParameter != null && expectParameter != element) {
+                    if (shouldAllowPropagationToExpected(element)) {
+                        return listOf(expectParameter)
+                    } else {
+                        element.ownerFunction?.dropActualModifier = true
+                        return listOf(element)
+                    }
+                }
+
                 return element.toPsiParameters().flatMap { psiParameter ->
                     checkParametersInMethodHierarchy(psiParameter) ?: emptyList()
                 }.ifEmpty { listOf(element) }
+            }
 
             is PsiParameter ->
                 return checkParametersInMethodHierarchy(element)

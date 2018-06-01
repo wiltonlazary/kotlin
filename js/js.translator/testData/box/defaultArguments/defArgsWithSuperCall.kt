@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1117
 package foo
 
 open class A(val a: Int = 1, val b: Int = 2)

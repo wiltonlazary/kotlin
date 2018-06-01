@@ -19,6 +19,10 @@ package org.jetbrains.kotlin.idea.intentions
 import com.google.common.collect.Lists
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.Task
+import com.intellij.openapi.progress.util.ProgressIndicatorBase
 import com.intellij.openapi.util.Computable
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.io.FileUtil
@@ -26,8 +30,10 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiFile
 import com.intellij.refactoring.BaseRefactoringProcessor
 import com.intellij.refactoring.util.CommonRefactoringUtil
+import com.intellij.testFramework.PlatformTestUtil
 import junit.framework.ComparisonFailure
 import junit.framework.TestCase
+import org.jetbrains.kotlin.idea.test.ConfigLibraryUtil
 import org.jetbrains.kotlin.idea.test.DirectiveBasedActionUtils
 import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.idea.util.application.executeWriteCommand
@@ -37,6 +43,8 @@ import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.junit.Assert
 import java.io.File
 import java.util.*
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 abstract class AbstractIntentionTest : KotlinLightCodeInsightFixtureTestCase() {
     protected open fun intentionFileName(): String = ".intention"
@@ -99,19 +107,43 @@ abstract class AbstractIntentionTest : KotlinLightCodeInsightFixtureTestCase() {
 
         val fileText = FileUtil.loadFile(mainFile, true)
 
-        TestCase.assertTrue("\"<caret>\" is missing in file \"$mainFile\"", fileText.contains("<caret>"))
+        ConfigLibraryUtil.configureLibrariesByDirective(myModule, PlatformTestUtil.getCommunityPath(), fileText)
 
-        val minJavaVersion = InTextDirectivesUtils.findStringWithPrefixes(fileText, "// MIN_JAVA_VERSION: ")
-        if (minJavaVersion != null && !SystemInfo.isJavaVersionAtLeast(minJavaVersion)) return
+        try {
+            TestCase.assertTrue("\"<caret>\" is missing in file \"$mainFile\"", fileText.contains("<caret>"))
 
-        if (file is KtFile && !InTextDirectivesUtils.isDirectiveDefined(fileText, "// SKIP_ERRORS_BEFORE")) {
-            DirectiveBasedActionUtils.checkForUnexpectedErrors(file as KtFile)
+            val minJavaVersion = InTextDirectivesUtils.findStringWithPrefixes(fileText, "// MIN_JAVA_VERSION: ")
+            if (minJavaVersion != null && !SystemInfo.isJavaVersionAtLeast(minJavaVersion)) return
+
+            if (file is KtFile && !InTextDirectivesUtils.isDirectiveDefined(fileText, "// SKIP_ERRORS_BEFORE")) {
+                DirectiveBasedActionUtils.checkForUnexpectedErrors(file as KtFile)
+            }
+
+            doTestFor(mainFile.name, pathToFiles, intentionAction, fileText)
+
+            if (file is KtFile && !InTextDirectivesUtils.isDirectiveDefined(fileText, "// SKIP_ERRORS_AFTER")) {
+                DirectiveBasedActionUtils.checkForUnexpectedErrors(file as KtFile)
+            }
         }
+        finally {
+            ConfigLibraryUtil.unconfigureLibrariesByDirective(myModule, fileText)
+        }
+    }
 
-        doTestFor(mainFile.name, pathToFiles, intentionAction, fileText)
-
-        if (file is KtFile && !InTextDirectivesUtils.isDirectiveDefined(fileText, "// SKIP_ERRORS_AFTER")) {
-            DirectiveBasedActionUtils.checkForUnexpectedErrors(file as KtFile)
+    private fun <T> computeUnderProgressIndicatorAndWait(compute: () -> T): T {
+        val result = CompletableFuture<T>()
+        val progressIndicator = ProgressIndicatorBase()
+        try {
+            val task = object : Task.Backgroundable(project, "isApplicable", false) {
+                override fun run(indicator: ProgressIndicator) {
+                    result.complete(compute())
+                }
+            }
+            ProgressManager.getInstance().runProcessWithProgressAsynchronously(task, progressIndicator)
+            return result.get(10, TimeUnit.SECONDS)
+        }
+        finally {
+            progressIndicator.cancel()
         }
     }
 
@@ -120,7 +152,7 @@ abstract class AbstractIntentionTest : KotlinLightCodeInsightFixtureTestCase() {
         val isApplicableString = InTextDirectivesUtils.findStringWithPrefixes(fileText, "// ${isApplicableDirectiveName()}: ")
         val isApplicableExpected = isApplicableString == null || isApplicableString == "true"
 
-        val isApplicableOnPooled = ApplicationManager.getApplication().executeOnPooledThread(java.util.concurrent.Callable { ApplicationManager.getApplication().runReadAction(Computable { intentionAction.isAvailable(project, editor, file) }) }).get()
+        val isApplicableOnPooled = computeUnderProgressIndicatorAndWait { ApplicationManager.getApplication().runReadAction(Computable { intentionAction.isAvailable(project, editor, file) }) }
 
         val isApplicableOnEdt = intentionAction.isAvailable(project, editor, file)
 
@@ -177,7 +209,7 @@ abstract class AbstractIntentionTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     companion object {
-        private val EXTENSIONS = arrayOf(".kt", ".java", ".groovy")
+        private val EXTENSIONS = arrayOf(".kt", ".kts", ".java", ".groovy")
     }
 }
 

@@ -44,6 +44,10 @@ private const val ORPHANED_RUN_FILE_AGE_THRESHOLD_MS = 1000000L
 
 data class DaemonWithMetadata(val daemon: CompileService, val runFile: File, val jvmOptions: DaemonJVMOptions)
 
+// TODO: write metadata into discovery file to speed up selection
+// TODO: consider using compiler jar signature (checksum) as a CompilerID (plus java version, plus ???) instead of classpath checksum
+//    would allow to use same compiler from taken different locations
+//    reqs: check that plugins (or anything els) should not be part of the CP
 fun walkDaemons(registryDir: File,
                 compilerId: CompilerId,
                 fileToCompareTimestamp: File,
@@ -88,13 +92,13 @@ private inline fun tryConnectToDaemon(port: Int, report: (DaemonReportCategory, 
         val daemon = LocateRegistry.getRegistry(LoopbackNetworkInterface.loopbackInetAddressName, port, LoopbackNetworkInterface.clientLoopbackSocketFactory)
                 ?.lookup(COMPILER_SERVICE_RMI_NAME)
         when (daemon) {
-            null -> report(DaemonReportCategory.EXCEPTION, "daemon not found")
+            null -> report(DaemonReportCategory.INFO, "daemon not found")
             is CompileService -> return daemon
-            else -> report(DaemonReportCategory.EXCEPTION, "Unable to cast compiler service, actual class received: ${daemon::class.java.name}")
+            else -> report(DaemonReportCategory.INFO, "Unable to cast compiler service, actual class received: ${daemon::class.java.name}")
         }
     }
     catch (e: Throwable) {
-        report(DaemonReportCategory.EXCEPTION, "cannot connect to registry: " + (e.cause?.message ?: e.message ?: "unknown error"))
+        report(DaemonReportCategory.INFO, "cannot connect to registry: " + (e.cause?.message ?: e.message ?: "unknown error"))
     }
     return null
 }

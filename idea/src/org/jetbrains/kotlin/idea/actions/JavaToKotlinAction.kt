@@ -22,7 +22,6 @@ import com.intellij.ide.scratch.ScratchRootType
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -96,12 +95,10 @@ class JavaToKotlinAction : AnAction() {
         }
 
         fun convertFiles(javaFiles: List<PsiJavaFile>, project: Project, enableExternalCodeProcessing: Boolean = true): List<KtFile> {
-            ApplicationManager.getApplication().saveAll()
-
             var converterResult: JavaToKotlinConverter.FilesResult? = null
             fun convert() {
                 val converter = JavaToKotlinConverter(project, ConverterSettings.defaultSettings, IdeaJavaToKotlinServices)
-                converterResult = converter.filesToKotlin(javaFiles, J2kPostProcessor(formatCode = true), ProgressManager.getInstance().progressIndicator)
+                converterResult = converter.filesToKotlin(javaFiles, J2kPostProcessor(formatCode = true), ProgressManager.getInstance().progressIndicator!!)
             }
 
 
@@ -120,7 +117,7 @@ class JavaToKotlinAction : AnAction() {
                     ProgressManager.getInstance().runProcessWithProgressSynchronously(
                             {
                                 runReadAction {
-                                    externalCodeUpdate = converterResult!!.externalCodeProcessing!!.prepareWriteOperation(ProgressManager.getInstance().progressIndicator)
+                                    externalCodeUpdate = converterResult!!.externalCodeProcessing!!.prepareWriteOperation(ProgressManager.getInstance().progressIndicator!!)
                                 }
                             },
                             title,

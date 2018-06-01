@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1122
 package foo
 
 // CHECK_CONTAINS_NO_CALLS: maxBySquare except=imul

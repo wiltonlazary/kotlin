@@ -1,3 +1,5 @@
+// IGNORE_BACKEND: JS_IR
+// EXPECTED_REACHABLE_NODES: 1117
 package foo
 
 private inline fun bar(predicate: (Char) -> Boolean): Int {

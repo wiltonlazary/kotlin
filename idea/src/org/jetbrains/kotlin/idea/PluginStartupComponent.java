@@ -29,10 +29,6 @@ import com.intellij.openapi.updateSettings.impl.UpdateChecker;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.search.searches.IndexPatternSearch;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.kotlin.idea.caches.JarUserDataManager;
-import org.jetbrains.kotlin.idea.debugger.filter.DebuggerFiltersUtilKt;
-import org.jetbrains.kotlin.idea.framework.CommonLibraryDetectionUtil;
-import org.jetbrains.kotlin.idea.framework.KotlinJavaScriptLibraryDetectionUtil;
 import org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinTodoSearcher;
 import org.jetbrains.kotlin.utils.PathUtil;
 
@@ -58,15 +54,6 @@ public class PluginStartupComponent implements ApplicationComponent {
     public void initComponent() {
         registerPathVariable();
 
-        if (ApplicationManager.getApplication().isUnitTestMode()) {
-            ThreadTrackerPatcherForTeamCityTesting.INSTANCE.patchThreadTracker();
-        }
-
-        JarUserDataManager.INSTANCE.register(KotlinJavaScriptLibraryDetectionUtil.HasKotlinJSMetadataInJar.INSTANCE);
-        JarUserDataManager.INSTANCE.register(CommonLibraryDetectionUtil.HasCommonKotlinMetadataInJar.INSTANCE);
-
-        DebuggerFiltersUtilKt.addKotlinStdlibDebugFilterIfNeeded();
-
         try {
             // API added in 15.0.2
             UpdateChecker.INSTANCE.getExcludedFromUpdateCheckPlugins().add("org.jetbrains.kotlin");
@@ -80,12 +67,17 @@ public class PluginStartupComponent implements ApplicationComponent {
             public void documentChanged(DocumentEvent e) {
                 VirtualFile virtualFile = FileDocumentManager.getInstance().getFile(e.getDocument());
                 if (virtualFile != null && virtualFile.getFileType() == KotlinFileType.INSTANCE) {
-                    KotlinPluginUpdater.Companion.getInstance().kotlinFileEdited();
+                    KotlinPluginUpdater.Companion.getInstance().kotlinFileEdited(virtualFile);
                 }
             }
         });
 
         ServiceManager.getService(IndexPatternSearch.class).registerExecutor(new KotlinTodoSearcher());
+
+        KotlinPluginCompatibilityVerifier.checkCompatibility();
+
+        //todo[Sedunov]: wait for fix in platform to avoid misunderstood from Java newbies (also ConfigureKotlinInTempDirTest)
+        //KotlinSdkType.Companion.setUpIfNeeded();
     }
 
     private static void registerPathVariable() {
