@@ -1,0 +1,89 @@
+KtPropertySetterSymbol:
+  annotationsList: [
+    SetAnnotation()
+      psi: KtAnnotationEntry
+    ExplicitSetAnnotation()
+      psi: KtAnnotationEntry
+  ]
+  callableIdIfNonLocal: null
+  contextReceivers: []
+  hasBody: true
+  hasStableParameterNames: true
+  isDefault: false
+  isExtension: false
+  isInline: false
+  isOverride: false
+  modality: FINAL
+  origin: SOURCE
+  parameter: KtValueParameterSymbol:
+    annotationsList: [
+      ExplicitSetparamAnnotation()
+        psi: KtAnnotationEntry
+      SetparamAnnotation()
+        psi: KtAnnotationEntry
+    ]
+    callableIdIfNonLocal: null
+    contextReceivers: []
+    generatedPrimaryConstructorProperty: null
+    hasDefaultValue: false
+    isCrossinline: false
+    isExtension: false
+    isImplicitLambdaParameter: false
+    isNoinline: false
+    isVararg: false
+    name: value
+    origin: SOURCE
+    receiverParameter: null
+    returnType: KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: kotlin/Int
+    symbolKind: LOCAL
+    typeParameters: []
+    getContainingFileSymbol: KtFileSymbol(setterWithAnnotations.kt)
+    getContainingJvmClassName: null
+    getContainingModule: KtSourceModule "Sources of main"
+    deprecationStatus: null
+  receiverParameter: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: kotlin/Unit
+  symbolKind: ACCESSOR
+  typeParameters: []
+  valueParameters: [
+    KtValueParameterSymbol:
+      annotationsList: [
+        ExplicitSetparamAnnotation()
+          psi: KtAnnotationEntry
+        SetparamAnnotation()
+          psi: KtAnnotationEntry
+      ]
+      callableIdIfNonLocal: null
+      contextReceivers: []
+      generatedPrimaryConstructorProperty: null
+      hasDefaultValue: false
+      isCrossinline: false
+      isExtension: false
+      isImplicitLambdaParameter: false
+      isNoinline: false
+      isVararg: false
+      name: value
+      origin: SOURCE
+      receiverParameter: null
+      returnType: KtUsualClassType:
+        annotationsList: []
+        ownTypeArguments: []
+        type: kotlin/Int
+      symbolKind: LOCAL
+      typeParameters: []
+      getContainingFileSymbol: KtFileSymbol(setterWithAnnotations.kt)
+      getContainingJvmClassName: null
+      getContainingModule: KtSourceModule "Sources of main"
+      deprecationStatus: null
+  ]
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(setterWithAnnotations.kt)
+  getContainingJvmClassName: SetterWithAnnotationsKt
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null

@@ -1,32 +1,20 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.psi
 
 import com.intellij.lang.ASTNode
-import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiElement
 import com.intellij.psi.tree.TokenSet
-import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.stubs.KotlinClassStub
 import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementTypes
-import java.util.*
 
 open class KtClass : KtClassOrObject {
+    private val classInterfaceTokenSet = TokenSet.create(KtTokens.CLASS_KEYWORD, KtTokens.INTERFACE_KEYWORD)
+
     constructor(node: ASTNode) : super(node)
     constructor(stub: KotlinClassStub) : super(stub, KtStubElementTypes.CLASS)
 
@@ -37,68 +25,24 @@ open class KtClass : KtClassOrObject {
     private val _stub: KotlinClassStub?
         get() = stub as? KotlinClassStub
 
-    fun getColon(): PsiElement? = findChildByType(KtTokens.COLON)
-
-    fun getProperties(): List<KtProperty> = getBody()?.properties.orEmpty()
+    fun getProperties(): List<KtProperty> = body?.properties.orEmpty()
 
     fun isInterface(): Boolean =
         _stub?.isInterface() ?: (findChildByType<PsiElement>(KtTokens.INTERFACE_KEYWORD) != null)
 
     fun isEnum(): Boolean = hasModifier(KtTokens.ENUM_KEYWORD)
-    fun isData(): Boolean = hasModifier(KtTokens.DATA_KEYWORD)
     fun isSealed(): Boolean = hasModifier(KtTokens.SEALED_KEYWORD)
     fun isInner(): Boolean = hasModifier(KtTokens.INNER_KEYWORD)
+    fun isInline(): Boolean = hasModifier(KtTokens.INLINE_KEYWORD)
+    fun isValue(): Boolean = hasModifier(KtTokens.VALUE_KEYWORD)
 
-    override fun isEquivalentTo(another: PsiElement?): Boolean {
-        if (this === another) {
-            return true
-        }
+    override fun getCompanionObjects(): List<KtObjectDeclaration> = body?.allCompanionObjects.orEmpty()
 
-        if (another !is KtClass) {
-            return false
-        }
+    fun getClassOrInterfaceKeyword(): PsiElement? = findChildByType(classInterfaceTokenSet)
 
-        val fq1 = getQualifiedName() ?: return false
-        val fq2 = another.getQualifiedName() ?: return false
-        if (fq1 == fq2) {
-            val thisLocal = isLocal
-            if (thisLocal != another.isLocal) {
-                return false
-            }
+    fun getClassKeyword(): PsiElement? = findChildByType(KtTokens.CLASS_KEYWORD)
 
-            // For non-local classes same fqn is enough
-            // Consider different instances of local classes non-equivalent
-            return !thisLocal
-        }
-
-        return false
-    }
-
-    protected fun getQualifiedName(): String? {
-        val stub = stub
-        if (stub != null) {
-            val fqName = stub.getFqName()
-            return fqName?.asString()
-        }
-
-        val parts = ArrayList<String>()
-        var current: KtClassOrObject? = this
-        while (current != null) {
-            parts.add(current.name!!)
-            current = PsiTreeUtil.getParentOfType<KtClassOrObject>(current, KtClassOrObject::class.java)
-        }
-        val file = containingFile as? KtFile ?: return null
-        val fileQualifiedName = file.packageFqName.asString()
-        if (!fileQualifiedName.isEmpty()) {
-            parts.add(fileQualifiedName)
-        }
-        Collections.reverse(parts)
-        return StringUtil.join(parts, ".")
-    }
-
-    override fun getCompanionObjects(): List<KtObjectDeclaration> = getBody()?.allCompanionObjects.orEmpty()
-
-    fun getClassOrInterfaceKeyword(): PsiElement? = findChildByType(TokenSet.create(KtTokens.CLASS_KEYWORD, KtTokens.INTERFACE_KEYWORD))
+    fun getFunKeyword(): PsiElement? = modifierList?.getModifier(KtTokens.FUN_KEYWORD)
 }
 
 fun KtClass.createPrimaryConstructorIfAbsent(): KtPrimaryConstructor {

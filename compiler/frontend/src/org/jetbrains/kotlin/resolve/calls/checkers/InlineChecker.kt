@@ -21,18 +21,20 @@ import org.jetbrains.kotlin.builtins.isBuiltinFunctionalType
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.contracts.parsing.isFromContractDsl
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.diagnostics.Errors.*
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
+import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.util.getSuperCallExpression
+import org.jetbrains.kotlin.resolve.calls.util.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.DefaultValueArgument
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyPrivateApi
 import org.jetbrains.kotlin.resolve.descriptorUtil.isInsidePrivateClass
+import org.jetbrains.kotlin.resolve.descriptorUtil.isMemberOfCompanionOfPrivateClass
 import org.jetbrains.kotlin.resolve.inline.InlineUtil
 import org.jetbrains.kotlin.resolve.inline.InlineUtil.allowsNonLocalReturns
 import org.jetbrains.kotlin.resolve.inline.InlineUtil.checkNonLocalReturnUsage
@@ -40,6 +42,7 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ExtensionReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 import org.jetbrains.kotlin.resolve.source.KotlinSourceElement
+import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.util.OperatorNameConventions
 import kotlin.properties.Delegates
 
@@ -59,7 +62,8 @@ internal class InlineChecker(private val descriptor: FunctionDescriptor) : CallC
     private var supportDefaultValueInline by Delegates.notNull<Boolean>()
 
     override fun check(resolvedCall: ResolvedCall<*>, reportOn: PsiElement, context: CallCheckerContext) {
-        val expression = resolvedCall.call.calleeExpression ?: return
+        val call = resolvedCall.call
+        val expression = call.calleeExpression ?: return
 
         supportDefaultValueInline = context.languageVersionSettings.supportsFeature(LanguageFeature.InlineDefaultFunctionalParameters)
 
@@ -74,7 +78,7 @@ internal class InlineChecker(private val descriptor: FunctionDescriptor) : CallC
 
         if (inlinableParameters.contains(targetDescriptor)) {
             when {
-                !checkNotInDefaultParameter(context, targetDescriptor, expression) -> { /*error*/
+                !checkNotInDefaultParameter(context, expression) -> { /*error*/
                 }
                 !isInsideCall(expression) -> context.trace.report(USAGE_IS_NOT_INLINABLE.on(expression, expression, descriptor))
             }
@@ -88,11 +92,12 @@ internal class InlineChecker(private val descriptor: FunctionDescriptor) : CallC
             }
         }
 
-        checkVisibilityAndAccess(targetDescriptor, expression, context)
-        checkRecursion(context, targetDescriptor, expression)
+        val replacementForReport = (call.dispatchReceiver as? ExpressionReceiver)?.expression
+        checkVisibilityAndAccess(targetDescriptor, expression, replacementForReport, context, call)
+        checkRecursion(context, targetDescriptor, expression, replacementForReport)
     }
 
-    private fun checkNotInDefaultParameter(context: CallCheckerContext, targetDescriptor: CallableDescriptor, expression: KtExpression) =
+    private fun checkNotInDefaultParameter(context: CallCheckerContext, expression: KtExpression) =
         !supportDefaultValueInline || expression.getParentOfType<KtParameter>(true)?.let {
             val allow = it !in inlinableKtParameters
             if (!allow) {
@@ -143,7 +148,7 @@ internal class InlineChecker(private val descriptor: FunctionDescriptor) : CallC
 
         if (argumentCallee != null && inlinableParameters.contains(argumentCallee)) {
             when {
-                !checkNotInDefaultParameter(context, argumentCallee, argumentExpression) -> { /*error*/
+                !checkNotInDefaultParameter(context, argumentExpression) -> { /*error*/
                 }
 
                 InlineUtil.isInline(targetDescriptor) && InlineUtil.isInlineParameter(targetParameterDescriptor) ->
@@ -215,7 +220,13 @@ internal class InlineChecker(private val descriptor: FunctionDescriptor) : CallC
     ) {
         val inlinableCall = isInvokeOrInlineExtension(callDescriptor)
         if (!inlinableCall) {
-            context.trace.report(USAGE_IS_NOT_INLINABLE.on(receiverExpression, receiverExpression, descriptor))
+            if (InlineUtil.isInline(callDescriptor) &&
+                !context.languageVersionSettings.supportsFeature(LanguageFeature.ForbidExtensionCallsOnInlineFunctionalParameters)
+            ) {
+                context.trace.report(USAGE_IS_NOT_INLINABLE_WARNING.on(receiverExpression, receiverExpression, descriptor))
+            } else {
+                context.trace.report(USAGE_IS_NOT_INLINABLE.on(receiverExpression, receiverExpression, descriptor))
+            }
         } else {
             checkNonLocalReturn(context, lambdaDescriptor, receiverExpression)
         }
@@ -224,10 +235,12 @@ internal class InlineChecker(private val descriptor: FunctionDescriptor) : CallC
     private fun checkRecursion(
         context: CallCheckerContext,
         targetDescriptor: CallableDescriptor,
-        expression: KtElement
+        expression: KtElement,
+        replacementForReport: KtElement?
     ) {
         if (targetDescriptor.original === descriptor) {
-            context.trace.report(Errors.RECURSION_IN_INLINE.on(expression, expression, descriptor))
+            context.trace.report(RECURSION_IN_INLINE.on(expression, expression, descriptor))
+            context.reportDeprecationOnReplacement(expression, replacementForReport)
         }
     }
 
@@ -235,18 +248,20 @@ internal class InlineChecker(private val descriptor: FunctionDescriptor) : CallC
         if (descriptor !is SimpleFunctionDescriptor) {
             return false
         }
+        // TODO: receivers are currently not inline (KT-5837)
+        // if (InlineUtil.isInline(descriptor)) return true
 
         val containingDeclaration = descriptor.getContainingDeclaration()
-        val isInvoke = descriptor.getName() == OperatorNameConventions.INVOKE &&
+        return descriptor.getName() == OperatorNameConventions.INVOKE &&
                 containingDeclaration is ClassDescriptor && containingDeclaration.defaultType.isBuiltinFunctionalType
-
-        return isInvoke || InlineUtil.isInline(descriptor)
     }
 
     private fun checkVisibilityAndAccess(
         calledDescriptor: CallableDescriptor,
         expression: KtElement,
-        context: CallCheckerContext
+        replacementForReport: KtElement?,
+        context: CallCheckerContext,
+        call: Call
     ) {
         val calledFunEffectiveVisibility = if (isDefinedInInlineFunction(calledDescriptor))
             EffectiveVisibility.Public
@@ -257,28 +272,77 @@ internal class InlineChecker(private val descriptor: FunctionDescriptor) : CallC
         val isInlineFunPublicOrPublishedApi = inlineFunEffectiveVisibility.publicApi
         if (isInlineFunPublicOrPublishedApi &&
             !isCalledFunPublicOrPublishedApi &&
-            calledDescriptor.visibility !== Visibilities.LOCAL) {
-            context.trace.report(Errors.NON_PUBLIC_CALL_FROM_PUBLIC_INLINE.on(expression, calledDescriptor, descriptor))
+            calledDescriptor.visibility !== DescriptorVisibilities.LOCAL
+        ) {
+            context.trace.report(NON_PUBLIC_CALL_FROM_PUBLIC_INLINE.on(expression, calledDescriptor, descriptor))
+            context.reportDeprecationOnReplacement(expression, replacementForReport)
         } else {
-            checkPrivateClassMemberAccess(calledDescriptor, expression, context)
+            checkPrivateClassMemberAccess(calledDescriptor, expression, replacementForReport, context)
+            if (isInlineFunPublicOrPublishedApi) {
+                checkSuperCalls(calledDescriptor, call, expression, context)
+            }
         }
 
-        if (calledDescriptor !is ConstructorDescriptor &&
+        val isConstructorCall = calledDescriptor is ConstructorDescriptor
+        if ((!isConstructorCall || expression !is KtConstructorCalleeExpression) &&
             isInlineFunPublicOrPublishedApi &&
-            inlineFunEffectiveVisibility.toVisibility() !== Visibilities.PROTECTED &&
-            calledFunEffectiveVisibility.toVisibility() === Visibilities.PROTECTED) {
-            context.trace.report(Errors.PROTECTED_CALL_FROM_PUBLIC_INLINE.on(expression, calledDescriptor))
+            inlineFunEffectiveVisibility.toVisibility() !== Visibilities.Protected &&
+            calledFunEffectiveVisibility.toVisibility() === Visibilities.Protected
+        ) {
+            when {
+                isConstructorCall -> {
+                    context.trace.report(
+                        PROTECTED_CONSTRUCTOR_CALL_FROM_PUBLIC_INLINE.on(context.languageVersionSettings, expression, calledDescriptor)
+                    )
+                }
+                else -> {
+                    context.trace.report(
+                        PROTECTED_CALL_FROM_PUBLIC_INLINE.on(context.languageVersionSettings, expression, calledDescriptor)
+                    )
+                }
+            }
+            context.reportDeprecationOnReplacement(expression, replacementForReport)
         }
     }
 
     private fun checkPrivateClassMemberAccess(
         declarationDescriptor: DeclarationDescriptor,
         expression: KtElement,
+        replacementForReport: KtElement?,
         context: CallCheckerContext
     ) {
         if (!isEffectivelyPrivateApiFunction) {
             if (declarationDescriptor.isInsidePrivateClass) {
-                context.trace.report(Errors.PRIVATE_CLASS_MEMBER_FROM_INLINE.on(expression, declarationDescriptor, descriptor))
+                context.trace.report(PRIVATE_CLASS_MEMBER_FROM_INLINE.on(expression, declarationDescriptor, descriptor))
+                context.reportDeprecationOnReplacement(expression, replacementForReport)
+            } else if (declarationDescriptor.isMemberOfCompanionOfPrivateClass) {
+                context.trace.report(PRIVATE_CLASS_MEMBER_FROM_INLINE_WARNING.on(expression, declarationDescriptor, descriptor))
+                context.reportDeprecationOnReplacement(expression, replacementForReport)
+            }
+        }
+    }
+
+    private fun checkSuperCalls(
+        callableDescriptor: CallableDescriptor,
+        call: Call,
+        expression: KtElement,
+        context: CallCheckerContext
+    ) {
+        val superCall = getSuperCallExpression(call)
+        if (superCall != null) {
+            val thisTypeForSuperCall: KotlinType =
+                context.trace.get(
+                    BindingContext.THIS_TYPE_FOR_SUPER_EXPRESSION,
+                    superCall
+                ) ?: return
+            val descriptor = thisTypeForSuperCall.constructor.declarationDescriptor as? DeclarationDescriptorWithVisibility ?: return
+
+            if (!isDefinedInInlineFunction(descriptor)) {
+                context.trace.report(
+                    SUPER_CALL_FROM_PUBLIC_INLINE.on(
+                        context.languageVersionSettings, expression.parent.parent ?: superCall, callableDescriptor
+                    )
+                )
             }
         }
     }
@@ -304,6 +368,15 @@ internal class InlineChecker(private val descriptor: FunctionDescriptor) : CallC
 
         if (!checkNonLocalReturnUsage(descriptor, parameterUsage, context.resolutionContext)) {
             context.trace.report(NON_LOCAL_RETURN_NOT_ALLOWED.on(parameterUsage, parameterUsage))
+        }
+    }
+
+    private fun CallCheckerContext.reportDeprecationOnReplacement(
+        expression: KtElement,
+        replacementForReport: KtElement?
+    ) {
+        if (!expression.isPhysical && replacementForReport != null) {
+            trace.report(DEPRECATED_IMPLICIT_NON_PUBLIC_API_ACCESS.on(replacementForReport))
         }
     }
 }

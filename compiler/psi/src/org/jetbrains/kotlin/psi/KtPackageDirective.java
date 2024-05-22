@@ -18,7 +18,6 @@ package org.jetbrains.kotlin.psi;
 
 import com.intellij.lang.ASTNode;
 import com.intellij.psi.PsiElement;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.lexer.KtTokens;
@@ -28,7 +27,9 @@ import org.jetbrains.kotlin.name.SpecialNames;
 import org.jetbrains.kotlin.psi.psiUtil.KtPsiUtilKt;
 import org.jetbrains.kotlin.psi.stubs.KotlinPlaceHolderStub;
 import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementTypes;
+import org.jetbrains.kotlin.psi.stubs.elements.KtTokenSets;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -46,7 +47,7 @@ public class KtPackageDirective extends KtModifierListOwnerStub<KotlinPlaceHolde
     // This should be either JetSimpleNameExpression, or JetDotQualifiedExpression
     @Nullable
     public KtExpression getPackageNameExpression() {
-        return KtStubbedPsiUtil.getStubOrPsiChild(this, KtStubElementTypes.INSIDE_DIRECTIVE_EXPRESSIONS, KtExpression.ARRAY_FACTORY);
+        return KtStubbedPsiUtil.getStubOrPsiChild(this, KtTokenSets.INSIDE_DIRECTIVE_EXPRESSIONS, KtExpression.ARRAY_FACTORY);
     }
 
     @NotNull
@@ -54,7 +55,7 @@ public class KtPackageDirective extends KtModifierListOwnerStub<KotlinPlaceHolde
         KtExpression nameExpression = getPackageNameExpression();
         if (nameExpression == null) return Collections.emptyList();
 
-        List<KtSimpleNameExpression> packageNames = ContainerUtil.newArrayList();
+        List<KtSimpleNameExpression> packageNames = new ArrayList<>();
         while (nameExpression instanceof KtQualifiedExpression) {
             KtQualifiedExpression qualifiedExpression = (KtQualifiedExpression) nameExpression;
 
@@ -119,7 +120,10 @@ public class KtPackageDirective extends KtModifierListOwnerStub<KotlinPlaceHolde
 
     public void setFqName(@NotNull FqName fqName) {
         if (fqName.isRoot()) {
-            delete();
+            if (!getFqName().isRoot()) {
+                //noinspection ConstantConditions
+                replace(new KtPsiFactory(getProject()).createFile("").getPackageDirective());
+            }
             return;
         }
 
@@ -134,6 +138,7 @@ public class KtPackageDirective extends KtModifierListOwnerStub<KotlinPlaceHolde
         PsiElement keyword = getPackageKeyword();
         if (keyword != null) {
             addAfter(newExpression, keyword);
+            addAfter(psiFactory.createWhiteSpace(), keyword);
             return;
         }
 

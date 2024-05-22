@@ -1,5 +1,6 @@
-// !CHECK_TYPE
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// FIR_IDENTICAL
+// CHECK_TYPE
+// DIAGNOSTICS: -UNUSED_VARIABLE
 // FILE: A.java
 public class A {
     public static <T> Class<T> foo(Class<T> clazz) {

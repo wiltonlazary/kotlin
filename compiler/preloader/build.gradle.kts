@@ -6,10 +6,8 @@ plugins {
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 dependencies {
-    compileOnly(intellijDep()) { includeJars("asm-all") }
+    compileOnly(commonDependency("org.jetbrains.intellij.deps:asm-all"))
 }
 
 sourceSets {
@@ -24,5 +22,3 @@ sourceSets {
 runtimeJar {
     manifest.attributes.put("Main-Class", "org.jetbrains.kotlin.preloading.Preloader")
 }
-
-dist()

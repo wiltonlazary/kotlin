@@ -1,8 +1,9 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1166
+// IGNORE_BACKEND_K2: JS_IR, JS_IR_ES6
+// ISSUE: KT-64652
+// EXPECTED_REACHABLE_NODES: 1323
 fun <T> checkThrown(x: T, block: (T) -> Any?): Unit? {
     return try {
-        println((block(x) ?: "").toString())
+        block(x)
         null
     }
     catch (e: NoWhenBranchMatchedException) {
@@ -12,7 +13,7 @@ fun <T> checkThrown(x: T, block: (T) -> Any?): Unit? {
 
 fun <T> checkNotThrown(x: T, block: (T) -> Any?): Unit? {
     return try {
-        println((block(x) ?: "").toString())
+        block(x)
         Unit
     }
     catch (e: NoWhenBranchMatchedException) {

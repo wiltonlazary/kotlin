@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:kotlin.jvm.JvmMultifileClass
@@ -8,10 +8,6 @@
 @file:Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
 
 package kotlin.text
-
-import kotlin.*
-
-
 
 /**
  * Parses the string as a signed [Byte] number and returns the result
@@ -98,13 +94,25 @@ public fun String.toIntOrNull(radix: Int): Int? {
     }
 
 
-    val limitBeforeMul = limit / radix
+    val limitForMaxRadix = (-Int.MAX_VALUE) / 36
+
+    var limitBeforeMul = limitForMaxRadix
     var result = 0
-    for (i in start..(length - 1)) {
+    for (i in start until length) {
         val digit = digitOf(this[i], radix)
 
         if (digit < 0) return null
-        if (result < limitBeforeMul) return null
+        if (result < limitBeforeMul) {
+            if (limitBeforeMul == limitForMaxRadix) {
+                limitBeforeMul = limit / radix
+
+                if (result < limitBeforeMul) {
+                    return null
+                }
+            } else {
+                return null
+            }
+        }
 
         result *= radix
 
@@ -161,13 +169,25 @@ public fun String.toLongOrNull(radix: Int): Long? {
     }
 
 
-    val limitBeforeMul = limit / radix
+    val limitForMaxRadix = (-Long.MAX_VALUE) / 36
+
+    var limitBeforeMul = limitForMaxRadix
     var result = 0L
-    for (i in start..(length - 1)) {
+    for (i in start until length) {
         val digit = digitOf(this[i], radix)
 
         if (digit < 0) return null
-        if (result < limitBeforeMul) return null
+        if (result < limitBeforeMul) {
+            if (limitBeforeMul == limitForMaxRadix) {
+                limitBeforeMul = limit / radix
+
+                if (result < limitBeforeMul) {
+                    return null
+                }
+            } else {
+                return null
+            }
+        }
 
         result *= radix
 
@@ -178,3 +198,6 @@ public fun String.toLongOrNull(radix: Int): Long? {
 
     return if (isNegative) result else -result
 }
+
+
+internal fun numberFormatError(input: String): Nothing = throw NumberFormatException("Invalid number format: '$input'")

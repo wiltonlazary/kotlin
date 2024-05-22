@@ -1,7 +1,5 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS
-
-// WITH_RUNTIME
+// WITH_STDLIB
+import kotlin.test.*
 
 class Value(val x: Int) : Comparable<Value> {
     override fun compareTo(other: Value): Int {
@@ -20,8 +18,8 @@ class ValueRange(override val start: Value,
 operator fun Value.rangeTo(other: Value): ClosedRange<Value> = ValueRange(this, other)
 
 fun box(): String {
-    assert(Value(42) in Value(1)..Value(2))
-    assert(Value(41) !in Value(40)..Value(42))
+    assertTrue(Value(42) in Value(1)..Value(2))
+    assertTrue(Value(41) !in Value(40)..Value(42))
 
     return "OK"
 }

@@ -1,3 +1,4 @@
+
 fun zap(s: String) = s
 
 inline fun tryZap1(string: String, fn: (String) -> String) =

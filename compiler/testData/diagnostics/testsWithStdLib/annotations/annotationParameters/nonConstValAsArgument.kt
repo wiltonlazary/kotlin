@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 import kotlin.reflect.KClass
 
 annotation class Ann(
@@ -27,7 +28,7 @@ var mutable = ""
 
 var mutableWithGetter
     get() = ""
-    set(<!UNUSED_PARAMETER!>x<!>) = TODO()
+    set(x) = TODO()
 
 object WithLateinit {
     lateinit var kClass: KClass<*>

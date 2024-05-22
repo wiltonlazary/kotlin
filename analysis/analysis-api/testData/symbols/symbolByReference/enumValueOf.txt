@@ -1,0 +1,59 @@
+KtFunctionSymbol:
+  annotationsList: []
+  callableIdIfNonLocal: /MyKotlinEnum.valueOf
+  contextReceivers: []
+  contractEffects: []
+  hasStableParameterNames: true
+  isActual: false
+  isBuiltinFunctionInvoke: false
+  isExpect: false
+  isExtension: false
+  isExternal: false
+  isInfix: false
+  isInline: false
+  isOperator: false
+  isOverride: false
+  isStatic: true
+  isSuspend: false
+  isTailRec: false
+  modality: FINAL
+  name: valueOf
+  origin: SOURCE_MEMBER_GENERATED
+  receiverParameter: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: MyKotlinEnum
+  symbolKind: CLASS_MEMBER
+  typeParameters: []
+  valueParameters: [
+    KtValueParameterSymbol:
+      annotationsList: []
+      callableIdIfNonLocal: null
+      contextReceivers: []
+      generatedPrimaryConstructorProperty: null
+      hasDefaultValue: false
+      isCrossinline: false
+      isExtension: false
+      isImplicitLambdaParameter: false
+      isNoinline: false
+      isVararg: false
+      name: value
+      origin: SOURCE_MEMBER_GENERATED
+      receiverParameter: null
+      returnType: KtUsualClassType:
+        annotationsList: []
+        ownTypeArguments: []
+        type: kotlin/String
+      symbolKind: LOCAL
+      typeParameters: []
+      getContainingFileSymbol: KtFileSymbol(enumValueOf.kt)
+      getContainingJvmClassName: MyKotlinEnum
+      getContainingModule: KtSourceModule "Sources of main"
+      deprecationStatus: null
+  ]
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(enumValueOf.kt)
+  getContainingJvmClassName: MyKotlinEnum
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null

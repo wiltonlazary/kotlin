@@ -17,14 +17,19 @@
 package org.jetbrains.kotlin.resolve.constants
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeConstructor
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
+import org.jetbrains.kotlin.types.TypeRefinement
 import java.util.*
 
 class IntegerValueTypeConstructor(
-        private val value: Long,
-        private val builtIns: KotlinBuiltIns
+    private val value: Long,
+    private val module: ModuleDescriptor,
+    parameters: CompileTimeConstant.Parameters
 ) : TypeConstructor {
     private val supertypes = ArrayList<KotlinType>(4)
 
@@ -32,14 +37,43 @@ class IntegerValueTypeConstructor(
         // order of types matters
         // 'getPrimitiveNumberType' returns first of supertypes that is a subtype of expected type
         // for expected type 'Any' result type 'Int' should be returned
-        checkBoundsAndAddSuperType(value, Integer.MIN_VALUE.toLong(), Integer.MAX_VALUE.toLong(), builtIns.intType)
-        checkBoundsAndAddSuperType(value, java.lang.Byte.MIN_VALUE.toLong(), java.lang.Byte.MAX_VALUE.toLong(), builtIns.byteType)
-        checkBoundsAndAddSuperType(value, java.lang.Short.MIN_VALUE.toLong(), java.lang.Short.MAX_VALUE.toLong(), builtIns.shortType)
+        val isUnsigned = parameters.isUnsignedNumberLiteral
+        val isConvertable = parameters.isConvertableConstVal
+
+        if (isUnsigned || isConvertable) {
+            assert(hasUnsignedTypesInModuleDependencies(module)) {
+                "Unsigned types should be on classpath to create an unsigned type constructor"
+            }
+        }
+
+        when {
+            isConvertable -> {
+                addSignedSuperTypes()
+                addUnsignedSuperTypes()
+            }
+
+            isUnsigned -> addUnsignedSuperTypes()
+
+            else -> addSignedSuperTypes()
+        }
+    }
+
+    private fun addSignedSuperTypes() {
+        checkBoundsAndAddSuperType(value, builtIns.intType)
+        checkBoundsAndAddSuperType(value, builtIns.byteType)
+        checkBoundsAndAddSuperType(value, builtIns.shortType)
         supertypes.add(builtIns.longType)
     }
 
-    private fun checkBoundsAndAddSuperType(value: Long, minValue: Long, maxValue: Long, kotlinType: KotlinType) {
-        if (value >= minValue && value <= maxValue) {
+    private fun addUnsignedSuperTypes() {
+        checkBoundsAndAddSuperType(value, module.unsignedType(StandardNames.FqNames.uInt))
+        checkBoundsAndAddSuperType(value, module.unsignedType(StandardNames.FqNames.uByte))
+        checkBoundsAndAddSuperType(value, module.unsignedType(StandardNames.FqNames.uShort))
+        supertypes.add(module.unsignedType(StandardNames.FqNames.uLong))
+    }
+
+    private fun checkBoundsAndAddSuperType(value: Long, kotlinType: KotlinType) {
+        if (value in kotlinType.minValue()..kotlinType.maxValue()) {
             supertypes.add(kotlinType)
         }
     }
@@ -57,8 +91,12 @@ class IntegerValueTypeConstructor(
     fun getValue(): Long = value
 
     override fun getBuiltIns(): KotlinBuiltIns {
-        return builtIns
+        return module.builtIns
     }
+
+    @TypeRefinement
+    override fun refine(kotlinTypeRefiner: KotlinTypeRefiner): TypeConstructor = this
 
     override fun toString() = "IntegerValueType($value)"
 }
+

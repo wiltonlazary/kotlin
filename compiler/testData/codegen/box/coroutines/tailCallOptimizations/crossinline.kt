@@ -1,11 +1,11 @@
-// IGNORE_BACKEND: JS
-// COMMON_COROUTINES_TEST
-// WITH_RUNTIME
+// IGNORE_INLINER: IR
+// WITH_STDLIB
 // WITH_COROUTINES
 // CHECK_BYTECODE_LISTING
+// FIR_IDENTICAL
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 interface SourceCrossinline<out E> {
     suspend fun consume(sink: Sink<E>)

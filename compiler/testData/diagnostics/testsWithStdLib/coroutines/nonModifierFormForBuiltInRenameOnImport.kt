@@ -1,4 +1,6 @@
+// FIR_IDENTICAL
 // SKIP_TXT
+
 import kotlin.suspend as suspendLambda
 
 fun bar() {
@@ -24,5 +26,5 @@ fun bar() {
         println()
     }
 
-    val <!UNUSED_VARIABLE!>w<!>: (suspend () -> Int) -> Any? = ::<!NON_MODIFIER_FORM_FOR_BUILT_IN_SUSPEND!>suspendLambda<!>
+    val w: (suspend () -> Int) -> Any? = ::<!NON_MODIFIER_FORM_FOR_BUILT_IN_SUSPEND!>suspendLambda<!>
 }

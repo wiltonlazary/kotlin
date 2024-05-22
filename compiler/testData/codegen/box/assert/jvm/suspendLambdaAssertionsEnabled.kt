@@ -1,11 +1,11 @@
-// IGNORE_BACKEND: JS
-// KOTLIN_CONFIGURATION_FLAGS: ASSERTIONS_MODE=jvm
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// ASSERTIONS_MODE: jvm
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
+package suspendLambdaAssertionsEnabled
 
 import helpers.*
-import COROUTINES_PACKAGE.*
+import kotlin.coroutines.*
 
 class Checker {
     fun check() {
@@ -17,8 +17,8 @@ class Dummy
 
 fun enableAssertions(): Checker {
     val loader = Dummy::class.java.classLoader
-    loader.setDefaultAssertionStatus(true)
-    val c = loader.loadClass("Checker")
+    loader.setPackageAssertionStatus("suspendLambdaAssertionsEnabled", true)
+    val c = loader.loadClass("suspendLambdaAssertionsEnabled.Checker")
     return c.newInstance() as Checker
 }
 

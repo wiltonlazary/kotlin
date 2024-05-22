@@ -1,8 +1,8 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 
 @file:JvmName("FacadeName")
 package a.b.c
 
 fun foo() {}
 
-val bar = 3
+const val bar = 3

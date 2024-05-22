@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.js
@@ -24,7 +24,7 @@ public external interface Json {
      * }
      * ```
      */
-    operator fun get(propertyName: String): Any?
+    public operator fun get(propertyName: String): Any?
 
     /**
      * Calls of the function will be translated to an assignment of [value] to the receiver indexed (with square brackets/index operation) with [propertyName].
@@ -46,7 +46,7 @@ public external interface Json {
      * }
      * ```
      */
-    operator fun set(propertyName: String, value: Any?): Unit
+    public operator fun set(propertyName: String, value: Any?): Unit
 }
 
 /**

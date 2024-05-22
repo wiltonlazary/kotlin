@@ -1,11 +1,12 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package test.text
 
 import test.collections.assertArrayNotSameButEquals
+import test.platformNull
 import java.util.*
 import kotlin.test.*
 
@@ -41,9 +42,14 @@ class StringJVMTest {
         assertEquals("1,234,567.890", "%,.3f".format(Locale.ENGLISH, 1234567.890))
         assertEquals("1.234.567,890", "%,.3f".format(Locale.GERMAN,  1234567.890))
         assertEquals("1 234 567,890", "%,.3f".format(Locale("fr"),   1234567.890))
+        assertEquals("1,234,567.890", "%,.3f".format(null,           1234567.890))
+        assertEquals("1,234,567.890", "%,.3f".format(platformNull<Locale>(), 1234567.890))
+
         assertEquals("1,234,567.890", String.format(Locale.ENGLISH, "%,.3f", 1234567.890))
         assertEquals("1.234.567,890", String.format(Locale.GERMAN,  "%,.3f", 1234567.890))
         assertEquals("1 234 567,890", String.format(Locale("fr"),   "%,.3f", 1234567.890))
+        assertEquals("1,234,567.890", String.format(null,           "%,.3f", 1234567.890))
+        assertEquals("1,234,567.890", String.format(platformNull<Locale>(), "%,.3f", 1234567.890))
     }
 
     @Test fun toByteArrayEncodings() {
@@ -61,15 +67,93 @@ class StringJVMTest {
         assertArrayNotSameButEquals(charArrayOf('\u0000', '\u0000', 'e', 'l'), buffer)
     }
 
-    @Test fun orderIgnoringCase() {
-        val list = listOf("Beast", "Ast", "asterisk")
-        assertEquals(listOf("Ast", "Beast", "asterisk"), list.sorted())
-        assertEquals(listOf("Ast", "asterisk", "Beast"), list.sortedWith(String.CASE_INSENSITIVE_ORDER))
-    }
 
     @Test fun charsets() {
         assertEquals("UTF-32", Charsets.UTF_32.name())
         assertEquals("UTF-32LE", Charsets.UTF_32LE.name())
         assertEquals("UTF-32BE", Charsets.UTF_32BE.name())
+    }
+
+    @Suppress("DEPRECATION")
+    @Test fun capitalize() {
+        fun testCapitalize(expected: String, string: String) {
+            assertEquals(expected, string.capitalize())
+            assertEquals(expected, string.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() })
+        }
+        // Case mapping that results in multiple characters (validating Character.toUpperCase was not used).
+        assertEquals("SSßß", "ßßß".capitalize())
+        assertEquals("Ssßß", "ßßß".replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() })
+
+        // Case mapping where title case is different than uppercase and so Character.toTitleCase is preferred.
+        testCapitalize("ǲǳǳ", "ǳǳǳ")
+        testCapitalize("ǱǱǱ", "ǱǱǱ")
+    }
+
+    @Test fun decapitalize() {
+        fun testDecapitalize(expected: String, string: String) {
+            @Suppress("DEPRECATION")
+            assertEquals(expected, string.decapitalize())
+            assertEquals(expected, string.replaceFirstChar { it.lowercase(Locale.getDefault()) })
+        }
+        // Case mapping where title case is different than uppercase.
+        testDecapitalize("ǳǳǳ", "Ǳǳǳ")
+        testDecapitalize("ǳǳǳ", "ǲǳǳ")
+    }
+
+    @Suppress("DEPRECATION")
+    @Test fun capitalizeLocale() {
+        fun testCapitalizeLocale(expected: String, string: String, locale: Locale) {
+            assertEquals(expected, string.capitalize(locale))
+            assertEquals(expected, string.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() })
+        }
+        testCapitalizeLocale("ABC", "ABC", Locale.US)
+        testCapitalizeLocale("Abc", "Abc", Locale.US)
+        testCapitalizeLocale("Abc", "abc", Locale.US)
+
+        // Locale-specific case mappings.
+        testCapitalizeLocale("İii", "iii", Locale("tr", "TR"))
+        testCapitalizeLocale("Iii", "iii", Locale.US)
+
+        // Case mapping that results in multiple characters (validating Character.toUpperCase was not used).
+        assertEquals("SSßß", "ßßß".capitalize(Locale.US))
+        assertEquals("Ssßß", "ßßß".replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() })
+
+        // Case mapping where title case is different than uppercase and so Character.toTitleCase is preferred.
+        testCapitalizeLocale("ǲǳǳ", "ǳǳǳ", Locale.US)
+        testCapitalizeLocale("ǱǱǱ", "ǱǱǱ", Locale.US)
+    }
+
+    @Test fun decapitalizeLocale() {
+        fun testDecapitalizeLocale(expected: String, string: String, locale: Locale) {
+            @Suppress("DEPRECATION")
+            assertEquals(expected, string.decapitalize(locale))
+            assertEquals(expected, string.replaceFirstChar { it.lowercase(locale) })
+        }
+        testDecapitalizeLocale("aBC", "ABC", Locale.US)
+        testDecapitalizeLocale("abc", "Abc", Locale.US)
+        testDecapitalizeLocale("abc", "abc", Locale.US)
+
+        // Locale-specific case mappings.
+        testDecapitalizeLocale("ıII", "III", Locale("tr", "TR"))
+        testDecapitalizeLocale("iII", "III", Locale.US)
+
+        // Case mapping where title case is different than uppercase.
+        testDecapitalizeLocale("ǳǳǳ", "Ǳǳǳ", Locale.US)
+        testDecapitalizeLocale("ǳǳǳ", "ǲǳǳ", Locale.US)
+    }
+
+    @Test
+    fun stringToBoolean() {
+        assertFalse(platformNull<String>().toBoolean())
+    }
+
+    @Test
+    fun stringEquals() {
+        assertFalse(platformNull<String>().equals("sample", ignoreCase = false))
+        assertFalse(platformNull<String>().equals("sample", ignoreCase = true))
+        assertFalse("sample".equals(platformNull<String>(), ignoreCase = false))
+        assertFalse("sample".equals(platformNull(), ignoreCase = true))
+        assertTrue(platformNull<String>().equals(platformNull(), ignoreCase = true))
+        assertTrue(platformNull<String>().equals(platformNull<String>(), ignoreCase = false))
     }
 }

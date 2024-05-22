@@ -1,5 +1,5 @@
-// !WITH_NEW_INFERENCE
-// !DIAGNOSTICS: -UNUSED_PARAMETER, -EXTENSION_SHADOWED_BY_MEMBER
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER, -EXTENSION_SHADOWED_BY_MEMBER
 
 class Example {
     operator infix fun plus(other: Example) = 0
@@ -20,7 +20,7 @@ fun a() {
     val b = Example()
 
     a + b
-    a <!NI;OPERATOR_MODIFIER_REQUIRED!>-<!> b
+    a - b
     a * b
     a <!OPERATOR_MODIFIER_REQUIRED!>/<!> b
 
@@ -31,7 +31,7 @@ fun a() {
 
     with (Example()) {
         consumeInt(this + a)
-        consumeString(<!NI;TYPE_MISMATCH!>this <!NI;OPERATOR_MODIFIER_REQUIRED!>-<!> b<!>)
+        consumeString(this - b)
         consumeInt(this * a)
         consumeInt(this <!OPERATOR_MODIFIER_REQUIRED!>/<!> b)
 

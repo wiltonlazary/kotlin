@@ -1,4 +1,5 @@
-// !CHECK_TYPE
+// FIR_IDENTICAL
+// CHECK_TYPE
 // FILE: Function.java
 public interface Function<E extends java.util.Map<String, Integer>, F extends CharSequence> {
     F handle(E e);

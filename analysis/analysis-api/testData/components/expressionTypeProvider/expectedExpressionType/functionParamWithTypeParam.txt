@@ -1,0 +1,5 @@
+expression: ab
+expected type: KtUsualClassType:
+  annotationsList: []
+  ownTypeArguments: []
+  type: kotlin/Int

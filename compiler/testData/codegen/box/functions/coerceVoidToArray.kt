@@ -1,3 +1,4 @@
+
 fun a(): IntArray? = null
 
 fun b(): Nothing = throw Exception()

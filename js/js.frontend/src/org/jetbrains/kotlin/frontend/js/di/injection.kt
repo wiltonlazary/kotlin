@@ -17,53 +17,83 @@
 package org.jetbrains.kotlin.frontend.js.di
 
 import org.jetbrains.kotlin.config.LanguageVersionSettings
-import org.jetbrains.kotlin.config.TargetPlatformVersion
+import org.jetbrains.kotlin.container.StorageComponentContainer
 import org.jetbrains.kotlin.container.get
-import org.jetbrains.kotlin.container.useImpl
 import org.jetbrains.kotlin.container.useInstance
 import org.jetbrains.kotlin.context.ModuleContext
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider
 import org.jetbrains.kotlin.descriptors.impl.CompositePackageFragmentProvider
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
+import org.jetbrains.kotlin.frontend.di.configureIncrementalCompilation
 import org.jetbrains.kotlin.frontend.di.configureModule
+import org.jetbrains.kotlin.frontend.di.configureStandardResolveComponents
+import org.jetbrains.kotlin.incremental.components.EnumWhenTracker
 import org.jetbrains.kotlin.incremental.components.ExpectActualTracker
+import org.jetbrains.kotlin.incremental.components.InlineConstTracker
 import org.jetbrains.kotlin.incremental.components.LookupTracker
-import org.jetbrains.kotlin.js.resolve.JsPlatform
+import org.jetbrains.kotlin.js.resolve.JsPlatformAnalyzerServices
+import org.jetbrains.kotlin.platform.js.JsPlatforms
 import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.lazy.KotlinCodeAnalyzer
-import org.jetbrains.kotlin.resolve.lazy.ResolveSession
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory
-import org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration
-import org.jetbrains.kotlin.serialization.js.KotlinJavascriptSerializationUtil
-import org.jetbrains.kotlin.serialization.js.PackagesWithHeaderMetadata
+import org.jetbrains.kotlin.platform.TargetPlatform
 
-fun createTopDownAnalyzerForJs(
-        moduleContext: ModuleContext,
-        bindingTrace: BindingTrace,
-        declarationProviderFactory: DeclarationProviderFactory,
-        languageVersionSettings: LanguageVersionSettings,
-        lookupTracker: LookupTracker,
-        expectActualTracker: ExpectActualTracker,
-        fallbackPackage: PackageFragmentProvider?
-): LazyTopDownAnalyzer {
-    val storageComponentContainer = createContainer("TopDownAnalyzerForJs", JsPlatform) {
-        configureModule(moduleContext, JsPlatform, TargetPlatformVersion.NoVersion, bindingTrace)
+fun createContainerForJS(
+    moduleContext: ModuleContext,
+    bindingTrace: BindingTrace,
+    declarationProviderFactory: DeclarationProviderFactory,
+    languageVersionSettings: LanguageVersionSettings,
+    lookupTracker: LookupTracker,
+    expectActualTracker: ExpectActualTracker,
+    inlineConstTracker: InlineConstTracker,
+    enumWhenTracker: EnumWhenTracker,
+    additionalPackages: List<PackageFragmentProvider>,
+    targetEnvironment: TargetEnvironment,
+    analyzerServices: PlatformDependentAnalyzerServices,
+    platform: TargetPlatform
+): StorageComponentContainer {
+    val storageComponentContainer = createContainer("TopDownAnalyzerForJs", analyzerServices) {
+        configureModule(
+            moduleContext,
+            platform,
+            analyzerServices,
+            bindingTrace,
+            languageVersionSettings,
+            optimizingOptions = null,
+            absentDescriptorHandlerClass = null
+        )
+
+        configureIncrementalCompilation(lookupTracker, expectActualTracker, inlineConstTracker, enumWhenTracker)
+        configureStandardResolveComponents()
 
         useInstance(declarationProviderFactory)
-        useImpl<AnnotationResolverImpl>()
-
-        CompilerEnvironment.configure(this)
-        useInstance(lookupTracker)
-        useInstance(expectActualTracker)
-
-        useInstance(languageVersionSettings)
-        useImpl<ResolveSession>()
-        useImpl<LazyTopDownAnalyzer>()
+        targetEnvironment.configure(this)
     }.apply {
         val packagePartProviders = mutableListOf(get<KotlinCodeAnalyzer>().packageFragmentProvider)
         val moduleDescriptor = get<ModuleDescriptorImpl>()
-        fallbackPackage?.let { packagePartProviders += it }
-        moduleDescriptor.initialize(CompositePackageFragmentProvider(packagePartProviders))
+        packagePartProviders += additionalPackages
+        moduleDescriptor.initialize(
+            CompositePackageFragmentProvider(packagePartProviders, "CompositeProvider@createContainerForJS for $moduleDescriptor")
+        )
     }
-    return storageComponentContainer.get<LazyTopDownAnalyzer>()
+    return storageComponentContainer
+}
+
+fun createTopDownAnalyzerForJs(
+    moduleContext: ModuleContext,
+    bindingTrace: BindingTrace,
+    declarationProviderFactory: DeclarationProviderFactory,
+    languageVersionSettings: LanguageVersionSettings,
+    lookupTracker: LookupTracker,
+    expectActualTracker: ExpectActualTracker,
+    inlineConstTracker: InlineConstTracker,
+    enumWhenTracker: EnumWhenTracker,
+    additionalPackages: List<PackageFragmentProvider>,
+    targetEnvironment: TargetEnvironment,
+): LazyTopDownAnalyzer {
+    return createContainerForJS(
+        moduleContext, bindingTrace, declarationProviderFactory, languageVersionSettings,
+        lookupTracker, expectActualTracker, inlineConstTracker, enumWhenTracker, additionalPackages, targetEnvironment,
+        JsPlatformAnalyzerServices, JsPlatforms.defaultJsPlatform
+    ).get<LazyTopDownAnalyzer>()
 }

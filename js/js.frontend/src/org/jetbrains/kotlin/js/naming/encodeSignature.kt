@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.js.naming
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.isSuspendFunctionType
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.types.KotlinType
@@ -32,7 +33,16 @@ fun encodeSignature(descriptor: CallableDescriptor): String {
     val usedTypeParameters = currentParameters.toMutableSet()
     val typeParameterNamer = { typeParameter: TypeParameterDescriptor ->
         usedTypeParameters += typeParameter.original
-        typeParameterNames[typeParameter.original]!!
+        typeParameterNames[typeParameter.original]
+            ?: error("${typeParameter.original} is not found when encode the signature of $descriptor.")
+    }
+
+    val contextReceiverParameters = descriptor.contextReceiverParameters
+    if (contextReceiverParameters.isNotEmpty()) {
+        for (contextReceiverParameter in contextReceiverParameters) {
+            sig.encodeForSignature(contextReceiverParameter.type, typeParameterNamer).append(',')
+        }
+        sig.append('\\')
     }
 
     val receiverParameter = descriptor.extensionReceiverParameter
@@ -80,7 +90,11 @@ private fun StringBuilder.encodeForSignature(
         return append(typeParameterNamer(declaration))
     }
 
-    append(DescriptorUtils.getFqName(declaration).asString())
+    if (type.isSuspendFunctionType) {
+        append(DescriptorUtils.getFqName(declaration).asString().replace("kotlin.coroutines.SuspendFunction", "kotlin.SuspendFunction"))
+    } else {
+        append(DescriptorUtils.getFqName(declaration).asString())
+    }
 
     val parameters = declaration.typeConstructor.parameters
     if (type.arguments.isNotEmpty() && parameters.isNotEmpty()) {

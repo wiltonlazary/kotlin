@@ -16,21 +16,24 @@
 
 package org.jetbrains.kotlin.types
 
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
+import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.renderer.DescriptorRendererOptions
+import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.types.checker.ErrorTypesAreEqualToAnything
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
 import org.jetbrains.kotlin.types.typeUtil.builtIns
-
 
 fun KotlinType.isFlexible(): Boolean = unwrap() is FlexibleType
 fun KotlinType.asFlexibleType(): FlexibleType = unwrap() as FlexibleType
 
 fun KotlinType.isNullabilityFlexible(): Boolean {
     val flexibility = unwrap() as? FlexibleType ?: return false
-    return TypeUtils.isNullableType(flexibility.lowerBound) != TypeUtils.isNullableType(flexibility.upperBound)
+    return flexibility.lowerBound.isMarkedNullable != flexibility.upperBound.isMarkedNullable
 }
 
 // This function is intended primarily for sets: since KotlinType.equals() represents _syntactical_ equality of types,
@@ -44,10 +47,8 @@ fun KotlinType.isNullabilityFlexible(): Boolean {
 fun Collection<KotlinType>.singleBestRepresentative(): KotlinType? {
     if (this.size == 1) return this.first()
 
-    return this.firstOrNull {
-        candidate ->
-        this.all {
-            other ->
+    return this.firstOrNull { candidate ->
+        this.all { other ->
             // We consider error types equal to anything here, so that intersections like
             // {Array<String>, Array<[ERROR]>} work correctly
             candidate == other || ErrorTypesAreEqualToAnything.equalTypes(candidate, other)
@@ -72,6 +73,7 @@ fun KotlinType.lowerIfFlexible(): SimpleType = with(unwrap()) {
         is SimpleType -> this
     }
 }
+
 fun KotlinType.upperIfFlexible(): SimpleType = with(unwrap()) {
     when (this) {
         is FlexibleType -> upperBound
@@ -79,7 +81,7 @@ fun KotlinType.upperIfFlexible(): SimpleType = with(unwrap()) {
     }
 }
 
-class FlexibleTypeImpl(lowerBound: SimpleType, upperBound: SimpleType) : FlexibleType(lowerBound, upperBound), CustomTypeVariable {
+class FlexibleTypeImpl(lowerBound: SimpleType, upperBound: SimpleType) : FlexibleType(lowerBound, upperBound), CustomTypeParameter {
     companion object {
         @JvmField
         var RUN_SLOW_ASSERTIONS = false
@@ -97,10 +99,11 @@ class FlexibleTypeImpl(lowerBound: SimpleType, upperBound: SimpleType) : Flexibl
         if (!RUN_SLOW_ASSERTIONS || assertionsDone) return
         assertionsDone = true
 
-        assert (!lowerBound.isFlexible()) { "Lower bound of a flexible type can not be flexible: $lowerBound" }
-        assert (!upperBound.isFlexible()) { "Upper bound of a flexible type can not be flexible: $upperBound" }
-        assert (lowerBound != upperBound) { "Lower and upper bounds are equal: $lowerBound == $upperBound" }
-        assert (KotlinTypeChecker.DEFAULT.isSubtypeOf(lowerBound, upperBound)) {
+        assert(!lowerBound.isFlexible()) { "Lower bound of a flexible type can not be flexible: $lowerBound" }
+        assert(!upperBound.isFlexible()) { "Upper bound of a flexible type can not be flexible: $upperBound" }
+        // TODO: https://youtrack.jetbrains.com/issue/KT-54198 (two captured types)
+        assert(lowerBound != upperBound) { "Lower and upper bounds are equal: $lowerBound == $upperBound" }
+        assert(KotlinTypeChecker.DEFAULT.isSubtypeOf(lowerBound, upperBound)) {
             "Lower bound $lowerBound of a flexible type must be a subtype of the upper bound $upperBound"
         }
     }
@@ -111,19 +114,20 @@ class FlexibleTypeImpl(lowerBound: SimpleType, upperBound: SimpleType) : Flexibl
             return lowerBound
         }
 
-    override val isTypeVariable: Boolean get() = lowerBound.constructor.declarationDescriptor is TypeParameterDescriptor
-                                                 && lowerBound.constructor == upperBound.constructor
+    override val isTypeParameter: Boolean
+        get() = lowerBound.constructor.declarationDescriptor is TypeParameterDescriptor
+                && lowerBound.constructor == upperBound.constructor
 
     override fun substitutionResult(replacement: KotlinType): KotlinType {
         val unwrapped = replacement.unwrap()
-        return when(unwrapped) {
+        return when (unwrapped) {
             is FlexibleType -> unwrapped
             is SimpleType -> KotlinTypeFactory.flexibleType(unwrapped, unwrapped.makeNullableAsSpecified(true))
         }.inheritEnhancement(unwrapped)
     }
 
-    override fun replaceAnnotations(newAnnotations: Annotations): UnwrappedType
-            = KotlinTypeFactory.flexibleType(lowerBound.replaceAnnotations(newAnnotations), upperBound.replaceAnnotations(newAnnotations))
+    override fun replaceAttributes(newAttributes: TypeAttributes): UnwrappedType =
+        KotlinTypeFactory.flexibleType(lowerBound.replaceAttributes(newAttributes), upperBound.replaceAttributes(newAttributes))
 
     override fun render(renderer: DescriptorRenderer, options: DescriptorRendererOptions): String {
         if (options.debugMode) {
@@ -132,6 +136,38 @@ class FlexibleTypeImpl(lowerBound: SimpleType, upperBound: SimpleType) : Flexibl
         return renderer.renderFlexibleType(renderer.renderType(lowerBound), renderer.renderType(upperBound), builtIns)
     }
 
-    override fun makeNullableAsSpecified(newNullability: Boolean): UnwrappedType
-            = KotlinTypeFactory.flexibleType(lowerBound.makeNullableAsSpecified(newNullability), upperBound.makeNullableAsSpecified(newNullability))
+    override fun toString() = "($lowerBound..$upperBound)"
+
+    override fun makeNullableAsSpecified(newNullability: Boolean): UnwrappedType = KotlinTypeFactory.flexibleType(
+        lowerBound.makeNullableAsSpecified(newNullability),
+        upperBound.makeNullableAsSpecified(newNullability)
+    )
+
+    @TypeRefinement
+    @OptIn(TypeRefinement::class)
+    override fun refine(kotlinTypeRefiner: KotlinTypeRefiner): FlexibleType {
+        return FlexibleTypeImpl(
+            kotlinTypeRefiner.refineType(lowerBound) as SimpleType,
+            kotlinTypeRefiner.refineType(upperBound) as SimpleType
+        )
+    }
+}
+
+object FlexibleTypeBoundsChecker {
+    fun areTypesMayBeLowerAndUpperBoundsOfSameFlexibleTypeByMutability(a: KotlinType, b: KotlinType): Boolean {
+        val fqName = a.constructor.declarationDescriptor?.fqNameSafe ?: return false
+        val possiblePairBound = (CommonFlexibleTypeBoundsChecker.baseTypesToMutableEquivalent[fqName]
+            ?: CommonFlexibleTypeBoundsChecker.mutableToBaseMap[fqName])
+            ?: return false
+
+        return possiblePairBound == b.constructor.declarationDescriptor?.fqNameSafe
+    }
+
+    // We consider base bounds as readonly collection interfaces (e.g. kotlin.collections.Iterable).
+    fun getBaseBoundFqNameByMutability(type: KotlinType): FqName? =
+        type.constructor.declarationDescriptor?.fqNameSafe?.let(::getBaseBoundFqNameByMutability)
+
+    fun getBaseBoundFqNameByMutability(fqName: FqName): FqName? {
+        return CommonFlexibleTypeBoundsChecker.getBaseBoundFqNameByMutability(fqName)
+    }
 }

@@ -1,3 +1,4 @@
+
 // KT-3985
 
 interface Trait<T> {

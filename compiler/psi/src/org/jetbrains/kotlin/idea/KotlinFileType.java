@@ -17,7 +17,6 @@
 package org.jetbrains.kotlin.idea;
 
 import com.intellij.openapi.fileTypes.LanguageFileType;
-import com.intellij.openapi.util.IconLoader;
 import com.intellij.openapi.util.NotNullLazyValue;
 import org.jetbrains.annotations.NotNull;
 
@@ -25,15 +24,10 @@ import javax.swing.*;
 
 public class KotlinFileType extends LanguageFileType {
     public static final String EXTENSION = "kt";
+    public static final String DOT_DEFAULT_EXTENSION = "." + EXTENSION;
     public static final KotlinFileType INSTANCE = new KotlinFileType();
 
-    private final NotNullLazyValue<Icon> myIcon = new NotNullLazyValue<Icon>() {
-        @NotNull
-        @Override
-        protected Icon compute() {
-            return IconLoader.getIcon("/org/jetbrains/kotlin/idea/icons/kotlin_file.png");
-        }
-    };
+    private final NotNullLazyValue<Icon> myIcon = NotNullLazyValue.lazy(() -> KotlinIconProviderService.getInstance().getFileIcon());
 
     private KotlinFileType() {
         super(KotlinLanguage.INSTANCE);

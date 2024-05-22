@@ -35,10 +35,9 @@ fun bytesToStrings(bytes: ByteArray): Array<String> {
     for (b in bytes) {
         val c = b.toInt() and 0xFF // 0 <= c <= 255
         buffer.append(c.toChar())
-        if (0 < b && b <= 127) {
+        if (b in 1..127) {
             bytesInBuffer++
-        }
-        else {
+        } else {
             bytesInBuffer += 2
         }
 
@@ -57,13 +56,13 @@ fun bytesToStrings(bytes: ByteArray): Array<String> {
 }
 
 fun stringsToBytes(strings: Array<String>): ByteArray {
-    val resultLength = strings.sumBy { it.length }
+    val resultLength = strings.sumOf { it.length }
     val result = ByteArray(resultLength)
 
     var i = 0
     for (s in strings) {
         for (si in 0..s.length - 1) {
-            result[i++] = s[si].toByte()
+            result[i++] = s[si].code.toByte()
         }
     }
 

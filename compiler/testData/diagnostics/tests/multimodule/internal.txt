@@ -31,11 +31,8 @@ package p {
     }
 }
 
-
 // -- Module: <m2> --
 package
 
 public fun test(): kotlin.Unit
 
-package p {
-}

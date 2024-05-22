@@ -16,72 +16,63 @@
 
 package org.jetbrains.kotlin.incremental
 
+import com.google.common.io.Closer
 import org.jetbrains.kotlin.incremental.storage.BasicMapsOwner
+import org.jetbrains.kotlin.serialization.SerializerExtensionProtocol
+import java.io.Closeable
 import java.io.File
 
-abstract class IncrementalCachesManager<PlatformCache : IncrementalCacheCommon<*>>(
-    protected val cachesRootDir: File,
-    protected val reporter: ICReporter
-) {
+abstract class IncrementalCachesManager<PlatformCache : AbstractIncrementalCache<*>>(
+    icContext: IncrementalCompilationContext,
+    cachesRootDir: File,
+) : Closeable {
     private val caches = arrayListOf<BasicMapsOwner>()
+
+    private var isClosed = false
+
+    @Synchronized
     protected fun <T : BasicMapsOwner> T.registerCache() {
+        check(!isClosed) { "This cache storage has already been closed" }
         caches.add(this)
     }
 
     private val inputSnapshotsCacheDir = File(cachesRootDir, "inputs").apply { mkdirs() }
     private val lookupCacheDir = File(cachesRootDir, "lookups").apply { mkdirs() }
 
-    val inputsCache: InputsCache = InputsCache(inputSnapshotsCacheDir, reporter).apply { registerCache() }
-    val lookupCache: LookupStorage = LookupStorage(lookupCacheDir).apply { registerCache() }
+    val inputsCache: InputsCache = InputsCache(inputSnapshotsCacheDir, icContext).apply { registerCache() }
+    val lookupCache: LookupStorage = LookupStorage(lookupCacheDir, icContext).apply { registerCache() }
     abstract val platformCache: PlatformCache
 
-    fun clean() {
-        caches.forEach { it.clean() }
-        cachesRootDir.deleteRecursively()
-    }
+    @Suppress("UnstableApiUsage")
+    @Synchronized
+    override fun close() {
+        check(!isClosed) { "This cache storage has already been closed" }
 
-    fun close(flush: Boolean = false): Boolean {
-        var successful = true
-
-        for (cache in caches) {
-            if (flush) {
-                try {
-                    cache.flush(false)
-                }
-                catch (e: Throwable) {
-                    successful = false
-                    reporter.report { "Exception when flushing cache ${cache.javaClass}: $e" }
-                }
-            }
-
-            try {
-                cache.close()
-            }
-            catch (e: Throwable) {
-                successful = false
-                reporter.report { "Exception when closing cache ${cache.javaClass}: $e" }
-            }
+        val closer = Closer.create()
+        caches.forEach {
+            closer.register(it)
         }
+        closer.close()
 
-        return successful
+        isClosed = true
     }
+
 }
 
-class IncrementalJvmCachesManager(
-    cacheDirectory: File,
-    outputDir: File,
-    reporter: ICReporter
-) : IncrementalCachesManager<IncrementalJvmCache>(cacheDirectory, reporter) {
-
-    private val jvmCacheDir = File(cacheDirectory, "jvm").apply { mkdirs() }
-    override val platformCache = IncrementalJvmCache(jvmCacheDir, outputDir).apply { registerCache() }
+open class IncrementalJvmCachesManager(
+    icContext: IncrementalCompilationContext,
+    outputDir: File?,
+    cachesRootDir: File,
+) : IncrementalCachesManager<IncrementalJvmCache>(icContext, cachesRootDir) {
+    private val jvmCacheDir = File(cachesRootDir, "jvm").apply { mkdirs() }
+    override val platformCache = IncrementalJvmCache(jvmCacheDir, icContext, outputDir).apply { registerCache() }
 }
 
 class IncrementalJsCachesManager(
-        cachesRootDir: File,
-        reporter: ICReporter
-) : IncrementalCachesManager<IncrementalJsCache>(cachesRootDir, reporter) {
-
+    icContext: IncrementalCompilationContext,
+    serializerProtocol: SerializerExtensionProtocol,
+    cachesRootDir: File,
+) : IncrementalCachesManager<IncrementalJsCache>(icContext, cachesRootDir) {
     private val jsCacheFile = File(cachesRootDir, "js").apply { mkdirs() }
-    override val platformCache = IncrementalJsCache(jsCacheFile).apply { registerCache() }
+    override val platformCache = IncrementalJsCache(jsCacheFile, icContext, serializerProtocol).apply { registerCache() }
 }

@@ -22,7 +22,7 @@ import org.jetbrains.kotlin.container.DslKt;
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
 import org.jetbrains.kotlin.psi.KtNamedFunction;
-import org.jetbrains.kotlin.psi.KtPsiFactoryKt;
+import org.jetbrains.kotlin.psi.KtPsiFactory;
 import org.jetbrains.kotlin.resolve.FunctionDescriptorResolver;
 import org.jetbrains.kotlin.resolve.OverloadChecker;
 import org.jetbrains.kotlin.resolve.calls.results.TypeSpecificityComparator;
@@ -30,7 +30,7 @@ import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfoFactory;
 import org.jetbrains.kotlin.resolve.lazy.JvmResolveUtil;
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope;
 import org.jetbrains.kotlin.test.ConfigurationKind;
-import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.DummyTraces;
 import org.jetbrains.kotlin.test.KotlinTestWithEnvironment;
 
 public class KotlinOverloadTest extends KotlinTestWithEnvironment {
@@ -168,10 +168,10 @@ public class KotlinOverloadTest extends KotlinTestWithEnvironment {
     }
 
     private FunctionDescriptor makeFunction(String funDecl) {
-        KtNamedFunction function = KtPsiFactoryKt.KtPsiFactory(getProject()).createFunction(funDecl);
+        KtNamedFunction function = new KtPsiFactory(getProject()).createFunction(funDecl);
         LexicalScope scope = TypeTestUtilsKt.builtInPackageAsLexicalScope(module);
         return functionDescriptorResolver.resolveFunctionDescriptor(
-                module, scope, function, KotlinTestUtils.DUMMY_TRACE, DataFlowInfoFactory.EMPTY
+                module, scope, function, DummyTraces.DUMMY_TRACE, DataFlowInfoFactory.EMPTY, null
         );
     }
 }

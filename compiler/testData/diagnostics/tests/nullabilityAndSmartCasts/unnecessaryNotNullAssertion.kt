@@ -1,5 +1,4 @@
-// !WITH_NEW_INFERENCE
-// !DIAGNOSTICS: -UNUSED_PARAMETER, -SENSELESS_COMPARISON, -DEBUG_INFO_SMARTCAST
+// DIAGNOSTICS: -UNUSED_PARAMETER, -SENSELESS_COMPARISON, -DEBUG_INFO_SMARTCAST
 
 fun takeNotNull(s: String) {}
 fun <T> notNull(): T = TODO()
@@ -11,9 +10,9 @@ fun test() {
     takeNotNull(nullable()!!)
 
     var x: String? = null
-    takeNotNull(dependOn(x)<!NI;UNNECESSARY_NOT_NULL_ASSERTION!>!!<!>)
-    takeNotNull(dependOn(dependOn(x))<!NI;UNNECESSARY_NOT_NULL_ASSERTION!>!!<!>)
-    takeNotNull(dependOn(dependOn(x)<!NI;UNNECESSARY_NOT_NULL_ASSERTION!>!!<!>))
+    takeNotNull(dependOn(x)!!)
+    takeNotNull(dependOn(dependOn(x))!!)
+    takeNotNull(dependOn(dependOn(x)!!))
     takeNotNull(dependOn(dependOn(x!!)))
 
     if (x != null) {

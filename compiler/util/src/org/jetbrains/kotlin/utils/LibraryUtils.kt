@@ -58,9 +58,6 @@ object LibraryUtils {
         return classesRoots.firstOrNull { it.name == jarName }
     }
 
-    @Suppress("unused") // used in K2JSCompilerMojo
-    @JvmStatic fun isKotlinJavascriptLibrary(library: File): Boolean = KotlinJavascriptMetadataUtils.loadMetadata(library).isNotEmpty()
-
     @JvmStatic fun isKotlinJavascriptStdLibrary(library: File): Boolean {
         return checkAttributeValue(library, TITLE_KOTLIN_JAVASCRIPT_STDLIB, Attributes.Name.IMPLEMENTATION_TITLE)
     }

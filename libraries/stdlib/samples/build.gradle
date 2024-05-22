@@ -1,8 +1,8 @@
 apply plugin: 'kotlin'
 
 dependencies {
-    compile project(':kotlin-stdlib-jre8')
-    testCompile project(':kotlin-test:kotlin-test-junit')
+    api project(':kotlin-stdlib-jdk8')
+    testApi RepoDependencies.kotlinTest(project, "junit")
 }
 
 sourceSets {
@@ -10,11 +10,10 @@ sourceSets {
 }
 
 compileTestKotlin {
-    kotlinOptions.jdkHome = JDK_18
-}
-
-kotlin.experimental.coroutines 'enable'
-
-test {
-    executable = "$JDK_18/bin/java"
+    compilerOptions {
+        optIn.addAll([
+                "kotlin.ExperimentalStdlibApi",
+                "kotlin.ExperimentalUnsignedTypes",
+        ])
+    }
 }

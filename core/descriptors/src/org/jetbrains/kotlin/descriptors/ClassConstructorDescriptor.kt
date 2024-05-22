@@ -16,10 +16,11 @@
 
 package org.jetbrains.kotlin.descriptors
 
+import org.jetbrains.kotlin.mpp.ConstructorSymbolMarker
 import org.jetbrains.kotlin.types.TypeSubstitutor
 
 
-interface ClassConstructorDescriptor : ConstructorDescriptor {
+interface ClassConstructorDescriptor : ConstructorDescriptor, ConstructorSymbolMarker {
     override fun getContainingDeclaration(): ClassDescriptor
 
     override fun getOriginal(): ClassConstructorDescriptor
@@ -29,7 +30,7 @@ interface ClassConstructorDescriptor : ConstructorDescriptor {
     override fun copy(
             newOwner: DeclarationDescriptor,
             modality: Modality,
-            visibility: Visibility,
+            visibility: DescriptorVisibility,
             kind: CallableMemberDescriptor.Kind,
             copyOverrides: Boolean
     ): ClassConstructorDescriptor

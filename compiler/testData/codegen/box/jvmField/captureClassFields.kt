@@ -1,7 +1,6 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
-// WITH_RUNTIME
+// WITH_STDLIB
 
 open class A {
     @JvmField public val publicField = "1";
@@ -11,7 +10,7 @@ open class A {
     fun test(): String {
         return {
             publicField + internalField + protectedField
-        }()
+        }.let { it() }
     }
 }
 

@@ -21,14 +21,13 @@ import org.jetbrains.kotlin.backend.common.bridges.Bridge
 import org.jetbrains.kotlin.backend.common.bridges.FunctionHandle
 import org.jetbrains.kotlin.backend.common.bridges.generateBridges
 import org.jetbrains.kotlin.utils.DFS
-import java.util.*
 import kotlin.test.assertEquals
 
 class BridgeTest : TestCase() {
     private class Fun(val text: String) : FunctionHandle {
         override val isDeclaration: Boolean get() = text[1] == 'D'
         override val isAbstract: Boolean get() = text[0] == '-'
-        override val isInterfaceDeclaration: Boolean get() = false
+        override val mayBeUsedAsSuperImplementation: Boolean get() = true
         val signature: Char get() = text[2]
 
         val overriddenFunctions: MutableList<Fun> = arrayListOf()
@@ -53,7 +52,7 @@ class BridgeTest : TestCase() {
         return Fun(text)
     }
 
-    private fun bridge(from: Fun, to: Fun): Bridge<Meth> = Bridge(Meth(from), Meth(to))
+    private fun bridge(from: Fun, to: Fun): Bridge<Meth, Fun> = Bridge(Meth(from), Meth(to), emptySet())
 
     /**
      * Constructs a graph out of the given pairs of vertices. First vertex should be a function in the derived class,
@@ -91,14 +90,14 @@ class BridgeTest : TestCase() {
             return result
         }
 
-        val vertices = edges.flatMapTo(HashSet<Fun>()) { pair -> listOf(pair.first, pair.second) }
+        val vertices = edges.flatMapTo(HashSet()) { pair -> listOf(pair.first, pair.second) }
 
         for (vertex in vertices) {
             val directConcreteSuperFunctions = vertex.overriddenFunctions.filter { !it.isAbstract }
             assert(directConcreteSuperFunctions.size <= 1) {
                 "Incorrect test data: function $vertex has more than one direct concrete super-function: ${vertex.overriddenFunctions}\n" +
-                "This is not allowed because only classes can contain implementations (concrete functions), and having more than one " +
-                "concrete super-function means having more than one superclass, which is prohibited in Kotlin"
+                        "This is not allowed because only classes can contain implementations (concrete functions), and having more than " +
+                        "one concrete super-function means having more than one superclass, which is prohibited in Kotlin"
             }
 
             if (vertex.isDeclaration) continue
@@ -120,19 +119,23 @@ class BridgeTest : TestCase() {
                 }
                 assert(concreteDeclarations.size == 1) {
                     "Incorrect test data: concrete fake override vertex $vertex has more than one concrete super-declaration: " +
-                    "$concreteDeclarations"
+                            "$concreteDeclarations"
                 }
             }
         }
     }
 
-    private fun doTest(function: Fun, expectedBridges: Set<Bridge<Meth>>) {
+    private fun doTest(function: Fun, expectedBridges: Set<Bridge<Meth, Fun>>) {
         val actualBridges = generateBridges(function, ::Meth)
-        assert(actualBridges.firstOrNull { it.from == it.to } == null) {
+        assert(actualBridges.all { it.from != it.to }) {
             "A bridge invoking itself was generated, which makes no sense, since it will result in StackOverflowError" +
-            " once called: $actualBridges"
+                    " once called: $actualBridges"
         }
-        assertEquals(expectedBridges, actualBridges, "Expected and actual bridge sets differ for function $function")
+        assertEquals(
+            expectedBridges.map { it.from to it.to },
+            actualBridges.map { it.from to it.to },
+            "Expected and actual bridge sets differ for function $function"
+        )
     }
 
     // ------------------------------------------------------------------------------------------------------------------
@@ -150,7 +153,7 @@ class BridgeTest : TestCase() {
         graph()
         doTest(a, setOf())
     }
-    
+
     fun testSimpleFakeOverrideSameSignature() {
         val a = v("+D1")
         val b = v("+F1")
@@ -190,7 +193,7 @@ class BridgeTest : TestCase() {
         doTest(a, setOf())
         doTest(b, setOf())
     }
-    
+
     // Simple tests where declaration "a" is inherited by declaration "b" with a different signature.
     // Note that we don't generate bridges near abstract declarations in contrast to javac
 
@@ -200,7 +203,7 @@ class BridgeTest : TestCase() {
         graph(b to a)
         doTest(b, setOf(bridge(a, b)))
     }
-    
+
     fun testSimpleAbstractDeclarationDifferentSignature() {
         val a = v("-D1")
         val b = v("-D2")
@@ -221,7 +224,7 @@ class BridgeTest : TestCase() {
         graph(b to a)
         doTest(b, setOf(bridge(a, b)))
     }
-    
+
     // Simple tests where declaration overrides declaration through a fake override in the super class, with a different signature
 
     fun testSimpleConcreteDeclarationOverridesConcreteThroughFakeOverride() {
@@ -263,7 +266,7 @@ class BridgeTest : TestCase() {
         doTest(b, setOf())
         doTest(c, setOf())
     }
-    
+
     // Declaration "c" overrides two declarations "a" and "b"
 
     fun testAbstractDeclarationOverridesTwoAbstractDeclarations() {
@@ -320,7 +323,7 @@ class BridgeTest : TestCase() {
         doTest(b, setOf())
         doTest(c, setOf(bridge(a, c), bridge(b, c)))
     }
-    
+
     // Diamonds where the sink (vertex "d") is a declaration: bridges from all super-declarations to "d" should be present
 
     fun testDiamondAbstractDeclarations() {
@@ -334,7 +337,7 @@ class BridgeTest : TestCase() {
         doTest(c, setOf())
         doTest(d, setOf())
     }
-    
+
     fun testDiamondMixedDeclarations() {
         val a = v("-D1")
         val b = v("+D2")
@@ -346,7 +349,7 @@ class BridgeTest : TestCase() {
         doTest(c, setOf())
         doTest(d, setOf(bridge(a, d), bridge(b, d), bridge(c, d)))
     }
-    
+
     fun testDiamondAbstractFakeOverridesInTheMiddle() {
         val a = v("-D1")
         val b = v("-F2")
@@ -360,7 +363,7 @@ class BridgeTest : TestCase() {
     }
 
     // Fake override "c" overrides declarations "a" and "b": a bridge is needed if signatures are different and there's an implementation
-    
+
     fun testAbstractFakeOverride() {
         val a = v("-D1")
         val b = v("-D2")
@@ -384,7 +387,7 @@ class BridgeTest : TestCase() {
         graph(c to a, c to b)
         doTest(c, setOf(bridge(a, b)))
     }
-    
+
     fun testFakeOverrideInheritingDeclarations() {
         val a = v("-D1")
         val b = v("+D2")
@@ -474,7 +477,7 @@ class BridgeTest : TestCase() {
         graph(c to a, e to d, f to b, f to c, f to e)
         doTest(e, setOf())
         // Although "a" is a concrete declaration, it's overridden with abstract in "c" and all bridges should delegate to "d" instead
-        doTest(f, setOf(bridge(a, d), bridge(b, d), bridge(c, d)))
+        doTest(f, setOf(bridge(b, d), bridge(a, d), bridge(c, d)))
     }
 
     // Fake override overrides another fake override (or declaration) with some bridges already present there
@@ -537,9 +540,11 @@ class BridgeTest : TestCase() {
         val h = v("-D8")
         val i = v("-D9")
         val j = v("+F0")
-        graph(d to a, d to b, d to c,
-              g to d, g to e, g to f,
-              j to g, j to h, j to i)
+        graph(
+            d to a, d to b, d to c,
+            g to d, g to e, g to f,
+            j to g, j to h, j to i
+        )
         doTest(d, setOf(bridge(b, a), bridge(c, a)))
         doTest(g, setOf(bridge(e, a), bridge(f, a)))
         doTest(j, setOf(bridge(h, a), bridge(i, a)))

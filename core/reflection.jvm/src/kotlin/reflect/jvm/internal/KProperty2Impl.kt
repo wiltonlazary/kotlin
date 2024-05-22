@@ -22,40 +22,43 @@ import kotlin.jvm.internal.CallableReference
 import kotlin.reflect.KMutableProperty2
 import kotlin.reflect.KProperty2
 
-internal open class KProperty2Impl<D, E, out R> : KProperty2<D, E, R>, KPropertyImpl<R> {
-    constructor(container: KDeclarationContainerImpl, name: String, signature: String) : super(container, name, signature, CallableReference.NO_RECEIVER)
+internal open class KProperty2Impl<D, E, out V> : KProperty2<D, E, V>, KPropertyImpl<V> {
+    constructor(container: KDeclarationContainerImpl, name: String, signature: String) : super(
+        container, name, signature, CallableReference.NO_RECEIVER
+    )
 
     constructor(container: KDeclarationContainerImpl, descriptor: PropertyDescriptor) : super(container, descriptor)
 
-    private val getter_ = ReflectProperties.lazy { Getter(this) }
+    private val _getter = lazy(PUBLICATION) { Getter(this) }
 
-    override val getter: Getter<D, E, R> get() = getter_()
+    override val getter: Getter<D, E, V> get() = _getter.value
 
-    override fun get(receiver1: D, receiver2: E): R = getter.call(receiver1, receiver2)
+    override fun get(receiver1: D, receiver2: E): V = getter.call(receiver1, receiver2)
 
-    private val delegateField = lazy(PUBLICATION) { computeDelegateField() }
+    private val delegateSource = lazy(PUBLICATION) { computeDelegateSource() }
 
-    override fun getDelegate(receiver1: D, receiver2: E): Any? = getDelegate(delegateField.value, receiver1)
+    override fun getDelegate(receiver1: D, receiver2: E): Any? = getDelegateImpl(delegateSource.value, receiver1, receiver2)
 
-    override fun invoke(receiver1: D, receiver2: E): R = get(receiver1, receiver2)
+    override fun invoke(receiver1: D, receiver2: E): V = get(receiver1, receiver2)
 
-    class Getter<D, E, out R>(override val property: KProperty2Impl<D, E, R>) : KPropertyImpl.Getter<R>(), KProperty2.Getter<D, E, R> {
-        override fun invoke(receiver1: D, receiver2: E): R = property.get(receiver1, receiver2)
+    class Getter<D, E, out V>(override val property: KProperty2Impl<D, E, V>) : KPropertyImpl.Getter<V>(), KProperty2.Getter<D, E, V> {
+        override fun invoke(receiver1: D, receiver2: E): V = property.get(receiver1, receiver2)
     }
 }
 
-internal class KMutableProperty2Impl<D, E, R> : KProperty2Impl<D, E, R>, KMutableProperty2<D, E, R> {
+internal class KMutableProperty2Impl<D, E, V> : KProperty2Impl<D, E, V>, KMutableProperty2<D, E, V> {
     constructor(container: KDeclarationContainerImpl, name: String, signature: String) : super(container, name, signature)
 
     constructor(container: KDeclarationContainerImpl, descriptor: PropertyDescriptor) : super(container, descriptor)
 
-    private val setter_ = ReflectProperties.lazy { Setter(this) }
+    private val _setter = lazy(PUBLICATION) { Setter(this) }
 
-    override val setter: Setter<D, E, R> get() = setter_()
+    override val setter: Setter<D, E, V> get() = _setter.value
 
-    override fun set(receiver1: D, receiver2: E, value: R) = setter.call(receiver1, receiver2, value)
+    override fun set(receiver1: D, receiver2: E, value: V) = setter.call(receiver1, receiver2, value)
 
-    class Setter<D, E, R>(override val property: KMutableProperty2Impl<D, E, R>) : KPropertyImpl.Setter<R>(), KMutableProperty2.Setter<D, E, R> {
-        override fun invoke(receiver1: D, receiver2: E, value: R): Unit = property.set(receiver1, receiver2, value)
+    class Setter<D, E, V>(override val property: KMutableProperty2Impl<D, E, V>) : KPropertyImpl.Setter<V>(),
+        KMutableProperty2.Setter<D, E, V> {
+        override fun invoke(receiver1: D, receiver2: E, value: V): Unit = property.set(receiver1, receiver2, value)
     }
 }

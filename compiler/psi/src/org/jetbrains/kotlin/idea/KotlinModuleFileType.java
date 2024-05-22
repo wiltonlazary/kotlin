@@ -17,8 +17,6 @@
 package org.jetbrains.kotlin.idea;
 
 import com.intellij.openapi.fileTypes.FileType;
-import com.intellij.openapi.fileTypes.LanguageFileType;
-import com.intellij.openapi.util.IconLoader;
 import com.intellij.openapi.util.NotNullLazyValue;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
@@ -30,13 +28,7 @@ public class KotlinModuleFileType implements FileType {
     public static final String EXTENSION = "kotlin_module";
     public static final KotlinModuleFileType INSTANCE = new KotlinModuleFileType();
 
-    private final NotNullLazyValue<Icon> myIcon = new NotNullLazyValue<Icon>() {
-        @NotNull
-        @Override
-        protected Icon compute() {
-            return IconLoader.getIcon("/org/jetbrains/kotlin/idea/icons/kotlin_file.png");
-        }
-    };
+    private final NotNullLazyValue<Icon> myIcon = NotNullLazyValue.lazy(() -> KotlinIconProviderService.getInstance().getFileIcon());
 
     private KotlinModuleFileType() {}
 

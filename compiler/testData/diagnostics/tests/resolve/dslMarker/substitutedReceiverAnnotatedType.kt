@@ -1,5 +1,5 @@
-// !WITH_NEW_INFERENCE
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER
 @DslMarker
 @Target(AnnotationTarget.TYPE)
 annotation class Ann
@@ -19,7 +19,7 @@ fun test() {
     foo<A> {
         a()
         bar<B> {
-            <!OI;DSL_SCOPE_VIOLATION!>a<!>()
+            <!DSL_SCOPE_VIOLATION!>a<!>()
             this@foo.a()
             b()
         }

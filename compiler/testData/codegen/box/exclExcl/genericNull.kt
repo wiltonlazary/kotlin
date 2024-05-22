@@ -1,3 +1,4 @@
+
 fun <T> foo(t: T) {
     t!!
 }

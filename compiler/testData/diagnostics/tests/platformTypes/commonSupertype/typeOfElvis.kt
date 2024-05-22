@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // FILE: p/J.java
 
 package p;
@@ -12,7 +13,7 @@ import p.*
 
 fun foo(): J? = null
 
-fun main(args: Array<String>) {
+fun main() {
     val v = foo() ?: J.j()
     if (v != null) {
 

@@ -1,7 +1,10 @@
+// FIR_IDENTICAL
 open class Base {
     open fun foo() {}
 
     open val bar: String = ""
+
+    override fun hashCode() = super.hashCode()
 }
 
 class Derived : Base() {

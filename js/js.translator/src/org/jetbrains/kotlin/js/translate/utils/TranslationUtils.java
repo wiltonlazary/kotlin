@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.js.translate.utils;
@@ -11,7 +11,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.FunctionTypesKt;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
-import org.jetbrains.kotlin.config.CoroutineLanguageVersionSettingsUtilKt;
+import org.jetbrains.kotlin.builtins.StandardNames;
+import org.jetbrains.kotlin.builtins.PrimitiveType;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.impl.AnonymousFunctionDescriptor;
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableAccessorDescriptor;
@@ -26,7 +27,9 @@ import org.jetbrains.kotlin.js.translate.context.TemporaryConstVariable;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.expression.InlineMetadata;
 import org.jetbrains.kotlin.js.translate.general.Translation;
+import org.jetbrains.kotlin.js.translate.intrinsic.functions.factories.ArrayFIF;
 import org.jetbrains.kotlin.js.translate.reference.ReferenceTranslator;
+import org.jetbrains.kotlin.js.translate.utils.jsAstUtils.AstUtilsKt;
 import org.jetbrains.kotlin.name.ClassId;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.name.FqNameUnsafe;
@@ -37,7 +40,7 @@ import org.jetbrains.kotlin.resolve.BindingContextUtils;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
 import org.jetbrains.kotlin.resolve.inline.InlineUtil;
-import org.jetbrains.kotlin.resolve.source.KotlinSourceElementKt;
+import org.jetbrains.kotlin.resolve.source.PsiSourceElementKt;
 import org.jetbrains.kotlin.types.DynamicTypesKt;
 import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.kotlin.types.TypeUtils;
@@ -56,7 +59,7 @@ public final class TranslationUtils {
             new FqNameUnsafe("kotlin.ranges.CharProgression"),
             new FqNameUnsafe("kotlin.js.internal.CharCompanionObject"),
             new FqNameUnsafe("kotlin.Char.Companion"),
-            KotlinBuiltIns.FQ_NAMES.charSequence, KotlinBuiltIns.FQ_NAMES.number
+            StandardNames.FqNames.charSequence, StandardNames.FqNames.number
     ));
 
     private TranslationUtils() {
@@ -70,7 +73,7 @@ public final class TranslationUtils {
         JsExpression functionExpression = function;
         if (InlineUtil.isInline(descriptor)) {
             InlineMetadata metadata = InlineMetadata.compose(function, descriptor, context);
-            PsiElement sourceInfo = KotlinSourceElementKt.getPsi(descriptor.getSource());
+            PsiElement sourceInfo = PsiSourceElementKt.getPsi(descriptor.getSource());
             functionExpression = metadata.functionWithMetadata(context, sourceInfo);
         }
 
@@ -102,7 +105,7 @@ public final class TranslationUtils {
     @NotNull
     private static JsPropertyInitializer translateExtensionFunctionAsEcma5DataDescriptor(@NotNull JsExpression functionExpression,
             @NotNull FunctionDescriptor descriptor, @NotNull TranslationContext context) {
-        JsObjectLiteral meta = createDataDescriptor(functionExpression, ModalityKt.isOverridable(descriptor), false);
+        JsObjectLiteral meta = createDataDescriptor(functionExpression, ModalityUtilsKt.isOverridable(descriptor), false);
         return new JsPropertyInitializer(context.getNameForDescriptor(descriptor).makeRef(), meta);
     }
 
@@ -171,6 +174,16 @@ public final class TranslationUtils {
             boolean isNegated
     ) {
         return nullCheck(prepareForNullCheck(ktSubject, expressionToCheck, context), isNegated);
+    }
+
+    @NotNull
+    public static JsBinaryOperation nullCheck(
+            @NotNull KotlinType expressionType,
+            @NotNull JsExpression expressionToCheck,
+            @NotNull TranslationContext context,
+            boolean isNegated
+    ) {
+        return nullCheck(coerce(context, expressionToCheck, TypeUtils.makeNullable(expressionType)), isNegated);
     }
 
     @NotNull
@@ -382,8 +395,7 @@ public final class TranslationUtils {
 
     @NotNull
     public static ClassDescriptor getCoroutineBaseClass(@NotNull TranslationContext context) {
-        FqName className = CoroutineLanguageVersionSettingsUtilKt.coroutinesPackageFqName(context.getLanguageVersionSettings())
-                .child(Name.identifier("CoroutineImpl"));
+        FqName className = StandardNames.COROUTINES_PACKAGE_FQ_NAME.child(Name.identifier("CoroutineImpl"));
         ClassDescriptor descriptor = FindClassInModuleKt.findClassAcrossModuleDependencies(
                 context.getCurrentModule(), ClassId.topLevel(className));
         assert descriptor != null;
@@ -407,9 +419,9 @@ public final class TranslationUtils {
 
     public static boolean isOverridableFunctionWithDefaultParameters(@NotNull FunctionDescriptor descriptor) {
         return hasOrInheritsParametersWithDefaultValue(descriptor) &&
-                !(descriptor instanceof ConstructorDescriptor) &&
-                descriptor.getContainingDeclaration() instanceof ClassDescriptor &&
-                ModalityKt.isOverridable(descriptor);
+               !(descriptor instanceof ConstructorDescriptor) &&
+               descriptor.getContainingDeclaration() instanceof ClassDescriptor &&
+               ModalityUtilsKt.isOverridable(descriptor);
     }
 
     @NotNull
@@ -421,7 +433,7 @@ public final class TranslationUtils {
     public static KotlinType getReturnTypeForCoercion(@NotNull CallableDescriptor descriptor, boolean forcePrivate) {
         descriptor = descriptor.getOriginal();
 
-        if (FunctionTypesKt.getFunctionalClassKind(descriptor) != null || descriptor instanceof AnonymousFunctionDescriptor) {
+        if (FunctionTypesKt.getFunctionTypeKind(descriptor) != null || descriptor instanceof AnonymousFunctionDescriptor) {
             return getAnyTypeFromSameModule(descriptor);
         }
 
@@ -433,13 +445,14 @@ public final class TranslationUtils {
             }
 
             DeclarationDescriptor container = descriptor.getContainingDeclaration();
-            boolean isPublic = descriptor.getVisibility().effectiveVisibility(descriptor, true).getPublicApi() && !forcePrivate;
+            EffectiveVisibility effectiveVisibility = EffectiveVisibilityUtilsKt.effectiveVisibility(descriptor.getVisibility(), descriptor, true);
+            boolean isPublic = effectiveVisibility.getPublicApi() && !forcePrivate;
             if (KotlinBuiltIns.isCharOrNullableChar(returnType) && container instanceof ClassDescriptor && isPublic) {
                 ClassDescriptor containingClass = (ClassDescriptor) container;
                 FqNameUnsafe containingClassName = DescriptorUtilsKt.getFqNameUnsafe(containingClass);
                 if (!CLASSES_WITH_NON_BOXED_CHARS.contains(containingClassName) &&
                     !KotlinBuiltIns.isPrimitiveType(containingClass.getDefaultType()) &&
-                    !KotlinBuiltIns.isPrimitiveArray(containingClassName)
+                    !StandardNames.isPrimitiveArray(containingClassName)
                 ) {
                     return getAnyTypeFromSameModule(descriptor);
                 }
@@ -510,6 +523,40 @@ public final class TranslationUtils {
         else if (KotlinBuiltIns.isUnit(from)) {
             if (!KotlinBuiltIns.isUnit(to) && !MetadataProperties.isUnit(value)) {
                 value = voidToUnit(context, value);
+            }
+        }
+
+        PrimitiveType signedPrimitiveFromUnsigned = ArrayFIF.INSTANCE.unsignedPrimitiveToSigned(to);
+        if (signedPrimitiveFromUnsigned != null) {
+            if (KotlinBuiltIns.isInt(from)) {
+                switch (signedPrimitiveFromUnsigned) {
+                    case BYTE:
+                        value = AstUtilsKt.toByte(context, value);
+                        break;
+                    case SHORT:
+                        value = AstUtilsKt.toShort(context, value);
+                        break;
+                }
+                DeclarationDescriptor d = to.getConstructor().getDeclarationDescriptor();
+                if (d instanceof ClassDescriptor) {
+                    value =  new JsNew(ReferenceTranslator.translateAsTypeReference((ClassDescriptor) d, context),
+                                     Collections.singletonList(value));
+                }
+            }
+        }
+
+        // SAM conversion
+        if ((FunctionTypesKt.isFunctionTypeOrSubtype(from) || FunctionTypesKt.isSuspendFunctionTypeOrSubtype(from))) {
+            ClassifierDescriptor d = to.getConstructor().getDeclarationDescriptor();
+            if (d instanceof ClassDescriptor && ((ClassDescriptor)d).isFun()) {
+                JsName constructorName = context.getInlineableInnerNameForDescriptor(d.getOriginal());
+                if (to.isMarkedNullable()) {
+                    JsConditional c = TranslationUtils.notNullConditional(value, new JsNullLiteral(), context);
+                    c.setThenExpression(new JsNew(new JsNameRef(constructorName), Collections.singletonList(c.getThenExpression())));
+                    value = c;
+                } else {
+                    value = new JsNew(new JsNameRef(constructorName), Collections.singletonList(value));
+                }
             }
         }
 

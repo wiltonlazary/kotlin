@@ -1,3 +1,4 @@
+
 abstract class A {
     inner class InnerInA {
         fun returnOk() = "OK"

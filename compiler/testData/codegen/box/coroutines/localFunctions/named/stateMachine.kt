@@ -1,10 +1,8 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
-
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 var result = "FAIL"
 var i = 0
@@ -34,15 +32,12 @@ fun builder(c: suspend () -> Unit) {
         override val context: CoroutineContext
             get() = EmptyCoroutineContext
 
-        override fun resume(value: Unit) {
+        override fun resumeWith(value: Result<Unit>) {
+            value.getOrThrow()
             proceed = {
                 result = "OK"
                 finished = true
             }
-        }
-
-        override fun resumeWithException(exception: Throwable) {
-            throw exception
         }
     }
     c.startCoroutine(continuation)

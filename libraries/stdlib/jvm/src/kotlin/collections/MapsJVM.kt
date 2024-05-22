@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2023 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:kotlin.jvm.JvmMultifileClass
@@ -9,22 +9,53 @@
 package kotlin.collections
 
 import java.util.Comparator
-import java.util.LinkedHashMap
 import java.util.Properties
 import java.util.SortedMap
 import java.util.TreeMap
 import java.util.concurrent.ConcurrentMap
-
+import kotlin.collections.builders.MapBuilder
 
 /**
- * Returns an immutable map, mapping only the specified key to the
+ * Returns a new read-only map, mapping only the specified key to the
  * specified value.
  *
  * The returned map is serializable.
  *
  * @sample samples.collections.Maps.Instantiation.mapFromPairs
  */
-public fun <K, V> mapOf(pair: Pair<K, V>): Map<K, V> = java.util.Collections.singletonMap(pair.first, pair.second)
+public actual fun <K, V> mapOf(pair: Pair<K, V>): Map<K, V> = java.util.Collections.singletonMap(pair.first, pair.second)
+
+@PublishedApi
+@SinceKotlin("1.3")
+@kotlin.internal.InlineOnly
+internal actual inline fun <K, V> buildMapInternal(builderAction: MutableMap<K, V>.() -> Unit): Map<K, V> {
+    return build(createMapBuilder<K, V>().apply(builderAction))
+}
+
+@PublishedApi
+@SinceKotlin("1.3")
+@kotlin.internal.InlineOnly
+internal actual inline fun <K, V> buildMapInternal(capacity: Int, builderAction: MutableMap<K, V>.() -> Unit): Map<K, V> {
+    return build(createMapBuilder<K, V>(capacity).apply(builderAction))
+}
+
+@PublishedApi
+@SinceKotlin("1.3")
+internal fun <K, V> createMapBuilder(): MutableMap<K, V> {
+    return MapBuilder()
+}
+
+@PublishedApi
+@SinceKotlin("1.3")
+internal fun <K, V> createMapBuilder(capacity: Int): MutableMap<K, V> {
+    return MapBuilder(capacity)
+}
+
+@PublishedApi
+@SinceKotlin("1.3")
+internal fun <K, V> build(builder: MutableMap<K, V>): Map<K, V> {
+    return (builder as MapBuilder<K, V>).build()
+}
 
 
 /**
@@ -45,15 +76,20 @@ public inline fun <K, V> ConcurrentMap<K, V>.getOrPut(key: K, defaultValue: () -
 
 
 /**
- * Converts this [Map] to a [SortedMap] so iteration order will be in key order.
+ * Converts this [Map] to a [SortedMap]. The resulting [SortedMap] determines the equality and order of keys according to their natural sorting order.
+ *
+ * Note that if the natural sorting order of keys considers any two keys of this map equal
+ * (this could happen if the equality of keys according to [Comparable.compareTo] is inconsistent with the equality according to [Any.equals]),
+ * only the value associated with the last of them gets into the resulting map.
  *
  * @sample samples.collections.Maps.Transformations.mapToSortedMap
  */
 public fun <K : Comparable<K>, V> Map<out K, V>.toSortedMap(): SortedMap<K, V> = TreeMap(this)
 
 /**
- * Converts this [Map] to a [SortedMap] using the given [comparator] so that iteration order will be in the order
- * defined by the comparator.
+ * Converts this [Map] to a [SortedMap]. The resulting [SortedMap] determines the equality and order of keys according to the sorting order provided by the given [comparator].
+ *
+ * Note that if the `comparator` considers any two keys of this map equal, only the value associated with the last of them gets into the resulting map.
  *
  * @sample samples.collections.Maps.Transformations.mapToSortedMapWithComparator
  */
@@ -64,10 +100,24 @@ public fun <K, V> Map<out K, V>.toSortedMap(comparator: Comparator<in K>): Sorte
  * Returns a new [SortedMap] with the specified contents, given as a list of pairs
  * where the first value is the key and the second is the value.
  *
+ * The resulting [SortedMap] determines the equality and order of keys according to their natural sorting order.
+ *
  * @sample samples.collections.Maps.Instantiation.sortedMapFromPairs
  */
 public fun <K : Comparable<K>, V> sortedMapOf(vararg pairs: Pair<K, V>): SortedMap<K, V> =
     TreeMap<K, V>().apply { putAll(pairs) }
+
+/**
+ * Returns a new [SortedMap] with the specified contents, given as a list of pairs
+ * where the first value is the key and the second is the value.
+ *
+ * The resulting [SortedMap] determines the equality and order of keys according to the sorting order provided by the given [comparator].
+ *
+ * @sample samples.collections.Maps.Instantiation.sortedMapWithComparatorFromPairs
+ */
+@SinceKotlin("1.4")
+public fun <K, V> sortedMapOf(comparator: Comparator<in K>, vararg pairs: Pair<K, V>): SortedMap<K, V> =
+    TreeMap<K, V>(comparator).apply { putAll(pairs) }
 
 
 /**
@@ -88,3 +138,19 @@ internal actual inline fun <K, V> Map<K, V>.toSingletonMapOrSelf(): Map<K, V> = 
 internal actual fun <K, V> Map<out K, V>.toSingletonMap(): Map<K, V> =
     with(entries.iterator().next()) { java.util.Collections.singletonMap(key, value) }
 
+/**
+ * Calculate the initial capacity of a map, based on Guava's
+ * [com.google.common.collect.Maps.capacity](https://github.com/google/guava/blob/v28.2/guava/src/com/google/common/collect/Maps.java#L325)
+ * approach.
+ */
+@PublishedApi
+internal actual fun mapCapacity(expectedSize: Int): Int = when {
+    // We are not coercing the value to a valid one and not throwing an exception. It is up to the caller to
+    // properly handle negative values.
+    expectedSize < 0 -> expectedSize
+    expectedSize < 3 -> expectedSize + 1
+    expectedSize < INT_MAX_POWER_OF_TWO -> ((expectedSize / 0.75F) + 1.0F).toInt()
+    // any large value
+    else -> Int.MAX_VALUE
+}
+private const val INT_MAX_POWER_OF_TWO: Int = 1 shl (Int.SIZE_BITS - 2)

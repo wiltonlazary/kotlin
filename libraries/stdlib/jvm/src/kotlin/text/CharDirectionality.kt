@@ -1,11 +1,9 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2023 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.text
-
-import kotlin.*
 
 /**
  * Represents the Unicode directionality of a character.
@@ -117,8 +115,9 @@ public enum class CharDirectionality(public val value: Int) {
 
 
     public companion object {
-        private val directionalityMap by lazy { CharDirectionality.values().associateBy { it.value } }
+        private val directionalityMap by lazy { entries.associateBy { it.value } }
 
-        public fun valueOf(directionality: Int): CharDirectionality = directionalityMap[directionality] ?: throw IllegalArgumentException("Directionality #$directionality is not defined.")
+        public fun valueOf(directionality: Int): CharDirectionality =
+            directionalityMap[directionality] ?: throw IllegalArgumentException("Directionality #$directionality is not defined.")
     }
 }

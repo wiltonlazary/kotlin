@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.js.translate.expression
 
+import com.intellij.psi.impl.source.tree.LeafPsiElement
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.ValueParameterDescriptorImpl
 import org.jetbrains.kotlin.js.backend.ast.*
@@ -64,7 +65,8 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
         lambda.body.statements += setDefaultValueForArguments(descriptor, functionContext)
         lambda.body.statements += translateFunctionBody(descriptor, declaration, functionContext)
         lambda.functionDescriptor = descriptor
-        lambda.source = finalElement
+        lambda.source = declaration
+        lambda.body.source = finalElement as? LeafPsiElement
 
         val tracker = functionContext.usageTracker()!!
 
@@ -256,6 +258,6 @@ private fun HasName.getStaticRef(): JsNode? {
 
 private fun isLocalInlineDeclaration(descriptor: CallableDescriptor): Boolean {
     return descriptor is FunctionDescriptor
-           && descriptor.getVisibility() == Visibilities.LOCAL
+           && descriptor.getVisibility() == DescriptorVisibilities.LOCAL
            && InlineUtil.isInline(descriptor)
 }

@@ -1,5 +1,8 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
+// LAMBDAS: CLASS
+
+// has declaring class on Android 4.4
+// IGNORE_BACKEND: ANDROID
 
 // WITH_REFLECT
 

@@ -1,5 +1,6 @@
-// !DIAGNOSTICS: -NOTHING_TO_INLINE
-fun main(args: Array<String>) {
+// FIR_IDENTICAL
+// DIAGNOSTICS: -NOTHING_TO_INLINE
+fun main() {
     test {
         <!RETURN_NOT_ALLOWED!>return<!>
     }

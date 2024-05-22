@@ -1,9 +1,8 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1119
+// EXPECTED_REACHABLE_NODES: 1289
 package foo
 
 // NO_INLINE
-// CHECK_CALLED_IN_SCOPE: scope=box function=isInstanceOf
+// CHECK_CALLED_IN_SCOPE: scope=box function=isInstanceOf TARGET_BACKENDS=JS
 
 class A
 class B

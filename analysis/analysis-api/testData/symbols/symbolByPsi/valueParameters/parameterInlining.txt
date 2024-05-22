@@ -1,0 +1,122 @@
+KtFunctionSymbol:
+  annotationsList: []
+  callableIdIfNonLocal: /foo
+  contextReceivers: []
+  contractEffects: []
+  hasStableParameterNames: true
+  isActual: false
+  isBuiltinFunctionInvoke: false
+  isExpect: false
+  isExtension: false
+  isExternal: false
+  isInfix: false
+  isInline: true
+  isOperator: false
+  isOverride: false
+  isStatic: false
+  isSuspend: false
+  isTailRec: false
+  modality: FINAL
+  name: foo
+  origin: SOURCE
+  receiverParameter: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: kotlin/Unit
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  valueParameters: [
+    KtValueParameterSymbol:
+      annotationsList: []
+      callableIdIfNonLocal: null
+      contextReceivers: []
+      generatedPrimaryConstructorProperty: null
+      hasDefaultValue: false
+      isCrossinline: false
+      isExtension: false
+      isImplicitLambdaParameter: false
+      isNoinline: false
+      isVararg: false
+      name: inlineParameter
+      origin: SOURCE
+      receiverParameter: null
+      returnType: KtFunctionalType:
+        annotationsList: []
+        ownTypeArguments: [
+          KtUsualClassType:
+            annotationsList: []
+            ownTypeArguments: []
+            type: kotlin/Int
+        ]
+        type: kotlin/Function0<kotlin/Int>
+      symbolKind: LOCAL
+      typeParameters: []
+      getContainingFileSymbol: KtFileSymbol(parameterInlining.kt)
+      getContainingJvmClassName: ParameterInliningKt
+      getContainingModule: KtSourceModule "Sources of main"
+      deprecationStatus: null
+    KtValueParameterSymbol:
+      annotationsList: []
+      callableIdIfNonLocal: null
+      contextReceivers: []
+      generatedPrimaryConstructorProperty: null
+      hasDefaultValue: false
+      isCrossinline: true
+      isExtension: false
+      isImplicitLambdaParameter: false
+      isNoinline: false
+      isVararg: false
+      name: crossinlineParameter
+      origin: SOURCE
+      receiverParameter: null
+      returnType: KtFunctionalType:
+        annotationsList: []
+        ownTypeArguments: [
+          KtUsualClassType:
+            annotationsList: []
+            ownTypeArguments: []
+            type: kotlin/Int
+        ]
+        type: kotlin/Function0<kotlin/Int>
+      symbolKind: LOCAL
+      typeParameters: []
+      getContainingFileSymbol: KtFileSymbol(parameterInlining.kt)
+      getContainingJvmClassName: ParameterInliningKt
+      getContainingModule: KtSourceModule "Sources of main"
+      deprecationStatus: null
+    KtValueParameterSymbol:
+      annotationsList: []
+      callableIdIfNonLocal: null
+      contextReceivers: []
+      generatedPrimaryConstructorProperty: null
+      hasDefaultValue: false
+      isCrossinline: false
+      isExtension: false
+      isImplicitLambdaParameter: false
+      isNoinline: true
+      isVararg: false
+      name: noinlineParameter
+      origin: SOURCE
+      receiverParameter: null
+      returnType: KtFunctionalType:
+        annotationsList: []
+        ownTypeArguments: [
+          KtUsualClassType:
+            annotationsList: []
+            ownTypeArguments: []
+            type: kotlin/Int
+        ]
+        type: kotlin/Function0<kotlin/Int>
+      symbolKind: LOCAL
+      typeParameters: []
+      getContainingFileSymbol: KtFileSymbol(parameterInlining.kt)
+      getContainingJvmClassName: ParameterInliningKt
+      getContainingModule: KtSourceModule "Sources of main"
+      deprecationStatus: null
+  ]
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(parameterInlining.kt)
+  getContainingJvmClassName: ParameterInliningKt
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null

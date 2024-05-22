@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package templates
@@ -19,15 +19,22 @@ object Mapping : TemplateGroupBase() {
                 else
                     sequenceClassification(intermediate, stateless)
             }
+            specialFor(ArraysOfUnsigned) {
+                sinceAtLeast("1.3")
+                annotation("@ExperimentalUnsignedTypes")
+            }
         }
     }
 
     val f_withIndex = fn("withIndex()") {
         includeDefault()
-        include(CharSequences)
+        include(CharSequences, ArraysOfUnsigned)
     } builder {
         doc {
-            "Returns a ${if (f == Sequences) f.mapResult else "lazy [Iterable]"} of [IndexedValue] for each ${f.element} of the original ${f.collection}."
+            """
+            Returns a ${if (f == Sequences) f.mapResult else "lazy [Iterable]"} that wraps each ${f.element} of the original ${f.collection}
+            into an [IndexedValue] containing the index of that ${f.element} and the ${f.element} itself.
+            """
         }
         returns("Iterable<IndexedValue<T>>")
         body {
@@ -42,9 +49,10 @@ object Mapping : TemplateGroupBase() {
 
     val f_mapIndexed = fn("mapIndexed(transform: (index: Int, T) -> R)") {
         includeDefault()
-        include(CharSequences)
+        include(CharSequences, ArraysOfUnsigned)
     } builder {
         inline()
+        specialFor(ArraysOfUnsigned) { inlineOnly() }
 
         doc {
             """
@@ -59,7 +67,7 @@ object Mapping : TemplateGroupBase() {
         body(Iterables) {
             "return mapIndexedTo(ArrayList<R>(collectionSizeOrDefault(10)), transform)"
         }
-        body(ArraysOfObjects, ArraysOfPrimitives) {
+        body(ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned) {
             "return mapIndexedTo(ArrayList<R>(size), transform)"
         }
         body(CharSequences) {
@@ -76,9 +84,10 @@ object Mapping : TemplateGroupBase() {
 
     val f_map = fn("map(transform: (T) -> R)") {
         includeDefault()
-        include(Maps, CharSequences)
+        include(Maps, CharSequences, ArraysOfUnsigned)
     } builder {
         inline()
+        specialFor(ArraysOfUnsigned) { inlineOnly() }
 
         doc {
             """
@@ -86,12 +95,25 @@ object Mapping : TemplateGroupBase() {
             to each ${f.element} in the original ${f.collection}.
             """
         }
+
+        specialFor(Iterables, Sequences, ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned) {
+            sample("samples.collections.Collections.Transformations.map")
+        }
+
+        specialFor(Maps) {
+            sample("samples.collections.Maps.Transformations.mapToList")
+        }
+
+        specialFor(CharSequences) {
+            sample("samples.text.Strings.map")
+        }
+
         typeParam("R")
         returns("List<R>")
         body(Iterables) {
             "return mapTo(ArrayList<R>(collectionSizeOrDefault(10)), transform)"
         }
-        body(ArraysOfObjects, ArraysOfPrimitives, Maps) {
+        body(ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned, Maps) {
             "return mapTo(ArrayList<R>(size), transform)"
         }
         body(CharSequences) {
@@ -119,6 +141,13 @@ object Mapping : TemplateGroupBase() {
             to each ${f.element} in the original ${f.collection}.
             """
         }
+
+        fun sampleClass(f: Family): String = when (f) {
+            Maps -> "samples.collections.Maps.Transformations"
+            else -> "samples.collections.Collections.Transformations"
+        }
+        sample("${sampleClass(f)}.mapNotNull")
+
         body {
             "return mapNotNullTo(ArrayList<R>(), transform)"
         }
@@ -162,9 +191,10 @@ object Mapping : TemplateGroupBase() {
 
     val f_mapTo = fn("mapTo(destination: C, transform: (T) -> R)") {
         includeDefault()
-        include(Maps, CharSequences)
+        include(Maps, CharSequences, ArraysOfUnsigned)
     } builder {
         inline()
+        specialFor(ArraysOfUnsigned) { inlineOnly() }
 
         doc {
             """
@@ -178,18 +208,19 @@ object Mapping : TemplateGroupBase() {
 
         body {
             """
-                for (item in this)
-                    destination.add(transform(item))
-                return destination
+            for (item in this)
+                destination.add(transform(item))
+            return destination
             """
         }
     }
 
     val f_mapIndexedTo = fn("mapIndexedTo(destination: C, transform: (index: Int, T) -> R)") {
         includeDefault()
-        include(CharSequences)
+        include(CharSequences, ArraysOfUnsigned)
     } builder {
         inline()
+        specialFor(ArraysOfUnsigned) { inlineOnly() }
 
         doc {
             """
@@ -204,11 +235,12 @@ object Mapping : TemplateGroupBase() {
         returns("C")
 
         body {
+            fun checkOverflow(value: String) = if (f == Sequences || f == Iterables) "checkIndexOverflow($value)" else value
             """
-                var index = 0
-                for (item in this)
-                    destination.add(transform(index++, item))
-                return destination
+            var index = 0
+            for (item in this)
+                destination.add(transform(${checkOverflow("index++")}, item))
+            return destination
             """
         }
     }
@@ -259,11 +291,19 @@ object Mapping : TemplateGroupBase() {
 
     val f_flatMap = fn("flatMap(transform: (T) -> Iterable<R>)") {
         includeDefault()
-        include(Maps, CharSequences)
+        include(Maps, CharSequences, ArraysOfUnsigned)
     } builder {
         inline()
+        specialFor(ArraysOfUnsigned) { inlineOnly() }
 
         doc { "Returns a single list of all elements yielded from results of [transform] function being invoked on each ${f.element} of original ${f.collection}." }
+
+        fun sampleClass(f: Family): String = when (f) {
+            Maps -> "samples.collections.Maps.Transformations"
+            else -> "samples.collections.Collections.Transformations"
+        }
+
+        sample("${sampleClass(f)}.flatMap")
         typeParam("R")
         returns("List<R>")
         body {
@@ -271,43 +311,182 @@ object Mapping : TemplateGroupBase() {
         }
         specialFor(Sequences) {
             inline(Inline.No)
-            signature("flatMap(transform: (T) -> Sequence<R>)")
+            since("1.4")
+            annotation("@OptIn(kotlin.experimental.ExperimentalTypeInference::class)")
+            annotation("@OverloadResolutionByLambdaReturnType")
+            annotation("""@kotlin.jvm.JvmName("flatMapIterable")""")
             doc { "Returns a single sequence of all elements from results of [transform] function being invoked on each element of original sequence." }
             returns("Sequence<R>")
             body {
-                "return FlatteningSequence(this, transform, { it.iterator() })"
+                "return FlatteningSequence(this, transform, Iterable<R>::iterator)"
+            }
+        }
+    }
+
+    val f_flatMapSequence = fn("flatMap(transform: (T) -> Sequence<R>)") {
+        include(Sequences, Iterables, ArraysOfObjects, Maps)
+    } builder {
+        inline()
+        doc { "Returns a single list of all elements yielded from results of [transform] function being invoked on each ${f.element} of original ${f.collection}." }
+        sample("samples.collections.Collections.Transformations.flatMap")
+        typeParam("R")
+        returns("List<R>")
+        body {
+            "return flatMapTo(ArrayList<R>(), transform)"
+        }
+        if (f != Sequences) {
+            since("1.4")
+            annotation("@OptIn(kotlin.experimental.ExperimentalTypeInference::class)")
+            annotation("@OverloadResolutionByLambdaReturnType")
+            annotation("""@kotlin.jvm.JvmName("flatMapSequence")""")
+        }
+        specialFor(Sequences) {
+            inline(Inline.No)
+            doc { "Returns a single sequence of all elements from results of [transform] function being invoked on each element of original sequence." }
+            returns("Sequence<R>")
+            body {
+                "return FlatteningSequence(this, transform, Sequence<R>::iterator)"
             }
         }
     }
 
     val f_flatMapTo = fn("flatMapTo(destination: C, transform: (T) -> Iterable<R>)") {
         includeDefault()
-        include(Maps, CharSequences)
+        include(Maps, CharSequences, ArraysOfUnsigned)
     } builder {
         inline()
+        specialFor(ArraysOfUnsigned) { inlineOnly() }
+
         doc { "Appends all elements yielded from results of [transform] function being invoked on each ${f.element} of original ${f.collection}, to the given [destination]." }
         specialFor(Sequences) {
-            signature("flatMapTo(destination: C, transform: (T) -> Sequence<R>)")
+            since("1.4")
+            annotation("@OptIn(kotlin.experimental.ExperimentalTypeInference::class)")
+            annotation("@OverloadResolutionByLambdaReturnType")
+            annotation("""@kotlin.jvm.JvmName("flatMapIterableTo")""")
         }
         typeParam("R")
         typeParam("C : MutableCollection<in R>")
         returns("C")
         body {
             """
+            for (element in this) {
+                val list = transform(element)
+                destination.addAll(list)
+            }
+            return destination
+            """
+        }
+    }
+
+    val f_flatMapToSequence = fn("flatMapTo(destination: C, transform: (T) -> Sequence<R>)") {
+        include(Sequences, Iterables, ArraysOfObjects, Maps)
+    } builder {
+        inline()
+        doc { "Appends all elements yielded from results of [transform] function being invoked on each ${f.element} of original ${f.collection}, to the given [destination]." }
+        if (f != Sequences) {
+            since("1.4")
+            annotation("@OptIn(kotlin.experimental.ExperimentalTypeInference::class)")
+            annotation("@OverloadResolutionByLambdaReturnType")
+            annotation("""@kotlin.jvm.JvmName("flatMapSequenceTo")""")
+        }
+        typeParam("R")
+        typeParam("C : MutableCollection<in R>")
+        returns("C")
+        body {
+            """
+            for (element in this) {
+                val list = transform(element)
+                destination.addAll(list)
+            }
+            return destination
+            """
+        }
+    }
+
+    val f_flatMapIndexed = listOf(Iterables, Sequences).map { containerFamily ->
+        val containerClass = containerFamily.name.dropLast(1)
+        fn("flatMapIndexed(transform: (index: Int, T) -> $containerClass<R>)") {
+            when (containerFamily) {
+                Iterables -> include(Iterables, Sequences, ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned, CharSequences)
+                Sequences -> include(Sequences, Iterables, ArraysOfObjects)
+                else -> {}
+            }
+        } builder {
+            inlineOnly()
+
+            since("1.4")
+            doc {
+                """
+                Returns a single ${f.mapResult} of all elements yielded from results of [transform] function being invoked on each ${f.element}  
+                and its index in the original ${f.collection}.
+                """
+            }
+            annotation("@OptIn(kotlin.experimental.ExperimentalTypeInference::class)")
+            annotation("@OverloadResolutionByLambdaReturnType")
+            if (family != ArraysOfUnsigned)
+                annotation("""@kotlin.jvm.JvmName("flatMapIndexed$containerClass")""")
+            sample("samples.collections.Collections.Transformations.flatMapIndexed")
+            typeParam("R")
+            returns("List<R>")
+            body {
+                "return flatMapIndexedTo(ArrayList<R>(), transform)"
+            }
+            specialFor(Sequences) {
+                inline(Inline.No)
+                returns("Sequence<R>")
+                body {
+                    "return flatMapIndexed(this, transform, $containerClass<R>::iterator)"
+                }
+            }
+        }
+    }
+
+
+    val f_flatMapIndexedTo = listOf(Iterables, Sequences).map { containerFamily ->
+        val containerClass = containerFamily.name.dropLast(1)
+        fn("flatMapIndexedTo(destination: C, transform: (index: Int, T) -> $containerClass<R>)") {
+            when (containerFamily) {
+                Iterables -> include(Iterables, Sequences, ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned, CharSequences)
+                Sequences -> include(Sequences, Iterables, ArraysOfObjects)
+                else -> {}
+            }
+        } builder {
+            inlineOnly()
+
+            since("1.4")
+            doc {
+                """
+                Appends all elements yielded from results of [transform] function being invoked on each ${f.element} 
+                and its index in the original ${f.collection}, to the given [destination].
+                """
+            }
+            annotation("@OptIn(kotlin.experimental.ExperimentalTypeInference::class)")
+            annotation("@OverloadResolutionByLambdaReturnType")
+            if (family != ArraysOfUnsigned)
+                annotation("""@kotlin.jvm.JvmName("flatMapIndexed${containerClass}To")""")
+            typeParam("R")
+            typeParam("C : MutableCollection<in R>")
+            returns("C")
+            body {
+                fun checkOverflow(value: String) = if (f == Sequences || f == Iterables) "checkIndexOverflow($value)" else value
+                """
+                var index = 0
                 for (element in this) {
-                    val list = transform(element)
+                    val list = transform(${checkOverflow("index++")}, element)
                     destination.addAll(list)
                 }
                 return destination
-            """
+                """
+            }
         }
     }
 
     val f_groupBy_key = fn("groupBy(keySelector: (T) -> K)") {
         includeDefault()
-        include(CharSequences)
+        include(CharSequences, ArraysOfUnsigned)
     } builder {
         inline()
+        specialFor(ArraysOfUnsigned) { inlineOnly() }
 
         doc {
             """
@@ -326,9 +505,10 @@ object Mapping : TemplateGroupBase() {
 
     val f_groupByTo_key = fn("groupByTo(destination: M, keySelector: (T) -> K)") {
         includeDefault()
-        include(CharSequences)
+        include(CharSequences, ArraysOfUnsigned)
     } builder {
         inline()
+        specialFor(ArraysOfUnsigned) { inlineOnly() }
 
         typeParam("K")
         typeParam("M : MutableMap<in K, MutableList<T>>")
@@ -345,21 +525,23 @@ object Mapping : TemplateGroupBase() {
         returns("M")
         body {
             """
-                for (element in this) {
-                    val key = keySelector(element)
-                    val list = destination.getOrPut(key) { ArrayList<T>() }
-                    list.add(element)
-                }
-                return destination
+            for (element in this) {
+                val key = keySelector(element)
+                val list = destination.getOrPut(key) { ArrayList<T>() }
+                list.add(element)
+            }
+            return destination
             """
         }
     }
 
     val f_groupBy_key_value = fn("groupBy(keySelector: (T) -> K, valueTransform: (T) -> V)") {
         includeDefault()
-        include(CharSequences)
+        include(CharSequences, ArraysOfUnsigned)
     } builder {
         inline()
+        specialFor(ArraysOfUnsigned) { inlineOnly() }
+
         doc {
             """
             Groups values returned by the [valueTransform] function applied to each ${f.element} of the original ${f.collection}
@@ -380,9 +562,11 @@ object Mapping : TemplateGroupBase() {
 
     val f_groupByTo_key_value = fn("groupByTo(destination: M, keySelector: (T) -> K, valueTransform: (T) -> V)") {
         includeDefault()
-        include(CharSequences)
+        include(CharSequences, ArraysOfUnsigned)
     } builder {
         inline()
+        specialFor(ArraysOfUnsigned) { inlineOnly() }
+
         typeParam("K")
         typeParam("V")
         typeParam("M : MutableMap<in K, MutableList<V>>")
@@ -401,12 +585,12 @@ object Mapping : TemplateGroupBase() {
         returns("M")
         body {
             """
-                for (element in this) {
-                    val key = keySelector(element)
-                    val list = destination.getOrPut(key) { ArrayList<V>() }
-                    list.add(valueTransform(element))
-                }
-                return destination
+            for (element in this) {
+                val key = keySelector(element)
+                val list = destination.getOrPut(key) { ArrayList<V>() }
+                list.add(valueTransform(element))
+            }
+            return destination
             """
         }
     }
@@ -428,7 +612,7 @@ object Mapping : TemplateGroupBase() {
             using the specified [keySelector] function to extract a key from each ${f.element}.
             """
         }
-        sample("samples.collections.Collections.Transformations.groupingByEachCount")
+        sample("samples.collections.Grouping.groupingByEachCount")
 
         body {
             """

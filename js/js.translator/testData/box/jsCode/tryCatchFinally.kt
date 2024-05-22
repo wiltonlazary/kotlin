@@ -1,10 +1,10 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1119
+// EXPECTED_REACHABLE_NODES: 1289
 package foo
 
 class Counter {
     var count: Int = 0
 
+    @JsName("inc")
     public fun inc() {
         count++
     }

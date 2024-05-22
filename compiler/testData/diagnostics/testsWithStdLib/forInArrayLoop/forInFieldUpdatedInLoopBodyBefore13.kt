@@ -1,5 +1,6 @@
-// !LANGUAGE: -ProperForInArrayLoopRangeVariableAssignmentSemantic
-// !DIAGNOSTICS: -UNUSED_VALUE
+// FIR_IDENTICAL
+// LANGUAGE: -ProperForInArrayLoopRangeVariableAssignmentSemantic
+// DIAGNOSTICS: -UNUSED_VALUE
 // SKIP_TXT
 
 var xs: IntArray = intArrayOf(1, 2, 3)

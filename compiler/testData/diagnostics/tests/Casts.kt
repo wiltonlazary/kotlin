@@ -1,4 +1,4 @@
-// !CHECK_TYPE
+// CHECK_TYPE
 
 fun test() : Unit {
   var x : Int? = 0
@@ -15,9 +15,9 @@ fun test() : Unit {
   checkSubtype<Int?>(x as? Int?)
   checkSubtype<Int?>(y as? Int?)
 
-  val <!UNUSED_VARIABLE!>s<!> = "" as Any
+  val s = "" as Any
   ("" as String?)?.length
-  (data@("" as String?))?.length
+  (<!REDUNDANT_LABEL_WARNING!>data@<!>("" as String?))?.length
   (<!WRONG_ANNOTATION_TARGET!>@MustBeDocumented()<!>( "" as String?))?.length
   Unit
 }

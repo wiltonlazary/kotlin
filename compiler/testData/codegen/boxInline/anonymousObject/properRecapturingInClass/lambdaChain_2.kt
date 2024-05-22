@@ -1,3 +1,5 @@
+// IGNORE_INLINER_K2: IR
+// NO_CHECK_LAMBDA_INLINING
 // FILE: 1.kt
 
 package test
@@ -10,7 +12,7 @@ class A {
     inline fun inlineFun(arg: String, crossinline f: (String) -> Unit) {
         {
             f(arg + addParam)
-        }()
+        }.let { it() }
     }
 
     fun box(): String {
@@ -20,10 +22,10 @@ class A {
                     {
                         {
                             result = param + c + a
-                        }()
-                    }()
+                        }.let { it() }
+                    }.let { it() }
                 }
-            }()
+            }.let { it() }
         }
 
         return if (result == "start1_additional_2_additional_") "OK" else "fail: $result"
@@ -32,7 +34,6 @@ class A {
 
 // FILE: 2.kt
 
-//NO_CHECK_LAMBDA_INLINING
 import test.*
 
 fun box(): String {

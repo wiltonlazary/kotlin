@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:JvmName("TextStreamsKt")
@@ -11,6 +11,8 @@ import java.io.*
 import java.nio.charset.Charset
 import java.net.URL
 import java.util.NoSuchElementException
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 import kotlin.internal.*
 
 
@@ -19,7 +21,7 @@ import kotlin.internal.*
 public inline fun Reader.buffered(bufferSize: Int = DEFAULT_BUFFER_SIZE): BufferedReader =
     if (this is BufferedReader) this else BufferedReader(this, bufferSize)
 
-/** Returns a buffered reader wrapping this Writer, or this Writer itself if it is already buffered. */
+/** Returns a buffered writer wrapping this Writer, or this Writer itself if it is already buffered. */
 @kotlin.internal.InlineOnly
 public inline fun Writer.buffered(bufferSize: Int = DEFAULT_BUFFER_SIZE): BufferedWriter =
     if (this is BufferedWriter) this else BufferedWriter(this, bufferSize)
@@ -48,9 +50,12 @@ public fun Reader.readLines(): List<String> {
  * the processing is complete.
  * @return the value returned by [block].
  */
-@RequireKotlin("1.2", versionKind = RequireKotlinVersionKind.COMPILER_VERSION, message = "Requires newer compiler version to be inlined correctly.")
-public inline fun <T> Reader.useLines(block: (Sequence<String>) -> T): T =
-    buffered().use { block(it.lineSequence()) }
+public inline fun <T> Reader.useLines(block: (Sequence<String>) -> T): T {
+    contract {
+        callsInPlace(block, InvocationKind.EXACTLY_ONCE)
+    }
+    return buffered().use { block(it.lineSequence()) }
+}
 
 /** Creates a new reader for the string. */
 @kotlin.internal.InlineOnly
@@ -60,8 +65,8 @@ public inline fun String.reader(): StringReader = StringReader(this)
  * Returns a sequence of corresponding file lines.
  *
  * *Note*: the caller must close the underlying `BufferedReader`
- * when the iteration is finished; as the user may not complete the iteration loop (e.g. using a method like find() or any() on the iterator
- * may terminate the iteration early.
+ * when the iteration is finished, as the user may not complete the iteration loop (e.g. using a method like find() or any() on the iterator
+ * may terminate the iteration early).
  *
  * We suggest you try the method [useLines] instead which closes the stream when the processing is complete.
  *

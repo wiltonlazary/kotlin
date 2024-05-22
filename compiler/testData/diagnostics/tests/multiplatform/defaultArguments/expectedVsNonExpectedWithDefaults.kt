@@ -1,11 +1,11 @@
-// !LANGUAGE: +MultiPlatformProjects
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER
 // MODULE: m1-common
 // FILE: common.kt
 
 expect fun ok(x: Int, y: String = "")
 
-// MODULE: m2-jvm(m1-common)
+// MODULE: m2-jvm()()(m1-common)
 // FILE: jvm.kt
 
 actual fun ok(x: Int, y: String) {}

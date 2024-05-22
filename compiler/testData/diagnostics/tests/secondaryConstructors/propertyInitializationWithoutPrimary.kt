@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER
 class A {
     val x: Int
     var y: Int

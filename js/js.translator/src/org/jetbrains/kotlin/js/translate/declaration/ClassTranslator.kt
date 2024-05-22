@@ -119,6 +119,8 @@ class ClassTranslator private constructor(
             enumInitFunction.body.statements += JsAstUtils.asSyntheticStatement(initInvocation.source(companionDescriptor.source.getPsi()))
         }
 
+        maybeConvertInterfaceToSamAdapter(context, constructorFunction)
+
         translatePrimaryConstructor(constructorFunction, context, delegationTranslator)
         addMetadataObject()
         addMetadataType()
@@ -126,8 +128,11 @@ class ClassTranslator private constructor(
         addSuperclassReferences()
         classDeclaration.secondaryConstructors.forEach { generateSecondaryConstructor(context, it) }
 
-        if (descriptor.isData && classDeclaration is KtClassOrObject) {
-            JsDataClassGenerator(classDeclaration, context).generate()
+        if (classDeclaration is KtClassOrObject) {
+            when {
+                descriptor.isData -> JsDataClassGenerator(classDeclaration, context).generate()
+                descriptor.isInline || descriptor.isValue -> JsInlineClassGenerator(classDeclaration, context).generate()
+            }
         }
 
         emitConstructors(nonConstructorContext, nonConstructorContext.endDeclaration())
@@ -291,7 +296,9 @@ class ClassTranslator private constructor(
         val delegationClassDescriptor = (resolvedCall?.resultingDescriptor as? ClassConstructorDescriptor)?.constructedClass
 
         if (resolvedCall != null && !KotlinBuiltIns.isAny(delegationClassDescriptor!!)) {
-            if (JsDescriptorUtils.isImmediateSubtypeOfError(classDescriptor)) {
+            val isDelegationToCurrentClass = delegationClassDescriptor == classDescriptor
+            val isDelegationToErrorClass = JsDescriptorUtils.isImmediateSubtypeOfError(classDescriptor) && !isDelegationToCurrentClass
+            if (isDelegationToErrorClass) {
                 superCallGenerators += {
                     val innerContext = context().innerBlock()
                     ClassInitializerTranslator.emulateSuperCallToNativeError(
@@ -555,6 +562,42 @@ class ClassTranslator private constructor(
             literal.propertyInitializers += JsPropertyInitializer(JsStringLiteral("get"), getterFunction)
             context.addAccessorsToPrototype(descriptor, property, literal)
         }
+    }
+
+    private fun maybeConvertInterfaceToSamAdapter(context: TranslationContext, constructorFunction: JsFunction) {
+        if (!descriptor.isFun) return
+
+        val paramName = context.scope().declareFreshName("f")
+        constructorFunction.parameters += JsParameter(paramName)
+        constructorFunction.body.statements += JsBinaryOperation(
+            JsBinaryOperator.ASG,
+            pureFqn(Namer.SAM_FIELD_NAME, JsThisRef()),
+            JsNameRef(paramName)
+        ).makeStmt()
+
+        val samDescriptor = descriptor.unsubstitutedMemberScope
+            .getContributedDescriptors(DescriptorKindFilter.FUNCTIONS)
+            .filterIsInstance<FunctionDescriptor>()
+            .single { it.modality === Modality.ABSTRACT }
+
+        val function = context.getFunctionObject(samDescriptor)
+        val innerContext = context.newDeclaration(samDescriptor).translateAndAliasParameters(samDescriptor, function.parameters)
+
+        if (samDescriptor.isSuspend) {
+            function.fillCoroutineMetadata(innerContext, samDescriptor, hasController = false)
+        }
+
+        val parameters = listOfNotNull(samDescriptor.extensionReceiverParameter) +
+                samDescriptor.valueParameters +
+                listOfNotNull(innerContext.continuationParameterDescriptor)
+
+        val arguments = parameters.map {
+            TranslationUtils.coerce(innerContext, ReferenceTranslator.translateAsValueReference(it, innerContext), context.currentModule.builtIns.anyType)
+        }
+
+        function.body = JsBlock(JsReturn(JsInvocation(pureFqn(Namer.SAM_FIELD_NAME, JsThisRef()), arguments)))
+
+        context.addDeclarationStatement(context.addFunctionToPrototype(descriptor, samDescriptor, function))
     }
 
     private fun <T : JsNode> T.withDefaultLocation(): T = apply { source = classDeclaration }

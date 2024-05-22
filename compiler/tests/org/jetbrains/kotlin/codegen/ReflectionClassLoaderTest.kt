@@ -18,7 +18,7 @@ package org.jetbrains.kotlin.codegen
 
 import org.jetbrains.kotlin.test.ConfigurationKind
 
-class ReflectionClassLoaderTest : CodegenTestCase() {
+open class ReflectionClassLoaderTest : CodegenTestCase() {
     override fun getPrefix() = "reflection/classLoaders"
 
     override fun setUp() {
@@ -39,18 +39,18 @@ class ReflectionClassLoaderTest : CodegenTestCase() {
     }
 
     fun testSimpleDifferentClassLoaders() {
-        loadFile(prefix + "/differentClassLoaders.kt")
+        loadFile("$prefix/differentClassLoaders.kt")
 
         doTest(
-                createClassLoader(),
-                createClassLoader()
+            createClassLoader(),
+            createClassLoader()
         )
     }
 
     fun testClassLoaderWithNonTrivialEqualsAndHashCode() {
         // Check that class loaders do not participate as keys in hash maps (use identity hash maps instead)
 
-        loadFile(prefix + "/differentClassLoaders.kt")
+        loadFile("$prefix/differentClassLoaders.kt")
 
         class BrokenEqualsClassLoader(parent: ClassLoader) : ClassLoader(parent) {
             override fun equals(other: Any?) = true
@@ -58,23 +58,36 @@ class ReflectionClassLoaderTest : CodegenTestCase() {
         }
 
         doTest(
-                BrokenEqualsClassLoader(createClassLoader()),
-                BrokenEqualsClassLoader(createClassLoader())
+            BrokenEqualsClassLoader(createClassLoader()),
+            BrokenEqualsClassLoader(createClassLoader())
         )
     }
 
     fun testParentFirst() {
         // Check that for a child class loader, a class reference would be the same as for his parent
 
-        loadFile(prefix + "/parentFirst.kt")
+        loadFile("$prefix/parentFirst.kt")
 
         class ChildClassLoader(parent: ClassLoader) : ClassLoader(parent)
 
         val parent = createClassLoader()
 
         doTest(
-                parent,
-                ChildClassLoader(parent)
+            parent,
+            ChildClassLoader(parent)
+        )
+    }
+
+    fun testKTypeEquality() {
+        /*
+         * Check that typeOf<List<Clz>>() when clz is loaded by different classloaders
+         * differs in both its `equals` and its `classifier`.
+         * It is important in the face of KType caching
+         */
+        loadFile("$prefix/kTypeEquality.kt")
+        doTest(
+            createClassLoader(),
+            createClassLoader()
         )
     }
 }

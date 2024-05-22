@@ -3,23 +3,19 @@ plugins {
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-javaHome = rootProject.extra["JDK_16"] as String
+project.configureJvmToolchain(JdkMajorVersion.JDK_1_8)
 
 dependencies {
-    compile(project(":core:descriptors"))
-    compile(project(":core:deserialization"))
-    compile(project(":core:metadata.jvm"))
-    compile(project(":core:util.runtime"))
-    compile(commonDep("javax.inject"))
+    api(project(":kotlin-annotations-jvm"))
+    api(project(":core:descriptors"))
+    api(project(":core:deserialization"))
+    api(project(":core:compiler.common.jvm"))
+    api(project(":core:deserialization.common.jvm"))
+    api(project(":core:util.runtime"))
+    api(commonDependency("javax.inject"))
 }
 
 sourceSets {
     "main" { projectDefault() }
     "test" {}
-}
-
-tasks.withType<JavaCompile> {
-    sourceCompatibility = "1.6"
-    targetCompatibility = "1.6"
 }

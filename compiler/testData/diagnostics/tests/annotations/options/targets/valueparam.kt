@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER
 @Target(AnnotationTarget.VALUE_PARAMETER) annotation class base
 
 <!WRONG_ANNOTATION_TARGET!>@base<!> annotation class derived

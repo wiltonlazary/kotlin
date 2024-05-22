@@ -1,7 +1,7 @@
-// FILE: inlined.kt
-// COMMON_COROUTINES_TEST
-// WITH_RUNTIME
+// WITH_COROUTINES
 // NO_CHECK_LAMBDA_INLINING
+// WITH_STDLIB
+// FILE: inlined.kt
 
 suspend inline fun inlineMe(c: suspend (String) -> String, d: suspend () -> String): String {
     return c(try { d() } catch (e: Exception) { "Exception 1 ${e.message}" })
@@ -16,22 +16,11 @@ suspend inline fun crossinlineMe(crossinline c: suspend (String) -> String, cros
 }
 
 // FILE: inlineSite.kt
-// COMMON_COROUTINES_TEST
-
-import COROUTINES_PACKAGE.*
+import kotlin.coroutines.*
+import helpers.*
 
 fun builder(c: suspend () -> Unit) {
-    c.startCoroutine(object: Continuation<Unit> {
-        override val context: CoroutineContext
-            get() = EmptyCoroutineContext
-
-        override fun resume(value: Unit) {
-        }
-
-        override fun resumeWithException(exception: Throwable) {
-            throw exception
-        }
-    })
+    c.startCoroutine(EmptyContinuation)
 }
 
 suspend fun yieldString(s: String) = s

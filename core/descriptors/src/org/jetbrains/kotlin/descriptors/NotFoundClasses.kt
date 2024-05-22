@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.descriptors
@@ -16,7 +16,9 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.types.ClassTypeConstructorImpl
+import org.jetbrains.kotlin.types.SimpleType
 import org.jetbrains.kotlin.types.Variance
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
 
 class NotFoundClasses(private val storageManager: StorageManager, private val module: ModuleDescriptor) {
     /**
@@ -50,35 +52,39 @@ class NotFoundClasses(private val storageManager: StorageManager, private val mo
             private val isInner: Boolean,
             numberOfDeclaredTypeParameters: Int
     ) : ClassDescriptorBase(storageManager, container, name, SourceElement.NO_SOURCE, /* isExternal = */ false) {
-        private val typeParameters = (0 until numberOfDeclaredTypeParameters).map { index ->
+        private val declaredTypeParameters = (0 until numberOfDeclaredTypeParameters).map { index ->
             TypeParameterDescriptorImpl.createWithDefaultBound(
-                    this, Annotations.EMPTY, false, Variance.INVARIANT, Name.identifier("T$index"), index
+                    this, Annotations.EMPTY, false, Variance.INVARIANT, Name.identifier("T$index"), index, storageManager
             )
         }
 
-        private val typeConstructor = ClassTypeConstructorImpl(this, typeParameters, setOf(module.builtIns.anyType), storageManager)
+        private val typeConstructor =
+            ClassTypeConstructorImpl(this, computeConstructorTypeParameters(), setOf(module.builtIns.anyType), storageManager)
 
         override fun getKind() = ClassKind.CLASS
         override fun getModality() = Modality.FINAL
-        override fun getVisibility() = Visibilities.PUBLIC
+        override fun getVisibility() = DescriptorVisibilities.PUBLIC
         override fun getTypeConstructor() = typeConstructor
-        override fun getDeclaredTypeParameters() = typeParameters
+        override fun getDeclaredTypeParameters() = declaredTypeParameters
         override fun isInner() = isInner
 
         override fun isCompanionObject() = false
         override fun isData() = false
         override fun isInline() = false
+        override fun isFun() = false
+        override fun isValue() = false
         override fun isExpect() = false
         override fun isActual() = false
         override fun isExternal() = false
         override val annotations: Annotations get() = Annotations.EMPTY
 
-        override fun getUnsubstitutedMemberScope() = MemberScope.Empty
+        override fun getUnsubstitutedMemberScope(kotlinTypeRefiner: KotlinTypeRefiner) = MemberScope.Empty
         override fun getStaticScope() = MemberScope.Empty
         override fun getConstructors(): Collection<ClassConstructorDescriptor> = emptySet()
         override fun getUnsubstitutedPrimaryConstructor(): ClassConstructorDescriptor? = null
         override fun getCompanionObjectDescriptor(): ClassDescriptor? = null
         override fun getSealedSubclasses(): Collection<ClassDescriptor> = emptyList()
+        override fun getValueClassRepresentation(): ValueClassRepresentation<SimpleType>? = null
 
         override fun toString() = "class $name (not found)"
     }

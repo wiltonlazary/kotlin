@@ -1,3 +1,6 @@
+// TARGET_BACKEND: JVM
+// LANGUAGE: -ProperIeee754Comparisons
+
 fun box(): String {
     val zero: Any = 0.0
     val floatZero: Any = -0.0F

@@ -1,33 +1,29 @@
-import org.jetbrains.kotlin.gradle.dsl.Coroutines
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
+project.updateJvmTarget("1.8")
 
 dependencies {
-    compile(projectDist(":kotlin-stdlib"))
-    compile(projectDist(":kotlin-reflect"))
-    compile(commonDep("org.jetbrains.kotlinx", "kotlinx-coroutines-core")) { isTransitive = false }
+    api(kotlinStdlib())
+    compileOnly(commonDependency("org.jetbrains.kotlin:kotlin-reflect")) { isTransitive = false }
+    testImplementation(libs.junit4)
 }
 
 sourceSets {
     "main" { projectDefault() }
-    "test" {}
+    "test" { projectDefault() }
 }
 
-kotlin.experimental.coroutines = Coroutines.ENABLE
-
-val jar = runtimeJar()
-val sourcesJar = sourcesJar()
-val javadocJar = javadocJar()
-
-dist()
-
-ideaPlugin {
-    from(jar, sourcesJar)
+tasks.withType<KotlinJvmCompile>().configureEach {
+    compilerOptions.freeCompilerArgs.add("-Xallow-kotlin-package")
 }
 
 publish()
+
+runtimeJar()
+sourcesJar()
+javadocJar()

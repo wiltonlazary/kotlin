@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package test.collections
@@ -30,7 +30,7 @@ class GroupingTest {
         verifyGrouping(elements.asSequence().groupingBy(keySelector))
 
         val charSeq = "some sequence of chars"
-        verifyGrouping(charSeq.groupingBy { it.toInt() }, charSeq.toList(), charSeq.map { it.toInt() })
+        verifyGrouping(charSeq.groupingBy { it.code }, charSeq.toList(), charSeq.map { it.code })
     }
 
     // aggregate and aggregateTo operations are not tested, but they're used in every other operation

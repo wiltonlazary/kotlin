@@ -1,5 +1,4 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1117
+// EXPECTED_REACHABLE_NODES: 1289
 // MODULE: lib
 // FILE: lib.kt
 
@@ -11,6 +10,6 @@ inline fun foo() = O.bar()
 
 // MODULE: main(lib)
 // FILE: main.kt
-// CHECK_CONTAINS_NO_CALLS: box except=bar
+// CHECK_CONTAINS_NO_CALLS: box except=bar TARGET_BACKENDS=JS
 
 fun box() = foo()

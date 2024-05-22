@@ -1,20 +1,18 @@
-// IGNORE_BACKEND: NATIVE
+// IGNORE_BACKEND: JS_IR, JS_IR_ES6
 // WITH_COROUTINES
-// WITH_RUNTIME
-// COMMON_COROUTINES_TEST
-
+// WITH_STDLIB
 // MODULE: lib(support)
 // FILE: lib.kt
 
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 var continuation: () -> Unit = { }
 var log = ""
 var finished = false
 
-suspend fun <T> foo(v: T): T = suspendCoroutineOrReturn { x ->
+suspend fun <T> foo(v: T): T = suspendCoroutineUninterceptedOrReturn { x ->
     continuation = {
         x.resume(v)
     }
@@ -40,8 +38,8 @@ fun builder(c: suspend () -> Unit) {
 // MODULE: main(lib)
 // FILE: main.kt
 
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 suspend fun baz() {
     bar("A")

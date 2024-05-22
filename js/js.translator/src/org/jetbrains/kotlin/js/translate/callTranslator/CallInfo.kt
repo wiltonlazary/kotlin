@@ -16,6 +16,8 @@
 
 package org.jetbrains.kotlin.js.translate.callTranslator
 
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.contracts.parsing.isEqualsDescriptor
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -30,7 +32,7 @@ import org.jetbrains.kotlin.js.translate.utils.JsDescriptorUtils.getReceiverPara
 import org.jetbrains.kotlin.js.translate.utils.TranslationUtils
 import org.jetbrains.kotlin.js.translate.utils.createCoroutineResult
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.calls.callUtil.isSafeCall
+import org.jetbrains.kotlin.resolve.calls.util.isSafeCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind.*
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
@@ -137,8 +139,12 @@ private fun TranslationContext.createCallInfo(
 
     var dispatchReceiver = getDispatchReceiver()
     var dispatchReceiverType = resolvedCall.smartCastDispatchReceiverType ?: resolvedCall.dispatchReceiver?.type
-    if (dispatchReceiverType != null && (resolvedCall.resultingDescriptor as? FunctionDescriptor)?.kind?.isReal == false) {
-        dispatchReceiverType = TranslationUtils.getDispatchReceiverTypeForCoercion(resolvedCall.resultingDescriptor)
+    if (dispatchReceiverType != null) {
+        if ((resolvedCall.resultingDescriptor as? FunctionDescriptor)?.kind?.isReal == false) {
+            dispatchReceiverType = TranslationUtils.getDispatchReceiverTypeForCoercion(resolvedCall.resultingDescriptor)
+        } else if (KotlinBuiltIns.isChar(dispatchReceiverType) && resolvedCall.resultingDescriptor.isEqualsDescriptor()) {
+            dispatchReceiverType = resolvedCall.resultingDescriptor.overriddenDescriptors.single().dispatchReceiverParameter!!.type
+        }
     }
     var extensionReceiver = getExtensionReceiver()
     var notNullConditional: JsConditional? = null

@@ -1,6 +1,7 @@
-// !LANGUAGE: +StrictJavaNullabilityAssertions
+// LANGUAGE: +StrictJavaNullabilityAssertions -ProhibitUsingNullableTypeParameterAgainstNotNullAnnotated
 // TARGET_BACKEND: JVM
-
+// IGNORE_BACKEND_K2: JVM_IR, JS_IR
+// FIR status: expected: <OK> but was: <Fail: SHOULD NOT throw>, issue related to T & Any
 // See KT-8135
 // We could generate runtime assertion on call site for 'generic<NOT_NULL_TYPE>()' below.
 
@@ -24,7 +25,8 @@ fun <T> generic(j: J) = j.nullT<T>()
 import org.jetbrains.annotations.NotNull;
 
 public class J {
-    public <T> @NotNull T nullT() {
+    @NotNull
+    public <T> T nullT() {
         return null;
     }
 

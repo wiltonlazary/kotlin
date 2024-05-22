@@ -1,7 +1,0 @@
-package test
-
-fun dummy() {
-
-}
-
-val property = 1

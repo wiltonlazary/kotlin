@@ -1,0 +1,93 @@
+KtFunctionSymbol:
+  annotationsList: []
+  callableIdIfNonLocal: /f
+  contextReceivers: []
+  contractEffects: []
+  hasStableParameterNames: true
+  isActual: false
+  isBuiltinFunctionInvoke: false
+  isExpect: false
+  isExtension: false
+  isExternal: false
+  isInfix: false
+  isInline: false
+  isOperator: false
+  isOverride: false
+  isStatic: false
+  isSuspend: false
+  isTailRec: false
+  modality: FINAL
+  name: f
+  origin: SOURCE
+  receiverParameter: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: kotlin/Unit
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  valueParameters: [
+    KtValueParameterSymbol:
+      annotationsList: []
+      callableIdIfNonLocal: null
+      contextReceivers: []
+      generatedPrimaryConstructorProperty: null
+      hasDefaultValue: false
+      isCrossinline: false
+      isExtension: false
+      isImplicitLambdaParameter: false
+      isNoinline: false
+      isVararg: false
+      name: p
+      origin: SOURCE
+      receiverParameter: null
+      returnType: KtFunctionalType:
+        annotationsList: []
+        ownTypeArguments: [
+          KtUsualClassType:
+            annotationsList: []
+            ownTypeArguments: []
+            type: kotlin/Int
+          KtClassErrorType:
+            annotationsList: []
+            type: ERROR_TYPE
+          KtTypeErrorType:
+            annotationsList: []
+            type: ERROR_TYPE
+        ]
+        type: kotlin/Function2<kotlin/Int, ERROR CLASS: Symbol not found for p2, ERROR CLASS: Incomplete code>
+      symbolKind: LOCAL
+      typeParameters: []
+      getContainingFileSymbol: KtFileSymbol(parameterNotFunctionalType.kt)
+      getContainingJvmClassName: ParameterNotFunctionalTypeKt
+      getContainingModule: KtSourceModule "Sources of main"
+      deprecationStatus: null
+    KtValueParameterSymbol:
+      annotationsList: []
+      callableIdIfNonLocal: null
+      contextReceivers: []
+      generatedPrimaryConstructorProperty: null
+      hasDefaultValue: false
+      isCrossinline: false
+      isExtension: false
+      isImplicitLambdaParameter: false
+      isNoinline: false
+      isVararg: false
+      name: <no name provided>
+      origin: SOURCE
+      receiverParameter: null
+      returnType: KtTypeErrorType:
+        annotationsList: []
+        type: ERROR_TYPE
+      symbolKind: LOCAL
+      typeParameters: []
+      getContainingFileSymbol: KtFileSymbol(parameterNotFunctionalType.kt)
+      getContainingJvmClassName: ParameterNotFunctionalTypeKt
+      getContainingModule: KtSourceModule "Sources of main"
+      deprecationStatus: null
+  ]
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(parameterNotFunctionalType.kt)
+  getContainingJvmClassName: ParameterNotFunctionalTypeKt
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null

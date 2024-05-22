@@ -19,21 +19,22 @@ package org.jetbrains.kotlin.codegen;
 import com.intellij.util.ArrayUtil;
 import kotlin.Pair;
 import kotlin.Unit;
-import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.backend.common.CodegenUtil;
-import org.jetbrains.kotlin.codegen.annotation.AnnotatedSimple;
 import org.jetbrains.kotlin.codegen.context.FieldOwnerContext;
 import org.jetbrains.kotlin.codegen.serialization.JvmSerializerExtension;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
+import org.jetbrains.kotlin.descriptors.MemberDescriptor;
 import org.jetbrains.kotlin.descriptors.annotations.Annotated;
+import org.jetbrains.kotlin.descriptors.annotations.AnnotatedImpl;
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor;
-import org.jetbrains.kotlin.descriptors.annotations.AnnotationsImpl;
+import org.jetbrains.kotlin.descriptors.annotations.Annotations;
 import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader;
 import org.jetbrains.kotlin.metadata.ProtoBuf;
 import org.jetbrains.kotlin.name.FqName;
-import org.jetbrains.kotlin.psi.*;
+import org.jetbrains.kotlin.psi.KtAnnotationEntry;
+import org.jetbrains.kotlin.psi.KtDeclaration;
+import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName;
 import org.jetbrains.kotlin.serialization.DescriptorSerializer;
@@ -41,9 +42,11 @@ import org.jetbrains.org.objectweb.asm.Type;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
-import static org.jetbrains.kotlin.codegen.AsmUtil.writeAnnotationData;
+import static org.jetbrains.kotlin.codegen.DescriptorAsmUtil.writeAnnotationData;
 import static org.jetbrains.kotlin.load.java.JvmAnnotationNames.METADATA_PACKAGE_NAME_FIELD_NAME;
+import static org.jetbrains.kotlin.name.JvmStandardClassIds.JVM_SYNTHETIC_ANNOTATION_FQ_NAME;
 import static org.jetbrains.org.objectweb.asm.Opcodes.*;
 
 public class PackagePartCodegen extends MemberCodegen<KtFile> {
@@ -62,8 +65,20 @@ public class PackagePartCodegen extends MemberCodegen<KtFile> {
 
     @Override
     protected void generateDeclaration() {
-        v.defineClass(element, state.getClassFileVersion(),
-                      ACC_PUBLIC | ACC_FINAL | ACC_SUPER,
+        boolean isSynthetic = false;
+        List<AnnotationDescriptor> fileAnnotationDescriptors = new ArrayList<>();
+        for (KtAnnotationEntry annotationEntry : element.getAnnotationEntries()) {
+            AnnotationDescriptor annotationDescriptor = state.getBindingContext().get(BindingContext.ANNOTATION, annotationEntry);
+            if (annotationDescriptor != null) {
+                fileAnnotationDescriptors.add(annotationDescriptor);
+                if (Objects.equals(annotationDescriptor.getFqName(), JVM_SYNTHETIC_ANNOTATION_FQ_NAME)) {
+                    isSynthetic = true;
+                }
+            }
+        }
+
+        v.defineClass(element, state.getConfig().getClassFileVersion(),
+                      ACC_PUBLIC | ACC_FINAL | ACC_SUPER | (isSynthetic ? ACC_SYNTHETIC : 0),
                       packagePartType.getInternalName(),
                       null,
                       "java/lang/Object",
@@ -73,27 +88,14 @@ public class PackagePartCodegen extends MemberCodegen<KtFile> {
 
         generatePropertyMetadataArrayFieldIfNeeded(packagePartType);
 
-        generateAnnotationsForPartClass();
-    }
-
-    private void generateAnnotationsForPartClass() {
-        List<AnnotationDescriptor> fileAnnotationDescriptors = new ArrayList<>();
-        for (KtAnnotationEntry annotationEntry : element.getAnnotationEntries()) {
-            AnnotationDescriptor annotationDescriptor = state.getBindingContext().get(BindingContext.ANNOTATION, annotationEntry);
-            if (annotationDescriptor != null) {
-                fileAnnotationDescriptors.add(annotationDescriptor);
-            }
-        }
-        Annotated annotatedFile = new AnnotatedSimple(new AnnotationsImpl(fileAnnotationDescriptors));
-        AnnotationCodegen.forClass(v.getVisitor(), this,  state.getTypeMapper()).genAnnotations(annotatedFile, null);
+        Annotated annotatedFile = new AnnotatedImpl(Annotations.Companion.create(fileAnnotationDescriptors));
+        AnnotationCodegen.forClass(v.getVisitor(), this, state).genAnnotations(annotatedFile, null, null);
     }
 
     @Override
     protected void generateBody() {
-        for (KtDeclaration declaration : CodegenUtil.getActualDeclarations(element)) {
-            if (declaration instanceof KtNamedFunction || declaration instanceof KtProperty || declaration instanceof KtTypeAlias) {
-                genSimpleMember(declaration);
-            }
+        for (KtDeclaration declaration : CodegenUtil.getMemberDeclarationsToGenerate(element)) {
+            genSimpleMember(declaration);
         }
 
         if (state.getClassBuilderMode().generateBodies) {
@@ -105,7 +107,7 @@ public class PackagePartCodegen extends MemberCodegen<KtFile> {
     protected void generateKotlinMetadataAnnotation() {
         Pair<DescriptorSerializer, ProtoBuf.Package> serializedPart = serializePackagePartMembers(this, packagePartType);
 
-        WriteAnnotationUtilKt.writeKotlinMetadata(v, state, KotlinClassHeader.Kind.FILE_FACADE, 0, av -> {
+        WriteAnnotationUtilKt.writeKotlinMetadata(v, state.getConfig(), KotlinClassHeader.Kind.FILE_FACADE, false, 0, av -> {
             writeAnnotationData(av, serializedPart.getFirst(), serializedPart.getSecond());
 
             FqName kotlinPackageFqName = element.getPackageFqName();
@@ -122,23 +124,11 @@ public class PackagePartCodegen extends MemberCodegen<KtFile> {
             @NotNull MemberCodegen<? extends KtFile> codegen,
             @NotNull Type packagePartType
     ) {
-        BindingContext bindingContext = codegen.bindingContext;
-        List<DeclarationDescriptor> members = CollectionsKt.mapNotNull(CodegenUtil.getActualDeclarations(codegen.element), declaration -> {
-            if (declaration instanceof KtNamedFunction) {
-                return bindingContext.get(BindingContext.FUNCTION, declaration);
-            }
-            else if (declaration instanceof KtProperty) {
-                return bindingContext.get(BindingContext.VARIABLE, declaration);
-            }
-            else if (declaration instanceof KtTypeAlias) {
-                return bindingContext.get(BindingContext.TYPE_ALIAS, declaration);
-            }
-
-            return null;
-        });
+        List<MemberDescriptor> members = CodegenUtil.getMemberDescriptorsToGenerate(codegen.element, codegen.bindingContext);
 
         JvmSerializerExtension extension = new JvmSerializerExtension(codegen.v.getSerializationBindings(), codegen.state);
-        DescriptorSerializer serializer = DescriptorSerializer.createTopLevel(extension);
+        DescriptorSerializer serializer = DescriptorSerializer.createTopLevel(
+                extension, codegen.state.getLanguageVersionSettings(), null);
         ProtoBuf.Package.Builder builder = serializer.packagePartProto(codegen.element.getPackageFqName(), members);
         extension.serializeJvmPackage(builder, packagePartType);
 

@@ -1,34 +1,40 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1148
+// EXPECTED_REACHABLE_NODES: 1291
 package foo
 
-enum class Type {
-    NUMBER,
-    STRING,
-    BOOLEAN,
-    OBJECT
-}
+val NUMBER = 1
+val STRING = 2
+val BOOLEAN = 3
+val OBJECT = 4
+val FUNCTION = 5
+val FUNCTION0 = FUNCTION // right now we can't distinguish functions with different arity
 
-fun test(a: Any, actualType: Type) {
-    assertEquals(actualType == Type.NUMBER, a is Int, "$a is Int")
-    assertEquals(actualType == Type.NUMBER, a is Number, "$a is Number")
-    assertEquals(actualType == Type.NUMBER, a is Double, "$a is Double")
-    assertEquals(actualType == Type.BOOLEAN, a is Boolean, "$a is Boolean")
-    assertEquals(actualType == Type.STRING, a is String, "$a is String")
+fun test(a: Any, actualType: Int) {
+    assertEquals(actualType == NUMBER, a is Int, "$a is Int")
+    assertEquals(actualType == NUMBER, a is Number, "$a is Number")
+    assertEquals(actualType == NUMBER, a is Double, "$a is Double")
+    assertEquals(actualType == BOOLEAN, a is Boolean, "$a is Boolean")
+    assertEquals(actualType == STRING, a is String, "$a is String")
+    assertEquals(actualType == FUNCTION0, a is Function0<*>, "$a is Function0")
+    assertEquals(actualType == FUNCTION || actualType == FUNCTION0, a is Function<*>, "$a is Function")
 }
 
 fun box(): String {
-    test(1, Type.NUMBER)
+    test(1, NUMBER)
 
-    test(12.3, Type.NUMBER)
-    test(12.3f, Type.NUMBER)
+    test(12.3, NUMBER)
+    test(12.3f, NUMBER)
 
-    test("text", Type.STRING)
+    test("text", STRING)
 
-    test(true, Type.BOOLEAN)
-    test(false, Type.BOOLEAN)
+    test(true, BOOLEAN)
+    test(false, BOOLEAN)
 
-    test(object {}, Type.OBJECT)
+    test(object {}, OBJECT)
+
+    test({}, FUNCTION0)
+
+    test({}, FUNCTION)
+    test({a: Any -> }, FUNCTION)
 
     return "OK"
 }

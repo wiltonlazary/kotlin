@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.resolve;
 
+import com.intellij.openapi.project.Project;
 import com.intellij.util.SmartFMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -52,9 +53,10 @@ public class ObservableBindingTrace implements BindingTrace {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public <K, V> void record(WritableSlice<K, V> slice, K key, V value) {
         originalTrace.record(slice, key, value);
-        RecordHandler recordHandler = handlers.get(slice);
+        RecordHandler<K, V> recordHandler = (RecordHandler) handlers.get(slice);
         if (recordHandler != null) {
             recordHandler.handleRecord(slice, key, value);
         }
@@ -95,5 +97,16 @@ public class ObservableBindingTrace implements BindingTrace {
     @Override
     public boolean wantsDiagnostics() {
         return originalTrace.wantsDiagnostics();
+    }
+
+    @Override
+    public String toString() {
+        return "ObservableTrace over " + originalTrace.toString();
+    }
+
+    @Nullable
+    @Override
+    public Project getProject() {
+        return originalTrace.getProject();
     }
 }

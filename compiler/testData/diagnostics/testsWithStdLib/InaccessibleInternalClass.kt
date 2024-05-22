@@ -1,10 +1,11 @@
+// FIR_IDENTICAL
+// SKIP_TXT
 // FILE: a.kt
 package p
 
 class FilteringSequence
 
 // FILE: b.kt
-// SKIP_TXT
 package kotlin.sequences
 
 import p.*

@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.storage
@@ -40,7 +40,7 @@ open class ExceptionTracker : ModificationTracker, LockBasedStorageManager.Excep
 
 object CacheResetOnProcessCanceled {
     private const val PROPERTY = "kotlin.internal.cacheResetOnProcessCanceled"
-    private const val DEFAULT_VALUE = true
+    private const val DEFAULT_VALUE = false
 
     var enabled: Boolean
         get() = PropertiesComponent.getInstance()?.getBoolean(PROPERTY, DEFAULT_VALUE) ?: DEFAULT_VALUE

@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_VARIABLE
 
 
 fun <T> shuffle(x: List<T>): List<T> = x

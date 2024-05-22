@@ -1,3 +1,4 @@
+
 class A {
     private lateinit var str: String
 

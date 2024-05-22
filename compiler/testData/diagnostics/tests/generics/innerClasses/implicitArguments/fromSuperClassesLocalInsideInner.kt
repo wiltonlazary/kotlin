@@ -1,6 +1,5 @@
-// !WITH_NEW_INFERENCE
-// !CHECK_TYPE
-// !DIAGNOSTICS: -UNUSED_VALUE -VARIABLE_WITH_REDUNDANT_INITIALIZER -TOPLEVEL_TYPEALIASES_ONLY
+// CHECK_TYPE
+// DIAGNOSTICS: -UNUSED_VALUE -VARIABLE_WITH_REDUNDANT_INITIALIZER -TOPLEVEL_TYPEALIASES_ONLY
 
 class A<R1, R2, R3, R4, R5, R6>
 
@@ -46,8 +45,8 @@ class Outer<T> {
             x().foo().a() checkType { _<A<T, F, String, Double, Short, Long>>() }
             x().bar() checkType { _<A<T, F, String, Double, Short, Char>>() }
 
-            x = <!NI;TYPE_MISMATCH, NI;TYPE_MISMATCH, NI;TYPE_MISMATCH, TYPE_MISMATCH!>foobar<Int>()<!>
-            x = <!TYPE_MISMATCH!>z.<!NI;TYPE_MISMATCH!>foobar<String>()<!><!>
+            x = <!TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH!>foobar<Int>()<!>
+            x = <!TYPE_MISMATCH!>z.<!TYPE_MISMATCH!>foobar<String>()<!><!>
 
             var y = noParameters()
             y = noParameters()

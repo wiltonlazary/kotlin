@@ -1,5 +1,3 @@
-// IGNORE_BACKEND: NATIVE
-
 fun equals1(a: Double, b: Double) = a.equals(b)
 
 fun box(): String {

@@ -1,4 +1,6 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// LANGUAGE: -ProhibitOperatorMod
+// DIAGNOSTICS: -UNUSED_PARAMETER
 
 class Foo {
     <!DEPRECATED_BINARY_MOD!>operator<!> fun mod(x: Int): Foo = Foo()

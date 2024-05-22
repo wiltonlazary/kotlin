@@ -1,14 +1,16 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen
 
 import org.jetbrains.kotlin.codegen.coroutines.createCustomCopy
-import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
+import org.jetbrains.kotlin.codegen.optimization.common.InsnSequence
+import org.jetbrains.kotlin.codegen.optimization.common.findPreviousOrNull
 import org.jetbrains.kotlin.config.JVMAssertionsMode
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.descriptors.isTopLevelInPackage
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.BindingTraceContext
 import org.jetbrains.kotlin.resolve.DelegatingBindingTrace
@@ -20,12 +22,16 @@ import org.jetbrains.kotlin.resolve.calls.tasks.TracingStrategy
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
 import org.jetbrains.org.objectweb.asm.Label
+import org.jetbrains.org.objectweb.asm.MethodVisitor
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
+import org.jetbrains.org.objectweb.asm.tree.FieldInsnNode
+import org.jetbrains.org.objectweb.asm.tree.LdcInsnNode
+import org.jetbrains.org.objectweb.asm.tree.MethodInsnNode
 import org.jetbrains.org.objectweb.asm.tree.MethodNode
 
-val assertionsDisabledFieldName = "\$assertionsDisabled"
+const val ASSERTIONS_DISABLED_FIELD_NAME = "\$assertionsDisabled"
 private const val ALWAYS_ENABLED_ASSERT_FUNCTION_NAME = "alwaysEnabledAssert"
 private const val LAMBDA_INTERNAL_NAME = "kotlin/jvm/functions/Function0"
 private const val ASSERTION_ERROR_INTERNAL_NAME = "java/lang/AssertionError"
@@ -42,22 +48,20 @@ private fun FunctionDescriptor.isBuiltinAlwaysEnabledAssertWithoutLambda() =
 fun FunctionDescriptor.isBuiltinAlwaysEnabledAssert() =
     this.isBuiltinAlwaysEnabledAssertWithLambda() || this.isBuiltinAlwaysEnabledAssertWithoutLambda()
 
-fun createMethodNodeForAlwaysEnabledAssert(
-    functionDescriptor: FunctionDescriptor,
-    typeMapper: KotlinTypeMapper
-): MethodNode {
-    assert(functionDescriptor.isBuiltinAlwaysEnabledAssert()) {
-        "functionDescriptor must be kotlin.alwaysEnabledAssert, but got $functionDescriptor"
+fun FieldInsnNode.isCheckAssertionsStatus() =
+    opcode == Opcodes.GETSTATIC && name == ASSERTIONS_DISABLED_FIELD_NAME && desc == Type.BOOLEAN_TYPE.descriptor
+
+fun createMethodNodeForAlwaysEnabledAssert(functionDescriptor: FunctionDescriptor): MethodNode {
+    val signature = when {
+        functionDescriptor.isBuiltinAlwaysEnabledAssertWithLambda() ->
+            Type.getMethodDescriptor(Type.VOID_TYPE, Type.BOOLEAN_TYPE, AsmTypes.FUNCTION0)
+        functionDescriptor.isBuiltinAlwaysEnabledAssertWithoutLambda() ->
+            Type.getMethodDescriptor(Type.VOID_TYPE, Type.BOOLEAN_TYPE)
+        else ->
+            error("functionDescriptor must be kotlin.alwaysEnabledAssert, but got $functionDescriptor")
     }
 
-    val node =
-        org.jetbrains.org.objectweb.asm.tree.MethodNode(
-            Opcodes.ASM5,
-            Opcodes.ACC_STATIC,
-            "fake",
-            typeMapper.mapAsmMethod(functionDescriptor).descriptor, null, null
-        )
-
+    val node = MethodNode(Opcodes.API_VERSION, Opcodes.ACC_STATIC, "fake", signature, null, null)
     val v = InstructionAdapter(node)
     val returnLabel = Label()
 
@@ -130,17 +134,16 @@ private fun inlineAlwaysInlineAssert(resolvedCall: ResolvedCall<*>, codegen: Exp
     )
 }
 
-fun generateAssertionsDisabledFieldInitialization(parentCodegen: MemberCodegen<*>) {
-    parentCodegen.v.newField(
-        JvmDeclarationOrigin.NO_ORIGIN, Opcodes.ACC_STATIC or Opcodes.ACC_FINAL or Opcodes.ACC_SYNTHETIC, assertionsDisabledFieldName,
+fun generateAssertionsDisabledFieldInitialization(classBuilder: ClassBuilder, clInitBuilder: MethodVisitor, className: String) {
+    classBuilder.newField(
+        JvmDeclarationOrigin.NO_ORIGIN, Opcodes.ACC_STATIC or Opcodes.ACC_FINAL or Opcodes.ACC_SYNTHETIC, ASSERTIONS_DISABLED_FIELD_NAME,
         "Z", null, null
     )
-    val clInitCodegen = parentCodegen.createOrGetClInitCodegen()
-    MemberCodegen.markLineNumberForElement(parentCodegen.element.psiOrParent, clInitCodegen.v)
     val thenLabel = Label()
     val elseLabel = Label()
-    with(clInitCodegen.v) {
-        aconst(Type.getObjectType(parentCodegen.v.thisName))
+    with(InstructionAdapter(clInitBuilder)) {
+        mark(Label())
+        aconst(Type.getObjectType(className))
         invokevirtual("java/lang/Class", "desiredAssertionStatus", "()Z", false)
         ifne(thenLabel)
         iconst(1)
@@ -150,8 +153,18 @@ fun generateAssertionsDisabledFieldInitialization(parentCodegen: MemberCodegen<*
         iconst(0)
 
         mark(elseLabel)
-        putstatic(parentCodegen.v.thisName, assertionsDisabledFieldName, "Z")
+        putstatic(classBuilder.thisName, ASSERTIONS_DISABLED_FIELD_NAME, "Z")
     }
+}
+
+fun rewriteAssertionsDisabledFieldInitialization(methodNode: MethodNode, className: String) {
+    val node = InsnSequence(methodNode.instructions).firstOrNull {
+        it is FieldInsnNode && it.opcode == Opcodes.PUTSTATIC && it.name == ASSERTIONS_DISABLED_FIELD_NAME
+    }?.findPreviousOrNull {
+        it is MethodInsnNode && it.opcode == Opcodes.INVOKEVIRTUAL
+                && it.owner == "java/lang/Class" && it.name == "desiredAssertionStatus" && it.desc == "()Z"
+    }?.previous
+    (node as? LdcInsnNode)?.cst = Type.getObjectType(className)
 }
 
 private fun <D : FunctionDescriptor> ResolvedCall<D>.replaceAssertWithAssertInner(): ResolvedCall<D> {
@@ -162,7 +175,7 @@ private fun <D : FunctionDescriptor> ResolvedCall<D>.replaceAssertWithAssertInne
         call,
         newCandidateDescriptor,
         dispatchReceiver, extensionReceiver, explicitReceiverKind,
-        null, DelegatingBindingTrace(BindingTraceContext().bindingContext, "Temporary trace for assertInner"),
+        null, DelegatingBindingTrace(BindingTraceContext(null).bindingContext, "Temporary trace for assertInner"),
         TracingStrategy.EMPTY, MutableDataFlowInfoForArguments.WithoutArgumentsCheck(DataFlowInfo.EMPTY)
     )
     valueArguments.forEach {

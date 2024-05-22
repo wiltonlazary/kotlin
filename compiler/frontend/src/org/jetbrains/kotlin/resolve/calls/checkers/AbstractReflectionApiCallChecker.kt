@@ -17,35 +17,52 @@
 package org.jetbrains.kotlin.resolve.calls.checkers
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.builtins.KOTLIN_REFLECT_FQ_NAME
 import org.jetbrains.kotlin.builtins.ReflectionTypes
+import org.jetbrains.kotlin.builtins.StandardNames.KOTLIN_REFLECT_FQ_NAME
+import org.jetbrains.kotlin.config.AnalysisFlags.allowFullyQualifiedNameInKClass
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.descriptors.NotFoundClasses
+import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
+import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.storage.getValue
-import org.jetbrains.kotlin.util.OperatorNameConventions
 
-private val ANY_MEMBER_NAMES = setOf("equals", "hashCode", "toString")
+private val ALLOWED_MEMBER_NAMES = setOf(
+    "equals", "hashCode", "toString", "invoke", "name"
+)
+
+private val ALLOWED_CLASSES = setOf(
+    FqName("kotlin.reflect.KType"),
+    FqName("kotlin.reflect.KTypeParameter"),
+    FqName("kotlin.reflect.KTypeProjection"),
+    FqName("kotlin.reflect.KTypeProjection.Companion"),
+    FqName("kotlin.reflect.KVariance")
+)
 
 /**
  * Checks that there are no usages of reflection API which will fail at runtime.
  */
 abstract class AbstractReflectionApiCallChecker(
-    private val module: ModuleDescriptor,
-    private val notFoundClasses: NotFoundClasses,
+    private val reflectionTypes: ReflectionTypes,
     storageManager: StorageManager
 ) : CallChecker {
     protected abstract val isWholeReflectionApiAvailable: Boolean
     protected abstract fun report(element: PsiElement, context: CallCheckerContext)
 
     private val kPropertyClasses by storageManager.createLazyValue {
-        val reflectionTypes = ReflectionTypes(module, notFoundClasses)
         setOf(reflectionTypes.kProperty0, reflectionTypes.kProperty1, reflectionTypes.kProperty2)
+    }
+
+    private val kClass by storageManager.createLazyValue { reflectionTypes.kClass }
+
+    protected open fun isAllowedKClassMember(name: Name, context: CallCheckerContext): Boolean = when (name.asString()) {
+        "simpleName", "isInstance" -> true
+        "qualifiedName" -> context.languageVersionSettings.getFlag(allowFullyQualifiedNameInKClass)
+        else -> false
     }
 
     final override fun check(resolvedCall: ResolvedCall<*>, reportOn: PsiElement, context: CallCheckerContext) {
@@ -58,25 +75,27 @@ abstract class AbstractReflectionApiCallChecker(
         val containingClass = descriptor.containingDeclaration as? ClassDescriptor ?: return
         if (!ReflectionTypes.isReflectionClass(containingClass)) return
 
-        if (!isAllowedReflectionApi(descriptor, containingClass)) {
+        if (!isAllowedReflectionApi(descriptor, containingClass, context)) {
             report(reportOn, context)
         }
     }
 
-    protected open fun isAllowedReflectionApi(descriptor: CallableDescriptor, containingClass: ClassDescriptor): Boolean {
+    protected open fun isAllowedReflectionApi(
+        descriptor: CallableDescriptor,
+        containingClass: ClassDescriptor,
+        context: CallCheckerContext
+    ): Boolean {
         val name = descriptor.name
-        return name.asString() in ANY_MEMBER_NAMES ||
-                name == OperatorNameConventions.INVOKE ||
-                name.asString() == "name" ||
-                (name.asString() == "get" || name.asString() == "set") && containingClass.isKPropertyClass()
+        return name.asString() in ALLOWED_MEMBER_NAMES ||
+                DescriptorUtils.isSubclass(containingClass, kClass) && isAllowedKClassMember(name, context) ||
+                (name.asString() == "get" || name.asString() == "set") && containingClass.isKPropertyClass() ||
+                containingClass.fqNameSafe in ALLOWED_CLASSES
     }
 
     private fun ClassDescriptor.isKPropertyClass() = kPropertyClasses.any { kProperty -> DescriptorUtils.isSubclass(this, kProperty) }
 
     private fun isReflectionSource(reportOn: PsiElement): Boolean {
         val file = reportOn.containingFile as? KtFile ?: return false
-        val fqName = file.packageFqName.toUnsafe()
-        return fqName == KOTLIN_REFLECT_FQ_NAME.toUnsafe() || fqName.asString().startsWith(KOTLIN_REFLECT_FQ_NAME.asString() + ".")
+        return file.packageFqName.startsWith(KOTLIN_REFLECT_FQ_NAME)
     }
 }
-

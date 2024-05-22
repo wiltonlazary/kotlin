@@ -18,8 +18,8 @@ package org.jetbrains.kotlin.renderer
 
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
-import org.jetbrains.kotlin.descriptors.annotations.AnnotationWithTarget
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.resolve.constants.ConstantValue
 import org.jetbrains.kotlin.types.KotlinType
 import java.lang.IllegalStateException
 import java.lang.reflect.Modifier
@@ -48,7 +48,7 @@ internal class DescriptorRendererOptionsImpl : DescriptorRendererOptions {
             assert(!field.name.startsWith("is")) { "Fields named is* are not supported here yet" }
             val value = property.getValue(
                     this,
-                    PropertyReference1Impl(DescriptorRendererOptionsImpl::class, field.name, "get" + field.name.capitalize())
+                    PropertyReference1Impl(DescriptorRendererOptionsImpl::class, field.name, "get" + field.name.replaceFirstChar(Char::uppercaseChar))
             )
             field.set(copy, copy.property(value))
         }
@@ -70,7 +70,7 @@ internal class DescriptorRendererOptionsImpl : DescriptorRendererOptions {
     override var classifierNamePolicy: ClassifierNamePolicy by property(ClassifierNamePolicy.SOURCE_CODE_QUALIFIED)
     override var withDefinedIn by property(true)
     override var withSourceFileForTopLevel by property(true)
-    override var modifiers: Set<DescriptorRendererModifier> by property(DescriptorRendererModifier.DEFAULTS)
+    override var modifiers: Set<DescriptorRendererModifier> by property(DescriptorRendererModifier.ALL_EXCEPT_ANNOTATIONS)
     override var startFromName by property(false)
     override var startFromDeclarationKeyword by property(false)
     override var debugMode by property(false)
@@ -78,10 +78,16 @@ internal class DescriptorRendererOptionsImpl : DescriptorRendererOptions {
     override var verbose by property(false)
     override var unitReturnType by property(true)
     override var withoutReturnType by property(false)
+    override var enhancedTypes by property(false)
     override var normalizedVisibilities by property(false)
     override var renderDefaultVisibility by property(true)
+    override var renderDefaultModality by property(true)
+    override var renderConstructorDelegation by property(false)
+    override var renderPrimaryConstructorParametersAsProperties by property(false)
+    override var actualPropertiesInPrimaryConstructor: Boolean by property(false)
     override var uninferredTypeParameterAsName by property(false)
     override var includePropertyConstant by property(false)
+    override var propertyConstantRenderer: ((ConstantValue<*>) -> String?)? by property(null)
     override var withoutTypeParameters by property(false)
     override var withoutSuperTypes by property(false)
     override var typeNormalizer by property<(KotlinType) -> KotlinType>({ it })
@@ -93,8 +99,10 @@ internal class DescriptorRendererOptionsImpl : DescriptorRendererOptions {
     override var parameterNameRenderingPolicy by property(ParameterNameRenderingPolicy.ALL)
     override var receiverAfterName by property(false)
     override var renderCompanionObjectName by property(false)
-    override var renderAccessors by property(false)
+    override var propertyAccessorRenderingPolicy by property(PropertyAccessorRenderingPolicy.DEBUG)
     override var renderDefaultAnnotationArguments by property(false)
+
+    override var eachAnnotationOnNewLine: Boolean by property(false)
 
     override var excludedAnnotationClasses by property(emptySet<FqName>())
 
@@ -110,9 +118,19 @@ internal class DescriptorRendererOptionsImpl : DescriptorRendererOptions {
 
     override var renderUnabbreviatedType: Boolean by property(true)
 
+    override var renderTypeExpansions: Boolean by property(false)
+
+    override var renderAbbreviatedTypeComments: Boolean by property(false)
+
     override var includeAdditionalModifiers: Boolean by property(true)
 
     override var parameterNamesInFunctionalTypes: Boolean by property(true)
 
     override var renderFunctionContracts: Boolean by property(false)
+
+    override var presentableUnresolvedTypes: Boolean by property(false)
+
+    override var boldOnlyForNamesInHtml: Boolean by property(false)
+
+    override var informativeErrorType: Boolean by property(true)
 }

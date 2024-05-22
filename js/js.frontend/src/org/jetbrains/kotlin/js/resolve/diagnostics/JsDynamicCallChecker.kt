@@ -17,7 +17,9 @@
 package org.jetbrains.kotlin.js.resolve.diagnostics
 
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.js.naming.NameSuggestion
+import org.jetbrains.kotlin.lexer.KtSingleValueToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.calls.checkers.CallChecker
@@ -52,8 +54,9 @@ object JsDynamicCallChecker : CallChecker {
                     in OperatorConventions.IN_OPERATIONS -> {
                         reportInOperation(context, reportOn)
                     }
-                    KtTokens.RANGE -> {
-                        context.trace.report(ErrorsJs.WRONG_OPERATION_WITH_DYNAMIC.on(reportOn, "`..` operation"))
+                    KtTokens.RANGE, KtTokens.RANGE_UNTIL -> {
+                        token as KtSingleValueToken
+                        context.trace.report(ErrorsJs.WRONG_OPERATION_WITH_DYNAMIC.on(reportOn, "`${token.value}` operation"))
                     }
                 }
             }
@@ -82,7 +85,9 @@ object JsDynamicCallChecker : CallChecker {
     }
 
     private fun checkIdentifier(name: String?, reportOn: PsiElement, context: CallCheckerContext) {
-        if (name == null) return
+        if (name == null || context.languageVersionSettings.supportsFeature(LanguageFeature.JsAllowInvalidCharsIdentifiersEscaping)) {
+            return
+        }
         if (NameSuggestion.sanitizeName(name) != name) {
             context.trace.report(ErrorsJs.NAME_CONTAINS_ILLEGAL_CHARS.on(reportOn))
         }

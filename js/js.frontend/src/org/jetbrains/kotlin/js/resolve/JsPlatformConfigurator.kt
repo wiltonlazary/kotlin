@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.js.resolve
@@ -20,51 +9,38 @@ import org.jetbrains.kotlin.container.StorageComponentContainer
 import org.jetbrains.kotlin.container.useImpl
 import org.jetbrains.kotlin.container.useInstance
 import org.jetbrains.kotlin.js.analyze.JsNativeDiagnosticSuppressor
+import org.jetbrains.kotlin.js.naming.JsNameSuggestion
 import org.jetbrains.kotlin.js.naming.NameSuggestion
 import org.jetbrains.kotlin.js.resolve.diagnostics.*
-import org.jetbrains.kotlin.platform.PlatformToKotlinClassMap
-import org.jetbrains.kotlin.resolve.DeclarationReturnTypeSanitizer
-import org.jetbrains.kotlin.resolve.OverloadFilter
-import org.jetbrains.kotlin.resolve.OverridesBackwardCompatibilityHelper
-import org.jetbrains.kotlin.resolve.PlatformConfigurator
-import org.jetbrains.kotlin.resolve.calls.checkers.ReifiedTypeParameterSubstitutionChecker
+import org.jetbrains.kotlin.resolve.PlatformConfiguratorBase
+import org.jetbrains.kotlin.resolve.calls.checkers.LateinitIntrinsicApplicabilityChecker
 import org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker
-import org.jetbrains.kotlin.resolve.lazy.DelegationFilter
-import org.jetbrains.kotlin.resolve.scopes.SyntheticScopes
 import org.jetbrains.kotlin.types.DynamicTypesAllowed
 
-object JsPlatformConfigurator : PlatformConfigurator(
-        DynamicTypesAllowed(),
-        additionalDeclarationCheckers = listOf(
-                NativeInvokeChecker(), NativeGetterChecker(), NativeSetterChecker(),
-                JsNameChecker, JsModuleChecker, JsExternalFileChecker,
-                JsExternalChecker, JsInheritanceChecker, JsMultipleInheritanceChecker,
-                JsRuntimeAnnotationChecker,
-                JsDynamicDeclarationChecker,
-                ExpectedActualDeclarationChecker
-        ),
-        additionalCallCheckers = listOf(
-                ReifiedTypeParameterSubstitutionChecker(),
-                JsModuleCallChecker,
-                JsDynamicCallChecker,
-                JsDefinedExternallyCallChecker
-        ),
-        additionalTypeCheckers = listOf(),
-        additionalClassifierUsageCheckers = listOf(),
-        additionalAnnotationCheckers = listOf(),
-        identifierChecker = JsIdentifierChecker,
-        overloadFilter = OverloadFilter.Default,
-        platformToKotlinClassMap = PlatformToKotlinClassMap.EMPTY,
-        delegationFilter = DelegationFilter.Default,
-        overridesBackwardCompatibilityHelper = OverridesBackwardCompatibilityHelper.Default,
-        declarationReturnTypeSanitizer = DeclarationReturnTypeSanitizer.Default
+object JsPlatformConfigurator : PlatformConfiguratorBase(
+    DynamicTypesAllowed(),
+    additionalDeclarationCheckers = listOf(
+        NativeInvokeChecker(), NativeGetterChecker(), NativeSetterChecker(),
+        JsNameChecker, JsModuleChecker, JsExternalFileChecker,
+        JsInheritanceChecker, JsMultipleInheritanceChecker,
+        JsExternalInheritorOnlyChecker,
+        JsRuntimeAnnotationChecker,
+        JsDynamicDeclarationChecker,
+        JsExportAnnotationChecker,
+    ),
+    additionalCallCheckers = listOf(
+        JsModuleCallChecker,
+        JsDynamicCallChecker,
+        JsDefinedExternallyCallChecker,
+        LateinitIntrinsicApplicabilityChecker(isWarningInPre19 = true),
+        JsExternalArgumentCallChecker
+    ),
 ) {
     override fun configureModuleComponents(container: StorageComponentContainer) {
-        container.useInstance(NameSuggestion())
         container.useImpl<JsCallChecker>()
-        container.useInstance(SyntheticScopes.Empty)
-        container.useInstance(JsTypeSpecificityComparator)
+        container.useImpl<JsTypeSpecificityComparator>()
         container.useImpl<JsNameClashChecker>()
+        container.useImpl<JsIdentifierChecker>()
         container.useImpl<JsNameCharsChecker>()
         container.useImpl<JsBuiltinNameClashChecker>()
         container.useInstance(JsModuleClassLiteralChecker)
@@ -74,5 +50,12 @@ object JsPlatformConfigurator : PlatformConfigurator(
         container.useInstance(ExtensionFunctionToExternalIsInlinable)
         container.useInstance(JsQualifierChecker)
         container.useInstance(JsNativeDiagnosticSuppressor)
+        container.useInstance(JsExternalChecker(allowCompanionInInterface = true, allowUnsignedTypes = false))
+        container.useInstance(JsExportDeclarationChecker(allowCompanionInInterface = true, includeUnsignedNumbers = false))
+    }
+
+    override fun configureModuleDependentCheckers(container: StorageComponentContainer) {
+        super.configureModuleDependentCheckers(container)
+        container.useImpl<ExpectedActualDeclarationChecker>()
     }
 }

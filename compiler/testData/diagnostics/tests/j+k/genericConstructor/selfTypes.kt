@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_VARIABLE
 // FILE: R.java
 public class R<T extends R<T>> {
     public <F extends R<F>> R(F x) {

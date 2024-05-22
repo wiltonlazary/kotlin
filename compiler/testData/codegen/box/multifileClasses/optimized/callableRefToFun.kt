@@ -1,12 +1,11 @@
 // TARGET_BACKEND: JVM
-// IGNORE_LIGHT_ANALYSIS
-// WITH_RUNTIME
-// KOTLIN_CONFIGURATION_FLAGS: +JVM.INHERIT_MULTIFILE_PARTS
+// WITH_STDLIB
+// INHERIT_MULTIFILE_PARTS
 // FILE: box.kt
 
 import a.*
 
-fun box(): String = (::ok)()
+fun box(): String = (::ok).let { it() }
 
 // FILE: part1.kt
 @file:[JvmName("MultifileClass") JvmMultifileClass]

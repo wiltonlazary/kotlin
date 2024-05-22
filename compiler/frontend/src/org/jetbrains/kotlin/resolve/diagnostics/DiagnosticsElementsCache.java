@@ -16,9 +16,8 @@
 
 package org.jetbrains.kotlin.resolve.diagnostics;
 
-import com.intellij.openapi.util.AtomicNotNullLazyValue;
+import com.intellij.openapi.util.NotNullLazyValue;
 import com.intellij.psi.PsiElement;
-import com.intellij.util.containers.ConcurrentMultiMap;
 import com.intellij.util.containers.MultiMap;
 import kotlin.collections.CollectionsKt;
 import kotlin.jvm.functions.Function1;
@@ -27,21 +26,19 @@ import org.jetbrains.kotlin.diagnostics.Diagnostic;
 
 import java.util.Collection;
 
+import static org.jetbrains.kotlin.utils.PlatformUtilsKt.createConcurrentMultiMap;
+
 public class DiagnosticsElementsCache {
     private final Diagnostics diagnostics;
     private final Function1<Diagnostic, Boolean> filter;
 
-    private final AtomicNotNullLazyValue<MultiMap<PsiElement, Diagnostic>> elementToDiagnostic = new AtomicNotNullLazyValue<MultiMap<PsiElement, Diagnostic>>() {
-        @NotNull
-        @Override
-        protected MultiMap<PsiElement, Diagnostic> compute() {
-            return buildElementToDiagnosticCache(diagnostics, filter);
-        }
-    };
+    private final NotNullLazyValue<MultiMap<PsiElement, Diagnostic>> elementToDiagnostic;
 
     public DiagnosticsElementsCache(Diagnostics diagnostics, Function1<Diagnostic, Boolean> filter) {
         this.diagnostics = diagnostics;
         this.filter = filter;
+
+        elementToDiagnostic = NotNullLazyValue.atomicLazy(() -> buildElementToDiagnosticCache(this.diagnostics, this.filter));
     }
 
     @NotNull
@@ -50,7 +47,7 @@ public class DiagnosticsElementsCache {
     }
 
     private static MultiMap<PsiElement, Diagnostic> buildElementToDiagnosticCache(Diagnostics diagnostics, Function1<Diagnostic, Boolean> filter) {
-        MultiMap<PsiElement, Diagnostic> elementToDiagnostic = new ConcurrentMultiMap<>();
+        MultiMap<PsiElement, Diagnostic> elementToDiagnostic = createConcurrentMultiMap();
         for (Diagnostic diagnostic : diagnostics) {
             if (diagnostic == null) {
                 throw new IllegalStateException(

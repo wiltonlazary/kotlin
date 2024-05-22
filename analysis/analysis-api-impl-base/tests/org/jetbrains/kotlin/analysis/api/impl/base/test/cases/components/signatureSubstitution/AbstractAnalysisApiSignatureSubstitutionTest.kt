@@ -1,0 +1,49 @@
+/*
+ * Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
+ */
+
+package org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.signatureSubstitution
+
+import org.jetbrains.kotlin.analysis.api.impl.base.test.cases.components.stringRepresentation
+import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
+import org.jetbrains.kotlin.analysis.test.framework.base.AbstractAnalysisApiBasedTest
+import org.jetbrains.kotlin.analysis.test.framework.project.structure.KtTestModule
+import org.jetbrains.kotlin.analysis.test.framework.services.SubstitutionParser
+import org.jetbrains.kotlin.analysis.test.framework.services.expressionMarkerProvider
+import org.jetbrains.kotlin.analysis.utils.printer.prettyPrint
+import org.jetbrains.kotlin.psi.KtCallableDeclaration
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.test.services.TestServices
+import org.jetbrains.kotlin.test.services.assertions
+
+abstract class AbstractAnalysisApiSignatureSubstitutionTest : AbstractAnalysisApiBasedTest() {
+    override fun doTestByMainFile(mainFile: KtFile, mainModule: KtTestModule, testServices: TestServices) {
+        val declaration = testServices.expressionMarkerProvider.getElementOfTypeAtCaret<KtCallableDeclaration>(mainFile)
+        val actual = analyseForTest(declaration) {
+            val symbol = declaration.getSymbol() as KaCallableSymbol
+
+            val substitutor = SubstitutionParser.parseSubstitutor(analysisSession, mainFile, declaration)
+
+            val signatureBeforeSubstitution = symbol.asSignature()
+            val signatureAfterSubstitution = signatureBeforeSubstitution.substitute(substitutor)
+            prettyPrint {
+                appendLine("KtDeclaration: ${declaration::class.simpleName}")
+
+                appendLine("Symbol:")
+                appendLine(symbol.render())
+
+                appendLine()
+
+                appendLine("Signature before substitution:")
+                appendLine(stringRepresentation(signatureBeforeSubstitution))
+
+                appendLine()
+
+                appendLine("Signature after substitution:")
+                appendLine(stringRepresentation(signatureAfterSubstitution))
+            }
+        }
+        testServices.assertions.assertEqualsToTestDataFileSibling(actual)
+    }
+}

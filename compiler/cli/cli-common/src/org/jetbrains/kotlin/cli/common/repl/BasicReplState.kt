@@ -24,21 +24,19 @@ import kotlin.concurrent.write
 
 data class LineId(override val no: Int, override val generation: Int, private val codeHash: Int) : ILineId, Serializable {
 
-    constructor(codeLine: ReplCodeLine): this(codeLine.no, codeLine.generation, codeLine.code.hashCode())
-
-    override fun compareTo(other: ILineId): Int = (other as? LineId)?.let {
-        no.compareTo(it.no).takeIf { it != 0 }
-        ?: generation.compareTo(it.generation).takeIf { it != 0 }
-        ?: codeHash.compareTo(it.codeHash)
+    override fun compareTo(other: ILineId): Int = (other as? LineId)?.let { lineId ->
+        no.compareTo(lineId.no).takeIf { no -> no != 0 }
+            ?: codeHash.compareTo(lineId.codeHash)
     } ?: -1 // TODO: check if it doesn't break something
 
     companion object {
-        private val serialVersionUID: Long = 8328353000L
+        private const val serialVersionUID: Long = 8328354000L
     }
 }
 
 open class BasicReplStageHistory<T>(override val lock: ReentrantReadWriteLock = ReentrantReadWriteLock()) : IReplStageHistory<T>, ArrayList<ReplHistoryRecord<T>>() {
 
+    val currentLineNumber = AtomicInteger(REPL_CODE_LINE_FIRST_NO)
     val currentGeneration = AtomicInteger(REPL_CODE_LINE_FIRST_GEN)
 
     override fun push(id: ILineId, item: T) {
@@ -54,24 +52,32 @@ open class BasicReplStageHistory<T>(override val lock: ReentrantReadWriteLock = 
             val removed = map { it.id }
             clear()
             currentGeneration.incrementAndGet()
+            currentLineNumber.set(REPL_CODE_LINE_FIRST_NO)
             return removed
         }
     }
 
     override fun resetTo(id: ILineId): Iterable<ILineId> {
         lock.write {
-            val idx = indexOfFirst { it.id == id }
-            if (idx < 0) throw java.util.NoSuchElementException("Cannot rest to inexistent line ${id.no}")
-            return if (idx < lastIndex) {
-                val removed = asSequence().drop(idx + 1).map { it.id }.toList()
-                removeRange(idx + 1, size)
-                currentGeneration.incrementAndGet()
-                removed
+            return tryResetTo(id) ?: throw NoSuchElementException("Cannot reset to non-existent line ${id.no}")
+        }
+    }
+
+    protected fun tryResetTo(id: ILineId): List<ILineId>? {
+        val idx = indexOfFirst { it.id == id }
+        if (idx < 0) return null
+        return if (idx < lastIndex) {
+            val removed = asSequence().drop(idx + 1).map { it.id }.toList()
+            removeRange(idx + 1, size)
+            currentGeneration.incrementAndGet()
+            removed.lastOrNull()?.no?.let {
+                currentLineNumber.set(it)
             }
-            else {
-                currentGeneration.incrementAndGet()
-                emptyList()
-            }
+            removed
+        } else {
+            currentGeneration.incrementAndGet()
+            currentLineNumber.set(id.no + 1)
+            emptyList()
         }
     }
 }
@@ -79,6 +85,8 @@ open class BasicReplStageHistory<T>(override val lock: ReentrantReadWriteLock = 
 open class BasicReplStageState<HistoryItemT>(override final val lock: ReentrantReadWriteLock = ReentrantReadWriteLock()): IReplStageState<HistoryItemT> {
 
     override val currentGeneration: Int get() = history.currentGeneration.get()
+
+    override fun getNextLineNo(): Int = history.currentLineNumber.getAndIncrement()
 
     override val history: BasicReplStageHistory<HistoryItemT> = BasicReplStageHistory(lock)
 }

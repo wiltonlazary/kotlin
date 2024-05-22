@@ -1,31 +1,25 @@
-/*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
- */
-
-
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
 
-
-jvmTarget = "1.6"
+repositories {
+    maven("https://packages.jetbrains.team/maven/p/ij/intellij-dependencies")
+}
 
 val jflexPath by configurations.creating
 
 dependencies {
-    val compile by configurations
-    val compileOnly by configurations
+    api(project(":core:compiler.common"))
+    api(project(":compiler:util"))
+    api(project(":compiler:frontend.common"))
+    api(project(":kotlin-script-runtime"))
 
-    compile(project(":core:descriptors"))
-    compile(project(":compiler:util"))
-    compile(project(":kotlin-script-runtime"))
+    compileOnly(intellijCore())
+    compileOnly(libs.guava)
+    compileOnly(commonDependency("org.jetbrains.intellij.deps.fastutil:intellij-deps-fastutil"))
 
-    compileOnly(intellijCoreDep()) { includeJars("intellij-core", "annotations") }
-    compileOnly(intellijDep()) { includeJars("guava", "trove4j", rootProject = rootProject) }
-
-    jflexPath(commonDep("org.jetbrains.intellij.deps.jflex", "jflex"))
+    jflexPath(commonDependency("org.jetbrains.intellij.deps.jflex", "jflex"))
 }
 
 sourceSets {
@@ -37,5 +31,10 @@ sourceSets {
 
 ant.importBuild("buildLexer.xml")
 
-ant.properties["builddir"] = buildDir.absolutePath
-ant.properties["flex.classpath"] = jflexPath.asPath
+ant.properties["builddir"] = layout.buildDirectory.get().asFile.absolutePath
+
+tasks.findByName("lexer")!!.apply {
+    doFirst {
+        ant.properties["flex.classpath"] = jflexPath.asPath
+    }
+}

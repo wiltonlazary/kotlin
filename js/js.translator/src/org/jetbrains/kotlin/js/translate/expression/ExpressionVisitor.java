@@ -23,12 +23,14 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.builtins.functions.FunctionClassDescriptor;
+import org.jetbrains.kotlin.builtins.functions.FunctionTypeKind;
 import org.jetbrains.kotlin.config.LanguageVersion;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor;
 import org.jetbrains.kotlin.descriptors.annotations.KotlinRetention;
 import org.jetbrains.kotlin.js.backend.ast.*;
 import org.jetbrains.kotlin.js.backend.ast.metadata.MetadataProperties;
+import org.jetbrains.kotlin.js.backend.ast.metadata.SpecialFunction;
 import org.jetbrains.kotlin.js.naming.NameSuggestion;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.declaration.ClassTranslator;
@@ -66,7 +68,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.jetbrains.kotlin.descriptors.FindClassInModuleKt.findClassAcrossModuleDependencies;
-import static org.jetbrains.kotlin.js.translate.context.Namer.*;
+import static org.jetbrains.kotlin.js.translate.context.Namer.GET_KCLASS_FROM_EXPRESSION;
+import static org.jetbrains.kotlin.js.translate.context.Namer.getCapturedVarAccessor;
 import static org.jetbrains.kotlin.js.translate.general.Translation.translateAsExpression;
 import static org.jetbrains.kotlin.js.translate.utils.BindingUtils.*;
 import static org.jetbrains.kotlin.js.translate.utils.ErrorReportingUtils.message;
@@ -74,8 +77,7 @@ import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.*;
 import static org.jetbrains.kotlin.js.translate.utils.JsDescriptorUtils.getReceiverParameterForDeclaration;
 import static org.jetbrains.kotlin.js.translate.utils.TranslationUtils.translateInitializerForProperty;
 import static org.jetbrains.kotlin.resolve.BindingContext.*;
-import static org.jetbrains.kotlin.resolve.BindingContextUtils.isVarCapturedInClosure;
-import static org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt.getResolvedCallWithAssert;
+import static org.jetbrains.kotlin.resolve.calls.util.CallUtilKt.getResolvedCallWithAssert;
 import static org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt.getAnnotationClass;
 import static org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isFunctionExpression;
 import static org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils.isFunctionLiteral;
@@ -109,8 +111,8 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
 
     @Override
     @NotNull
-    public JsNode visitBlockExpression(@NotNull KtBlockExpression jetBlock, @NotNull TranslationContext context) {
-        List<KtExpression> statements = jetBlock.getStatements();
+    public JsNode visitBlockExpression(@NotNull KtBlockExpression ktBlockExpression, @NotNull TranslationContext context) {
+        List<KtExpression> statements = ktBlockExpression.getStatements();
         JsBlock jsBlock = new JsBlock();
         for (KtExpression statement : statements) {
             JsNode jsNode = Translation.translateExpression(statement, context, jsBlock);
@@ -129,9 +131,9 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
 
     @Override
     public JsNode visitDestructuringDeclaration(@NotNull KtDestructuringDeclaration multiDeclaration, @NotNull TranslationContext context) {
-        KtExpression jetInitializer = multiDeclaration.getInitializer();
-        assert jetInitializer != null : "Initializer for multi declaration must be not null";
-        JsExpression initializer = Translation.translateAsExpression(jetInitializer, context);
+        KtExpression ktInitializer = multiDeclaration.getInitializer();
+        assert ktInitializer != null : "Initializer for multi declaration must be not null";
+        JsExpression initializer = Translation.translateAsExpression(ktInitializer, context);
         JsName parameterName = JsScope.declareTemporary();
         JsVars tempVarDeclaration = JsAstUtils.newVar(parameterName, initializer);
         MetadataProperties.setSynthetic(tempVarDeclaration, true);
@@ -141,31 +143,36 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
 
     @Override
     @NotNull
-    public JsNode visitReturnExpression(@NotNull KtReturnExpression jetReturnExpression, @NotNull TranslationContext context) {
-        KtExpression returned = jetReturnExpression.getReturnedExpression();
+    public JsNode visitReturnExpression(@NotNull KtReturnExpression ktReturnExpression, @NotNull TranslationContext context) {
+        KtExpression returned = ktReturnExpression.getReturnedExpression();
 
         // TODO: add related descriptor to context and use it here
-        KtDeclarationWithBody parent = PsiTreeUtil.getParentOfType(jetReturnExpression, KtDeclarationWithBody.class);
+        KtDeclarationWithBody parent = PsiTreeUtil.getParentOfType(ktReturnExpression, KtDeclarationWithBody.class);
         if (parent instanceof KtSecondaryConstructor) {
             ClassDescriptor classDescriptor = context.getClassDescriptor();
             assert classDescriptor != null : "Missing class descriptor in context while translating constructor: " +
-                    PsiUtilsKt.getTextWithLocation(jetReturnExpression);
+                    PsiUtilsKt.getTextWithLocation(ktReturnExpression);
             JsExpression ref = ReferenceTranslator.translateAsValueReference(classDescriptor.getThisAsReceiverParameter(), context);
-            return new JsReturn(ref.source(jetReturnExpression));
+            return new JsReturn(ref.source(ktReturnExpression));
         }
 
-        FunctionDescriptor returnTarget = getNonLocalReturnTarget(jetReturnExpression, context);
+        FunctionDescriptor returnTarget = getNonLocalReturnTarget(ktReturnExpression, context);
 
         JsReturn jsReturn;
         if (returned == null) {
-            jsReturn = new JsReturn(null);
+            JsExpression returnExpression = null;
+            if (returnTarget != null && KotlinBuiltIns.mayReturnNonUnitValue(returnTarget)) {
+                ClassDescriptor unit = context.getCurrentModule().getBuiltIns().getUnit();
+                returnExpression = ReferenceTranslator.translateAsValueReference(unit, context);
+            }
+            jsReturn = new JsReturn(returnExpression);
         }
         else {
             JsExpression jsReturnExpression = translateAsExpression(returned, context);
 
             KotlinType returnedType = context.bindingContext().getType(returned);
             assert returnedType != null : "Resolved return expression is expected to have type: " +
-                                          PsiUtilsKt.getTextWithLocation(jetReturnExpression);
+                                          PsiUtilsKt.getTextWithLocation(ktReturnExpression);
 
             CallableDescriptor returnTargetOrCurrentFunction = returnTarget;
             if (returnTargetOrCurrentFunction == null) {
@@ -181,7 +188,7 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
 
         MetadataProperties.setReturnTarget(jsReturn, returnTarget);
 
-        return jsReturn.source(jetReturnExpression);
+        return jsReturn.source(ktReturnExpression);
     }
 
     @Nullable
@@ -244,7 +251,7 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
             initializer = PropertyTranslatorKt.translateDelegateOrInitializerExpression(context, expression);
             assert initializer != null : "Initializer must be non-null for property with delegate";
         }
-        else if (isVarCapturedInClosure(context.bindingContext(), descriptor)) {
+        else if (context.isBoxedLocalCapturedInClosure(descriptor)) {
             JsNameRef alias = getCapturedVarAccessor(name.makeRef());
             initializer = JsAstUtils.wrapValue(alias, initializer == null ? new JsNullLiteral() : initializer);
         }
@@ -268,11 +275,13 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
         DoubleColonLHS lhs = context.bindingContext().get(DOUBLE_COLON_LHS, receiverExpression);
         assert lhs != null : "Class literal expression should have LHS resolved";
 
+        ClassifierDescriptor descriptor = lhs.getType().getConstructor().getDeclarationDescriptor();
+
         if (lhs instanceof DoubleColonLHS.Expression && !((DoubleColonLHS.Expression) lhs).isObjectQualifier()) {
             JsExpression receiver = translateAsExpression(receiverExpression, context);
             receiver = TranslationUtils.coerce(context, receiver, context.getCurrentModule().getBuiltIns().getAnyType());
             if (isPrimitiveClassLiteral(lhs.getType())) {
-                JsExpression primitiveExpression = getPrimitiveClass(context, lhs.getType());
+                JsExpression primitiveExpression = getPrimitiveClass(context, descriptor);
                 if (primitiveExpression != null) {
                     return JsAstUtils.newSequence(Arrays.asList(receiver, primitiveExpression));
                 }
@@ -280,54 +289,65 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
             return new JsInvocation(context.namer().kotlin(GET_KCLASS_FROM_EXPRESSION), receiver);
         }
 
-        JsExpression primitiveExpression = getPrimitiveClass(context, lhs.getType());
-        if (primitiveExpression != null) return primitiveExpression;
-        return new JsInvocation(context.getReferenceToIntrinsic(GET_KCLASS), UtilsKt.getReferenceToJsClass(lhs.getType(), context));
+        return getObjectKClass(context, descriptor);
     }
 
-    private static JsExpression getPrimitiveClass(@NotNull TranslationContext context, @NotNull KotlinType type) {
+    @NotNull
+    public static JsExpression getObjectKClass(@NotNull TranslationContext context, @Nullable ClassifierDescriptor descriptor) {
+        JsExpression primitiveExpression = getPrimitiveClass(context, descriptor);
+        if (primitiveExpression != null) return primitiveExpression;
+
+        // getKClass should be imported as intrinsic when used outside of inline context, otherwise bootstrap fails.
+        // Inside an inline function it should however be marked as SpecialFunction to support T::class when T -> Int (KT-32215)
+        JsName kClassName = context.getNameForIntrinsic(SpecialFunction.GET_KCLASS.getSuggestedName());
+        MetadataProperties.setSpecialFunction(kClassName, SpecialFunction.GET_KCLASS);
+
+        return new JsInvocation(kClassName.makeRef(), UtilsKt.getReferenceToJsClass(descriptor, context));
+    }
+
+    @Nullable
+    public static JsExpression getPrimitiveClass(@NotNull TranslationContext context, @Nullable ClassifierDescriptor classifierDescriptor) {
         if (!context.getConfig().isAtLeast(LanguageVersion.KOTLIN_1_2) || findPrimitiveClassesObject(context) == null) return null;
+        if (!(classifierDescriptor instanceof ClassDescriptor)) return null;
+        ClassDescriptor descriptor = (ClassDescriptor) classifierDescriptor;
 
-        ClassifierDescriptor descriptor = type.getConstructor().getDeclarationDescriptor();
-        if (descriptor instanceof ClassDescriptor) {
-            FqName fqName = DescriptorUtilsKt.getFqNameSafe(descriptor);
-            switch (fqName.asString()) {
-                case "kotlin.Boolean":
-                case "kotlin.Byte":
-                case "kotlin.Short":
-                case "kotlin.Int":
-                case "kotlin.Float":
-                case "kotlin.Double":
-                case "kotlin.String":
-                case "kotlin.Array":
-                case "kotlin.Any":
-                case "kotlin.Throwable":
-                case "kotlin.Number":
-                case "kotlin.Nothing":
-                case "kotlin.BooleanArray":
-                case "kotlin.CharArray":
-                case "kotlin.ByteArray":
-                case "kotlin.ShortArray":
-                case "kotlin.IntArray":
-                case "kotlin.LongArray":
-                case "kotlin.FloatArray":
-                case "kotlin.DoubleArray":
-                    return getKotlinPrimitiveClassRef(context, StringUtil.decapitalize(fqName.shortName().asString()) + "Class");
+        FqName fqName = DescriptorUtilsKt.getFqNameSafe(descriptor);
+        switch (fqName.asString()) {
+            case "kotlin.Boolean":
+            case "kotlin.Byte":
+            case "kotlin.Short":
+            case "kotlin.Int":
+            case "kotlin.Float":
+            case "kotlin.Double":
+            case "kotlin.String":
+            case "kotlin.Array":
+            case "kotlin.Any":
+            case "kotlin.Throwable":
+            case "kotlin.Number":
+            case "kotlin.Nothing":
+            case "kotlin.BooleanArray":
+            case "kotlin.CharArray":
+            case "kotlin.ByteArray":
+            case "kotlin.ShortArray":
+            case "kotlin.IntArray":
+            case "kotlin.LongArray":
+            case "kotlin.FloatArray":
+            case "kotlin.DoubleArray":
+                return getKotlinPrimitiveClassRef(context, StringUtil.decapitalize(fqName.shortName().asString()) + "Class");
 
-                default: {
-                    if (descriptor instanceof FunctionClassDescriptor) {
-                        FunctionClassDescriptor functionClassDescriptor = (FunctionClassDescriptor) descriptor;
-                        if (functionClassDescriptor.getFunctionKind() == FunctionClassDescriptor.Kind.Function) {
-                            ClassDescriptor primitivesObject = findPrimitiveClassesObject(context);
-                            assert primitivesObject != null;
-                            FunctionDescriptor function = DescriptorUtils.getFunctionByName(
-                                    primitivesObject.getUnsubstitutedMemberScope(), Name.identifier("functionClass"));
-                            JsExpression functionRef = pureFqn(context.getInlineableInnerNameForDescriptor(function), null);
-                            return new JsInvocation(functionRef, new JsIntLiteral(functionClassDescriptor.getArity()));
-                        }
+            default: {
+                if (descriptor instanceof FunctionClassDescriptor) {
+                    FunctionClassDescriptor functionClassDescriptor = (FunctionClassDescriptor) descriptor;
+                    if (functionClassDescriptor.getFunctionTypeKind() == FunctionTypeKind.Function.INSTANCE) {
+                        ClassDescriptor primitivesObject = findPrimitiveClassesObject(context);
+                        assert primitivesObject != null;
+                        FunctionDescriptor function = DescriptorUtils.getFunctionByName(
+                                primitivesObject.getUnsubstitutedMemberScope(), Name.identifier("functionClass"));
+                        JsExpression functionRef = pureFqn(context.getInlineableInnerNameForDescriptor(function), null);
+                        return new JsInvocation(functionRef, new JsIntLiteral(functionClassDescriptor.getArity()));
                     }
-                    break;
                 }
+                break;
             }
         }
         return null;

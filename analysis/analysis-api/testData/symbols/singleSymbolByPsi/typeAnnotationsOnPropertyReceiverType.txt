@@ -1,0 +1,116 @@
+KtKotlinPropertySymbol:
+  annotationsList: []
+  backingFieldSymbol: KtBackingFieldSymbol:
+    annotationsList: []
+    callableIdIfNonLocal: null
+    contextReceivers: []
+    isExtension: false
+    name: field
+    origin: PROPERTY_BACKING_FIELD
+    owningProperty: KtKotlinPropertySymbol(/foo)
+    receiverParameter: null
+    returnType: KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: kotlin/Int
+    symbolKind: LOCAL
+    typeParameters: []
+    getContainingFileSymbol: KtFileSymbol(typeAnnotationsOnPropertyReceiverType.kt)
+    getContainingJvmClassName: TypeAnnotationsOnPropertyReceiverTypeKt
+    getContainingModule: KtSourceModule "Sources of main"
+    deprecationStatus: null
+  callableIdIfNonLocal: /foo
+  contextReceivers: []
+  getter: KtPropertyGetterSymbol:
+    annotationsList: []
+    callableIdIfNonLocal: null
+    contextReceivers: []
+    hasBody: false
+    hasStableParameterNames: true
+    isDefault: true
+    isExtension: false
+    isInline: false
+    isOverride: false
+    modality: FINAL
+    origin: SOURCE
+    receiverParameter: KtReceiverParameterSymbol:
+      annotationsList: []
+      origin: SOURCE
+      owningCallableSymbol: KtKotlinPropertySymbol(/foo)
+      type: KtUsualClassType:
+        annotationsList: [
+          Anno1()
+            psi: KtAnnotationEntry
+          Anno2()
+            psi: KtAnnotationEntry
+          Anno3()
+            psi: KtAnnotationEntry
+        ]
+        ownTypeArguments: []
+        type: @R|Anno1|()  @R|Anno2|()  @R|Anno3|()  BaseInterface
+      getContainingFileSymbol: KtFileSymbol(typeAnnotationsOnPropertyReceiverType.kt)
+      getContainingModule: KtSourceModule "Sources of main"
+      deprecationStatus: null
+    returnType: KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: kotlin/Int
+    symbolKind: ACCESSOR
+    typeParameters: []
+    valueParameters: []
+    visibility: Public
+    getContainingFileSymbol: KtFileSymbol(typeAnnotationsOnPropertyReceiverType.kt)
+    getContainingJvmClassName: TypeAnnotationsOnPropertyReceiverTypeKt
+    getContainingModule: KtSourceModule "Sources of main"
+    deprecationStatus: null
+  hasBackingField: true
+  hasGetter: true
+  hasSetter: false
+  initializer: null
+  isActual: false
+  isConst: false
+  isDelegatedProperty: false
+  isExpect: false
+  isExtension: true
+  isFromPrimaryConstructor: false
+  isLateInit: false
+  isOverride: false
+  isStatic: false
+  isVal: true
+  modality: FINAL
+  name: foo
+  origin: SOURCE
+  receiverParameter: KtReceiverParameterSymbol:
+    annotationsList: []
+    origin: SOURCE
+    owningCallableSymbol: KtKotlinPropertySymbol(/foo)
+    type: KtUsualClassType:
+      annotationsList: [
+        Anno1()
+          psi: KtAnnotationEntry
+        Anno2()
+          psi: KtAnnotationEntry
+        Anno3()
+          psi: KtAnnotationEntry
+      ]
+      ownTypeArguments: []
+      type: @R|Anno1|()  @R|Anno2|()  @R|Anno3|()  BaseInterface
+    getContainingFileSymbol: KtFileSymbol(typeAnnotationsOnPropertyReceiverType.kt)
+    getContainingModule: KtSourceModule "Sources of main"
+    deprecationStatus: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: kotlin/Int
+  setter: null
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(typeAnnotationsOnPropertyReceiverType.kt)
+  getContainingJvmClassName: TypeAnnotationsOnPropertyReceiverTypeKt
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null
+  getterDeprecationStatus: null
+  javaGetterName: getFoo
+  javaSetterName: null
+  setterDeprecationStatus: null

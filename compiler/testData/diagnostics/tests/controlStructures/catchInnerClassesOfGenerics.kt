@@ -1,5 +1,6 @@
-// !LANGUAGE: +ProhibitInnerClassesOfGenericClassExtendingThrowable
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// FIR_IDENTICAL
+// LANGUAGE: +ProhibitInnerClassesOfGenericClassExtendingThrowable
+// DIAGNOSTICS: -UNUSED_VARIABLE
 // JAVAC_EXPECTED_FILE
 
 class OuterGeneric<T> {

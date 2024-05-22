@@ -1,11 +1,13 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.tools.tests
 
-import org.jetbrains.kotlin.tools.*
+import kotlinx.validation.api.filterOutAnnotated
+import kotlinx.validation.api.filterOutNonPublic
+import kotlinx.validation.api.loadApiFromJvmClasses
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestName
@@ -17,12 +19,8 @@ class RuntimePublicAPITest {
     @[Rule JvmField]
     val testName = TestName()
 
-    @Test fun kotlinRuntime() {
-        snapshotAPIAndCompare("../../stdlib/runtime/build/libs", "kotlin-runtime", listOf("kotlin.jvm.internal"))
-    }
-
     @Test fun kotlinStdlibRuntimeMerged() {
-        snapshotAPIAndCompare("../../stdlib/jvm/build/libs", "kotlin-stdlib", listOf("kotlin.jvm.internal"))
+        snapshotAPIAndCompare("../../stdlib/build/libs", "kotlin-stdlib", listOf("kotlin.jvm.internal"))
     }
 
     @Test fun kotlinStdlibJdk7() {
@@ -33,24 +31,16 @@ class RuntimePublicAPITest {
         snapshotAPIAndCompare("../../stdlib/jdk8/build/libs", "kotlin-stdlib-jdk8")
     }
 
-    @Test fun kotlinStdlibJre7() {
-        snapshotAPIAndCompare("../../stdlib/jre7/build/libs", "kotlin-stdlib-jre7")
-    }
-
-    @Test fun kotlinStdlibJre8() {
-        snapshotAPIAndCompare("../../stdlib/jre8/build/libs", "kotlin-stdlib-jre8")
-    }
-
     @Test fun kotlinReflect() {
         snapshotAPIAndCompare("../../reflect/api/build/libs", "kotlin-reflect-api(?!-[-a-z]+)", nonPublicPackages = listOf("kotlin.reflect.jvm.internal"))
     }
-
 
     private fun snapshotAPIAndCompare(
         basePath: String,
         jarPattern: String,
         publicPackages: List<String> = emptyList(),
-        nonPublicPackages: List<String> = emptyList()
+        nonPublicPackages: List<String> = emptyList(),
+        nonPublicAnnotations: List<String> = emptyList()
     ) {
         val base = File(basePath).absoluteFile.normalize()
         val jarFile = getJarPath(base, jarPattern, System.getProperty("kotlinVersion"))
@@ -58,8 +48,9 @@ class RuntimePublicAPITest {
         val publicPackagePrefixes = publicPackages.map { it.replace('.', '/') + '/' }
         val publicPackageFilter = { className: String -> publicPackagePrefixes.none { className.startsWith(it) } }
 
-        println("Reading binary API from $jarFile")
-        val api = getBinaryAPI(JarFile(jarFile), publicPackageFilter).filterOutNonPublic(nonPublicPackages)
+        val api = JarFile(jarFile).loadApiFromJvmClasses(publicPackageFilter)
+            .filterOutNonPublic(nonPublicPackages)
+            .filterOutAnnotated(nonPublicAnnotations.toSet())
 
         val target = File("reference-public-api")
             .resolve(testName.methodName.replaceCamelCaseWithDashedLowerCase() + ".txt")
@@ -80,4 +71,3 @@ class RuntimePublicAPITest {
     }
 
 }
-

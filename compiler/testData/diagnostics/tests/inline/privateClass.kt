@@ -1,4 +1,6 @@
-// !DIAGNOSTICS: -EXPOSED_PARAMETER_TYPE
+// FIR_IDENTICAL
+// FIR_IDENTICAL
+// DIAGNOSTICS: -EXPOSED_PARAMETER_TYPE
 
 private class S public constructor() {
     fun a() {

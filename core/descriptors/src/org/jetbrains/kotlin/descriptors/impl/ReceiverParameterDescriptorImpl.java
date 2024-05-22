@@ -19,13 +19,32 @@ package org.jetbrains.kotlin.descriptors.impl;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
 import org.jetbrains.kotlin.descriptors.ReceiverParameterDescriptor;
+import org.jetbrains.kotlin.descriptors.annotations.Annotations;
+import org.jetbrains.kotlin.name.Name;
+import org.jetbrains.kotlin.name.SpecialNames;
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue;
+import org.jetbrains.kotlin.types.KotlinType;
+import org.jetbrains.kotlin.types.typeUtil.TypeUtilsKt;
 
 public class ReceiverParameterDescriptorImpl extends AbstractReceiverParameterDescriptor {
     private final DeclarationDescriptor containingDeclaration;
-    private final ReceiverValue value;
+    private ReceiverValue value;
 
-    public ReceiverParameterDescriptorImpl(@NotNull DeclarationDescriptor containingDeclaration, @NotNull ReceiverValue value) {
+    public ReceiverParameterDescriptorImpl(
+            @NotNull DeclarationDescriptor containingDeclaration,
+            @NotNull ReceiverValue value,
+            @NotNull Annotations annotations
+    ) {
+        this(containingDeclaration, value, annotations, SpecialNames.THIS);
+    }
+
+    public ReceiverParameterDescriptorImpl(
+            @NotNull DeclarationDescriptor containingDeclaration,
+            @NotNull ReceiverValue value,
+            @NotNull Annotations annotations,
+            @NotNull Name name
+    ) {
+        super(annotations, name);
         this.containingDeclaration = containingDeclaration;
         this.value = value;
     }
@@ -40,5 +59,16 @@ public class ReceiverParameterDescriptorImpl extends AbstractReceiverParameterDe
     @Override
     public DeclarationDescriptor getContainingDeclaration() {
         return containingDeclaration;
+    }
+
+    @NotNull
+    @Override
+    public ReceiverParameterDescriptor copy(@NotNull DeclarationDescriptor newOwner) {
+        return new ReceiverParameterDescriptorImpl(newOwner, value, getAnnotations());
+    }
+
+    public void setOutType(@NotNull KotlinType outType) {
+        assert TypeUtilsKt.shouldBeUpdated(this.value.getType());
+        this.value = value.replaceType(outType);
     }
 }

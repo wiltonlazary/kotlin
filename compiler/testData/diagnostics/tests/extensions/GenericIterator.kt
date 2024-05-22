@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 import java.util.Enumeration
 
 fun <T> java.util.Enumeration<T>.iterator() = object: Iterator<T> {
@@ -27,7 +28,7 @@ operator fun <T : Any> T?.iterator() = object : MyIterator<T> {
     }
 }
 
-fun main(args : Array<String>) {
+fun main() {
   val i : Int? = 1
   for (x in i) {
     System.out.println(x)

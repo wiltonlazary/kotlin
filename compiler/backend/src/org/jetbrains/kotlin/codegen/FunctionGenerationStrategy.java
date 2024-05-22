@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen;
@@ -27,6 +27,10 @@ public abstract class FunctionGenerationStrategy {
     );
 
     public abstract boolean skipNotNullAssertionsForParameters();
+
+    public boolean skipGenericSignature() {
+        return false;
+    }
 
     public MethodVisitor wrapMethodVisitor(@NotNull MethodVisitor mv, int access, @NotNull String name, @NotNull String desc) {
         return mv;
@@ -77,7 +81,12 @@ public abstract class FunctionGenerationStrategy {
                 @NotNull MemberCodegen<?> parentCodegen
         ) {
             ExpressionCodegen codegen = new ExpressionCodegen(mv, frameMap, signature.getReturnType(), context, state, parentCodegen);
-            doGenerateBody(codegen, signature);
+            state.getGlobalInlineContext().enterDeclaration(context.getFunctionDescriptor());
+            try {
+                doGenerateBody(codegen, signature);
+            } finally {
+                state.getGlobalInlineContext().exitDeclaration();
+            }
         }
 
         @Override

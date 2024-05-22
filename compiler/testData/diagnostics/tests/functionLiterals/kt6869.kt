@@ -1,4 +1,5 @@
-fun main(args : Array<String>) {
+// FIR_IDENTICAL
+fun main() {
     var list = listOf(1)
 
     val a: Int? = 2
@@ -6,5 +7,5 @@ fun main(args : Array<String>) {
     a?.let { list += it }
 }
 
-operator fun <T> Iterable<T>.plus(<!UNUSED_PARAMETER!>element<!>: T): List<T> = null!!
-fun <T> listOf(vararg <!UNUSED_PARAMETER!>values<!>: T): List<T> = null!!
+operator fun <T> Iterable<T>.plus(element: T): List<T> = null!!
+fun <T> listOf(vararg values: T): List<T> = null!!

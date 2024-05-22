@@ -1,5 +1,6 @@
-// EXPECTED_ERROR class J$B is public, should be declared in a file named J$B.java
-// EXPECTED_ERROR class JavaClass is public, should be declared in a file named JavaClass.java
+// FIR_BLOCKED: LC don't support names with $
+// EXPECTED_ERROR: class J$B is public, should be declared in a file named J$B.java
+// EXPECTED_ERROR: class JavaClass is public, should be declared in a file named JavaClass.java
 
 // FILE: JavaClass.java
 public class JavaClass {
@@ -8,7 +9,7 @@ public class JavaClass {
     }
 }
 
-//FILE: J$B.java
+// FILE: J$B.java
 public class J$B {
     public class C {}
 
@@ -35,7 +36,7 @@ class Experiment {
     annotation class Type
 
     @Type
-    data class Group(s: String)
+    data class Group(var s: String)
 }
 
 class Foo {

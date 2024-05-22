@@ -1,5 +1,6 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER -UNUSED_ANONYMOUS_PARAMETER -UNUSED_VARIABLE
-// !CHECK_TYPE
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER -UNUSED_ANONYMOUS_PARAMETER -UNUSED_VARIABLE
+// CHECK_TYPE
 fun foo(block: () -> (() -> Int)) {}
 
 fun test() {
@@ -39,5 +40,5 @@ fun test() {
 
     x4 checkType { _<Function1<Int, Function0<Int>>>() }
 
-    <!UNUSED_LAMBDA_EXPRESSION!>{ y: Int -> fun(): Int {return 1} }<!>
+    { y: Int -> fun(): Int {return 1} }
 }

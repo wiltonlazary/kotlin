@@ -1,4 +1,4 @@
-// !LANGUAGE: +MultiPlatformProjects
+// FIR_IDENTICAL
 // MODULE: m1-common
 // FILE: common.kt
 
@@ -8,7 +8,7 @@ expect class A {
     fun <S : Comparable<S>> bar(): List<S>
 }
 
-// MODULE: m2-jvm(m1-common)
+// MODULE: m2-jvm()()(m1-common)
 // FILE: jvm.kt
 
 actual typealias A = JavaA

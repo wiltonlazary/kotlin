@@ -31,19 +31,22 @@ import org.jetbrains.kotlin.resolve.scopes.flatMapClassifierNamesOrNull
 import org.jetbrains.kotlin.storage.getValue
 import org.jetbrains.kotlin.util.collectionUtils.getFirstClassifierDiscriminateHeaders
 import org.jetbrains.kotlin.util.collectionUtils.getFromAllScopes
+import org.jetbrains.kotlin.util.collectionUtils.listOfNonEmptyScopes
 import org.jetbrains.kotlin.utils.Printer
 
 class JvmPackageScope(
-        private val c: LazyJavaResolverContext,
-        jPackage: JavaPackage,
-        private val packageFragment: LazyJavaPackageFragment
-): MemberScope {
+    private val c: LazyJavaResolverContext,
+    jPackage: JavaPackage,
+    private val packageFragment: LazyJavaPackageFragment
+) : MemberScope {
     internal val javaScope = LazyJavaPackageScope(c, jPackage, packageFragment)
 
     private val kotlinScopes by c.storageManager.createLazyValue {
-        packageFragment.binaryClasses.values.mapNotNull { partClass ->
-            c.components.deserializedDescriptorResolver.createKotlinPackagePartScope(packageFragment, partClass)
-        }.toList()
+        listOfNonEmptyScopes(
+            packageFragment.binaryClasses.values.mapNotNull { partClass ->
+                c.components.deserializedDescriptorResolver.createKotlinPackagePartScope(packageFragment, partClass)
+            }
+        ).toTypedArray()
     }
 
     override fun getContributedClassifier(name: Name, location: LookupLocation): ClassifierDescriptor? {
@@ -66,18 +69,19 @@ class JvmPackageScope(
     }
 
     override fun getContributedDescriptors(
-            kindFilter: DescriptorKindFilter, nameFilter: (Name) -> Boolean
+        kindFilter: DescriptorKindFilter, nameFilter: (Name) -> Boolean
     ): Collection<DeclarationDescriptor> =
-            getFromAllScopes(javaScope, kotlinScopes) { it.getContributedDescriptors(kindFilter, nameFilter) }
+        getFromAllScopes(javaScope, kotlinScopes) { it.getContributedDescriptors(kindFilter, nameFilter) }
 
     override fun getFunctionNames() = kotlinScopes.flatMapTo(mutableSetOf()) { it.getFunctionNames() }.apply {
         addAll(javaScope.getFunctionNames())
     }
+
     override fun getVariableNames() = kotlinScopes.flatMapTo(mutableSetOf()) { it.getVariableNames() }.apply {
         addAll(javaScope.getVariableNames())
     }
 
-    override fun getClassifierNames(): Set<Name>? = kotlinScopes.flatMapClassifierNamesOrNull()?.apply {
+    override fun getClassifierNames(): Set<Name>? = kotlinScopes.asIterable().flatMapClassifierNamesOrNull()?.apply {
         addAll(javaScope.getClassifierNames())
     }
 
@@ -99,4 +103,6 @@ class JvmPackageScope(
     override fun recordLookup(name: Name, location: LookupLocation) {
         c.components.lookupTracker.record(location, packageFragment, name)
     }
+
+    override fun toString(): String = "scope for $packageFragment"
 }

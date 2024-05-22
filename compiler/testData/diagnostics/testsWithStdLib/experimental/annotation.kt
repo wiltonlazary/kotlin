@@ -1,17 +1,20 @@
-// !USE_EXPERIMENTAL: kotlin.Experimental
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// OPT_IN: kotlin.RequiresOptIn
+// DIAGNOSTICS: -UNUSED_PARAMETER
 // FILE: api.kt
 
 package api
 
-@Experimental(Experimental.Level.WARNING)
-@Target(AnnotationTarget.TYPE, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY, AnnotationTarget.TYPEALIAS,
+@RequiresOptIn(level = RequiresOptIn.Level.WARNING)
+@Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY, AnnotationTarget.TYPEALIAS,
         AnnotationTarget.VALUE_PARAMETER)
+@Retention(AnnotationRetention.BINARY)
 annotation class ExperimentalAPI
 
 @ExperimentalAPI
-@Target(AnnotationTarget.TYPE, AnnotationTarget.CLASS, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY, AnnotationTarget.TYPEALIAS,
+@Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY, AnnotationTarget.TYPEALIAS,
         AnnotationTarget.VALUE_PARAMETER)
+@Retention(AnnotationRetention.BINARY)
 annotation class EAnno
 
 // FILE: usage-propagate.kt
@@ -27,10 +30,10 @@ import api.*
 fun parameter(@EAnno p: String) {}
 
 @ExperimentalAPI
-fun parameterType(p: @EAnno String) {}
+fun parameterType(p: <!WRONG_ANNOTATION_TARGET!>@EAnno<!> String) {}
 
 @ExperimentalAPI
-fun returnType(): @EAnno Unit {}
+fun returnType(): <!WRONG_ANNOTATION_TARGET!>@EAnno<!> Unit {}
 
 @ExperimentalAPI
 @EAnno val property = ""
@@ -65,41 +68,41 @@ package usage2
 
 import api.*
 
-@UseExperimental(ExperimentalAPI::class)
+@OptIn(ExperimentalAPI::class)
 @EAnno fun function() {}
 
-@UseExperimental(ExperimentalAPI::class)
+@OptIn(ExperimentalAPI::class)
 fun parameter(@EAnno p: String) {}
 
-@UseExperimental(ExperimentalAPI::class)
-fun parameterType(p: @EAnno String) {}
+@OptIn(ExperimentalAPI::class)
+fun parameterType(p: <!WRONG_ANNOTATION_TARGET!>@EAnno<!> String) {}
 
-@UseExperimental(ExperimentalAPI::class)
-fun returnType(): @EAnno Unit {}
+@OptIn(ExperimentalAPI::class)
+fun returnType(): <!WRONG_ANNOTATION_TARGET!>@EAnno<!> Unit {}
 
-@UseExperimental(ExperimentalAPI::class)
+@OptIn(ExperimentalAPI::class)
 @EAnno val property = ""
 
-@UseExperimental(ExperimentalAPI::class)
+@OptIn(ExperimentalAPI::class)
 @EAnno typealias Typealias = Unit
 
-@UseExperimental(ExperimentalAPI::class)
+@OptIn(ExperimentalAPI::class)
 @EAnno class Klass
 
-@UseExperimental(ExperimentalAPI::class)
+@OptIn(ExperimentalAPI::class)
 annotation class AnnotationArgument(val p: EAnno)
 
 fun insideBody() {
-    @UseExperimental(ExperimentalAPI::class) @EAnno fun local() {}
+    @OptIn(ExperimentalAPI::class) @EAnno fun local() {}
 }
 
-fun inDefaultArgument(@UseExperimental(ExperimentalAPI::class) f: () -> Unit = @EAnno fun() {}) {}
+fun inDefaultArgument(@OptIn(ExperimentalAPI::class) f: () -> Unit = @EAnno fun() {}) {}
 
-@UseExperimental(ExperimentalAPI::class)
+@OptIn(ExperimentalAPI::class)
 val inProperty = @EAnno fun() {}
 
 val inPropertyAccessor: () -> Unit
-    @UseExperimental(ExperimentalAPI::class)
+    @OptIn(ExperimentalAPI::class)
     get() = @EAnno fun() {}
 
 // FILE: usage-none.kt
@@ -108,29 +111,29 @@ package usage3
 
 import api.*
 
-@<!EXPERIMENTAL_API_USAGE!>EAnno<!> fun function() {}
+@<!OPT_IN_USAGE!>EAnno<!> fun function() {}
 
-fun parameter(@<!EXPERIMENTAL_API_USAGE!>EAnno<!> p: String) {}
+fun parameter(@<!OPT_IN_USAGE!>EAnno<!> p: String) {}
 
-fun parameterType(p: @<!EXPERIMENTAL_API_USAGE!>EAnno<!> String) {}
+fun parameterType(p: <!WRONG_ANNOTATION_TARGET!>@<!OPT_IN_USAGE!>EAnno<!><!> String) {}
 
-fun returnType(): @<!EXPERIMENTAL_API_USAGE!>EAnno<!> Unit {}
+fun returnType(): <!WRONG_ANNOTATION_TARGET!>@<!OPT_IN_USAGE!>EAnno<!><!> Unit {}
 
-@<!EXPERIMENTAL_API_USAGE!>EAnno<!> val property = ""
+@<!OPT_IN_USAGE!>EAnno<!> val property = ""
 
-@<!EXPERIMENTAL_API_USAGE!>EAnno<!> typealias Typealias = Unit
+@<!OPT_IN_USAGE!>EAnno<!> typealias Typealias = Unit
 
-@<!EXPERIMENTAL_API_USAGE!>EAnno<!> class Klass
+@<!OPT_IN_USAGE!>EAnno<!> class Klass
 
-annotation class AnnotationArgument(val p: <!EXPERIMENTAL_API_USAGE!>EAnno<!>)
+annotation class AnnotationArgument(val p: <!OPT_IN_USAGE!>EAnno<!>)
 
 fun insideBody() {
-    @<!EXPERIMENTAL_API_USAGE!>EAnno<!> fun local() {}
+    @<!OPT_IN_USAGE!>EAnno<!> fun local() {}
 }
 
-fun inDefaultArgument(f: () -> Unit = @<!EXPERIMENTAL_API_USAGE!>EAnno<!> fun() {}) {}
+fun inDefaultArgument(f: () -> Unit = @<!OPT_IN_USAGE!>EAnno<!> fun() {}) {}
 
-val inProperty = @<!EXPERIMENTAL_API_USAGE!>EAnno<!> fun() {}
+val inProperty = @<!OPT_IN_USAGE!>EAnno<!> fun() {}
 
 val inPropertyAccessor: () -> Unit
-    get() = @<!EXPERIMENTAL_API_USAGE!>EAnno<!> fun() {}
+    get() = @<!OPT_IN_USAGE!>EAnno<!> fun() {}

@@ -46,8 +46,9 @@
 
 package org.jetbrains.kotlin.codegen.inline;
 
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.utils.SmartSet;
+import org.jetbrains.kotlin.utils.SmartIdentityTable;
 import org.jetbrains.org.objectweb.asm.*;
 
 import java.util.*;
@@ -61,6 +62,7 @@ import java.util.*;
  */
 public class MaxStackFrameSizeAndLocalsCalculator extends MaxLocalsCalculator {
     private static final int[] FRAME_SIZE_CHANGE_BY_OPCODE;
+
     static {
         // copy-pasted from org.jetbrains.org.objectweb.asm.Frame
         int i;
@@ -105,7 +107,7 @@ public class MaxStackFrameSizeAndLocalsCalculator extends MaxLocalsCalculator {
     private int maxStack;
 
     private final Collection<ExceptionHandler> exceptionHandlers = new LinkedList<>();
-    private final Map<Label, LabelWrapper> labelWrappersMap = new HashMap<>();
+    private final SmartIdentityTable<Label, LabelWrapper> labelWrappersTable = new SmartIdentityTable<>();
 
     public MaxStackFrameSizeAndLocalsCalculator(int api, int access, String descriptor, MethodVisitor mv) {
         super(api, access, descriptor, mv);
@@ -314,6 +316,10 @@ public class MaxStackFrameSizeAndLocalsCalculator extends MaxLocalsCalculator {
             LabelWrapper e = handler.end;
 
             while (l != e) {
+                if (l == null) {
+                    throw new IllegalStateException("Bad exception handler end");
+                }
+
                 l.addSuccessor(handler.handlerLabel, 0, true);
                 l = l.nextLabel;
             }
@@ -371,7 +377,7 @@ public class MaxStackFrameSizeAndLocalsCalculator extends MaxLocalsCalculator {
             @NotNull Label handler, String type
     ) {
         ExceptionHandler exceptionHandler = new ExceptionHandler(
-            getLabelWrapper(start), getLabelWrapper(end), getLabelWrapper(handler)
+                getLabelWrapper(start), getLabelWrapper(end), getLabelWrapper(handler)
         );
 
         exceptionHandlers.add(exceptionHandler);
@@ -412,14 +418,30 @@ public class MaxStackFrameSizeAndLocalsCalculator extends MaxLocalsCalculator {
         private LabelWrapper nextLabel = null;
         private final Collection<ControlFlowEdge> successors = new LinkedList<>();
 
+        private final int index;
         private int outputStackMax = 0;
         private int inputStackSize = 0;
-        public LabelWrapper(Label label) {
+
+        public LabelWrapper(Label label, int index) {
             this.label = label;
+            this.index = index;
         }
 
         private void addSuccessor(LabelWrapper successor, int outputStackSize, boolean isExceptional) {
             successors.add(new ControlFlowEdge(successor, outputStackSize, isExceptional));
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            LabelWrapper wrapper = (LabelWrapper) o;
+            return index == wrapper.index;
+        }
+
+        @Override
+        public int hashCode() {
+            return index;
         }
     }
 
@@ -428,7 +450,7 @@ public class MaxStackFrameSizeAndLocalsCalculator extends MaxLocalsCalculator {
     // ------------------------------------------------------------------------
 
     private LabelWrapper getLabelWrapper(Label label) {
-        return ContainerUtil.<Label, LabelWrapper>getOrCreate(labelWrappersMap, label, () -> new LabelWrapper(label));
+        return labelWrappersTable.getOrCreate(label, () -> new LabelWrapper(label, labelWrappersTable.getSize()));
     }
 
     private void increaseStackSize(int variation) {

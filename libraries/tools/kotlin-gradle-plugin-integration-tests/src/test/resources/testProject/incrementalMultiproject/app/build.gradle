@@ -1,5 +1,8 @@
-apply plugin: 'kotlin'
+plugins {
+    id "org.jetbrains.kotlin.jvm"
+    // kapt-plugin marker
+}
 
 dependencies {
-    compile project(':lib')
+    implementation project(':lib')
 }

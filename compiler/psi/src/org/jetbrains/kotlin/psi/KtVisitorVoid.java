@@ -145,6 +145,10 @@ public class KtVisitorVoid extends KtVisitor<Void, Void> {
         super.visitSuperTypeEntry(specifier, null);
     }
 
+    public void visitContextReceiverList(@NotNull KtContextReceiverList contextReceiverList) {
+        super.visitContextReceiverList(contextReceiverList, null);
+    }
+
     public void visitConstructorDelegationCall(@NotNull KtConstructorDelegationCall call) {
         super.visitConstructorDelegationCall(call, null);
     }
@@ -385,12 +389,16 @@ public class KtVisitorVoid extends KtVisitor<Void, Void> {
         super.visitNullableType(nullableType, null);
     }
 
+    public void visitIntersectionType(@NotNull KtIntersectionType intersectionType) {
+        super.visitIntersectionType(intersectionType, null);
+    }
+
     public void visitTypeProjection(@NotNull KtTypeProjection typeProjection) {
         super.visitTypeProjection(typeProjection, null);
     }
 
-    public void visitWhenEntry(@NotNull KtWhenEntry jetWhenEntry) {
-        super.visitWhenEntry(jetWhenEntry, null);
+    public void visitWhenEntry(@NotNull KtWhenEntry ktWhenEntry) {
+        super.visitWhenEntry(ktWhenEntry, null);
     }
 
     public void visitIsExpression(@NotNull KtIsExpression expression) {
@@ -757,6 +765,12 @@ public class KtVisitorVoid extends KtVisitor<Void, Void> {
     }
 
     @Override
+    public final Void visitCollectionLiteralExpression(@NotNull KtCollectionLiteralExpression expression, Void data) {
+        visitCollectionLiteralExpression(expression);
+        return null;
+    }
+
+    @Override
     public final Void visitTryExpression(@NotNull KtTryExpression expression, Void data) {
         visitTryExpression(expression);
         return null;
@@ -967,14 +981,20 @@ public class KtVisitorVoid extends KtVisitor<Void, Void> {
     }
 
     @Override
+    public Void visitIntersectionType(@NotNull KtIntersectionType intersectionType, Void data) {
+        visitIntersectionType(intersectionType);
+        return null;
+    }
+
+    @Override
     public final Void visitTypeProjection(@NotNull KtTypeProjection typeProjection, Void data) {
         visitTypeProjection(typeProjection);
         return null;
     }
 
     @Override
-    public final Void visitWhenEntry(@NotNull KtWhenEntry jetWhenEntry, Void data) {
-        visitWhenEntry(jetWhenEntry);
+    public final Void visitWhenEntry(@NotNull KtWhenEntry ktWhenEntry, Void data) {
+        visitWhenEntry(ktWhenEntry);
         return null;
     }
 

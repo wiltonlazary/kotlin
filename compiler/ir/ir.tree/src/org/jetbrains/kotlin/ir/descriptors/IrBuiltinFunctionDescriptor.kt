@@ -35,6 +35,7 @@ abstract class IrBuiltinOperatorDescriptorBase(containingDeclaration: Declaratio
     IrBuiltinOperatorDescriptor {
     override fun getDispatchReceiverParameter(): ReceiverParameterDescriptor? = null
     override fun getExtensionReceiverParameter(): ReceiverParameterDescriptor? = null
+    override fun getContextReceiverParameters(): List<ReceiverParameterDescriptor> = emptyList()
     override fun getOriginal(): SimpleFunctionDescriptor = this
     override fun substitute(substitutor: TypeSubstitutor): FunctionDescriptor = throw UnsupportedOperationException()
     override fun getOverriddenDescriptors(): Collection<FunctionDescriptor> = emptyList()
@@ -42,12 +43,12 @@ abstract class IrBuiltinOperatorDescriptorBase(containingDeclaration: Declaratio
         throw UnsupportedOperationException()
 
     override fun getTypeParameters(): List<TypeParameterDescriptor> = emptyList()
-    override fun getVisibility(): Visibility = Visibilities.PUBLIC
+    override fun getVisibility(): DescriptorVisibility = DescriptorVisibilities.PUBLIC
     override fun getModality(): Modality = Modality.FINAL
     override fun getKind(): CallableMemberDescriptor.Kind = CallableMemberDescriptor.Kind.SYNTHESIZED
     override fun getInitialSignatureDescriptor(): FunctionDescriptor? = null
     override fun isExternal(): Boolean = false
-    override fun <V : Any> getUserData(key: FunctionDescriptor.UserDataKey<V>?): V? = null
+    override fun <V : Any> getUserData(key: CallableDescriptor.UserDataKey<V>?): V? = null
     override fun isHiddenForResolutionEverywhereBesideSupercalls(): Boolean = false
     override fun isHiddenToOvercomeSignatureClash(): Boolean = false
     override fun isInfix(): Boolean = false
@@ -61,8 +62,8 @@ abstract class IrBuiltinOperatorDescriptorBase(containingDeclaration: Declaratio
     override fun hasSynthesizedParameterNames(): Boolean = false
 
     override fun copy(
-        newOwner: DeclarationDescriptor?, modality: Modality?, visibility: Visibility?,
-        kind: CallableMemberDescriptor.Kind?, copyOverrides: Boolean
+            newOwner: DeclarationDescriptor?, modality: Modality?, visibility: DescriptorVisibility?,
+            kind: CallableMemberDescriptor.Kind?, copyOverrides: Boolean
     ) =
         throw UnsupportedOperationException()
 
@@ -87,6 +88,18 @@ class IrSimpleBuiltinOperatorDescriptorImpl(
 
     override fun getReturnType(): KotlinType = returnType
     override fun getValueParameters(): List<ValueParameterDescriptor> = valueParameters
+
+    override fun equals(other: Any?): Boolean {
+        return this === other ||
+                other is IrSimpleBuiltinOperatorDescriptorImpl &&
+                name == other.name &&
+                valueParameters.map { it.type } == other.valueParameters.map { it.type } &&
+                containingDeclaration == other.containingDeclaration
+    }
+
+    override fun hashCode(): Int {
+        return (containingDeclaration.hashCode() * 31 + name.hashCode()) * 31 + valueParameters.map { it.type }.hashCode()
+    }
 }
 
 class IrBuiltinValueParameterDescriptorImpl(
@@ -106,8 +119,9 @@ class IrBuiltinValueParameterDescriptorImpl(
     override val isNoinline: Boolean get() = false
     override val varargElementType: KotlinType? get() = null
     override fun getCompileTimeInitializer(): ConstantValue<*>? = null
+    override fun cleanCompileTimeInitializerCache() {}
     override fun isVar(): Boolean = false
-    override fun getVisibility(): Visibility = Visibilities.LOCAL
+    override fun getVisibility(): DescriptorVisibility = DescriptorVisibilities.LOCAL
 
     override fun copy(newOwner: CallableDescriptor, newName: Name, newIndex: Int): ValueParameterDescriptor =
         throw UnsupportedOperationException()
@@ -117,5 +131,18 @@ class IrBuiltinValueParameterDescriptorImpl(
 
     override fun <R : Any?, D : Any?> accept(visitor: DeclarationDescriptorVisitor<R, D>, data: D): R {
         return visitor.visitValueParameterDescriptor(this, data)
+    }
+
+    override fun equals(other: Any?): Boolean {
+        return this === other ||
+                other is IrBuiltinValueParameterDescriptorImpl &&
+                name == other.name &&
+                index == other.index &&
+                type == other.type &&
+                containingDeclaration == other.containingDeclaration
+    }
+
+    override fun hashCode(): Int {
+        return (name.hashCode() * 31 + index) * 31 + type.hashCode()
     }
 }

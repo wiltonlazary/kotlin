@@ -1,5 +1,3 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-
 object A {
     const val a: String = "$"
     const val b = "1234$a"

@@ -1,10 +1,11 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.descriptors.impl;
 
+import kotlin.Pair;
 import kotlin.collections.CollectionsKt;
 import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
@@ -12,24 +13,28 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
 import org.jetbrains.kotlin.name.Name;
+import org.jetbrains.kotlin.resolve.DescriptorUtils;
+import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
 import org.jetbrains.kotlin.resolve.scopes.MemberScope;
 import org.jetbrains.kotlin.resolve.scopes.SubstitutingScope;
 import org.jetbrains.kotlin.storage.LockBasedStorageManager;
 import org.jetbrains.kotlin.types.*;
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
-public class LazySubstitutingClassDescriptor implements ClassDescriptor {
-    private final ClassDescriptor original;
+public class LazySubstitutingClassDescriptor extends ModuleAwareClassDescriptor {
+    private final ModuleAwareClassDescriptor original;
     private final TypeSubstitutor originalSubstitutor;
     private TypeSubstitutor newSubstitutor;
     private List<TypeParameterDescriptor> typeConstructorParameters;
     private List<TypeParameterDescriptor> declaredTypeParameters;
     private TypeConstructor typeConstructor;
 
-    public LazySubstitutingClassDescriptor(ClassDescriptor descriptor, TypeSubstitutor substitutor) {
+    public LazySubstitutingClassDescriptor(ModuleAwareClassDescriptor descriptor, TypeSubstitutor substitutor) {
         this.original = descriptor;
         this.originalSubstitutor = substitutor;
     }
@@ -82,28 +87,46 @@ public class LazySubstitutingClassDescriptor implements ClassDescriptor {
 
     @NotNull
     @Override
-    public MemberScope getMemberScope(@NotNull List<? extends TypeProjection> typeArguments) {
-        MemberScope memberScope = original.getMemberScope(typeArguments);
+    public MemberScope getMemberScope(@NotNull List<? extends TypeProjection> typeArguments, @NotNull KotlinTypeRefiner kotlinTypeRefiner) {
+        MemberScope memberScope = original.getMemberScope(typeArguments, kotlinTypeRefiner);
         if (originalSubstitutor.isEmpty()) {
             return memberScope;
         }
         return new SubstitutingScope(memberScope, getSubstitutor());
+    }
+
+    @NotNull
+    @Override
+    public MemberScope getMemberScope(@NotNull TypeSubstitution typeSubstitution, @NotNull KotlinTypeRefiner kotlinTypeRefiner) {
+        MemberScope memberScope = original.getMemberScope(typeSubstitution, kotlinTypeRefiner);
+        if (originalSubstitutor.isEmpty()) {
+            return memberScope;
+        }
+        return new SubstitutingScope(memberScope, getSubstitutor());
+    }
+
+    @NotNull
+    @Override
+    public MemberScope getMemberScope(@NotNull List<? extends TypeProjection> typeArguments) {
+        return getMemberScope(typeArguments, DescriptorUtilsKt.getKotlinTypeRefiner(DescriptorUtils.getContainingModule(this)));
     }
 
     @NotNull
     @Override
     public MemberScope getMemberScope(@NotNull TypeSubstitution typeSubstitution) {
-        MemberScope memberScope = original.getMemberScope(typeSubstitution);
-        if (originalSubstitutor.isEmpty()) {
-            return memberScope;
-        }
-        return new SubstitutingScope(memberScope, getSubstitutor());
+        return getMemberScope(typeSubstitution, DescriptorUtilsKt.getKotlinTypeRefiner(DescriptorUtils.getContainingModule(this)));
     }
 
     @NotNull
     @Override
     public MemberScope getUnsubstitutedMemberScope() {
-        MemberScope memberScope = original.getUnsubstitutedMemberScope();
+        return getUnsubstitutedMemberScope(DescriptorUtilsKt.getKotlinTypeRefiner(DescriptorUtils.getContainingModule(original)));
+    }
+
+    @NotNull
+    @Override
+    public MemberScope getUnsubstitutedMemberScope(@NotNull KotlinTypeRefiner kotlinTypeRefiner) {
+        MemberScope memberScope = original.getUnsubstitutedMemberScope(kotlinTypeRefiner);
         if (originalSubstitutor.isEmpty()) {
             return memberScope;
         }
@@ -120,7 +143,13 @@ public class LazySubstitutingClassDescriptor implements ClassDescriptor {
     @Override
     public SimpleType getDefaultType() {
         List<TypeProjection> typeProjections = TypeUtils.getDefaultTypeProjections(getTypeConstructor().getParameters());
-        return KotlinTypeFactory.simpleNotNullType(getAnnotations(), this, typeProjections);
+        return KotlinTypeFactory.simpleTypeWithNonTrivialMemberScope(
+                DefaultTypeAttributeTranslator.INSTANCE.toAttributes(getAnnotations(), null, null),
+                getTypeConstructor(),
+                typeProjections,
+                false,
+                getUnsubstitutedMemberScope()
+        );
     }
 
     @NotNull
@@ -131,12 +160,23 @@ public class LazySubstitutingClassDescriptor implements ClassDescriptor {
 
     @NotNull
     @Override
+    public List<ReceiverParameterDescriptor> getContextReceivers() {
+        return Collections.emptyList();
+    }
+
+    @NotNull
+    @Override
     public Collection<ClassConstructorDescriptor> getConstructors() {
         Collection<ClassConstructorDescriptor> originalConstructors = original.getConstructors();
         Collection<ClassConstructorDescriptor> result = new ArrayList<ClassConstructorDescriptor>(originalConstructors.size());
         for (ClassConstructorDescriptor constructor : originalConstructors) {
-            ClassConstructorDescriptor copy =
-                    constructor.copy(this, constructor.getModality(), constructor.getVisibility(), constructor.getKind(), false);
+            ClassConstructorDescriptor copy = (ClassConstructorDescriptor) constructor.newCopyBuilder()
+                    .setOriginal(constructor.getOriginal())
+                    .setModality(constructor.getModality())
+                    .setVisibility(constructor.getVisibility())
+                    .setKind(constructor.getKind())
+                    .setCopyOverrides(false)
+                    .build();
             result.add(copy.substitute(getSubstitutor()));
         }
         return result;
@@ -192,7 +232,7 @@ public class LazySubstitutingClassDescriptor implements ClassDescriptor {
 
     @NotNull
     @Override
-    public Visibility getVisibility() {
+    public DescriptorVisibility getVisibility() {
         return original.getVisibility();
     }
 
@@ -209,6 +249,16 @@ public class LazySubstitutingClassDescriptor implements ClassDescriptor {
     @Override
     public boolean isInline() {
         return original.isInline();
+    }
+
+    @Override
+    public boolean isFun() {
+        return original.isFun();
+    }
+
+    @Override
+    public boolean isValue() {
+        return original.isValue();
     }
 
     @Override
@@ -270,5 +320,45 @@ public class LazySubstitutingClassDescriptor implements ClassDescriptor {
     @Override
     public Collection<ClassDescriptor> getSealedSubclasses() {
         return original.getSealedSubclasses();
+    }
+
+    @Nullable
+    @Override
+    public ValueClassRepresentation<SimpleType> getValueClassRepresentation() {
+        ValueClassRepresentation<SimpleType> representation = original.getValueClassRepresentation();
+        if (representation == null) {
+            return null;
+        }
+        return representation.mapUnderlyingType(new Function1<SimpleType, SimpleType>() {
+            @Override
+            public SimpleType invoke(SimpleType type) {
+                return substituteSimpleType(type);
+            }
+        });
+    }
+
+    @Nullable
+    @Override
+    public SimpleType getDefaultFunctionTypeForSamInterface() {
+        return substituteSimpleType(original.getDefaultFunctionTypeForSamInterface());
+    }
+
+    @Nullable
+    private SimpleType substituteSimpleType(@Nullable SimpleType type) {
+        if (type == null || originalSubstitutor.isEmpty()) return type;
+
+        TypeSubstitutor substitutor = getSubstitutor();
+        KotlinType substitutedType = substitutor.substitute(type, Variance.INVARIANT);
+
+        assert substitutedType instanceof SimpleType :
+                "Substitution for SimpleType should also be a SimpleType, but it is " + substitutedType + "\n" +
+                "Unsubstituted: " + type;
+
+        return (SimpleType) substitutedType;
+    }
+
+    @Override
+    public boolean isDefinitelyNotSamInterface() {
+        return original.isDefinitelyNotSamInterface();
     }
 }

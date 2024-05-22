@@ -1,3 +1,1 @@
-sealed class Base
-
-class Derived : Base()
+interface A : suspend () -> Unit

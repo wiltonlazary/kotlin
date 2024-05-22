@@ -1,5 +1,4 @@
-// !WITH_NEW_INFERENCE
-// !DIAGNOSTICS: -UNUSED_VARIABLE, -UNUSED_PARAMETER
+// DIAGNOSTICS: -UNUSED_VARIABLE, -UNUSED_PARAMETER
 
 fun <T> takeFun(f: (T) -> Unit) {}
 fun <T, R> callFun(f: (T) -> R): R = TODO()
@@ -14,12 +13,12 @@ fun <T> Wrapper<T>.baz(transform: (T) -> Unit): T = TODO()
 
 fun test() {
     takeFun<String>(::foo)
-    takeFun<String>(<!NI;TYPE_MISMATCH!>::<!OI;TYPE_INFERENCE_UPPER_BOUND_VIOLATED!>fooInt<!><!>)
+    takeFun<String>(<!TYPE_MISMATCH!>::fooInt<!>)
 
     callFun<String, Wrapper<String>>(::createWrapper)
     callFun<Int, Wrapper<Number>>(::createWrapper)
     callFun<String, Wrapper<*>>(::createWrapper)
-    callFun<String, Wrapper<Int>>(::<!OI;TYPE_INFERENCE_EXPECTED_TYPE_MISMATCH!>createWrapper<!>)
+    callFun<String, Wrapper<Int>>(::createWrapper)
 
     callFun<Int, Wrapper<Int>>(::createWrapper).baz(::foo)
 }

@@ -86,6 +86,10 @@ message JvmPropertySignature {
 
   optional JvmMethodSignature getter = 3;
   optional JvmMethodSignature setter = 4;
+
+  // The delegate field of delegated properties may be optimized out; `getDelegate` should
+  // then call this method instead
+  optional JvmMethodSignature delegate_method = 5;
 }
 
 extend Constructor {
@@ -102,6 +106,11 @@ extend Function {
 
 extend Property {
   optional JvmPropertySignature property_signature = 100;
+
+  /**
+    isMovedFromInterfaceCompanion   true if this property is declared in an interface companion, and the field is stored in the interface
+   */
+  optional int32 flags = 101 [default = 0];
 }
 
 extend Type {
@@ -114,7 +123,7 @@ extend TypeParameter {
 }
 
 extend Class {
-  // If absent, assumed to be JvmAbi.DEFAULT_MODULE_NAME
+  // If absent, assumed to be "main" (JvmProtoBufUtil.DEFAULT_MODULE_NAME)
   optional int32 class_module_name = 101 [(string_id_in_table) = true];
 
   repeated Property class_local_variable = 102;
@@ -122,6 +131,11 @@ extend Class {
   // For anonymous objects from bodies of inline functions copied to the use site, the JVM internal name of the original
   // anonymous object this class is copied from
   optional int32 anonymous_object_origin_name = 103 [(string_id_in_table) = true];
+
+
+  // first bit: isFunctionBodyInInterface: 0 if actual body generated in DefaultImpl, 1 - otherwise (in interface default method)
+  // second bit: is all-compatibility mode or not, 1 - yes, 0 - no
+  optional int32 jvm_class_flags = 104 [default = 0];
 }
 
 extend Package {

@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // FILE: Test.java
 public interface Test {
     default String test() {
@@ -25,7 +26,7 @@ interface KTrait2 : KTrait {
 
 class A : KTrait {
     fun a() {
-        super.<!DEFAULT_METHOD_CALL_FROM_JAVA6_TARGET_ERROR!>test<!>()
+        super.test()
 
         test()
     }
@@ -34,7 +35,7 @@ class A : KTrait {
 
 class A2 : KTrait2 {
     fun a() {
-        super.<!DEFAULT_METHOD_CALL_FROM_JAVA6_TARGET_ERROR!>test<!>()
+        super.test()
 
         test()
     }

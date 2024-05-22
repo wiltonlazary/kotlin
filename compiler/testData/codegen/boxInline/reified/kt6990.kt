@@ -1,6 +1,8 @@
-// IGNORE_BACKEND: NATIVE
-// FILE: 1.kt
 // WITH_REFLECT
+// TARGET_BACKEND: JVM
+// IGNORE_BACKEND: ANDROID
+
+// FILE: 1.kt
 package test
 
 public inline fun <reified T : Any> inlineMeIfYouCan(): String? =
@@ -8,7 +10,7 @@ public inline fun <reified T : Any> inlineMeIfYouCan(): String? =
             f {
                 T::class.java.getName()
             }
-        }()
+        }.let { it() }
 
 inline fun f(x: () -> String) = x()
 

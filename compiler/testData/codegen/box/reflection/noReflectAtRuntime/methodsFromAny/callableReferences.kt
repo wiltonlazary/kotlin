@@ -1,7 +1,5 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS
-
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// WITH_STDLIB
 
 import kotlin.reflect.KCallable
 import kotlin.test.*

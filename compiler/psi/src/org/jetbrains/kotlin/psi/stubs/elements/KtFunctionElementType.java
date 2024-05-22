@@ -29,15 +29,19 @@ import org.jetbrains.kotlin.psi.KtNamedFunction;
 import org.jetbrains.kotlin.psi.psiUtil.KtPsiUtilKt;
 import org.jetbrains.kotlin.psi.stubs.KotlinFunctionStub;
 import org.jetbrains.kotlin.psi.stubs.impl.KotlinFunctionStubImpl;
+import org.jetbrains.kotlin.psi.stubs.impl.KotlinStubOrigin;
 
 import java.io.IOException;
 
 public class KtFunctionElementType extends KtStubElementType<KotlinFunctionStub, KtNamedFunction> {
 
+    private static final String NAME = "kotlin.FUNCTION";
+
     public KtFunctionElementType(@NotNull @NonNls String debugName) {
         super(debugName, KtNamedFunction.class, KotlinFunctionStub.class);
     }
 
+    @NotNull
     @Override
     public KotlinFunctionStub createStub(@NotNull KtNamedFunction psi, @NotNull StubElement parentStub) {
         boolean isTopLevel = psi.getParent() instanceof KtFile;
@@ -45,8 +49,13 @@ public class KtFunctionElementType extends KtStubElementType<KotlinFunctionStub,
         FqName fqName = KtPsiUtilKt.safeFqNameForLazyResolve(psi);
         boolean hasBlockBody = psi.hasBlockBody();
         boolean hasBody = psi.hasBody();
-        return new KotlinFunctionStubImpl(parentStub, StringRef.fromString(psi.getName()), isTopLevel, fqName,
-                                          isExtension, hasBlockBody, hasBody, psi.hasTypeParameterListBeforeFunctionName());
+        return new KotlinFunctionStubImpl(
+                (StubElement<?>) parentStub, StringRef.fromString(psi.getName()), isTopLevel, fqName,
+                isExtension, hasBlockBody, hasBody, psi.hasTypeParameterListBeforeFunctionName(),
+                psi.mayHaveContract(),
+                /* contract = */ null,
+                /* origin = */ null
+        );
     }
 
     @Override
@@ -61,6 +70,17 @@ public class KtFunctionElementType extends KtStubElementType<KotlinFunctionStub,
         dataStream.writeBoolean(stub.hasBlockBody());
         dataStream.writeBoolean(stub.hasBody());
         dataStream.writeBoolean(stub.hasTypeParameterListBeforeFunctionName());
+        boolean haveContract = stub.mayHaveContract();
+        dataStream.writeBoolean(haveContract);
+        if (stub instanceof KotlinFunctionStubImpl) {
+            KotlinFunctionStubImpl stubImpl = (KotlinFunctionStubImpl) stub;
+
+            if (haveContract) {
+                stubImpl.serializeContract(dataStream);
+            }
+
+            KotlinStubOrigin.serialize(stubImpl.getOrigin(), dataStream);
+        }
     }
 
     @NotNull
@@ -76,13 +96,23 @@ public class KtFunctionElementType extends KtStubElementType<KotlinFunctionStub,
         boolean hasBlockBody = dataStream.readBoolean();
         boolean hasBody = dataStream.readBoolean();
         boolean hasTypeParameterListBeforeFunctionName = dataStream.readBoolean();
-
-        return new KotlinFunctionStubImpl(parentStub, name, isTopLevel, fqName, isExtension, hasBlockBody, hasBody,
-                                          hasTypeParameterListBeforeFunctionName);
+        boolean mayHaveContract = dataStream.readBoolean();
+        return new KotlinFunctionStubImpl(
+                (StubElement<?>) parentStub, name, isTopLevel, fqName, isExtension, hasBlockBody, hasBody,
+                hasTypeParameterListBeforeFunctionName, mayHaveContract,
+                mayHaveContract ? KotlinFunctionStubImpl.Companion.deserializeContract(dataStream) : null,
+                KotlinStubOrigin.deserialize(dataStream)
+        );
     }
 
     @Override
     public void indexStub(@NotNull KotlinFunctionStub stub, @NotNull IndexSink sink) {
         StubIndexService.getInstance().indexFunction(stub, sink);
+    }
+
+    @NotNull
+    @Override
+    public String getExternalId() {
+        return NAME;
     }
 }

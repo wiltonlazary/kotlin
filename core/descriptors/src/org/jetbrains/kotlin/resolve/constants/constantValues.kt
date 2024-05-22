@@ -17,15 +17,21 @@
 package org.jetbrains.kotlin.resolve.constants
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
+import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationArgumentVisitor
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.descriptors.findClassAcrossModuleDependencies
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.types.ErrorUtils
-import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.resolve.descriptorUtil.classId
+import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.types.error.ErrorTypeKind
+import org.jetbrains.kotlin.types.error.ErrorUtils
+import org.jetbrains.kotlin.types.typeUtil.replaceArgumentsWithStarProjections
 
 abstract class ConstantValue<out T>(open val value: T) {
     abstract fun getType(module: ModuleDescriptor): KotlinType
@@ -37,9 +43,12 @@ abstract class ConstantValue<out T>(open val value: T) {
     override fun hashCode(): Int = value?.hashCode() ?: 0
 
     override fun toString(): String = value.toString()
+
+    open fun boxedValue(): Any? = value
 }
 
 abstract class IntegerValueConstant<out T> protected constructor(value: T) : ConstantValue<T>(value)
+abstract class UnsignedValueConstant<out T> protected constructor(value: T) : ConstantValue<T>(value)
 
 class AnnotationValue(value: AnnotationDescriptor) : ConstantValue<AnnotationDescriptor>(value) {
     override fun getType(module: ModuleDescriptor): KotlinType = value.type
@@ -47,16 +56,20 @@ class AnnotationValue(value: AnnotationDescriptor) : ConstantValue<AnnotationDes
     override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitAnnotationValue(this, data)
 }
 
-class ArrayValue(
-        value: List<ConstantValue<*>>,
-        private val computeType: (ModuleDescriptor) -> KotlinType
+open class ArrayValue(
+    value: List<ConstantValue<*>>,
+    private val computeType: (ModuleDescriptor) -> KotlinType
 ) : ConstantValue<List<ConstantValue<*>>>(value) {
     override fun getType(module: ModuleDescriptor): KotlinType = computeType(module).also { type ->
-        assert(KotlinBuiltIns.isArray(type) || KotlinBuiltIns.isPrimitiveArray(type)) { "Type should be an array, but was $type: $value" }
+        assert(KotlinBuiltIns.isArray(type) || KotlinBuiltIns.isPrimitiveArray(type) || KotlinBuiltIns.isUnsignedArrayType(type)) {
+            "Type should be an array, but was $type: $value"
+        }
     }
 
     override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitArrayValue(this, data)
 }
+
+class TypedArrayValue(value: List<ConstantValue<*>>, val type: KotlinType) : ArrayValue(value, { type })
 
 class BooleanValue(value: Boolean) : ConstantValue<Boolean>(value) {
     override fun getType(module: ModuleDescriptor) = module.builtIns.booleanType
@@ -75,7 +88,7 @@ class CharValue(value: Char) : IntegerValueConstant<Char>(value) {
 
     override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitCharValue(this, data)
 
-    override fun toString() = "\\u%04X ('%s')".format(value.toInt(), getPrintablePart(value))
+    override fun toString() = "\\u%04X ('%s')".format(value.code, getPrintablePart(value))
 
     private fun getPrintablePart(c: Char): String = when (c) {
         '\b' -> "\\b"
@@ -84,7 +97,7 @@ class CharValue(value: Char) : IntegerValueConstant<Char>(value) {
         //TODO: KT-8507
         12.toChar() -> "\\f"
         '\r' -> "\\r"
-        else -> if (isPrintableUnicode(c)) Character.toString(c) else "?"
+        else -> if (isPrintableUnicode(c)) c.toString() else "?"
     }
 
     private fun isPrintableUnicode(c: Char): Boolean {
@@ -110,7 +123,7 @@ class DoubleValue(value: Double) : ConstantValue<Double>(value) {
 class EnumValue(val enumClassId: ClassId, val enumEntryName: Name) : ConstantValue<Pair<ClassId, Name>>(enumClassId to enumEntryName) {
     override fun getType(module: ModuleDescriptor): KotlinType =
             module.findClassAcrossModuleDependencies(enumClassId)?.takeIf(DescriptorUtils::isEnumClass)?.defaultType
-            ?: ErrorUtils.createErrorType("Containing class for error-class based enum entry $enumClassId.$enumEntryName")
+            ?: ErrorUtils.createErrorType(ErrorTypeKind.ERROR_ENUM_TYPE, enumClassId.toString(), enumEntryName.toString())
 
     override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitEnumValue(this, data)
 
@@ -118,14 +131,18 @@ class EnumValue(val enumClassId: ClassId, val enumEntryName: Name) : ConstantVal
 }
 
 abstract class ErrorValue : ConstantValue<Unit>(Unit) {
-    @Deprecated("Should not be called, for this is not a real value, but a indication of an error")
+    init {
+        Unit
+    }
+
+    @Deprecated("Should not be called, for this is not a real value, but an indication of an error")
     override val value: Unit
         get() = throw UnsupportedOperationException()
 
     override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitErrorValue(this, data)
 
     class ErrorValueWithMessage(val message: String) : ErrorValue() {
-        override fun getType(module: ModuleDescriptor) = ErrorUtils.createErrorType(message)
+        override fun getType(module: ModuleDescriptor) = ErrorUtils.createErrorType(ErrorTypeKind.ERROR_CONSTANT_VALUE, message)
 
         override fun toString() = message
     }
@@ -151,13 +168,72 @@ class IntValue(value: Int) : IntegerValueConstant<Int>(value) {
     override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitIntValue(this, data)
 }
 
-class KClassValue(private val type: KotlinType) : ConstantValue<KotlinType>(type) {
-    override fun getType(module: ModuleDescriptor): KotlinType = type
+class KClassValue(value: Value) : ConstantValue<KClassValue.Value>(value) {
+    sealed class Value {
+        data class NormalClass(val value: ClassLiteralValue) : Value() {
+            val classId: ClassId get() = value.classId
+            val arrayDimensions: Int get() = value.arrayNestedness
+        }
 
-    override val value: KotlinType
-        get() = type.arguments.single().type
+        data class LocalClass(val type: KotlinType) : Value()
+    }
+
+    constructor(value: ClassLiteralValue) : this(Value.NormalClass(value))
+
+    constructor(classId: ClassId, arrayDimensions: Int) : this(ClassLiteralValue(classId, arrayDimensions))
+
+    override fun getType(module: ModuleDescriptor): KotlinType =
+        KotlinTypeFactory.simpleNotNullType(TypeAttributes.Empty, module.builtIns.kClass, listOf(TypeProjectionImpl(getArgumentType(module))))
+
+    fun getArgumentType(module: ModuleDescriptor): KotlinType {
+        when (value) {
+            is Value.LocalClass -> return value.type
+            is Value.NormalClass -> {
+                val (classId, arrayDimensions) = value.value
+                val descriptor = module.findClassAcrossModuleDependencies(classId)
+                    ?: return ErrorUtils.createErrorType(ErrorTypeKind.UNRESOLVED_KCLASS_CONSTANT_VALUE, classId.toString(), arrayDimensions.toString())
+
+                // If this value refers to a class named test.Foo.Bar where both Foo and Bar have generic type parameters,
+                // we're constructing a type `test.Foo<*>.Bar<*>` below
+                var type = descriptor.defaultType.replaceArgumentsWithStarProjections()
+                repeat(arrayDimensions) {
+                    type = module.builtIns.getArrayType(Variance.INVARIANT, type)
+                }
+
+                return type
+            }
+        }
+    }
 
     override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitKClassValue(this, data)
+
+    companion object {
+        fun create(argumentType: KotlinType): ConstantValue<*>? {
+            if (argumentType.isError) return null
+
+            var type = argumentType
+            var arrayDimensions = 0
+            while (KotlinBuiltIns.isArray(type)) {
+                type = type.arguments.single().type
+                arrayDimensions++
+            }
+
+            return when (val descriptor = type.constructor.declarationDescriptor) {
+                is ClassDescriptor -> {
+                    val classId = descriptor.classId ?: return KClassValue(KClassValue.Value.LocalClass(argumentType))
+                    KClassValue(classId, arrayDimensions)
+                }
+                is TypeParameterDescriptor -> {
+                    // This is possible before 1.4 if a reified type parameter is used in annotation on a local class / anonymous object.
+                    // In JVM class file, we can't represent such literal properly, so we're writing java.lang.Object instead.
+                    // This has no effect on the compiler front-end or other back-ends, so we use kotlin.Any for simplicity here.
+                    // See LanguageFeature.ProhibitTypeParametersInClassLiteralsInAnnotationArguments
+                    KClassValue(ClassId.topLevel(StandardNames.FqNames.any.toSafe()), 0)
+                }
+                else -> null
+            }
+        }
+    }
 }
 
 class LongValue(value: Long) : IntegerValueConstant<Long>(value) {
@@ -188,4 +264,56 @@ class StringValue(value: String) : ConstantValue<String>(value) {
     override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitStringValue(this, data)
 
     override fun toString() = "\"$value\""
+}
+
+class UByteValue(byteValue: Byte) : UnsignedValueConstant<Byte>(byteValue) {
+    override fun getType(module: ModuleDescriptor): KotlinType {
+        return module.findClassAcrossModuleDependencies(StandardNames.FqNames.uByte)?.defaultType
+                ?: ErrorUtils.createErrorType(ErrorTypeKind.NOT_FOUND_UNSIGNED_TYPE, "UByte")
+    }
+
+    override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D): R = visitor.visitUByteValue(this, data)
+
+    override fun toString() = "$value.toUByte()"
+
+    override fun boxedValue(): Any = value.toUByte()
+}
+
+class UShortValue(shortValue: Short) : UnsignedValueConstant<Short>(shortValue) {
+    override fun getType(module: ModuleDescriptor): KotlinType {
+        return module.findClassAcrossModuleDependencies(StandardNames.FqNames.uShort)?.defaultType
+                ?: ErrorUtils.createErrorType(ErrorTypeKind.NOT_FOUND_UNSIGNED_TYPE, "UShort")
+    }
+
+    override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D): R = visitor.visitUShortValue(this, data)
+
+    override fun toString() = "$value.toUShort()"
+
+    override fun boxedValue(): Any = value.toUShort()
+}
+
+class UIntValue(intValue: Int) : UnsignedValueConstant<Int>(intValue) {
+    override fun getType(module: ModuleDescriptor): KotlinType {
+        return module.findClassAcrossModuleDependencies(StandardNames.FqNames.uInt)?.defaultType
+                ?: ErrorUtils.createErrorType(ErrorTypeKind.NOT_FOUND_UNSIGNED_TYPE, "UInt")
+    }
+
+    override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D) = visitor.visitUIntValue(this, data)
+
+    override fun toString() = "$value.toUInt()"
+
+    override fun boxedValue(): Any = value.toUInt()
+}
+
+class ULongValue(longValue: Long) : UnsignedValueConstant<Long>(longValue) {
+    override fun getType(module: ModuleDescriptor): KotlinType {
+        return module.findClassAcrossModuleDependencies(StandardNames.FqNames.uLong)?.defaultType
+                ?: ErrorUtils.createErrorType(ErrorTypeKind.NOT_FOUND_UNSIGNED_TYPE, "ULong")
+    }
+
+    override fun <R, D> accept(visitor: AnnotationArgumentVisitor<R, D>, data: D): R = visitor.visitULongValue(this, data)
+
+    override fun toString() = "$value.toULong()"
+
+    override fun boxedValue(): Any = value.toULong()
 }

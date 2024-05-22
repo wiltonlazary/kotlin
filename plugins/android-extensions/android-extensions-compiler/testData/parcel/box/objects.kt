@@ -1,4 +1,4 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 
 @file:JvmName("TestKt")
 package test
@@ -24,6 +24,7 @@ fun box() = parcelTest { parcel ->
 
     val bytes = parcel.marshall()
     parcel.unmarshall(bytes, 0, bytes.size)
+    parcel.setDataPosition(0)
 
     val test2 = readFromParcel<Test>(parcel)
     assert(test == test2)

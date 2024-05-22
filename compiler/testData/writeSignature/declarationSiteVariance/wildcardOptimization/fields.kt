@@ -1,3 +1,4 @@
+// WITH_STDLIB
 class Out<out T>
 
 class Final

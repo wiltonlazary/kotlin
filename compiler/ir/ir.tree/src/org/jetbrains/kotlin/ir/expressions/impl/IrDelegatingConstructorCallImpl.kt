@@ -16,71 +16,59 @@
 
 package org.jetbrains.kotlin.ir.expressions.impl
 
-import org.jetbrains.kotlin.descriptors.ClassConstructorDescriptor
-import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
+import org.jetbrains.kotlin.ir.declarations.IrAttributeContainer
 import org.jetbrains.kotlin.ir.expressions.IrDelegatingConstructorCall
-import org.jetbrains.kotlin.ir.expressions.copyTypeArgumentsFrom
-import org.jetbrains.kotlin.ir.expressions.typeArgumentsCount
+import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
+import org.jetbrains.kotlin.ir.expressions.typeParametersCount
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
-import org.jetbrains.kotlin.ir.symbols.impl.IrConstructorSymbolImpl
-import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
-import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
-import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.util.allTypeParameters
+import org.jetbrains.kotlin.ir.util.initializeParameterArguments
+import org.jetbrains.kotlin.ir.util.initializeTypeArguments
 
 class IrDelegatingConstructorCallImpl(
-    startOffset: Int,
-    endOffset: Int,
-    override val symbol: IrConstructorSymbol,
-    override val descriptor: ClassConstructorDescriptor,
-    typeArgumentsCount: Int
-) :
-    IrCallWithIndexedArgumentsBase(
-        startOffset,
-        endOffset,
-        symbol.descriptor.builtIns.unitType,
-        typeArgumentsCount = typeArgumentsCount,
-        valueArgumentsCount = symbol.descriptor.valueParameters.size
-    ),
-    IrDelegatingConstructorCall {
+    override val startOffset: Int,
+    override val endOffset: Int,
+    override var type: IrType,
+    override var symbol: IrConstructorSymbol,
+    typeArgumentsCount: Int,
+    valueArgumentsCount: Int,
+) : IrDelegatingConstructorCall() {
+    override var origin: IrStatementOrigin? = null
 
-    @Deprecated("Use constructor with typeArgumentsCount and fill type arguments explicitly or with copyTypeArgumentsFrom")
-    constructor(
-        startOffset: Int,
-        endOffset: Int,
-        symbol: IrConstructorSymbol,
-        descriptor: ClassConstructorDescriptor,
-        typeArguments: Map<TypeParameterDescriptor, KotlinType>? = null
-    ) : this(startOffset, endOffset, symbol, descriptor, descriptor.typeArgumentsCount) {
-        copyTypeArgumentsFrom(typeArguments)
-    }
+    override val typeArguments: Array<IrType?> = initializeTypeArguments(typeArgumentsCount)
 
-    @Deprecated("Creates unbound symbol")
-    constructor(
-        startOffset: Int,
-        endOffset: Int,
-        descriptor: ClassConstructorDescriptor,
-        typeArgumentsCount: Int
-    ) : this(
-        startOffset, endOffset,
-        IrConstructorSymbolImpl(descriptor.original),
-        descriptor,
-        typeArgumentsCount
-    )
+    override var dispatchReceiver: IrExpression? = null
+    override var extensionReceiver: IrExpression? = null
+    override val valueArguments: Array<IrExpression?> = initializeParameterArguments(valueArgumentsCount)
 
-    @Deprecated("Creates unbound symbol")
-    constructor(
-        startOffset: Int,
-        endOffset: Int,
-        descriptor: ClassConstructorDescriptor,
-        typeArguments: Map<TypeParameterDescriptor, KotlinType>? = null
-    ) : this(
-        startOffset, endOffset,
-        IrConstructorSymbolImpl(descriptor.original),
-        descriptor,
-        typeArguments
-    )
+    override var contextReceiversCount = 0
 
-    override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R {
-        return visitor.visitDelegatingConstructorCall(this, data)
+    override var attributeOwnerId: IrAttributeContainer = this
+    override var originalBeforeInline: IrAttributeContainer? = null
+
+    companion object {
+        @ObsoleteDescriptorBasedAPI
+        fun fromSymbolDescriptor(
+            startOffset: Int,
+            endOffset: Int,
+            type: IrType,
+            symbol: IrConstructorSymbol,
+            typeArgumentsCount: Int = symbol.descriptor.typeParametersCount,
+            valueArgumentsCount: Int = symbol.descriptor.valueParameters.size + symbol.descriptor.contextReceiverParameters.size
+        ) = IrDelegatingConstructorCallImpl(startOffset, endOffset, type, symbol, typeArgumentsCount, valueArgumentsCount)
+
+        @UnsafeDuringIrConstructionAPI
+        fun fromSymbolOwner(
+            startOffset: Int,
+            endOffset: Int,
+            type: IrType,
+            symbol: IrConstructorSymbol,
+            typeArgumentsCount: Int = symbol.owner.allTypeParameters.size,
+            valueArgumentsCount: Int = symbol.owner.valueParameters.size
+        ) = IrDelegatingConstructorCallImpl(startOffset, endOffset, type, symbol, typeArgumentsCount, valueArgumentsCount)
     }
 }

@@ -1,20 +1,11 @@
-import kotlin.coroutines.experimental.Continuation
-import kotlin.coroutines.experimental.CoroutineContext
-import kotlin.coroutines.experimental.startCoroutine
+// FIR_IDENTICAL
+// SKIP_TXT
+import kotlin.coroutines.*
+
+fun <T> foo(): Continuation<T> = null!!
 
 fun bar() {
     suspend {
         println()
-    }.startCoroutine(object: Continuation<Unit> {
-        override val context: CoroutineContext
-            get() = TODO("not implemented")
-
-        override fun resume(value: Unit) {
-            TODO("not implemented")
-        }
-
-        override fun resumeWithException(exception: Throwable) {
-            TODO("not implemented")
-        }
-    })
+    }.startCoroutine(foo<Unit>())
 }

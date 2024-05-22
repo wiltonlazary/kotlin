@@ -1,14 +1,13 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
-// IGNORE_LIGHT_ANALYSIS
-
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// WITH_STDLIB
+// JVM_ABI_K1_K2_DIFF: KT-62770
+// LAMBDAS: CLASS
 
 import kotlin.test.assertEquals
 import kotlin.jvm.internal.FunctionBase
 
 fun test(f: Function<*>, arity: Int) {
-    assertEquals(arity, (f as FunctionBase).getArity())
+    assertEquals(arity, (f as FunctionBase).arity)
 }
 
 fun foo(s: String, i: Int) {}

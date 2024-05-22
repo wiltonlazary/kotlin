@@ -20,8 +20,6 @@ import org.jetbrains.kotlin.test.ConfigurationKind;
 
 import java.lang.reflect.Method;
 
-import static org.jetbrains.kotlin.codegen.CodegenTestUtil.assertThrows;
-
 public class ControlStructuresTest extends CodegenTestCase {
     @Override
     protected void setUp() throws Exception {
@@ -47,7 +45,7 @@ public class ControlStructuresTest extends CodegenTestCase {
     public void testThrowCheckedException() throws Exception {
         loadText("fun foo() { throw Exception(); }");
         Method main = generateFunction();
-        assertThrows(main, Exception.class, null);
+        CodegenTestUtil.assertThrows(main, Exception.class, null);
     }
 
     public void testCompareToZero() throws Exception {
@@ -68,7 +66,7 @@ public class ControlStructuresTest extends CodegenTestCase {
     public void testCompareToNull() throws Exception {
         loadText("fun foo(a: String?, b: String?): Boolean = a == null && b !== null && null == a && null !== b");
         String text = generateToText();
-        assertTrue(!text.contains("java/lang/Object.equals"));
+        assertFalse(text.contains("java/lang/Object.equals"));
         Method main = generateFunction();
         assertEquals(true, main.invoke(null, null, "lala"));
         assertEquals(false, main.invoke(null, null, null));
@@ -84,7 +82,7 @@ public class ControlStructuresTest extends CodegenTestCase {
     public void testCompareToNonnullableNotEq() throws Exception {
         loadText("fun foo(a: String?, b: String): Boolean = a != b");
         String text = generateToText();
-        assertTrue(text.contains("IXOR"));
+        assertTrue(text, text.contains("IXOR"));
         Method main = generateFunction();
         assertEquals(true, main.invoke(null, null, "lala"));
         assertEquals(false, main.invoke(null, "papa", "papa"));

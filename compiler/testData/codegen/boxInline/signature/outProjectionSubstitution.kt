@@ -1,6 +1,9 @@
-// IGNORE_BACKEND: NATIVE
-// FILE: 1.kt
 // WITH_REFLECT
+// NO_CHECK_LAMBDA_INLINING
+// TARGET_BACKEND: JVM
+// IGNORE_INLINER: IR
+
+// FILE: 1.kt
 package test
 
 interface F<T> {
@@ -16,7 +19,6 @@ inline fun <T> Array<T>.copyOfRange1(crossinline toIndex: () -> Int) =
 
 // FILE: 2.kt
 
-//NO_CHECK_LAMBDA_INLINING
 
 import test.*
 import java.util.*

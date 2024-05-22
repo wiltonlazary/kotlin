@@ -1,4 +1,5 @@
-// !CHECK_TYPE
+// FIR_IDENTICAL
+// CHECK_TYPE
 val x get(): String = foo()
 val y get(): List<Int> = bar()
 val z get(): List<Int> {

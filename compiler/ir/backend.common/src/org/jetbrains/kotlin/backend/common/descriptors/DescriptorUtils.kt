@@ -16,15 +16,13 @@
 
 package org.jetbrains.kotlin.backend.common.descriptors
 
-import org.jetbrains.kotlin.builtins.functions.FunctionClassDescriptor
-import org.jetbrains.kotlin.builtins.getFunctionalClassKind
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.TypeProjectionImpl
-import org.jetbrains.kotlin.types.TypeSubstitutor
-import org.jetbrains.kotlin.types.replace
+import org.jetbrains.kotlin.descriptors.explicitParameters as _explicitParameters
+
+val String.synthesizedName: Name get() = Name.identifier(this.synthesizedString)
+
+val String.synthesizedString: String get() = "\$$this"
 
 val CallableDescriptor.isSuspend: Boolean
     get() = this is FunctionDescriptor && isSuspend
@@ -32,63 +30,18 @@ val CallableDescriptor.isSuspend: Boolean
 /**
  * @return naturally-ordered list of all parameters available inside the function body.
  */
+// Used in Kotlin/Native
+@Suppress("unused")
 val CallableDescriptor.allParameters: List<ParameterDescriptor>
     get() = if (this is ConstructorDescriptor) {
-        listOf(this.constructedClass.thisAsReceiverParameter) + explicitParameters
+        listOf(this.constructedClass.thisAsReceiverParameter) + _explicitParameters
     } else {
-        explicitParameters
+        _explicitParameters
     }
 
-/**
- * @return naturally-ordered list of the parameters that can have values specified at call site.
- */
+@Deprecated(
+    message = "Please use org.jetbrains.kotlin.descriptors.explicitParameters",
+    ReplaceWith("explicitParameters", "org.jetbrains.kotlin.descriptors.explicitParameters")
+)
 val CallableDescriptor.explicitParameters: List<ParameterDescriptor>
-    get() {
-        val result = ArrayList<ParameterDescriptor>(valueParameters.size + 2)
-
-        this.dispatchReceiverParameter?.let {
-            result.add(it)
-        }
-
-        this.extensionReceiverParameter?.let {
-            result.add(it)
-        }
-
-        result.addAll(valueParameters)
-
-        return result
-    }
-
-fun KotlinType.replace(types: List<KotlinType>) = this.replace(types.map(::TypeProjectionImpl))
-
-fun FunctionDescriptor.substitute(vararg types: KotlinType): FunctionDescriptor {
-    val typeSubstitutor = TypeSubstitutor.create(
-            typeParameters
-                    .withIndex()
-                    .associateBy({ it.value.typeConstructor }, { TypeProjectionImpl(types[it.index]) })
-    )
-    return substitute(typeSubstitutor)!!
-}
-
-fun FunctionDescriptor.substitute(typeArguments: Map<TypeParameterDescriptor, KotlinType>): FunctionDescriptor {
-    val typeSubstitutor = TypeSubstitutor.create(
-            typeParameters.associateBy({ it.typeConstructor }, { TypeProjectionImpl(typeArguments[it]!!) })
-    )
-    return substitute(typeSubstitutor)!!
-}
-
-fun ClassDescriptor.getFunction(name: String, types: List<KotlinType>): FunctionDescriptor {
-    val typeSubstitutor = TypeSubstitutor.create(
-            declaredTypeParameters
-                    .withIndex()
-                    .associateBy({ it.value.typeConstructor }, { TypeProjectionImpl(types[it.index]) })
-    )
-    return unsubstitutedMemberScope
-            .getContributedFunctions(Name.identifier(name), NoLookupLocation.FROM_BACKEND).single().substitute(typeSubstitutor)!!
-}
-
-val KotlinType.isFunctionOrKFunctionType: Boolean
-    get() {
-        val kind = constructor.declarationDescriptor?.getFunctionalClassKind()
-        return kind == FunctionClassDescriptor.Kind.Function || kind == FunctionClassDescriptor.Kind.KFunction
-    }
+    get() = _explicitParameters

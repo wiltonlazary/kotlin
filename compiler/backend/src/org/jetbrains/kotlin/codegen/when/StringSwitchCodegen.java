@@ -16,10 +16,9 @@
 
 package org.jetbrains.kotlin.codegen.when;
 
-import com.google.common.collect.Maps;
-import com.intellij.openapi.util.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.codegen.ExpressionCodegen;
+import org.jetbrains.kotlin.psi.KtWhenEntry;
 import org.jetbrains.kotlin.psi.KtWhenExpression;
 import org.jetbrains.kotlin.resolve.constants.ConstantValue;
 import org.jetbrains.kotlin.resolve.constants.StringValue;
@@ -27,6 +26,7 @@ import org.jetbrains.org.objectweb.asm.Label;
 import org.jetbrains.org.objectweb.asm.Type;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,7 +34,7 @@ public class StringSwitchCodegen extends SwitchCodegen {
     private static final String HASH_CODE_METHOD_DESC = Type.getMethodDescriptor(Type.INT_TYPE);
     private static final String EQUALS_METHOD_DESC = Type.getMethodDescriptor(Type.BOOLEAN_TYPE, Type.getType(Object.class));
 
-    private final Map<Integer, List<Pair<String, Label>>> hashCodesToStringAndEntryLabel = Maps.newHashMap();
+    private final Map<Integer, List<Entry>> hashCodesToEntries = new HashMap<>();
     private int tempVarIndex;
 
     public StringSwitchCodegen(
@@ -47,35 +47,34 @@ public class StringSwitchCodegen extends SwitchCodegen {
     }
 
     @Override
-    protected void processConstant(
-            @NotNull ConstantValue<?> constant, @NotNull Label entryLabel
-    ) {
+    protected void processConstant(@NotNull ConstantValue<?> constant, @NotNull Label entryLabel, @NotNull KtWhenEntry entry) {
         assert constant instanceof StringValue : "guaranteed by usage contract";
         int hashCode = constant.hashCode();
 
+        List<StringSwitchCodegen.Entry> hashCodesToEntry;
         if (!transitionsTable.containsKey(hashCode)) {
             transitionsTable.put(hashCode, new Label());
-            hashCodesToStringAndEntryLabel.put(hashCode, new ArrayList<>());
+            hashCodesToEntry = new ArrayList<>();
+            hashCodesToEntries.put(hashCode, hashCodesToEntry);
+        } else {
+            hashCodesToEntry = hashCodesToEntries.get(hashCode);
         }
 
-        hashCodesToStringAndEntryLabel.get(hashCode).add(new Pair<>(((StringValue) constant).getValue(), entryLabel));
+        hashCodesToEntry.add(new Entry(((StringValue) constant).getValue(), entryLabel, entry));
     }
 
     @Override
     public void generate() {
         super.generate();
-        codegen.myFrameMap.leaveTemp(subjectType);
     }
 
     @Override
-    protected void generateSubject() {
-        tempVarIndex = codegen.myFrameMap.enterTemp(subjectType);
-        super.generateSubject();
-        v.store(tempVarIndex, subjectType);
-
-        v.load(tempVarIndex, subjectType);
-
+    protected void generateSubjectValueToIndex() {
         generateNullCheckIfNeeded();
+
+        tempVarIndex = codegen.myFrameMap.enterTemp(subjectType);
+        v.store(tempVarIndex, subjectType);
+        v.load(tempVarIndex, subjectType);
 
         v.invokevirtual(
                 subjectType.getInternalName(),
@@ -85,10 +84,10 @@ public class StringSwitchCodegen extends SwitchCodegen {
 
     @Override
     protected void generateEntries() {
-        for (int hashCode : hashCodesToStringAndEntryLabel.keySet()) {
+        for (int hashCode : hashCodesToEntries.keySet()) {
             v.visitLabel(transitionsTable.get(hashCode));
 
-            List<Pair<String, Label>> items = hashCodesToStringAndEntryLabel.get(hashCode);
+            List<Entry> items = hashCodesToEntries.get(hashCode);
             Label nextLabel = null;
 
             for (int i = 0; i < items.size(); i++) {
@@ -96,10 +95,11 @@ public class StringSwitchCodegen extends SwitchCodegen {
                     v.visitLabel(nextLabel);
                 }
 
-                Pair<String, Label> stringAndEntryLabel = items.get(i);
+                Entry entry = items.get(i);
 
+                codegen.markLineNumber(entry.entry, false);
                 v.load(tempVarIndex, subjectType);
-                v.aconst(stringAndEntryLabel.first);
+                v.aconst(entry.value);
                 v.invokevirtual(
                         subjectType.getInternalName(),
                         "equals",
@@ -115,10 +115,22 @@ public class StringSwitchCodegen extends SwitchCodegen {
                 }
 
                 v.ifeq(nextLabel);
-                v.goTo(stringAndEntryLabel.getSecond());
+                v.goTo(entry.label);
             }
         }
 
         super.generateEntries();
+    }
+
+    private static class Entry {
+        private final String value;
+        private final Label label;
+        private final KtWhenEntry entry;
+
+        private Entry(String value, Label label, KtWhenEntry entry) {
+            this.value = value;
+            this.label = label;
+            this.entry = entry;
+        }
     }
 }

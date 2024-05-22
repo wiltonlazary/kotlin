@@ -16,60 +16,44 @@
 
 package org.jetbrains.kotlin.cli
 
-import org.jetbrains.kotlin.cli.common.ExitCode
-import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
-import org.jetbrains.kotlin.cli.common.messages.MessageCollector
+import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
-import org.jetbrains.kotlin.config.Services
 import org.jetbrains.kotlin.test.CompilerTestUtil
 import org.jetbrains.kotlin.test.TestCaseWithTmpdir
-import org.junit.Assert
 import java.io.File
 
-/**
- * This test checks that [org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments.friendPaths] works by invoking the compiler's
- * "exec" method directly. Once there's a CLI argument for friend paths, it can be simplified to use that CLI argument instead.
- */
 class FriendPathsTest : TestCaseWithTmpdir() {
     private fun getTestDataDirectory(): File = File("compiler/testData/friendPaths/")
 
     fun testArchive() {
-        val libSrc = File(getTestDataDirectory(), "lib.kt")
-        val libDest = File(tmpdir, "lib.jar")
-        CompilerTestUtil.executeCompilerAssertSuccessful(K2JVMCompiler(), listOf("-d", libDest.path, libSrc.path))
+        doTestFriendPaths(File(tmpdir, "lib.jar"))
+    }
 
-        Assert.assertEquals(ExitCode.OK, invokeCompiler(libDest.path))
+    /** Regression test for KT-29933. */
+    fun testArchiveWithRelativePath() {
+        doTestFriendPaths(File(tmpdir, "lib.jar").relativeTo(File("").absoluteFile))
     }
 
     fun testDirectory() {
+        doTestFriendPaths(File(tmpdir, "lib"))
+    }
+
+    /** Regression test for KT-29933. */
+    fun testDirectoryWithRelativePath() {
+        doTestFriendPaths(File(tmpdir, "lib").relativeTo(File("").absoluteFile))
+    }
+
+    private fun doTestFriendPaths(libDest: File, messageRenderer: MessageRenderer? = null) {
         val libSrc = File(getTestDataDirectory(), "lib.kt")
-        val libDest = File(tmpdir, "lib")
-        CompilerTestUtil.executeCompilerAssertSuccessful(K2JVMCompiler(), listOf("-d", libDest.path, libSrc.path))
+        CompilerTestUtil.executeCompilerAssertSuccessful(K2JVMCompiler(), listOf("-d", libDest.path, libSrc.path), messageRenderer)
 
-        Assert.assertEquals(ExitCode.OK, invokeCompiler(libDest.path))
-    }
-
-    private fun invokeCompiler(libraryPath: String): ExitCode {
-        return K2JVMCompiler().exec(ThrowingMessageCollector(), Services.EMPTY, K2JVMCompilerArguments().apply {
-            destination = tmpdir.path
-            classpath = libraryPath
-            freeArgs = arrayListOf(File(getTestDataDirectory(), "usage.kt").path)
-
-            friendPaths = arrayOf(libraryPath)
-        })
-    }
-
-    private class ThrowingMessageCollector : MessageCollector {
-        override fun clear() {}
-
-        override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation?) {
-            if (severity.isError) {
-                Assert.fail("${severity.presentableName}: $message at $location")
-            }
-        }
-
-        override fun hasErrors(): Boolean = false
+        CompilerTestUtil.executeCompilerAssertSuccessful(
+            K2JVMCompiler(),
+            listOf(
+                "-d", tmpdir.path, "-cp", libDest.path, File(getTestDataDirectory(), "usage.kt").path,
+                "-Xfriend-paths=${libDest.path}"
+            ),
+            messageRenderer,
+        )
     }
 }

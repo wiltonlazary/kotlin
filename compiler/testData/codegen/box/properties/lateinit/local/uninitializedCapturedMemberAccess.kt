@@ -1,6 +1,6 @@
-// LANGUAGE_VERSION: 1.2
-// WITH_RUNTIME
-// IGNORE_BACKEND: NATIVE
+// WITH_STDLIB
+
+@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
 
 import kotlin.UninitializedPropertyAccessException
 

@@ -1,5 +1,5 @@
+// TARGET_BACKEND: JVM
 // WITH_REFLECT
-// IGNORE_BACKEND: JS, NATIVE
 
 import kotlin.reflect.full.declaredMemberFunctions
 import kotlin.test.assertEquals

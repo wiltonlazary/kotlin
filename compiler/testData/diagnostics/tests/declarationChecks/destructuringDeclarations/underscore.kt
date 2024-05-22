@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 
 class A {
     operator fun component1() = 1
@@ -26,7 +25,7 @@ fun test() {
         foo(<!UNRESOLVED_REFERENCE!>_<!>, <!UNRESOLVED_REFERENCE!>_<!>)
     }
 
-    for ((<!NI;TYPE_MISMATCH!>_ : String<!>, <!NI;TYPE_MISMATCH!>_ : Int<!>) in <!OI;COMPONENT_FUNCTION_RETURN_TYPE_MISMATCH, OI;COMPONENT_FUNCTION_RETURN_TYPE_MISMATCH!>C()<!>) {
+    for ((_ : String, _ : Int) in <!COMPONENT_FUNCTION_RETURN_TYPE_MISMATCH, COMPONENT_FUNCTION_RETURN_TYPE_MISMATCH!>C()<!>) {
         foo(<!UNRESOLVED_REFERENCE!>_<!>, <!UNRESOLVED_REFERENCE!>_<!>)
     }
 
@@ -43,9 +42,9 @@ fun test() {
 
     val (_, <!NAME_SHADOWING, REDECLARATION!>`_`<!>) = A()
 
-    foo(<!UNDERSCORE_USAGE_WITHOUT_BACKTICKS, TYPE_MISMATCH!>_<!>, y)
+    foo(<!TYPE_MISMATCH, UNDERSCORE_USAGE_WITHOUT_BACKTICKS!>_<!>, y)
 
-    val (<!UNUSED_VARIABLE!>unused<!>, _) = A()
+    val (unused, _) = A()
 }
 
-fun foo(<!UNUSED_PARAMETER!>x<!>: Int, <!UNUSED_PARAMETER!>y<!>: String) {}
+fun foo(x: Int, y: String) {}

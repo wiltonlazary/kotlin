@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2023 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:kotlin.jvm.JvmMultifileClass
@@ -14,7 +14,8 @@ package kotlin.text
  *
  * Doesn't affect a line if it doesn't contain [marginPrefix] except the first and the last blank lines.
  *
- * Doesn't preserve the original line endings.
+ * The lines in the original string can be separated with `\r\n` (CRLF), `\n` (LF), or `\r` (CR) characters, however, the lines in the
+ * resulting string will be separated solely with `\n` (LF) character.
  *
  * @param marginPrefix non-blank string, which is used as a margin delimiter. Default is `|` (pipe character).
  *
@@ -22,11 +23,15 @@ package kotlin.text
  * @see trimIndent
  * @see kotlin.text.isWhitespace
  */
+@kotlin.internal.IntrinsicConstEvaluation
 public fun String.trimMargin(marginPrefix: String = "|"): String =
     replaceIndentByMargin("", marginPrefix)
 
 /**
  * Detects indent by [marginPrefix] as it does [trimMargin] and replace it with [newIndent].
+ *
+ * The lines in the original string can be separated with `\r\n` (CRLF), `\n` (LF), or `\r` (CR) characters, however, the lines in the
+ * resulting string will be separated solely with `\n` (LF) character.
  *
  * @param marginPrefix non-blank string, which is used as a margin delimiter. Default is `|` (pipe character).
  */
@@ -54,12 +59,14 @@ public fun String.replaceIndentByMargin(newIndent: String = "", marginPrefix: St
  * In case if there are non-blank lines with no leading whitespace characters (no indent at all) then the
  * common indent is 0, and therefore this function doesn't change the indentation.
  *
- * Doesn't preserve the original line endings.
+ * The lines in the original string can be separated with `\r\n` (CRLF), `\n` (LF), or `\r` (CR) characters, however, the lines in the
+ * resulting string will be separated solely with `\n` (LF) character.
  *
  * @sample samples.text.Strings.trimIndent
  * @see trimMargin
  * @see kotlin.text.isBlank
  */
+@kotlin.internal.IntrinsicConstEvaluation
 public fun String.trimIndent(): String = replaceIndent("")
 
 /**
@@ -71,7 +78,7 @@ public fun String.replaceIndent(newIndent: String = ""): String {
     val minCommonIndent = lines
         .filter(String::isNotBlank)
         .map(String::indentWidth)
-        .min() ?: 0
+        .minOrNull() ?: 0
 
     return lines.reindent(length + newIndent.length * lines.size, getIndentFunction(newIndent), { line -> line.drop(minCommonIndent) })
 }
@@ -79,7 +86,8 @@ public fun String.replaceIndent(newIndent: String = ""): String {
 /**
  * Prepends [indent] to every line of the original string.
  *
- * Doesn't preserve the original line endings.
+ * The lines in the original string can be separated with `\r\n` (CRLF), `\n` (LF), or `\r` (CR) characters, however, the lines in the
+ * resulting string will be separated solely with `\n` (LF) character.
  */
 public fun String.prependIndent(indent: String = "    "): String =
     lineSequence()

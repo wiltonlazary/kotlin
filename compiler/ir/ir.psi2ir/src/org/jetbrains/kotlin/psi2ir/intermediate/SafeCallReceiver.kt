@@ -16,28 +16,27 @@
 
 package org.jetbrains.kotlin.psi2ir.intermediate
 
-import org.jetbrains.kotlin.ir.builders.constNull
-import org.jetbrains.kotlin.ir.builders.equalsNull
+import org.jetbrains.kotlin.ir.builders.buildStatement
+import org.jetbrains.kotlin.ir.builders.irIfNull
+import org.jetbrains.kotlin.ir.builders.irNull
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
 import org.jetbrains.kotlin.ir.expressions.impl.IrBlockImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrIfThenElseImpl
+import org.jetbrains.kotlin.ir.types.makeNullable
 import org.jetbrains.kotlin.psi2ir.generators.GeneratorWithScope
-import org.jetbrains.kotlin.types.typeUtil.builtIns
-import org.jetbrains.kotlin.types.typeUtil.makeNullable
 
-
-class SafeCallReceiver(
+internal class SafeCallReceiver(
     val generator: GeneratorWithScope,
     val startOffset: Int,
     val endOffset: Int,
     val extensionReceiver: IntermediateValue?,
+    val contextReceivers: List<IntermediateValue>,
     val dispatchReceiver: IntermediateValue?,
-    val isAssignmentReceiver: Boolean
+    val isStatement: Boolean
 ) : CallReceiver {
-    override fun call(withDispatchAndExtensionReceivers: (IntermediateValue?, IntermediateValue?) -> IrExpression): IrExpression {
+    override fun call(builder: CallExpressionBuilder): IrExpression {
         val irTmp = generator.scope.createTemporaryVariable(extensionReceiver?.load() ?: dispatchReceiver!!.load(), "safe_receiver")
-        val safeReceiverValue = VariableLValue(irTmp)
+        val safeReceiverValue = VariableLValue(generator.context, irTmp)
 
         val dispatchReceiverValue: IntermediateValue?
         val extensionReceiverValue: IntermediateValue?
@@ -49,28 +48,25 @@ class SafeCallReceiver(
             extensionReceiverValue = null
         }
 
-        val irResult = withDispatchAndExtensionReceivers(dispatchReceiverValue, extensionReceiverValue)
-        val resultType = if (isAssignmentReceiver) irResult.type.builtIns.unitType else irResult.type.makeNullable()
+        val irResult = builder.withReceivers(dispatchReceiverValue, extensionReceiverValue, contextReceivers)
+
+        val resultType = if (isStatement) generator.context.irBuiltIns.unitType else irResult.type.makeNullable()
 
         val irBlock = IrBlockImpl(startOffset, endOffset, resultType, IrStatementOrigin.SAFE_CALL)
 
         irBlock.statements.add(irTmp)
 
-        val irIfThenElse = IrIfThenElseImpl(
-            startOffset, endOffset, resultType,
-            generator.context.equalsNull(startOffset, endOffset, safeReceiverValue.load()),
-            generator.context.constNull(startOffset, endOffset),
-            irResult,
-            IrStatementOrigin.SAFE_CALL
-        )
+        val irIfThenElse =
+            generator.buildStatement(startOffset, endOffset, IrStatementOrigin.SAFE_CALL) {
+                irIfNull(resultType, safeReceiverValue.load(), irNull(), irResult)
+            }
         irBlock.statements.add(irIfThenElse)
 
         return irBlock
     }
 }
 
-
-fun IrExpression.safeCallOnDispatchReceiver(
+internal fun IrExpression.safeCallOnDispatchReceiver(
     generator: GeneratorWithScope,
     startOffset: Int,
     endOffset: Int,
@@ -79,8 +75,10 @@ fun IrExpression.safeCallOnDispatchReceiver(
     SafeCallReceiver(
         generator, startOffset, endOffset,
         extensionReceiver = null,
+        contextReceivers = emptyList(),
         dispatchReceiver = OnceExpressionValue(this),
-        isAssignmentReceiver = false
-    ).call { dispatchReceiverValue, _ ->
+        isStatement = false
+    ).call { dispatchReceiverValue, _, contextReceiverValues ->
+        assert(contextReceiverValues.isEmpty()) { "Context receivers in numeric promotion" }
         ifNotNull(dispatchReceiverValue!!.load())
     }

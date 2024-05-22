@@ -16,23 +16,52 @@
 
 package org.jetbrains.kotlin.incremental
 
+import org.jetbrains.kotlin.cli.common.messages.MessageCollector
+import org.jetbrains.kotlin.incremental.AbiSnapshotImpl.Companion.readAbiSnapshot
+import org.jetbrains.kotlin.incremental.AbiSnapshotImpl.Companion.writeAbiSnapshot
+import org.jetbrains.kotlin.incremental.util.ExceptionLocation
+import org.jetbrains.kotlin.incremental.util.reportException
 import java.io.*
 
-data class BuildInfo(val startTS: Long) : Serializable {
+data class BuildInfo(val startTS: Long, val dependencyToAbiSnapshot: Map<String, AbiSnapshot> = mapOf()) : Serializable {
     companion object {
-        fun read(file: File): BuildInfo? =
-                try {
-                    ObjectInputStream(FileInputStream(file)).use {
-                        it.readObject() as BuildInfo
-                    }
-                }
-                catch (e: Exception) {
-                    null
-                }
+        private fun ObjectInputStream.readBuildInfo() : BuildInfo {
+            val ts = readLong()
+            val size = readInt()
+            val abiSnapshots = HashMap<String, AbiSnapshot>(size)
+            repeat(size) {
+                val identifier = readUTF()
+                val snapshot = readAbiSnapshot()
+                abiSnapshots.put(identifier, snapshot)
+            }
+            return BuildInfo(ts, abiSnapshots)
+        }
 
-        fun write(buildInfo: BuildInfo, file: File) {
-            ObjectOutputStream(FileOutputStream(file)).use {
-                it.writeObject(buildInfo)
+        private fun ObjectOutputStream.writeBuildInfo(buildInfo: BuildInfo) {
+            writeLong(buildInfo.startTS)
+            writeInt(buildInfo.dependencyToAbiSnapshot.size)
+            for ((identifier, abiSnapshot) in buildInfo.dependencyToAbiSnapshot) {
+                writeUTF(identifier)
+                writeAbiSnapshot(abiSnapshot)
+            }
+        }
+
+        fun read(file: File, messageCollector: MessageCollector): BuildInfo? {
+            return try {
+                ObjectInputStream(FileInputStream(file)).use {
+                    it.readBuildInfo()
+                }
+            } catch (e: Exception) {
+                messageCollector.reportException(e, ExceptionLocation.INCREMENTAL_COMPILATION)
+                null
+            }
+        }
+
+        fun write(icContext: IncrementalCompilationContext, buildInfo: BuildInfo, file: File) {
+            icContext.transaction.write(file.toPath()) {
+                ObjectOutputStream(FileOutputStream(file)).use {
+                    it.writeBuildInfo(buildInfo)
+                }
             }
         }
     }

@@ -20,7 +20,7 @@ import com.intellij.lang.ASTNode
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.lexer.KtTokens
 
-abstract class KtDoubleColonExpression(node: ASTNode) : KtExpressionImpl(node) {
+interface KtDoubleColonExpression : KtExpression {
     val receiverExpression: KtExpression?
         get() = node.firstChildNode.psi as? KtExpression
 
@@ -35,8 +35,13 @@ abstract class KtDoubleColonExpression(node: ASTNode) : KtExpressionImpl(node) {
             error("Double colon expression must have '::': $text")
         }
 
+    fun findColonColon(): PsiElement?
+
     val doubleColonTokenReference: PsiElement
-        get() = findChildByType(KtTokens.COLONCOLON)!!
+        get() = findColonColon()!!
+
+    val lhs: PsiElement?
+        get() = doubleColonTokenReference.prevSibling
 
     fun setReceiverExpression(newReceiverExpression: KtExpression) {
         val oldReceiverExpression = this.receiverExpression
@@ -44,7 +49,7 @@ abstract class KtDoubleColonExpression(node: ASTNode) : KtExpressionImpl(node) {
     }
 
     val isEmptyLHS: Boolean
-        get() = doubleColonTokenReference.prevSibling == null
+        get() = lhs == null
 
     override fun <R, D> accept(visitor: KtVisitor<R, D>, data: D): R {
         return visitor.visitDoubleColonExpression(this, data)

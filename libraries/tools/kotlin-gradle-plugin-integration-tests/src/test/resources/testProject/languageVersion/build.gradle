@@ -1,18 +1,15 @@
-buildscript {
-    repositories {
-        mavenLocal()
-        jcenter()
-    }
-    dependencies {
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-    }
+plugins {
+    id "org.jetbrains.kotlin.jvm"
 }
 
-apply plugin: "kotlin"
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
 
 compileKotlin {
     kotlinOptions {
-        languageVersion = "1.0"
-        apiVersion = "1.0"
+        languageVersion = "1.5"
+        apiVersion = "1.5"
     }
 }

@@ -1,10 +1,12 @@
-// !LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect +ReadDeserializedContracts
+// OPT_IN: kotlin.contracts.ExperimentalContracts
+// JVM_ABI_K1_K2_DIFF: KT-62464
+
 // FILE: 1.kt
+
 package test
 
-import kotlin.internal.contracts.*
+import kotlin.contracts.*
 
-@Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
 public inline fun <R> myrun(block: () -> R): R {
     contract {
         callsInPlace(block, InvocationKind.EXACTLY_ONCE)

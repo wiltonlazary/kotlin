@@ -23,7 +23,7 @@ import com.sun.source.tree.Tree
 import com.sun.tools.javac.code.Flags
 import com.sun.tools.javac.tree.JCTree
 import com.sun.tools.javac.tree.TreeInfo
-import org.jetbrains.kotlin.descriptors.Visibilities.PUBLIC
+import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.javac.JavaClassWithClassId
 import org.jetbrains.kotlin.javac.JavacWrapper
@@ -39,6 +39,9 @@ class TreeBasedClass(
         override val classId: ClassId?,
         override val outerClass: JavaClass?
 ) : TreeBasedElement<JCTree.JCClassDecl>(tree, compilationUnit, javac), JavaClassWithClassId {
+
+    override val isFromSource: Boolean
+        get() = true
 
     override val name: Name
         get() = Name.identifier(tree.simpleName.toString())
@@ -63,7 +66,7 @@ class TreeBasedClass(
         get() = isEnum || tree.modifiers.isFinal
 
     override val visibility: Visibility
-        get() = if (outerClass?.isInterface == true) PUBLIC else tree.modifiers.visibility
+        get() = if (outerClass?.isInterface == true) Visibilities.Public else tree.modifiers.visibility
 
     override val typeParameters: List<JavaTypeParameter>
         get() = tree.typeParameters.map { parameter ->
@@ -114,6 +117,17 @@ class TreeBasedClass(
     override val isEnum: Boolean
         get() = tree.modifiers.flags and Flags.ENUM.toLong() != 0L
 
+    // TODO: Support
+    override val isRecord: Boolean
+        get() = false
+
+    // TODO
+    override val isSealed: Boolean
+        get() = false
+
+    override val permittedTypes: Sequence<JavaClassifierType>
+        get() = emptySequence()
+
     override val lightClassOriginKind: LightClassOriginKind?
         get() = null
 
@@ -133,6 +147,11 @@ class TreeBasedClass(
                 .map { constructor ->
                     TreeBasedConstructor(constructor as JCTree.JCMethodDecl, compilationUnit, this, javac)
                 }
+
+    override val recordComponents: Collection<JavaRecordComponent>
+        get() = emptyList()
+
+    override fun hasDefaultConstructor() = !isInterface && constructors.isEmpty()
 
     override val innerClassNames: Collection<Name>
         get() = innerClasses.keys

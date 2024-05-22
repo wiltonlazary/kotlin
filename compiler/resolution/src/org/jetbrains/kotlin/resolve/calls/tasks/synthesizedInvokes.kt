@@ -16,13 +16,15 @@
 
 package org.jetbrains.kotlin.resolve.calls.tasks
 
-import org.jetbrains.kotlin.builtins.getFunctionalClassKind
+import org.jetbrains.kotlin.builtins.getFunctionTypeKind
 import org.jetbrains.kotlin.builtins.isBuiltinFunctionClass
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.DescriptorFactory
 import org.jetbrains.kotlin.resolve.descriptorUtil.classId
 import org.jetbrains.kotlin.resolve.descriptorUtil.setSingleOverridden
 import org.jetbrains.kotlin.types.TypeSubstitutor
@@ -66,7 +68,11 @@ fun createSynthesizedInvokes(functions: Collection<FunctionDescriptor>): Collect
 
 private fun createSynthesizedFunctionWithFirstParameterAsReceiver(descriptor: FunctionDescriptor) =
     descriptor.original.newCopyBuilder().apply {
-        setExtensionReceiverType(descriptor.original.valueParameters.first().type)
+        setExtensionReceiverParameter(
+            DescriptorFactory.createExtensionReceiverParameterForCallable(
+                descriptor.original, descriptor.original.valueParameters.first().type, Annotations.EMPTY
+            )
+        )
         setValueParameters(
             descriptor.original.valueParameters
                 .drop(1)
@@ -84,5 +90,5 @@ fun isSynthesizedInvoke(descriptor: DeclarationDescriptor): Boolean {
     }
 
     return real.kind == CallableMemberDescriptor.Kind.SYNTHESIZED &&
-            real.containingDeclaration.getFunctionalClassKind() != null
+            real.containingDeclaration.getFunctionTypeKind() != null
 }

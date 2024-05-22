@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen
@@ -51,12 +51,14 @@ open class BranchedValue(
 
         val TRUE: BranchedValue = object : BranchedValue(StackValue.none()/*not used*/, null, Type.BOOLEAN_TYPE, IFEQ) {
             override fun condJump(jumpLabel: Label, v: InstructionAdapter, jumpIfFalse: Boolean) {
+                v.nop()
                 if (!jumpIfFalse) {
                     v.goTo(jumpLabel)
                 }
             }
 
             override fun loopJump(jumpLabel: Label, v: InstructionAdapter, jumpIfFalse: Boolean) {
+                v.nop()
                 if (!jumpIfFalse) {
                     v.fakeAlwaysTrueIfeq(jumpLabel)
                 } else {
@@ -72,12 +74,14 @@ open class BranchedValue(
 
         val FALSE: BranchedValue = object : BranchedValue(StackValue.none()/*not used*/, null, Type.BOOLEAN_TYPE, IFEQ) {
             override fun condJump(jumpLabel: Label, v: InstructionAdapter, jumpIfFalse: Boolean) {
+                v.nop()
                 if (jumpIfFalse) {
                     v.goTo(jumpLabel)
                 }
             }
 
             override fun loopJump(jumpLabel: Label, v: InstructionAdapter, jumpIfFalse: Boolean) {
+                v.nop()
                 if (jumpIfFalse) {
                     v.fakeAlwaysTrueIfeq(jumpLabel)
                 } else {
@@ -236,8 +240,9 @@ class ObjectCompare(
 
     companion object {
         fun getObjectCompareOpcode(opToken: IElementType): Int = when (opToken) {
-            KtTokens.EQEQEQ -> IF_ACMPNE
-            KtTokens.EXCLEQEQEQ -> IF_ACMPEQ
+            // "==" and "!=" are here because enum values are compared using reference equality.
+            KtTokens.EQEQEQ, KtTokens.EQEQ -> IF_ACMPNE
+            KtTokens.EXCLEQEQEQ, KtTokens.EXCLEQ -> IF_ACMPEQ
             else -> throw UnsupportedOperationException("don't know how to generate this condjump")
         }
     }

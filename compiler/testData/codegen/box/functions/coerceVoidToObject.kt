@@ -1,3 +1,4 @@
+
 fun a(): String? = null
 
 fun b(): Nothing = throw Exception()

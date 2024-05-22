@@ -180,7 +180,7 @@ NOTE: function expression can not be passed to a function call outside the paren
 
 In a lambda, only parameters (possibly decomposed) and their types can be specified. There's no way to explicitly specify the return type or receiver type. Those have to be inferred, otherwise function expression must be used.
 
-TODO: support qualified returns in lambdas (when return type is unknown, nad has to be inferrred).
+TODO: support qualified returns in lambdas (when return type is unknown, nad has to be inferred).
 
 ### Nested multi-declarations
 
@@ -198,7 +198,7 @@ b <- tmp2.component1()
 c <- tmp2.component2()
 ```
 
-If some of the types of `a`, `b` or `c` are specified, teh front-end verifies that respective component fucntion results match the expected types.
+If some of the types of `a`, `b` or `c` are specified, then front-end verifies that respective component function results match the expected types.
 
 Biggest issue: type inference for function literals. 
 
@@ -226,8 +226,8 @@ TODO
 - what is the Java name of this parameter: `(a, b): Pair<A, B>`?
   - maybe `a_b`
 - make components available in default parameter values
-- create locals for components, assign values (on nested decompositions, avoid calling smae component twice)
-- make sure that funciton expressions are inlined as well as lambda expressions
+- create locals for components, assign values (on nested decompositions, avoid calling the same component twice)
+- make sure that function expressions are inlined as well as lambda expressions
 
 ## IDE Changes
 

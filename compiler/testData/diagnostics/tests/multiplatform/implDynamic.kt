@@ -1,5 +1,4 @@
-// !LANGUAGE: +MultiPlatformProjects
-// !DIAGNOSTICS: -UNSUPPORTED
+// DIAGNOSTICS: -UNSUPPORTED
 // MODULE: m1-common
 // FILE: common.kt
 
@@ -13,7 +12,7 @@ expect class Foo {
     fun <T : Set<Number>> f3(t: T): T?
 }
 
-// MODULE: m2-js(m1-common)
+// MODULE: m2-js()()(m1-common)
 // FILE: js.kt
 
 // TODO: do not suppress UNSUPPORTED once JS files in multi-platform tests are analyzed with JS analyzer facade

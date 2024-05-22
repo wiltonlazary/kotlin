@@ -1,3 +1,4 @@
+// KJS_WITH_FULL_RUNTIME
 
 fun box() : String {
     if (!testIteratingOverMap1()) return "fail 1"

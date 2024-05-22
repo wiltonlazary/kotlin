@@ -1,12 +1,11 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 import kotlin.test.assertEquals
 
-suspend fun ArrayList<Int>.yield(v: Int): Unit = suspendCoroutineOrReturn { x ->
+suspend fun ArrayList<Int>.yield(v: Int): Unit = suspendCoroutineUninterceptedOrReturn { x ->
     this.add(v)
     x.resume(Unit)
     COROUTINE_SUSPENDED

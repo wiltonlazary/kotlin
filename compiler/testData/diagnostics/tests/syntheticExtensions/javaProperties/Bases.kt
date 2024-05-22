@@ -18,7 +18,7 @@ fun foo(k: KotlinClass2) {
     k.<!UNRESOLVED_REFERENCE!>somethingKotlin2<!>
 }
 
-fun useInt(<!UNUSED_PARAMETER!>i<!>: Int) {}
+fun useInt(i: Int) {}
 
 // FILE: JavaClass1.java
 public class JavaClass1 {

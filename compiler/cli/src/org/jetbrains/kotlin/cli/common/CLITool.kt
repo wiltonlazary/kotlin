@@ -17,22 +17,30 @@
 package org.jetbrains.kotlin.cli.common
 
 import org.fusesource.jansi.AnsiConsole
-import org.jetbrains.kotlin.cli.common.arguments.*
+import org.jetbrains.kotlin.cli.common.arguments.CommonToolArguments
+import org.jetbrains.kotlin.cli.common.arguments.parseCommandLineArguments
+import org.jetbrains.kotlin.cli.common.arguments.parseCommandLineArgumentsFromEnvironment
+import org.jetbrains.kotlin.cli.common.arguments.validateArguments
 import org.jetbrains.kotlin.cli.common.messages.*
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.INFO
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.STRONG_WARNING
 import org.jetbrains.kotlin.cli.jvm.compiler.CompileEnvironmentException
+import org.jetbrains.kotlin.cli.jvm.compiler.setupIdeaStandaloneExecution
 import org.jetbrains.kotlin.config.KotlinCompilerVersion
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.config.Services
+import org.jetbrains.kotlin.utils.PathUtil
 import java.io.PrintStream
 import java.net.URL
 import java.net.URLConnection
 import java.util.function.Predicate
+import kotlin.system.exitProcess
 
 abstract class CLITool<A : CommonToolArguments> {
-    fun exec(errStream: PrintStream, vararg args: String): ExitCode {
-        return exec(errStream, Services.EMPTY, MessageRenderer.PLAIN_RELATIVE_PATHS, args)
-    }
+    fun exec(errStream: PrintStream, vararg args: String): ExitCode =
+        exec(errStream, Services.EMPTY, defaultMessageRenderer(), args)
+
+    fun exec(errStream: PrintStream, messageRenderer: MessageRenderer, vararg args: String): ExitCode =
+        exec(errStream, Services.EMPTY, messageRenderer, args)
 
     protected fun exec(
         errStream: PrintStream,
@@ -42,11 +50,16 @@ abstract class CLITool<A : CommonToolArguments> {
     ): ExitCode {
         val arguments = createArguments()
         parseCommandLineArguments(args.asList(), arguments)
+
+        if (isReadingSettingsFromEnvironmentAllowed) {
+            parseCommandLineArgumentsFromEnvironment(arguments)
+        }
+
         val collector = PrintingMessageCollector(errStream, messageRenderer, arguments.verbose)
 
         try {
-            if (PlainTextMessageRenderer.COLOR_ENABLED) {
-                AnsiConsole.systemInstall()
+            if (messageRenderer is PlainTextMessageRenderer) {
+                messageRenderer.enableColorsIfNeeded()
             }
 
             errStream.print(messageRenderer.renderPreamble())
@@ -54,7 +67,7 @@ abstract class CLITool<A : CommonToolArguments> {
             val errorMessage = validateArguments(arguments.errors)
             if (errorMessage != null) {
                 collector.report(CompilerMessageSeverity.ERROR, errorMessage, null)
-                collector.report(CompilerMessageSeverity.INFO, "Use -help for more information", null)
+                collector.report(INFO, "Use -help for more information", null)
                 return ExitCode.COMPILATION_ERROR
             }
 
@@ -67,8 +80,8 @@ abstract class CLITool<A : CommonToolArguments> {
         } finally {
             errStream.print(messageRenderer.renderConclusion())
 
-            if (PlainTextMessageRenderer.COLOR_ENABLED) {
-                AnsiConsole.systemUninstall()
+            if (messageRenderer is PlainTextMessageRenderer) {
+                messageRenderer.disableColorsIfNeeded()
             }
         }
     }
@@ -84,7 +97,7 @@ abstract class CLITool<A : CommonToolArguments> {
             messageCollector
         }
 
-        reportArgumentParseProblems(fixedMessageCollector, arguments)
+        fixedMessageCollector.reportArgumentParseProblems(arguments)
         return execImpl(fixedMessageCollector, services, arguments)
     }
 
@@ -112,39 +125,6 @@ abstract class CLITool<A : CommonToolArguments> {
         }
     }
 
-    private fun reportArgumentParseProblems(collector: MessageCollector, arguments: A) {
-        val errors = arguments.errors
-        for (flag in errors.unknownExtraFlags) {
-            collector.report(STRONG_WARNING, "Flag is not supported by this version of the compiler: $flag")
-        }
-        for (argument in errors.extraArgumentsPassedInObsoleteForm) {
-            collector.report(
-                STRONG_WARNING, "Advanced option value is passed in an obsolete form. Please use the '=' character " +
-                        "to specify the value: $argument=..."
-            )
-        }
-        for ((key, value) in errors.duplicateArguments) {
-            collector.report(STRONG_WARNING, "Argument $key is passed multiple times. Only the last value will be used: $value")
-        }
-        for ((deprecatedName, newName) in errors.deprecatedArguments) {
-            collector.report(STRONG_WARNING, "Argument $deprecatedName is deprecated. Please use $newName instead")
-        }
-        if (arguments.internalArguments.isNotEmpty()) {
-            collector.report(
-                STRONG_WARNING,
-                "ATTENTION!\n" +
-                        "This build uses internal compiler arguments:\n" +
-                        arguments.internalArguments.joinToString(prefix = "\n", postfix = "\n\n", separator = "\n") +
-                        "This mode is strictly prohibited for production use,\n" +
-                        "as no stability/compatibility guarantees are given on\n" +
-                        "compiler or generated code. Use it at your own risk!\n"
-            )
-        }
-        for (argfileError in errors.argfileErrors) {
-            collector.report(STRONG_WARNING, argfileError)
-        }
-    }
-
     private fun <A : CommonToolArguments> printVersionIfNeeded(messageCollector: MessageCollector, arguments: A) {
         if (arguments.version) {
             val jreVersion = System.getProperty("java.runtime.version")
@@ -154,7 +134,20 @@ abstract class CLITool<A : CommonToolArguments> {
 
     abstract fun executableScriptFileName(): String
 
+    var isReadingSettingsFromEnvironmentAllowed: Boolean =
+        this::class.java.classLoader.getResource(LanguageVersionSettings.RESOURCE_NAME_TO_ALLOW_READING_FROM_ENVIRONMENT) != null
+
     companion object {
+        private fun defaultMessageRenderer(): MessageRenderer =
+            when (System.getProperty(MessageRenderer.PROPERTY_KEY)) {
+                MessageRenderer.XML.name -> MessageRenderer.XML
+                MessageRenderer.GRADLE_STYLE.name -> MessageRenderer.GRADLE_STYLE
+                MessageRenderer.XCODE_STYLE.name -> MessageRenderer.XCODE_STYLE
+                MessageRenderer.WITHOUT_PATHS.name -> MessageRenderer.WITHOUT_PATHS
+                MessageRenderer.PLAIN_FULL_PATHS.name -> MessageRenderer.PLAIN_FULL_PATHS
+                else -> MessageRenderer.PLAIN_RELATIVE_PATHS
+            }
+
         /**
          * Useful main for derived command line tools
          */
@@ -165,23 +158,29 @@ abstract class CLITool<A : CommonToolArguments> {
             if (System.getProperty("java.awt.headless") == null) {
                 System.setProperty("java.awt.headless", "true")
             }
-            if (System.getProperty(PlainTextMessageRenderer.KOTLIN_COLORS_ENABLED_PROPERTY) == null) {
-                System.setProperty(PlainTextMessageRenderer.KOTLIN_COLORS_ENABLED_PROPERTY, "true")
+            if (CompilerSystemProperties.KOTLIN_COLORS_ENABLED_PROPERTY.value == null) {
+                CompilerSystemProperties.KOTLIN_COLORS_ENABLED_PROPERTY.value = "true"
             }
+
+            setupIdeaStandaloneExecution()
+
             val exitCode = doMainNoExit(compiler, args)
             if (exitCode != ExitCode.OK) {
-                System.exit(exitCode.code)
+                exitProcess(exitCode.code)
             }
         }
 
         @JvmStatic
-        fun doMainNoExit(compiler: CLITool<*>, args: Array<String>): ExitCode {
-            try {
-                return compiler.exec(System.err, *args)
-            } catch (e: CompileEnvironmentException) {
-                System.err.println(e.message)
-                return ExitCode.INTERNAL_ERROR
-            }
+        @JvmOverloads
+        fun doMainNoExit(
+            compiler: CLITool<*>,
+            args: Array<String>,
+            messageRenderer: MessageRenderer = defaultMessageRenderer()
+        ): ExitCode = try {
+            compiler.exec(System.err, messageRenderer, *args)
+        } catch (e: CompileEnvironmentException) {
+            System.err.println(e.message)
+            ExitCode.INTERNAL_ERROR
         }
     }
 }

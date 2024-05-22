@@ -23,18 +23,22 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.storage.StorageManager
+import org.jetbrains.kotlin.storage.getValue
 import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
 
 abstract class AbstractTypeAliasDescriptor(
+    protected val storageManager: StorageManager,
     containingDeclaration: DeclarationDescriptor,
     annotations: Annotations,
     name: Name,
     sourceElement: SourceElement,
-    private val visibilityImpl: Visibility
+    private val visibilityImpl: DescriptorVisibility
 ) : DeclarationDescriptorNonRootImpl(containingDeclaration, annotations, name, sourceElement),
     TypeAliasDescriptor {
-
-    protected abstract val storageManager: StorageManager
+    override val constructors: Collection<TypeAliasConstructorDescriptor> by storageManager.createLazyValue {
+        getTypeAliasConstructors()
+    }
 
     // TODO kotlinize some interfaces
     private lateinit var declaredTypeParametersImpl: List<TypeParameterDescriptor>
@@ -89,8 +93,11 @@ abstract class AbstractTypeAliasDescriptor(
 
     protected abstract fun getTypeConstructorTypeParameters(): List<TypeParameterDescriptor>
 
+    @OptIn(TypeRefinement::class)
     protected fun computeDefaultType(): SimpleType =
-        TypeUtils.makeUnsubstitutedType(this, classDescriptor?.unsubstitutedMemberScope ?: MemberScope.Empty)
+        TypeUtils.makeUnsubstitutedType(this, classDescriptor?.unsubstitutedMemberScope ?: MemberScope.Empty) { kotlinTypeRefiner ->
+            kotlinTypeRefiner.refineDescriptor(this)?.defaultType
+        }
 
     private val typeConstructor = object : TypeConstructor {
         override fun getDeclarationDescriptor(): TypeAliasDescriptor =
@@ -112,5 +119,10 @@ abstract class AbstractTypeAliasDescriptor(
             declarationDescriptor.builtIns
 
         override fun toString(): String = "[typealias ${declarationDescriptor.name.asString()}]"
+
+        // There must be @TypeRefinement, but there is a bug with anonymous objects and experimental annotations
+        // See KT-31728
+        @OptIn(TypeRefinement::class)
+        override fun refine(kotlinTypeRefiner: KotlinTypeRefiner): TypeConstructor = this
     }
 }

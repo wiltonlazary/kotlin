@@ -1,7 +1,9 @@
+// IGNORE_BACKEND: JS_IR
+// IGNORE_BACKEND: JS_IR_ES6
 // TODO: muted automatically, investigate should it be ran for JS or not
 // IGNORE_BACKEND: JS
 
-// WITH_RUNTIME
+// WITH_STDLIB
 // This is a big, ugly, semi-auto generated test.
 // Use corresponding 'Small' test for debug.
 
@@ -38,11 +40,11 @@ abstract class TestFnBase(val type: String) {
     abstract fun testBad(x: Any)
 
     protected fun assertIs(x: Any, condition: Boolean) {
-        assert(condition) { "x is $type: failed for $x" }
+        require(condition) { "x is $type: failed for $x" }
     }
     
     protected fun assertIsNot(x: Any, condition: Boolean) {
-        assert(condition) { "x !is $type: failed for $x" }
+        require(condition) { "x !is $type: failed for $x" }
     }
 }
 

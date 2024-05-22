@@ -21,7 +21,8 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.Call
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.calls.CallTransformer
-import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.components.candidate.ResolutionCandidate
+import org.jetbrains.kotlin.resolve.calls.util.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo
 import org.jetbrains.kotlin.resolve.calls.tasks.TracingStrategy
@@ -29,7 +30,6 @@ import org.jetbrains.kotlin.resolve.calls.tasks.TracingStrategyForInvoke
 import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 import org.jetbrains.kotlin.util.OperatorNameConventions
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 val KotlinCall.psiKotlinCall: PSIKotlinCall
     get() {
@@ -39,6 +39,7 @@ val KotlinCall.psiKotlinCall: PSIKotlinCall
         return this as PSIKotlinCall
     }
 
+@Suppress("UNCHECKED_CAST")
 fun <D : CallableDescriptor> KotlinCall.getResolvedPsiKotlinCall(trace: BindingTrace): NewResolvedCallImpl<D>? =
     psiKotlinCall.psiCall.getResolvedCall(trace.bindingContext) as? NewResolvedCallImpl<D>
 
@@ -64,7 +65,8 @@ class PSIKotlinCallImpl(
     override val externalArgument: KotlinCallArgument?,
     override val startingDataFlowInfo: DataFlowInfo,
     override val resultDataFlowInfo: DataFlowInfo,
-    override val dataFlowInfoForArguments: DataFlowInfoForArguments
+    override val dataFlowInfoForArguments: DataFlowInfoForArguments,
+    override val isForImplicitInvoke: Boolean
 ) : PSIKotlinCall()
 
 class PSIKotlinCallForVariable(
@@ -85,11 +87,13 @@ class PSIKotlinCallForVariable(
     override val psiCall: Call = CallTransformer.stripCallArguments(baseCall.psiCall).let {
         if (explicitReceiver == null) CallTransformer.stripReceiver(it) else it
     }
+
+    override val isForImplicitInvoke: Boolean get() = false
 }
 
 class PSIKotlinCallForInvoke(
     val baseCall: PSIKotlinCallImpl,
-    val variableCall: KotlinResolutionCandidate,
+    val variableCall: ResolutionCandidate,
     override val explicitReceiver: ReceiverKotlinCallArgument,
     override val dispatchReceiverForInvokeExtension: SimpleKotlinCallArgument?
 ) : PSIKotlinCall() {
@@ -104,6 +108,7 @@ class PSIKotlinCallForInvoke(
     override val dataFlowInfoForArguments: DataFlowInfoForArguments get() = baseCall.dataFlowInfoForArguments
     override val psiCall: Call
     override val tracingStrategy: TracingStrategy
+    override val isForImplicitInvoke: Boolean = true
 
     init {
         val variableReceiver = dispatchReceiverForInvokeExtension ?: explicitReceiver

@@ -1,3 +1,4 @@
+
 interface Intf {
     val str: String
 }

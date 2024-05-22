@@ -1,4 +1,5 @@
-// !LANGUAGE: +SoundSmartCastsAfterTry
+// FIR_IDENTICAL
+// LANGUAGE: +SoundSmartCastsAfterTry
 
 fun foo() {
     var s: String?

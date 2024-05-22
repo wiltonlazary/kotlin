@@ -1,10 +1,9 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// WITH_STDLIB
 
 open class Base(val bar: String)
 
 class Foo(bar: String) : Base(bar) {
-  fun something() = (bar as java.lang.String).toUpperCase()
+  fun something() = bar.toUpperCase()
 }
 
 fun box() = Foo("ok").something()

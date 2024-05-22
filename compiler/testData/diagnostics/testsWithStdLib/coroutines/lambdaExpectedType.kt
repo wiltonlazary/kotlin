@@ -1,5 +1,6 @@
-// !CHECK_TYPE
-// !DIAGNOSTICS: -UNUSED_PARAMETER -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_VARIABLE
+// LANGUAGE: -SuspendConversion
+// CHECK_TYPE
+// DIAGNOSTICS: -UNUSED_PARAMETER -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_VARIABLE
 
 fun builder(c: suspend () -> Int) = 1
 fun <T> genericBuilder(c: suspend () -> T): T = null!!
@@ -19,7 +20,7 @@ fun foo() {
     builder { 1 }
 
     val x = { 1 }
-    builder(<!TYPE_MISMATCH!>x<!>)
+    builder(<!UNSUPPORTED_FEATURE!>x<!>)
     builder({1} <!UNCHECKED_CAST!>as (suspend () -> Int)<!>)
 
     var i: Int = 1
@@ -30,12 +31,12 @@ fun foo() {
     genericBuilder<Int> { <!TYPE_MISMATCH!>""<!> }
 
     val y = { 1 }
-    <!TYPE_INFERENCE_PARAMETER_CONSTRAINT_ERROR!>genericBuilder<!>(<!TYPE_MISMATCH!>y<!>)
+    genericBuilder(<!UNSUPPORTED_FEATURE!>y<!>)
 
     unitBuilder {}
-    unitBuilder { <!UNUSED_EXPRESSION!>1<!> }
+    unitBuilder { 1 }
     unitBuilder({})
-    unitBuilder({ <!UNUSED_EXPRESSION!>1<!> })
+    unitBuilder({ 1 })
 
     manyArgumentsBuilder({}, { "" }) { 1 }
 

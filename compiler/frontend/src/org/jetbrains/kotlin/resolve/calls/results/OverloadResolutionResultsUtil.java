@@ -19,19 +19,20 @@ package org.jetbrains.kotlin.resolve.calls.results;
 import com.google.common.collect.Lists;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.config.LanguageFeature;
 import org.jetbrains.kotlin.descriptors.CallableDescriptor;
 import org.jetbrains.kotlin.resolve.calls.context.ContextDependency;
 import org.jetbrains.kotlin.resolve.calls.context.ResolutionContext;
 import org.jetbrains.kotlin.resolve.calls.model.MutableResolvedCall;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
-import org.jetbrains.kotlin.resolve.calls.tower.KotlinToResolvedCallTransformerKt;
+import org.jetbrains.kotlin.resolve.calls.tower.*;
 import org.jetbrains.kotlin.types.KotlinType;
+import org.jetbrains.kotlin.resolve.calls.util.ResolvedCallUtilKt;
 
 import java.util.Collection;
 
 public class OverloadResolutionResultsUtil {
     @NotNull
+    @SuppressWarnings("unchecked")
     public static <D extends CallableDescriptor> OverloadResolutionResults<D> ambiguity(OverloadResolutionResults<D> results1, OverloadResolutionResults<D> results2) {
         Collection<MutableResolvedCall<D>> resultingCalls = Lists.newArrayList();
         resultingCalls.addAll((Collection<MutableResolvedCall<D>>) results1.getResultingCalls());
@@ -55,15 +56,21 @@ public class OverloadResolutionResultsUtil {
     ) {
         if (results.isSingleResult() && context.contextDependency == ContextDependency.INDEPENDENT) {
             ResolvedCall<D> resultingCall = results.getResultingCall();
-            if (!context.languageVersionSettings.supportsFeature(LanguageFeature.NewInference)) {
-                if (!((MutableResolvedCall<D>) resultingCall).hasInferredReturnType()) {
-                    return null;
-                }
+            NewAbstractResolvedCall<?> newResolvedCall;
+            if (resultingCall instanceof NewVariableAsFunctionResolvedCallImpl) {
+                newResolvedCall = ((NewVariableAsFunctionResolvedCallImpl) resultingCall).getFunctionCall();
             }
-            else {
-                if (KotlinToResolvedCallTransformerKt.isNewNotCompleted(resultingCall)) {
+            else if (resultingCall instanceof NewAbstractResolvedCall<?>) {
+                newResolvedCall = (NewAbstractResolvedCall<?>) resultingCall;
+            } else {
+                newResolvedCall = null;
+            }
+            if (newResolvedCall != null) {
+                if (!ResolvedCallUtilKt.hasInferredReturnType(newResolvedCall)) {
                     return null;
                 }
+            } else if (!((MutableResolvedCall<D>) resultingCall).hasInferredReturnType()) {
+                return null;
             }
         }
         return results.isSingleResult() ? results.getResultingCall() : null;

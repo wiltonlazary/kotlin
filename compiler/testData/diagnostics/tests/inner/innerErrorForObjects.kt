@@ -5,14 +5,14 @@ class TestSome<P> {
 }
 
 class Test {
-    object Some : <!UNRESOLVED_REFERENCE, DEBUG_INFO_UNRESOLVED_WITH_TARGET!>InnerClass<!>() {
-        val a = object: <!UNRESOLVED_REFERENCE, DEBUG_INFO_UNRESOLVED_WITH_TARGET!>InnerClass<!>() {
+    object Some : <!DEBUG_INFO_UNRESOLVED_WITH_TARGET, UNRESOLVED_REFERENCE!>InnerClass<!>() {
+        val a = object: <!DEBUG_INFO_UNRESOLVED_WITH_TARGET, UNRESOLVED_REFERENCE!>InnerClass<!>() {
         }
 
         fun more(): InnerClass {
             val b = <!RESOLUTION_TO_CLASSIFIER!>InnerClass<!>()
 
-            val <!UNUSED_VARIABLE!>testVal<!> = <!UNRESOLVED_REFERENCE!>inClass<!>
+            val testVal = <!UNRESOLVED_REFERENCE!>inClass<!>
             <!UNRESOLVED_REFERENCE!>foo<!>()
 
             return <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>b<!>

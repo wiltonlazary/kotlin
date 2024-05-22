@@ -22,6 +22,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.resolve.BindingTrace;
 import org.jetbrains.kotlin.storage.NotNullLazyValue;
 import org.jetbrains.kotlin.storage.StorageManager;
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner;
+import org.jetbrains.kotlin.types.error.ErrorTypeKind;
+import org.jetbrains.kotlin.types.error.ErrorUtils;
 import org.jetbrains.kotlin.util.Box;
 import org.jetbrains.kotlin.util.ReenteringLazyValueComputationException;
 
@@ -30,7 +33,7 @@ import static org.jetbrains.kotlin.resolve.BindingContext.DEFERRED_TYPE;
 public class DeferredType extends WrappedType {
     private static final Function1<Boolean, KotlinType> RECURSION_PREVENTER = firstTime -> {
         if (firstTime) throw new ReenteringLazyValueComputationException();
-        return ErrorUtils.createErrorType("Recursive dependency");
+        return ErrorUtils.createErrorType(ErrorTypeKind.RECURSIVE_TYPE);
     };
 
     @NotNull
@@ -43,16 +46,14 @@ public class DeferredType extends WrappedType {
         trace.record(DEFERRED_TYPE, new Box<>(deferredType));
         return deferredType;
     }
-    
+
     @NotNull
     /*package private*/ static DeferredType createRecursionIntolerant(
             @NotNull StorageManager storageManager,
             @NotNull BindingTrace trace,
             @NotNull Function0<KotlinType> compute
     ) {
-        //noinspection unchecked
-        DeferredType deferredType =
-                new DeferredType(storageManager.createLazyValueWithPostCompute(compute, RECURSION_PREVENTER, t -> null));
+        DeferredType deferredType = new DeferredType(storageManager.createLazyValue(compute, RECURSION_PREVENTER));
         trace.record(DEFERRED_TYPE, new Box<>(deferredType));
         return deferredType;
     }
@@ -60,7 +61,36 @@ public class DeferredType extends WrappedType {
     private final NotNullLazyValue<KotlinType> lazyValue;
 
     private DeferredType(@NotNull NotNullLazyValue<KotlinType> lazyValue) {
+        super();
         this.lazyValue = lazyValue;
+    }
+
+    @NotNull
+    @Override
+    public KotlinType refine(@NotNull KotlinTypeRefiner kotlinTypeRefiner) {
+        return new DeferredType(new NotNullLazyValue<KotlinType>() {
+            @NotNull
+            @Override
+            public String renderDebugInformation() {
+                return lazyValue.renderDebugInformation();
+            }
+
+            @Override
+            public boolean isComputed() {
+                return lazyValue.isComputed();
+            }
+
+            @Override
+            public boolean isComputing() {
+                return lazyValue.isComputing();
+            }
+
+            @Override
+            @TypeRefinement
+            public KotlinType invoke() {
+                return kotlinTypeRefiner.refineType(lazyValue.invoke());
+            }
+        });
     }
 
     public boolean isComputing() {

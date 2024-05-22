@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER -UNUSED_VARIABLE
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER -UNUSED_VARIABLE
 
 // KT-8596 Rewrite at slice LEXICAL_SCOPE for nested class constructor reference in an argument position
 

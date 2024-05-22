@@ -1,3 +1,4 @@
+
 fun foo(): Int {
     try {
     } finally {

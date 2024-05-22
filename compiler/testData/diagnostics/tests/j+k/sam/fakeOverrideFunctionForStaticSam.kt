@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // FILE: BehaviorSubject.java
 public class BehaviorSubject<T> extends Observable<T> {
 }
@@ -14,7 +15,7 @@ public class Observable<T> {
 }
 
 // FILE: 1.kt
-fun main(args: Array<String>) {
+fun main() {
     BehaviorSubject.create<String>(null)
     BehaviorSubject.create<Int> { }
 }

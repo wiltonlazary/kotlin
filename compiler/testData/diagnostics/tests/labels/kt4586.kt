@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_VARIABLE
 //KT-4586 this@ does not work for builders
 
 fun string(init: StringBuilder.() -> Unit): String{

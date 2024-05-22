@@ -1,4 +1,3 @@
-
 /** Test. */
 class Test {
     /** method(). */
@@ -11,7 +10,7 @@ class Test {
     fun method(a: String) {}
 
     /** prop. */
-    val prop: String = ""
+    const val prop: String = ""
 
     /** prop2. */
     @Anno
@@ -45,6 +44,7 @@ class Test4 {
 }
 
 enum class EnumError {
+    /** This is the one */
     One {
         override fun doIt() = ""
 

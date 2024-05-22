@@ -25,7 +25,8 @@ import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils;
-import org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt;
+import org.jetbrains.kotlin.resolve.DescriptorUtils;
+import org.jetbrains.kotlin.resolve.calls.util.CallUtilKt;
 import org.jetbrains.kotlin.resolve.calls.context.ResolutionContext;
 import org.jetbrains.kotlin.resolve.calls.model.ArgumentMapping;
 import org.jetbrains.kotlin.resolve.calls.model.ArgumentMatch;
@@ -45,7 +46,7 @@ public class InlineUtil {
     }
 
     public static boolean isInline(@Nullable DeclarationDescriptor descriptor) {
-        return descriptor instanceof FunctionDescriptor && getInlineStrategy((FunctionDescriptor) descriptor).isInline();
+        return descriptor instanceof FunctionDescriptor && ((FunctionDescriptor) descriptor).isInline();
     }
 
     public static boolean hasInlineAccessors(@NotNull PropertyDescriptor propertyDescriptor) {
@@ -74,13 +75,17 @@ public class InlineUtil {
         return isInlineOrContainingInline(descriptor.getContainingDeclaration());
     }
 
-    @NotNull
-    private static InlineStrategy getInlineStrategy(@NotNull FunctionDescriptor descriptor) {
-        if (descriptor.isInline()) {
-            return InlineStrategy.AS_FUNCTION;
+    public static boolean isInPublicInlineScope(@Nullable DeclarationDescriptor descriptor) {
+        if (descriptor == null) return false;
+        if (isInline(descriptor) && descriptor instanceof DeclarationDescriptorWithVisibility) {
+            DescriptorVisibility visibility = ((DeclarationDescriptorWithVisibility) descriptor).getVisibility();
+            if (!DescriptorVisibilities.isPrivate(visibility)) {
+                ClassDescriptor containingClass = DescriptorUtils.getContainingClass(descriptor);
+                if (containingClass == null || !DescriptorVisibilities.isPrivate(containingClass.getVisibility()))
+                    return true;
+            }
         }
-
-        return InlineStrategy.NOT_INLINE;
+        return isInPublicInlineScope(descriptor.getContainingDeclaration());
     }
 
     public static boolean checkNonLocalReturnUsage(
@@ -108,6 +113,11 @@ public class InlineUtil {
         if (containingFunctionDescriptor == null) return false;
 
         while (canBeInlineArgument(containingFunction) && fromFunction != containingFunctionDescriptor) {
+            Boolean isLambdaDefinitelyInline = bindingContext.get(BindingContext.NEW_INFERENCE_IS_LAMBDA_FOR_OVERLOAD_RESOLUTION_INLINE, containingFunction);
+            if (isLambdaDefinitelyInline != null) {
+                return isLambdaDefinitelyInline;
+            }
+
             if (!isInlinedArgument((KtFunction) containingFunction, bindingContext, true)) {
                 return false;
             }

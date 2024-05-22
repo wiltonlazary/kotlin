@@ -1,5 +1,8 @@
 // TARGET_BACKEND: JVM
-// WITH_RUNTIME
+// WITH_STDLIB
+
+// JVM_ABI_K1_K2_DIFF: KT-63864
+
 // FILE: test.kt
 fun box(): String {
     class Local(val i: Int, val j: Int) : Foo() {
@@ -14,7 +17,7 @@ fun box(): String {
     )
 
     val result = log.toString()
-    if (result != "Foo.<clinit>;i;j;Foo.<init>;Local.<init>;") return "Fail: '$result'"
+    if (result != "i;j;Foo.<clinit>;Foo.<init>;Local.<init>;") return "Fail: '$result'"
 
     return "OK"
 }

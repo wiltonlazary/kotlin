@@ -19,15 +19,11 @@ package org.jetbrains.kotlin.resolve.inline
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.coroutines.hasSuspendFunctionType
-import org.jetbrains.kotlin.coroutines.isSuspendLambda
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.descriptors.annotations.isInlineOnlyOrReifiable
 import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.resolve.AnalyzerExtensions
-import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.BindingTrace
+import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.calls.components.hasDefaultValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.declaresOrInheritsDefaultValue
 
@@ -38,7 +34,7 @@ class InlineAnalyzerExtension(
 
     override fun process(descriptor: CallableMemberDescriptor, functionOrProperty: KtCallableDeclaration, trace: BindingTrace) {
         checkModalityAndOverrides(descriptor, functionOrProperty, trace)
-        notSupportedInInlineCheck(descriptor, functionOrProperty, trace)
+        notSupportedInInlineCheck(functionOrProperty, trace)
 
         if (descriptor is FunctionDescriptor) {
             assert(functionOrProperty is KtNamedFunction) {
@@ -62,7 +58,6 @@ class InlineAnalyzerExtension(
     }
 
     private fun notSupportedInInlineCheck(
-        descriptor: CallableMemberDescriptor,
         functionOrProperty: KtCallableDeclaration,
         trace: BindingTrace
     ) {
@@ -144,7 +139,7 @@ class InlineAnalyzerExtension(
             return
         }
 
-        if (Visibilities.isPrivate(callableDescriptor.visibility)) {
+        if (DescriptorVisibilities.isPrivate(callableDescriptor.visibility)) {
             return
         }
 
@@ -161,20 +156,17 @@ class InlineAnalyzerExtension(
             }
         }
 
-        if (callableDescriptor.isEffectivelyFinal()) {
+        if (callableDescriptor.isEffectivelyFinal(ignoreEnumClassFinality = true)) {
             if (overridesAnything) {
                 trace.report(Errors.OVERRIDE_BY_INLINE.on(functionOrProperty))
+            }
+            if (!callableDescriptor.isEffectivelyFinal(ignoreEnumClassFinality = false)) {
+                trace.report(Errors.DECLARATION_CANT_BE_INLINED_WARNING.on(functionOrProperty))
             }
             return
         }
         trace.report(Errors.DECLARATION_CANT_BE_INLINED.on(functionOrProperty))
     }
-
-    private fun CallableMemberDescriptor.isEffectivelyFinal(): Boolean =
-        modality == Modality.FINAL ||
-                containingDeclaration.let { containingDeclaration ->
-                    containingDeclaration is ClassDescriptor && containingDeclaration.modality == Modality.FINAL
-                }
 
     private fun checkHasInlinableAndNullability(functionDescriptor: FunctionDescriptor, function: KtFunction, trace: BindingTrace) {
         var hasInlineArgs = false
@@ -183,12 +175,15 @@ class InlineAnalyzerExtension(
         }
         if (hasInlineArgs) return
 
-        if (functionDescriptor.isInlineOnlyOrReifiable() || functionDescriptor.isExpect || functionDescriptor.isSuspend) return
+        if (functionDescriptor.isInlineWithReified() || functionDescriptor.isInlineOnly() || functionDescriptor.isExpect ||
+            functionDescriptor.isSuspend
+        ) return
 
         if (reasonableInlineRules.any { it.isInlineReasonable(functionDescriptor, function, trace.bindingContext) }) return
+        if (functionDescriptor.returnType?.needsMfvcFlattening() == true) return
 
         val reportOn = function.modifierList?.getModifier(KtTokens.INLINE_KEYWORD) ?: function
-        trace.report(Errors.NOTHING_TO_INLINE.on(reportOn, functionDescriptor))
+        trace.report(Errors.NOTHING_TO_INLINE.on(reportOn))
     }
 
     private fun checkInlinableParameter(

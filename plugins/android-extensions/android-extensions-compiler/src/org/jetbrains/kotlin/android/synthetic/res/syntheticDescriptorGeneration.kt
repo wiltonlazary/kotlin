@@ -26,13 +26,11 @@ import org.jetbrains.kotlin.descriptors.impl.PropertyDescriptorImpl
 import org.jetbrains.kotlin.descriptors.impl.PropertyGetterDescriptorImpl
 import org.jetbrains.kotlin.descriptors.impl.SimpleFunctionDescriptorImpl
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.DescriptorFactory
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 import org.jetbrains.kotlin.resolve.source.PsiSourceElement
-import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.KotlinTypeFactory
-import org.jetbrains.kotlin.types.SimpleType
-import org.jetbrains.kotlin.types.StarProjectionImpl
+import org.jetbrains.kotlin.types.*
 
 private class XmlSourceElement(override val psi: PsiElement) : PsiSourceElement
 
@@ -46,8 +44,10 @@ internal fun genClearCacheFunction(packageFragmentDescriptor: PackageFragmentDes
             SourceElement.NO_SOURCE) {}
 
     val unitType = packageFragmentDescriptor.builtIns.unitType
-    function.initialize(receiverType, null, emptyList(), emptyList(), unitType, Modality.FINAL, Visibilities.PUBLIC)
-    return function
+    return function.initialize(
+        DescriptorFactory.createExtensionReceiverParameterForCallable(function, receiverType, Annotations.EMPTY),
+        null, emptyList(), emptyList(), emptyList(), unitType, Modality.FINAL, DescriptorVisibilities.PUBLIC
+    )
 }
 
 internal fun genPropertyForWidget(
@@ -56,7 +56,7 @@ internal fun genPropertyForWidget(
         resolvedWidget: ResolvedWidget,
         context: SyntheticElementResolveContext
 ): PropertyDescriptor {
-    val sourceEl = resolvedWidget.widget.sourceElement?.let(::XmlSourceElement) ?: SourceElement.NO_SOURCE
+    val sourceEl = resolvedWidget.widget.sourceElement?.element?.let(::XmlSourceElement) ?: SourceElement.NO_SOURCE
 
     val classDescriptor = resolvedWidget.viewClassDescriptor
     val type = classDescriptor?.let {
@@ -67,7 +67,7 @@ internal fun genPropertyForWidget(
         }
         else {
             KotlinTypeFactory.simpleNotNullType(
-                    Annotations.EMPTY, classDescriptor, defaultType.constructor.parameters.map(::StarProjectionImpl))
+                TypeAttributes.Empty, classDescriptor, defaultType.constructor.parameters.map(::StarProjectionImpl))
         }
     } ?: context.view
 
@@ -80,7 +80,7 @@ internal fun genPropertyForFragment(
         type: SimpleType,
         fragment: AndroidResource.Fragment
 ): PropertyDescriptor {
-    val sourceElement = fragment.sourceElement?.let(::XmlSourceElement) ?: SourceElement.NO_SOURCE
+    val sourceElement = fragment.sourceElement?.element?.let(::XmlSourceElement) ?: SourceElement.NO_SOURCE
     return genProperty(fragment, receiverType, type, packageFragmentDescriptor, sourceElement, null)
 }
 
@@ -97,7 +97,7 @@ private fun genProperty(
             null,
             Annotations.EMPTY,
             Modality.FINAL,
-            Visibilities.PUBLIC,
+            DescriptorVisibilities.PUBLIC,
             false,
             Name.identifier(resource.id.name),
             CallableMemberDescriptor.Kind.SYNTHESIZED,
@@ -120,13 +120,15 @@ private fun genProperty(
             flexibleType,
             emptyList<TypeParameterDescriptor>(),
             null,
-            receiverType)
+            DescriptorFactory.createExtensionReceiverParameterForCallable(property, receiverType, Annotations.EMPTY),
+            emptyList<ReceiverParameterDescriptor>()
+    )
 
     val getter = PropertyGetterDescriptorImpl(
             property,
             Annotations.EMPTY,
             Modality.FINAL,
-            Visibilities.PUBLIC,
+            DescriptorVisibilities.PUBLIC,
             /* isDefault = */ false,
             /* isExternal = */ false,
             /* isInline = */ false,

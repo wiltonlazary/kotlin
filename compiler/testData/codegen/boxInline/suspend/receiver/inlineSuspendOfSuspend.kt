@@ -1,9 +1,10 @@
-// FILE: test.kt
-// COMMON_COROUTINES_TEST
-// WITH_RUNTIME
+// WITH_COROUTINES
 // NO_CHECK_LAMBDA_INLINING
+// WITH_STDLIB
+// FILE: test.kt
 
-import COROUTINES_PACKAGE.*
+import kotlin.coroutines.*
+import helpers.*
 
 // Block is allowed to be called inside the body of owner inline function
 // suspend calls possible inside lambda matching to the parameter
@@ -17,22 +18,11 @@ class Controller {
 }
 
 // FILE: box.kt
-// COMMON_COROUTINES_TEST
-
-import COROUTINES_PACKAGE.*
+import kotlin.coroutines.*
+import helpers.*
 
 fun builder(controller: Controller, c: suspend Controller.() -> Unit) {
-    c.startCoroutine(controller, object: Continuation<Unit> {
-        override val context: CoroutineContext
-            get() = EmptyCoroutineContext
-
-        override fun resume(value: Unit) {
-        }
-
-        override fun resumeWithException(exception: Throwable) {
-            throw exception
-        }
-    })
+    c.startCoroutine(controller, EmptyContinuation)
 }
 
 suspend fun calculate() = "OK"

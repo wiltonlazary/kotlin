@@ -1,5 +1,4 @@
-// !WITH_NEW_INFERENCE
-// !DIAGNOSTICS: -UNUSED_EXPRESSION,-UNUSED_VARIABLE
+// DIAGNOSTICS: -UNUSED_EXPRESSION,-UNUSED_VARIABLE
 
 fun <T : CharSequence?> T.bar1() {}
 fun CharSequence?.bar2() {}
@@ -15,9 +14,9 @@ fun <T : CharSequence?> foo(x: T) {
         <!DEBUG_INFO_SMARTCAST!>x<!>.length
         x<!UNNECESSARY_SAFE_CALL!>?.<!>length
 
-        <!NI;DEBUG_INFO_SMARTCAST!>x<!>.bar1()
+        <!DEBUG_INFO_SMARTCAST!>x<!>.bar1()
         x.bar2()
-        <!NI;DEBUG_INFO_SMARTCAST!>x<!>.<!OI;TYPE_INFERENCE_UPPER_BOUND_VIOLATED!>bar3<!>()
+        <!DEBUG_INFO_SMARTCAST!>x<!>.bar3()
         <!DEBUG_INFO_SMARTCAST!>x<!>.bar4()
 
 
@@ -30,16 +29,16 @@ fun <T : CharSequence?> foo(x: T) {
         <!DEBUG_INFO_SMARTCAST!>x<!>.length
         x<!UNNECESSARY_SAFE_CALL!>?.<!>length
 
-        x.bar1()
+        <!DEBUG_INFO_SMARTCAST!>x<!>.bar1()
         x.bar2()
-        <!OI;DEBUG_INFO_SMARTCAST!>x<!>.bar3()
+        <!DEBUG_INFO_SMARTCAST!>x<!>.bar3()
     }
 
     if (x is CharSequence) {
         <!DEBUG_INFO_SMARTCAST!>x<!>.length
         x<!UNNECESSARY_SAFE_CALL!>?.<!>length
 
-        <!NI;DEBUG_INFO_SMARTCAST!>x<!>.bar1()
+        <!DEBUG_INFO_SMARTCAST!>x<!>.bar1()
         x.bar2()
         <!DEBUG_INFO_SMARTCAST!>x<!>.bar3()
     }

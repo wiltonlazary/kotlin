@@ -1,3 +1,4 @@
+
 fun box(): String {
     try {
         throw Throwable("OK", null)

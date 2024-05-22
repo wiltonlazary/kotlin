@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.test.testng
@@ -11,7 +11,7 @@ import kotlin.test.*
 /**
  * Provides [TestNGAsserter] if `org.testng.Assert` is found in the classpath.
  */
-class TestNGContributor : AsserterContributor {
+public class TestNGContributor : AsserterContributor {
     override fun contribute(): Asserter? {
         return if (hasTestNGInClassPath) TestNGAsserter else null
     }
@@ -27,21 +27,21 @@ class TestNGContributor : AsserterContributor {
 /**
  * Implements `kotlin.test` assertions by delegating them to `org.testng.Assert` class.
  */
-object TestNGAsserter : Asserter {
+public object TestNGAsserter : Asserter {
     override fun assertEquals(message: String?, expected: Any?, actual: Any?) {
-        Assert.assertEquals(expected, actual, message)
+        Assert.assertEquals(actual, expected, message)
     }
 
     override fun assertNotEquals(message: String?, illegal: Any?, actual: Any?) {
-        Assert.assertNotEquals(illegal, actual, message)
+        Assert.assertNotEquals(actual, illegal, message)
     }
 
     override fun assertSame(message: String?, expected: Any?, actual: Any?) {
-        Assert.assertSame(expected, actual, message)
+        Assert.assertSame(actual, expected, message)
     }
 
     override fun assertNotSame(message: String?, illegal: Any?, actual: Any?) {
-        Assert.assertNotSame(illegal, actual, message)
+        Assert.assertNotSame(actual, illegal, message)
     }
 
     override fun assertNotNull(message: String?, actual: Any?) {
@@ -56,5 +56,12 @@ object TestNGAsserter : Asserter {
         Assert.fail(message)
         // should not get here
         throw AssertionError(message)
+    }
+
+    @SinceKotlin("1.4")
+    override fun fail(message: String?, cause: Throwable?): Nothing {
+        Assert.fail(message, cause)
+        // should not get here
+        throw AssertionError(message).initCause(cause)
     }
 }

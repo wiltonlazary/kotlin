@@ -1,16 +1,15 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 var globalResult = ""
 var wasCalled = false
 class Controller {
     val postponedActions = mutableListOf<() -> Unit>()
 
-    suspend fun suspendWithValue(v: String): String = suspendCoroutineOrReturn { x ->
+    suspend fun suspendWithValue(v: String): String = suspendCoroutineUninterceptedOrReturn { x ->
         postponedActions.add {
             x.resume(v)
         }
@@ -18,7 +17,7 @@ class Controller {
         COROUTINE_SUSPENDED
     }
 
-    suspend fun suspendWithException(e: Exception): String = suspendCoroutineOrReturn { x ->
+    suspend fun suspendWithException(e: Exception): String = suspendCoroutineUninterceptedOrReturn { x ->
         postponedActions.add {
             x.resumeWithException(e)
         }

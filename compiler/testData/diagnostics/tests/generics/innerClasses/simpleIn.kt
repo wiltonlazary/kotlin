@@ -1,5 +1,5 @@
-// !CHECK_TYPE
-// !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER
+// CHECK_TYPE
+// DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER
 
 class Outer<in E> {
     inner class Inner {
@@ -15,7 +15,7 @@ class Outer<in E> {
 fun factoryString(): Outer<String>.Inner = null!!
 
 fun <T> infer(x: T): Outer<T>.Inner = null!!
-val infered = infer("")
+val inferred = infer("")
 
 fun main() {
     val outer = Outer<CharSequence>()

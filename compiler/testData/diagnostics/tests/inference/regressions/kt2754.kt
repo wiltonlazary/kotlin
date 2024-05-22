@@ -1,5 +1,6 @@
-// !CHECK_TYPE
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// CHECK_TYPE
+// DIAGNOSTICS: -UNUSED_PARAMETER
 
 // T is the immutable type
 interface Builder<out T> {

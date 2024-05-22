@@ -1,3 +1,4 @@
+
 var result = "fail"
 
 open class Base(val o: String, val k: String)

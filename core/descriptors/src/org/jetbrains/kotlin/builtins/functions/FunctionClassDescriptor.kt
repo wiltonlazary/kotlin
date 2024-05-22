@@ -1,25 +1,26 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.builtins.functions
 
-import org.jetbrains.kotlin.builtins.BuiltInsPackageFragment
-import org.jetbrains.kotlin.builtins.KOTLIN_REFLECT_FQ_NAME
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME
+import org.jetbrains.kotlin.builtins.StandardNames.BUILT_INS_PACKAGE_FQ_NAME
+import org.jetbrains.kotlin.builtins.StandardNames.COROUTINES_PACKAGE_FQ_NAME
+import org.jetbrains.kotlin.builtins.StandardNames.KOTLIN_REFLECT_FQ_NAME
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.AbstractClassDescriptor
 import org.jetbrains.kotlin.descriptors.impl.TypeParameterDescriptorImpl
-import org.jetbrains.kotlin.incremental.components.NoLookupLocation
-import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.types.*
-import java.util.*
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
+import org.jetbrains.kotlin.utils.IDEAPlatforms
+import org.jetbrains.kotlin.utils.IDEAPluginsCompatibilityAPI
+import org.jetbrains.kotlin.utils.addToStdlib.shouldNotBeCalled
 
 /**
  * A [ClassDescriptor] representing the fictitious class for a function type, such as kotlin.Function1 or kotlin.reflect.KFunction2.
@@ -30,24 +31,11 @@ import java.util.*
  * This allows to use both 'invoke' and reflection API on function references obtained by '::'.
  */
 class FunctionClassDescriptor(
-        private val storageManager: StorageManager,
-        private val containingDeclaration: PackageFragmentDescriptor,
-        val functionKind: Kind,
-        val arity: Int
-) : AbstractClassDescriptor(storageManager, functionKind.numberedClassName(arity)) {
-
-    enum class Kind(val packageFqName: FqName, val classNamePrefix: String) {
-        Function(BUILT_INS_PACKAGE_FQ_NAME, "Function"),
-        SuspendFunction(BUILT_INS_PACKAGE_FQ_NAME, "SuspendFunction"),
-        KFunction(KOTLIN_REFLECT_FQ_NAME, "KFunction");
-
-        fun numberedClassName(arity: Int) = Name.identifier("$classNamePrefix$arity")
-
-        companion object {
-            fun byClassNamePrefix(packageFqName: FqName, className: String) =
-                    Kind.values().firstOrNull { it.packageFqName == packageFqName && className.startsWith(it.classNamePrefix) }
-        }
-    }
+    private val storageManager: StorageManager,
+    private val containingDeclaration: PackageFragmentDescriptor,
+    val functionTypeKind: FunctionTypeKind,
+    val arity: Int
+) : AbstractClassDescriptor(storageManager, functionTypeKind.numberedClassName(arity)) {
 
     private val typeConstructor = FunctionTypeConstructor()
     private val memberScope = FunctionClassScope(storageManager, this)
@@ -59,7 +47,7 @@ class FunctionClassDescriptor(
 
         fun typeParameter(variance: Variance, name: String) {
             result.add(TypeParameterDescriptorImpl.createWithDefaultBound(
-                    this@FunctionClassDescriptor, Annotations.EMPTY, false, variance, Name.identifier(name), result.size
+                    this@FunctionClassDescriptor, Annotations.EMPTY, false, variance, Name.identifier(name), result.size, storageManager
             ))
         }
 
@@ -72,70 +60,66 @@ class FunctionClassDescriptor(
         parameters = result.toList()
     }
 
+    @get:JvmName("hasBigArity")
+    val hasBigArity: Boolean
+        get() = arity >= BuiltInFunctionArity.BIG_ARITY
+
     override fun getContainingDeclaration() = containingDeclaration
 
     override fun getStaticScope() = MemberScope.Empty
 
     override fun getTypeConstructor(): TypeConstructor = typeConstructor
 
-    override fun getUnsubstitutedMemberScope() = memberScope
+    override fun getUnsubstitutedMemberScope(kotlinTypeRefiner: KotlinTypeRefiner) = memberScope
 
     override fun getCompanionObjectDescriptor() = null
     override fun getConstructors() = emptyList<ClassConstructorDescriptor>()
     override fun getKind() = ClassKind.INTERFACE
     override fun getModality() = Modality.ABSTRACT
     override fun getUnsubstitutedPrimaryConstructor() = null
-    override fun getVisibility() = Visibilities.PUBLIC
+    override fun getVisibility() = DescriptorVisibilities.PUBLIC
     override fun isCompanionObject() = false
     override fun isInner() = false
     override fun isData() = false
     override fun isInline() = false
+    override fun isFun() = false
+    override fun isValue() = false
     override fun isExpect() = false
     override fun isActual() = false
     override fun isExternal() = false
     override val annotations: Annotations get() = Annotations.EMPTY
     override fun getSource(): SourceElement = SourceElement.NO_SOURCE
     override fun getSealedSubclasses() = emptyList<ClassDescriptor>()
+    override fun getValueClassRepresentation(): ValueClassRepresentation<SimpleType>? = null
 
     override fun getDeclaredTypeParameters() = parameters
 
     private inner class FunctionTypeConstructor : AbstractClassTypeConstructor(storageManager) {
         override fun computeSupertypes(): Collection<KotlinType> {
-            val result = ArrayList<KotlinType>(2)
+            // For K{Suspend}Function{n}, add corresponding numbered {Suspend}Function{n} class, e.g. {Suspend}Function2 for K{Suspend}Function2
+            val supertypes = when (functionTypeKind) {
+                FunctionTypeKind.Function -> // Function$N <: Function
+                    listOf(functionClassId)
+                FunctionTypeKind.KFunction -> // KFunction$N <: KFunction
+                    listOf(kFunctionClassId, ClassId(BUILT_INS_PACKAGE_FQ_NAME, FunctionTypeKind.Function.numberedClassName(arity)))
+                FunctionTypeKind.SuspendFunction -> // SuspendFunction$N<...> <: Function
+                    listOf(functionClassId)
+                FunctionTypeKind.KSuspendFunction -> // KSuspendFunction$N<...> <: KFunction
+                    listOf(kFunctionClassId, ClassId(COROUTINES_PACKAGE_FQ_NAME, FunctionTypeKind.SuspendFunction.numberedClassName(arity)))
+                else -> shouldNotBeCalled()
+            }
 
-            fun add(packageFragment: PackageFragmentDescriptor, name: Name) {
-                val descriptor = packageFragment.getMemberScope().getContributedClassifier(name, NoLookupLocation.FROM_BUILTINS) as? ClassDescriptor
-                                 ?: error("Class $name not found in $packageFragment")
-
-                val typeConstructor = descriptor.typeConstructor
+            val moduleDescriptor = containingDeclaration.containingDeclaration
+            return supertypes.map { id ->
+                val descriptor = moduleDescriptor.findClassAcrossModuleDependencies(id) ?: error("Built-in class $id not found")
 
                 // Substitute all type parameters of the super class with our last type parameters
-                val arguments = parameters.takeLast(typeConstructor.parameters.size).map {
+                val arguments = parameters.takeLast(descriptor.typeConstructor.parameters.size).map {
                     TypeProjectionImpl(it.defaultType)
                 }
 
-                result.add(KotlinTypeFactory.simpleNotNullType(Annotations.EMPTY, descriptor, arguments))
-            }
-
-
-            if (functionKind == Kind.SuspendFunction) {
-                // SuspendFunction$N<...> <: Any
-                result.add(containingDeclaration.builtIns.anyType)
-            }
-            else {
-                // Add unnumbered base class, e.g. Function for Function{n}, KFunction for KFunction{n}
-                add(containingDeclaration, Name.identifier(functionKind.classNamePrefix))
-            }
-
-            // For KFunction{n}, add corresponding numbered Function{n} class, e.g. Function2 for KFunction2
-            if (functionKind == Kind.KFunction) {
-                val packageView = containingDeclaration.containingDeclaration.getPackage(BUILT_INS_PACKAGE_FQ_NAME)
-                val kotlinPackageFragment = packageView.fragments.filterIsInstance<BuiltInsPackageFragment>().first()
-
-                add(kotlinPackageFragment, Kind.Function.numberedClassName(arity))
-            }
-
-            return result.toList()
+                KotlinTypeFactory.simpleNotNullType(TypeAttributes.Empty, descriptor, arguments)
+            }.toList()
         }
 
         override fun getParameters() = this@FunctionClassDescriptor.parameters
@@ -150,4 +134,12 @@ class FunctionClassDescriptor(
     }
 
     override fun toString() = name.asString()
+
+    companion object {
+        private val functionClassId = ClassId(BUILT_INS_PACKAGE_FQ_NAME, Name.identifier("Function"))
+        private val kFunctionClassId = ClassId(KOTLIN_REFLECT_FQ_NAME, Name.identifier("KFunction"))
+    }
+
+    @IDEAPluginsCompatibilityAPI(IDEAPlatforms._223, message = "Please migrate to the functionTypeKind", plugins = "android")
+    val functionKind: FunctionClassKind = FunctionClassKind.getFunctionClassKind(functionTypeKind)
 }

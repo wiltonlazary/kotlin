@@ -18,7 +18,7 @@ package org.jetbrains.kotlin.incremental.testingUtils
 
 import com.intellij.openapi.util.io.FileUtil
 import java.io.File
-import java.util.*
+import kotlin.math.max
 
 private val COMMANDS = listOf("new", "touch", "delete")
 private val COMMANDS_AS_REGEX_PART = COMMANDS.joinToString("|")
@@ -29,36 +29,68 @@ enum class TouchPolicy {
     CHECKSUM
 }
 
-fun copyTestSources(testDataDir: File, sourceDestinationDir: File, filePrefix: String): Map<File, File> {
-    val mapping = hashMapOf<File, File>()
-    FileUtil.copyDir(testDataDir, sourceDestinationDir) {
-        it.isDirectory || it.name.startsWith(filePrefix) && (it.name.endsWith(".kt") || it.name.endsWith(".java"))
+/**
+ * Optional suffix (first filename extension) that could be inserted before first "regular" extension
+ */
+enum class OptionalVariantSuffix {
+    None,
+    K1,
+    K2;
+
+    companion object {
+        /**
+         * A regex used to recognize a variant suffix in the filename.
+         * Note: Should match all possible suffixes, but "None", and should be compatible with comparison logic in `genVariantMatchingName`
+         */
+        val anySuffixRegex = Regex(".(K[12]).")
     }
+}
 
-    for (file in sourceDestinationDir.walk()) {
-        if (!file.isFile) continue
+fun String.genVariantMatchingName(expectedOptionalVariant: OptionalVariantSuffix): String? {
+    if (expectedOptionalVariant == OptionalVariantSuffix.None) return this
+    val variantMatch = OptionalVariantSuffix.anySuffixRegex.find(this) ?: return this
+    if (variantMatch.groups[1]?.value != expectedOptionalVariant.name) return null
+    return removeRange(variantMatch.range.first, variantMatch.range.last)
+}
 
-        val renamedFile =
-                if (filePrefix.isEmpty()) {
-                    file
-                }
-                else {
-                    File(sourceDestinationDir, file.name.removePrefix(filePrefix)).apply {
-                        file.renameTo(this)
+fun copyTestSources(
+    testDataDir: File,
+    sourceDestinationDir: File,
+    filePrefix: String,
+    optionalVariantSuffix: OptionalVariantSuffix = OptionalVariantSuffix.None,
+): Map<File, File> {
+    val mapping = hashMapOf<File, File>()
+
+    fun copyDir(fromDir: File, toDir: File) {
+        FileUtil.ensureExists(toDir)
+        for (file in fromDir.listFiles().orEmpty()) {
+            if (file.isDirectory) {
+                copyDir(file, File(toDir, file.name))
+            } else if (file.name.endsWith(".kt") || file.name.endsWith(".java")) {
+                val nameWithoutVariant = file.name.genVariantMatchingName(optionalVariantSuffix) ?: continue // prefixed but with different variant
+                if (nameWithoutVariant.startsWith(filePrefix)) {
+                    val targetFile = File(toDir, nameWithoutVariant.substring(filePrefix.length))
+                    if (nameWithoutVariant != file.name /* variant-prefixed file replaces the one without a variant prefix */ ||
+                        !mapping.containsKey(targetFile)
+                    ) {
+                        FileUtil.copy(file, targetFile)
+                        mapping[targetFile] = file
                     }
                 }
-
-        mapping[renamedFile] = File(testDataDir, file.name)
+            }
+        }
     }
 
+    copyDir(testDataDir, sourceDestinationDir)
     return mapping
 }
 
 fun getModificationsToPerform(
-        testDataDir: File,
-        moduleNames: Collection<String>?,
-        allowNoFilesWithSuffixInTestData: Boolean,
-        touchPolicy: TouchPolicy
+    testDataDir: File,
+    moduleNames: Collection<String>?,
+    allowNoFilesWithSuffixInTestData: Boolean,
+    touchPolicy: TouchPolicy,
+    optionalVariantSuffix: OptionalVariantSuffix = OptionalVariantSuffix.None,
 ): List<List<Modification>> {
 
     fun getModificationsForIteration(newSuffix: String, touchSuffix: String, deleteSuffix: String): List<Modification> {
@@ -67,12 +99,18 @@ fun getModificationsToPerform(
             val underscore = fileName.indexOf("_")
 
             if (underscore != -1) {
-                val module = fileName.substring(0, underscore)
+                var moduleName = fileName.substring(0, underscore)
+                var moduleFileName = fileName.substring(underscore + 1)
+                if (moduleName.all { it.isDigit() }) {
+                    val (moduleName1, moduleFileName1) = moduleFileName.split("_")
+                    moduleName = moduleName1
+                    moduleFileName = moduleFileName1
+                }
 
                 assert(moduleNames != null) { "File name has module prefix, but multi-module environment is absent" }
-                assert(module in moduleNames!!) { "Module not found for file with prefix: $fileName" }
+                assert(moduleName in moduleNames!!) { "Module not found for file with prefix: $fileName" }
 
-                return Pair(module, fileName.substring(underscore + 1))
+                return Pair(moduleName, moduleFileName)
             }
 
             assert(moduleNames == null) { "Test is multi-module, but file has no module prefix: $fileName" }
@@ -80,26 +118,35 @@ fun getModificationsToPerform(
         }
 
         val rules = mapOf<String, (String, File) -> Modification>(
-                newSuffix to { path, file -> ModifyContent(path, file) },
-                touchSuffix to { path, _ -> TouchFile(path, touchPolicy) },
-                deleteSuffix to { path, _ -> DeleteFile(path) }
+            newSuffix to { path, file -> ModifyContent(path, file) },
+            touchSuffix to { path, _ -> TouchFile(path, touchPolicy) },
+            deleteSuffix to { path, _ -> DeleteFile(path) }
         )
 
-        val modifications = ArrayList<Modification>()
+        val modifications = LinkedHashMap<String, Modification>()
 
         for (file in testDataDir.walkTopDown()) {
             if (!file.isFile) continue
 
-            val relativeFilePath = file.toRelativeString(testDataDir)
-
             val (suffix, createModification) = rules.entries.firstOrNull { file.path.endsWith(it.key) } ?: continue
 
-            val (moduleName, fileName) = splitToModuleNameAndFileName(relativeFilePath)
+            // NOTE: the code do not allow to combine module prefixes with directory structure
+            val relativeFilePath = file.toRelativeString(testDataDir)
+            val relativeFilePathWithoutVariant =
+                relativeFilePath.genVariantMatchingName(optionalVariantSuffix) ?: continue
+
+            val (moduleName, fileName) = splitToModuleNameAndFileName(relativeFilePathWithoutVariant)
             val srcDir = moduleName?.let { "$it/src" } ?: "src"
-            modifications.add(createModification(srcDir + "/" + fileName.removeSuffix(suffix), file))
+            val targetPath = srcDir + "/" + fileName.removeSuffix(suffix)
+
+            if (relativeFilePathWithoutVariant != relativeFilePath /* variant-prefixed file replaces the one without a variant prefix */ ||
+                !modifications.containsKey(targetPath)
+            ) {
+                modifications[targetPath] = createModification(targetPath, file)
+            }
         }
 
-        return modifications
+        return modifications.values.toList()
     }
 
     val haveFilesWithoutNumbers = testDataDir.walkTopDown().any { it.name.matches(".+\\.($COMMANDS_AS_REGEX_PART)$".toRegex()) }
@@ -122,8 +169,8 @@ fun getModificationsToPerform(
     }
     else {
         return (1..10)
-                .map { getModificationsForIteration(".new.$it", ".touch.$it", ".delete.$it") }
-                .filter { it.isNotEmpty() }
+            .map { getModificationsForIteration(".new.$it", ".touch.$it", ".delete.$it") }
+            .filter { it.isNotEmpty() }
     }
 }
 
@@ -160,7 +207,7 @@ class TouchFile(path: String, private val touchPolicy: TouchPolicy) : Modificati
             TouchPolicy.TIMESTAMP -> {
                 val oldLastModified = file.lastModified()
                 //Mac OS and some versions of Linux truncate timestamp to nearest second
-                file.setLastModified(Math.max(System.currentTimeMillis(), oldLastModified + 1000))
+                file.setLastModified(max(System.currentTimeMillis(), oldLastModified + 1000))
             }
             TouchPolicy.CHECKSUM -> {
                 file.appendText(" ")

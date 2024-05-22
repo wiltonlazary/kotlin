@@ -1,7 +1,0 @@
-fun foo() {
-    var a: Boolean = false
-    if (<caret>) {
-        a = true
-    }
-    a = true
-}

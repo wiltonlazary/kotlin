@@ -1,37 +1,27 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.optimization.common
 
-import org.jetbrains.kotlin.codegen.optimization.transformer.MethodTransformer
-import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.AbstractInsnNode
 import org.jetbrains.org.objectweb.asm.tree.IincInsnNode
 import org.jetbrains.org.objectweb.asm.tree.MethodNode
 import org.jetbrains.org.objectweb.asm.tree.VarInsnNode
-import org.jetbrains.org.objectweb.asm.tree.analysis.BasicValue
-import org.jetbrains.org.objectweb.asm.tree.analysis.Frame
 import java.util.*
 
 
 class VariableLivenessFrame(val maxLocals: Int) : VarFrame<VariableLivenessFrame> {
     private val bitSet = BitSet(maxLocals)
+    private var controlFlowMerge = false
 
     override fun mergeFrom(other: VariableLivenessFrame) {
         bitSet.or(other.bitSet)
+    }
+
+    override fun markControlFlowMerge() {
+        controlFlowMerge = true
     }
 
     fun markAlive(varIndex: Int) {
@@ -44,24 +34,26 @@ class VariableLivenessFrame(val maxLocals: Int) : VarFrame<VariableLivenessFrame
 
     fun isAlive(varIndex: Int): Boolean = bitSet.get(varIndex)
 
+    fun isControlFlowMerge(): Boolean = controlFlowMerge
+
     override fun equals(other: Any?): Boolean {
         if (other !is VariableLivenessFrame) return false
-        return bitSet == other.bitSet
+        return bitSet == other.bitSet && controlFlowMerge == other.controlFlowMerge
     }
 
-    override fun hashCode() = bitSet.hashCode()
+    override fun hashCode() = bitSet.hashCode() * 31 + controlFlowMerge.hashCode()
+
+    override fun toString(): String =
+        (if (controlFlowMerge) "*" else " ") + (0 until maxLocals).map { if (bitSet[it]) '@' else '_' }.joinToString(separator = "")
 }
 
-fun analyzeLiveness(node: MethodNode): List<VariableLivenessFrame> {
-    val typeAnnotatedFrames = MethodTransformer.analyze("fake", node, OptimizationBasicInterpreter())
-    return analyze(node, object : BackwardAnalysisInterpreter<VariableLivenessFrame> {
+fun analyzeLiveness(method: MethodNode): List<VariableLivenessFrame> =
+    analyze(method, object : BackwardAnalysisInterpreter<VariableLivenessFrame> {
         override fun newFrame(maxLocals: Int) = VariableLivenessFrame(maxLocals)
         override fun def(frame: VariableLivenessFrame, insn: AbstractInsnNode) = defVar(frame, insn)
         override fun use(frame: VariableLivenessFrame, insn: AbstractInsnNode) =
-            useVar(frame, insn, node, typeAnnotatedFrames[node.instructions.indexOf(insn)])
-
+            useVar(frame, insn)
     })
-}
 
 private fun defVar(frame: VariableLivenessFrame, insn: AbstractInsnNode) {
     if (insn is VarInsnNode && insn.isStoreOperation()) {
@@ -69,21 +61,7 @@ private fun defVar(frame: VariableLivenessFrame, insn: AbstractInsnNode) {
     }
 }
 
-private fun useVar(
-    frame: VariableLivenessFrame,
-    insn: AbstractInsnNode,
-    node: MethodNode,
-    // May be null in case of dead code
-    typeAnnotatedFrame: Frame<BasicValue>?
-) {
-    val index = node.instructions.indexOf(insn)
-    node.localVariables.filter {
-        node.instructions.indexOf(it.start) < index && index < node.instructions.indexOf(it.end) &&
-                Type.getType(it.desc).sort == typeAnnotatedFrame?.getLocal(it.index)?.type?.sort
-    }.forEach {
-            frame.markAlive(it.index)
-        }
-
+private fun useVar(frame: VariableLivenessFrame, insn: AbstractInsnNode) {
     if (insn is VarInsnNode && insn.isLoadOperation()) {
         frame.markAlive(insn.`var`)
     } else if (insn is IincInsnNode) {

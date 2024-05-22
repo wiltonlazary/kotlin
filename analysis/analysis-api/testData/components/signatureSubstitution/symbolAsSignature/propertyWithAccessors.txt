@@ -1,0 +1,13 @@
+KtDeclaration: KtProperty
+Symbol:
+var foo: kotlin.Int
+  get()
+  set(value: kotlin.Int)
+
+Signature:
+KtVariableLikeSignature:
+  name = foo
+  receiverType = null
+  returnType = kotlin.Int
+  symbol = var foo: kotlin.Int
+  callableIdIfNonLocal = /foo

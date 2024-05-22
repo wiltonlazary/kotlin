@@ -1,10 +1,10 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1385
+// KJS_WITH_FULL_RUNTIME
+// EXPECTED_REACHABLE_NODES: 1682
 package foo
 
 // CHECK_NOT_CALLED: f1
 // CHECK_NOT_CALLED: f2
-// CHECK_BREAKS_COUNT: function=test count=3
+// CHECK_BREAKS_COUNT: function=test count=3 TARGET_BACKENDS=JS
 
 internal var even = arrayListOf<Int>()
 internal var odd = arrayListOf<Int>()

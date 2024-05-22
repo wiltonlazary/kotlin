@@ -1,9 +1,21 @@
-import java.lang.System;
-
+/**
+ * public final class Test : kotlin/Any {
+ *
+ *   // signature: <init>()V
+ *   public constructor()
+ *
+ *   // companion object: A
+ *
+ *   // nested class: A
+ *
+ *   // module name: main
+ * }
+ */
 @kotlin.Metadata()
 public final class Test {
     @org.jetbrains.annotations.NotNull()
     private static final java.lang.String test = "";
+    @org.jetbrains.annotations.NotNull()
     public static final Test.A A = null;
 
     public Test() {
@@ -15,10 +27,26 @@ public final class Test {
         return null;
     }
 
+    /**
+     * public final companion object Test.A : kotlin/Any {
+     *
+     *   // signature: <init>()V
+     *   private constructor()
+     *
+     *   // field: test:Ljava/lang/String;
+     *   // getter: getTest()Ljava/lang/String;
+     *   // synthetic method for annotations: getTest$annotations()V
+     *   public final val test: kotlin/String (* = ... *)
+     *     public final get
+     *
+     *   // module name: main
+     * }
+     */
     @kotlin.Metadata()
     public static final class A {
 
-        public static void test$annotations() {
+        private A() {
+            super();
         }
 
         @org.jetbrains.annotations.NotNull()
@@ -26,8 +54,9 @@ public final class Test {
             return null;
         }
 
-        private A() {
-            super();
+        @kotlin.jvm.JvmStatic()
+        @java.lang.Deprecated()
+        public static void getTest$annotations() {
         }
     }
 }

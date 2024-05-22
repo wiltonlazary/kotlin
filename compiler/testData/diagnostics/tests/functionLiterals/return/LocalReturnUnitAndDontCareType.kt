@@ -1,4 +1,4 @@
-// !WITH_NEW_INFERENCE
+// FIR_IDENTICAL
 // NI_EXPECTED_FILE
 val flag = true
 
@@ -10,12 +10,12 @@ val a = run { // () -> Unit
 // Unit
 val b = run {
     if (flag) return@run
-    <!UNUSED_EXPRESSION!>5<!>
+    5
 }
 
 // Unit
 val c = run {
     if (flag) return@run
 
-    return@run <!OI;RETURN_TYPE_MISMATCH!>4<!>
+    return@run <!RETURN_TYPE_MISMATCH!>4<!>
 }

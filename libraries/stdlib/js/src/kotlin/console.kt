@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.io
@@ -23,7 +23,11 @@ internal abstract class BaseOutput {
 /** JsName used to make the declaration available outside of module to test it */
 @JsName("NodeJsOutput")
 internal class NodeJsOutput(val outputStream: dynamic) : BaseOutput() {
-    override fun print(message: Any?) = outputStream.write(String(message))
+    override fun print(message: Any?) {
+        // TODO: Using local variable because of bug in block decomposition lowering in IR backend
+        val messageString = String(message)
+        outputStream.write(messageString)
+    }
 }
 
 /** JsName used to make the declaration available outside of module to test it */
@@ -61,7 +65,7 @@ internal open class BufferedOutput : BaseOutput() {
 internal class BufferedOutputToConsoleLog : BufferedOutput() {
     override fun print(message: Any?) {
         var s = String(message)
-        val i = s.lastIndexOf('\n')
+        val i = s.nativeLastIndexOf("\n", 0)
         if (i >= 0) {
             buffer += s.substring(0, i)
             flush()
@@ -86,17 +90,23 @@ internal var output = run {
 @kotlin.internal.InlineOnly
 private inline fun String(value: Any?): String = js("String")(value)
 
-/** Prints a newline to the standard output stream. */
+/** Prints the line separator to the standard output stream. */
 public actual fun println() {
     output.println()
 }
 
-/** Prints the given message and newline to the standard output stream. */
+/** Prints the given [message] and the line separator to the standard output stream. */
 public actual fun println(message: Any?) {
     output.println(message)
 }
 
-/** Prints the given message to the standard output stream. */
+/** Prints the given [message] to the standard output stream. */
 public actual fun print(message: Any?) {
     output.print(message)
 }
+
+@SinceKotlin("1.6")
+public actual fun readln(): String = throw UnsupportedOperationException("readln is not supported in Kotlin/JS")
+
+@SinceKotlin("1.6")
+public actual fun readlnOrNull(): String? = throw UnsupportedOperationException("readlnOrNull is not supported in Kotlin/JS")

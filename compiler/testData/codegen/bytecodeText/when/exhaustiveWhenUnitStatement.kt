@@ -1,3 +1,5 @@
+// IGNORE_BACKEND_K2: JVM_IR
+
 enum class AccessMode { READ, WRITE, EXECUTE }
 
 fun whenExpr(access: AccessMode) {
@@ -6,11 +8,6 @@ fun whenExpr(access: AccessMode) {
         AccessMode.WRITE -> {}
         AccessMode.EXECUTE -> {}
     }
-}
-
-fun box(): String {
-    whenExpr(AccessMode.EXECUTE)
-    return "OK"
 }
 
 // 1 TABLESWITCH

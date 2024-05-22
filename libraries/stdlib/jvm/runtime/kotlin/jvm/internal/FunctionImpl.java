@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.jvm.internal;
@@ -11,7 +11,7 @@ import kotlin.jvm.functions.*;
 
 import java.io.Serializable;
 
-@SuppressWarnings("unused")
+@SuppressWarnings({"unused", "rawtypes"})
 @Deprecated
 @kotlin.Deprecated(message = "This class is no longer supported, do not use it.", level = DeprecationLevel.ERROR)
 public abstract class FunctionImpl

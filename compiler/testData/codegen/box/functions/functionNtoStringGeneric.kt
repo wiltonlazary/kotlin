@@ -1,5 +1,6 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// LAMBDAS: CLASS
+// TARGET_BACKEND: JVM
+// TARGET_BACKEND: JVM_IR
 
 // WITH_REFLECT
 

@@ -1,7 +1,5 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
-
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// WITH_STDLIB
 
 class B(var s: Int = 0) {
 

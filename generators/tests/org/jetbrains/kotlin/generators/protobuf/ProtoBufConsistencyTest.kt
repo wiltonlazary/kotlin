@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2022 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.generators.protobuf
@@ -30,16 +19,18 @@ class ProtoBufConsistencyTest : TestCase() {
         val extensions = LinkedHashMultimap.create<Key, Descriptors.FieldDescriptor>()
 
         for (protoPath in PROTO_PATHS) {
-            val classFqName = protoPath.packageName + "." + protoPath.debugClassName
-            val klass = this::class.java.classLoader.loadClass(classFqName) ?: error("Class not found: $classFqName")
-            for (field in klass.declaredFields) {
-                if (Modifier.isStatic(field.modifiers) && field.type == GeneratedExtension::class.java) {
-                    // The only place where type information for an extension is stored is the field's declared generic type.
-                    // The message type which this extension extends is the first argument to GeneratedExtension<*, *>
-                    val containingType = (field.genericType as ParameterizedType).actualTypeArguments.first() as Class<*>
-                    val value = field.get(null) as GeneratedExtension<*, *>
-                    val desc = value.descriptor
-                    extensions.put(Key(containingType, desc.number), desc)
+            if (protoPath.generateDebug) {
+                val classFqName = protoPath.packageName + "." + protoPath.debugClassName
+                val klass = this::class.java.classLoader.loadClass(classFqName) ?: error("Class not found: $classFqName")
+                for (field in klass.declaredFields) {
+                    if (Modifier.isStatic(field.modifiers) && field.type == GeneratedExtension::class.java) {
+                        // The only place where type information for an extension is stored is the field's declared generic type.
+                        // The message type which this extension extends is the first argument to GeneratedExtension<*, *>
+                        val containingType = (field.genericType as ParameterizedType).actualTypeArguments.first() as Class<*>
+                        val value = field.get(null) as GeneratedExtension<*, *>
+                        val desc = value.descriptor
+                        extensions.put(Key(containingType, desc.number), desc)
+                    }
                 }
             }
         }

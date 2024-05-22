@@ -14,23 +14,30 @@
  * limitations under the License.
  */
 
+// Android-extensions is no longer supported, but its code is still used from AS.
+@file:Suppress("DEPRECATION_ERROR")
+
 package org.jetbrains.kotlin.android.synthetic.codegen
 
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.android.parcel.isParcelize
+import org.jetbrains.kotlin.codegen.AbstractClassBuilder
 import org.jetbrains.kotlin.codegen.ClassBuilder
 import org.jetbrains.kotlin.codegen.ClassBuilderFactory
 import org.jetbrains.kotlin.codegen.DelegatingClassBuilder
-import org.jetbrains.kotlin.codegen.extensions.ClassBuilderInterceptorExtension
 import org.jetbrains.kotlin.diagnostics.DiagnosticSink
-import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
-import org.jetbrains.org.objectweb.asm.*
-import org.jetbrains.org.objectweb.asm.Opcodes.*
+import org.jetbrains.org.objectweb.asm.MethodVisitor
+import org.jetbrains.org.objectweb.asm.Opcodes
+import org.jetbrains.org.objectweb.asm.Opcodes.ACC_STATIC
+import org.jetbrains.org.objectweb.asm.RecordComponentVisitor
+import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
 
-class ParcelableClinitClassBuilderInterceptorExtension : ClassBuilderInterceptorExtension {
+class ParcelableClinitClassBuilderInterceptorExtension :
+    @Suppress("DEPRECATION_ERROR") org.jetbrains.kotlin.codegen.extensions.ClassBuilderInterceptorExtension {
     override fun interceptClassBuilderFactory(
             interceptedFactory: ClassBuilderFactory,
             bindingContext: BindingContext,
@@ -68,7 +75,7 @@ class ParcelableClinitClassBuilderInterceptorExtension : ClassBuilderInterceptor
             internal val delegateClassBuilder: ClassBuilder,
             val bindingContext: BindingContext
     ) : DelegatingClassBuilder() {
-        private var currentClass: KtClass? = null
+        private var currentClass: KtClassOrObject? = null
         private var currentClassName: String? = null
         private var isClinitGenerated = false
 
@@ -83,7 +90,7 @@ class ParcelableClinitClassBuilderInterceptorExtension : ClassBuilderInterceptor
                 superName: String,
                 interfaces: Array<out String>
         ) {
-            if (origin is KtClass) {
+            if (origin is KtClassOrObject) {
                 currentClass = origin
             } else {
                 currentClass = null
@@ -95,7 +102,7 @@ class ParcelableClinitClassBuilderInterceptorExtension : ClassBuilderInterceptor
             super.defineClass(origin, version, access, name, signature, superName, interfaces)
         }
 
-        override fun done() {
+        override fun done(generateSmapCopyToAnnotation: Boolean) {
             if (!isClinitGenerated && currentClass != null && currentClassName != null) {
                 val descriptor = bindingContext[BindingContext.CLASS, currentClass]
                 if (descriptor != null && declarationOrigin.descriptor == descriptor && descriptor.isParcelize) {
@@ -108,7 +115,7 @@ class ParcelableClinitClassBuilderInterceptorExtension : ClassBuilderInterceptor
                 }
             }
 
-            super.done()
+            super.done(generateSmapCopyToAnnotation)
         }
 
         override fun newMethod(
@@ -132,9 +139,13 @@ class ParcelableClinitClassBuilderInterceptorExtension : ClassBuilderInterceptor
 
             return super.newMethod(origin, access, name, desc, signature, exceptions)
         }
+
+        override fun newRecordComponent(name: String, desc: String, signature: String?): RecordComponentVisitor {
+            return AbstractClassBuilder.EMPTY_RECORD_VISITOR
+        }
     }
 
-    private class ClinitAwareMethodVisitor(val parcelableName: String, mv: MethodVisitor) : MethodVisitor(Opcodes.ASM5, mv) {
+    private class ClinitAwareMethodVisitor(val parcelableName: String, mv: MethodVisitor) : MethodVisitor(Opcodes.API_VERSION, mv) {
         override fun visitInsn(opcode: Int) {
             if (opcode == Opcodes.RETURN) {
                 val iv = InstructionAdapter(this)

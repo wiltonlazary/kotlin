@@ -26,8 +26,9 @@ import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.BindingContextUtils;
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
-import org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt;
+import org.jetbrains.kotlin.resolve.calls.util.CallUtilKt;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
+import org.jetbrains.kotlin.resolve.calls.util.FakeCallableDescriptorForTypeAliasObject;
 import org.jetbrains.kotlin.resolve.constants.CompileTimeConstant;
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator;
 import org.jetbrains.kotlin.types.KotlinType;
@@ -48,14 +49,15 @@ public final class BindingUtils {
     private BindingUtils() {
     }
 
+    @SuppressWarnings("unchecked")
     @NotNull
-    static private <E extends PsiElement, D extends DeclarationDescriptor>
-    D getDescriptorForExpression(@NotNull BindingContext context, @NotNull E expression, Class<D> descriptorClass) {
+    private static <E extends PsiElement, D extends DeclarationDescriptor> D getDescriptorForExpression(
+            @NotNull BindingContext context, @NotNull E expression, Class<D> descriptorClass
+    ) {
         DeclarationDescriptor descriptor = context.get(BindingContext.DECLARATION_TO_DESCRIPTOR, expression);
         assert descriptor != null;
         assert descriptorClass.isInstance(descriptor)
                 : message(expression, expression.toString() + " expected to have of type" + descriptorClass.toString());
-        //noinspection unchecked
         return (D) descriptor;
     }
 
@@ -80,7 +82,7 @@ public final class BindingUtils {
     @NotNull
     private static KtParameter getParameterForDescriptor(@NotNull ValueParameterDescriptor descriptor) {
         PsiElement result = DescriptorToSourceUtils.descriptorToDeclaration(descriptor);
-        assert result instanceof KtParameter : message(descriptor, "ValueParameterDescriptor should have corresponding JetParameter");
+        assert result instanceof KtParameter : message(descriptor, "ValueParameterDescriptor should have corresponding KtParameter");
         return (KtParameter) result;
     }
 
@@ -129,13 +131,17 @@ public final class BindingUtils {
             }
             return classDescriptor;
         }
+        else if (descriptor instanceof FakeCallableDescriptorForTypeAliasObject) {
+            return ((FakeCallableDescriptorForTypeAliasObject) descriptor).getReferencedObject();
+        }
         else {
             return descriptor;
         }
     }
 
     public static boolean isVariableReassignment(@NotNull BindingContext context, @NotNull KtExpression expression) {
-        return BindingContextUtils.getNotNull(context, BindingContext.VARIABLE_REASSIGNMENT, expression);
+        Boolean result = context.get(BindingContext.VARIABLE_REASSIGNMENT, expression);
+        return (result != null) ? result : false;
     }
 
     @Nullable

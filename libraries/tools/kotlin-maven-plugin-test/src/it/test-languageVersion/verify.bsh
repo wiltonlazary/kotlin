@@ -1,5 +1,4 @@
 source(new File(basedir, "../../../verify-common.bsh").getAbsolutePath());
 
 assertBuildLogHasLine("[INFO] BUILD FAILURE");
-assertBuildLogHasLineThatContains("This type is sealed");
-assertBuildLogHasLineThatContains("Unresolved reference: toMutableMap");
+assertBuildLogHasLineThatContains("Suspend function type is allowed as a supertype only since version 1.6");

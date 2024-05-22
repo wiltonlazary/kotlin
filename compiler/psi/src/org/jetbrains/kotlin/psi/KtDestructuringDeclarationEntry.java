@@ -34,7 +34,11 @@ import java.util.List;
 import static org.jetbrains.kotlin.lexer.KtTokens.VAL_KEYWORD;
 import static org.jetbrains.kotlin.lexer.KtTokens.VAR_KEYWORD;
 
+@SuppressWarnings("deprecation")
 public class KtDestructuringDeclarationEntry extends KtNamedDeclarationNotStubbed implements KtVariableDeclaration {
+
+    private static final TokenSet VAL_VAR_KEYWORDS = TokenSet.create(VAL_KEYWORD, VAR_KEYWORD);
+
     public KtDestructuringDeclarationEntry(@NotNull ASTNode node) {
         super(node);
     }
@@ -72,6 +76,12 @@ public class KtDestructuringDeclarationEntry extends KtNamedDeclarationNotStubbe
     @Override
     public KtTypeReference getReceiverTypeReference() {
         return null;
+    }
+
+    @NotNull
+    @Override
+    public List<KtContextReceiver> getContextReceivers() {
+        return Collections.emptyList();
     }
 
     @Nullable
@@ -122,13 +132,14 @@ public class KtDestructuringDeclarationEntry extends KtNamedDeclarationNotStubbe
     @NotNull
     private ASTNode getParentNode() {
         ASTNode parent = getNode().getTreeParent();
-        assert parent.getElementType() == KtNodeTypes.DESTRUCTURING_DECLARATION;
+        assert parent.getElementType() == KtNodeTypes.DESTRUCTURING_DECLARATION :
+                "parent is " + parent.getElementType();
         return parent;
     }
 
     @Override
     public PsiElement getValOrVarKeyword() {
-        ASTNode node = getParentNode().findChildByType(TokenSet.create(VAL_KEYWORD, VAR_KEYWORD));
+        ASTNode node = getParentNode().findChildByType(VAL_VAR_KEYWORDS);
         if (node == null) return null;
         return node.getPsi();
     }

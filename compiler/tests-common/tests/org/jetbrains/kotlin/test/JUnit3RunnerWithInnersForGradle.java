@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.test;
@@ -18,6 +18,7 @@ import org.junit.runner.notification.RunNotifier;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 
 import static org.jetbrains.kotlin.test.JUnit3RunnerWithInners.isTestMethod;
@@ -117,14 +118,30 @@ class JUnit3RunnerWithInnersForGradle extends Runner implements Filterable, Sort
             }
 
             includePatternsField.setAccessible(true);
-            @SuppressWarnings("unchecked") ArrayList<Pattern> includePatterns =
-                    (ArrayList<Pattern>) includePatternsField.get(testSelectionMatcher);
+            @SuppressWarnings("unchecked") List<Object> includePatterns =
+                    (ArrayList<Object>) includePatternsField.get(testSelectionMatcher);
 
             if (includePatterns.size() != 1) {
                 return null;
             }
 
-            Pattern pattern = includePatterns.get(0);
+            Object patternStorage = includePatterns.get(0);
+
+            Pattern pattern;
+            if (patternStorage instanceof Pattern) {
+                pattern = (Pattern) patternStorage;
+            } else {
+                try {
+                    // TestSelectionMatcher.TestPattern is used since Gradle 4.7
+                    Field patternField = patternStorage.getClass().getDeclaredField("pattern");
+                    patternField.setAccessible(true);
+                    pattern = (Pattern) patternField.get(patternStorage);
+                }
+                catch (NoSuchFieldException exception) {
+                    return null;
+                }
+            }
+
             String patternStr = pattern.pattern();
 
             if (patternStr.endsWith("*")) {

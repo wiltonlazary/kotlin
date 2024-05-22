@@ -1,10 +1,21 @@
 package test;
 
-import java.lang.System;
-
-@kotlin.Metadata()
-@java.lang.annotation.Retention(value = java.lang.annotation.RetentionPolicy.RUNTIME)
 @Anno(value = "anno-class")
+@java.lang.annotation.Retention(value = java.lang.annotation.RetentionPolicy.RUNTIME)
+/**
+ * public final annotation class test/Anno : kotlin/Annotation {
+ *
+ *   // signature: <init>(Ljava/lang/String;)V
+ *   public constructor(value: kotlin/String)
+ *
+ *   // getter: value()Ljava/lang/String;
+ *   public final val value: kotlin/String
+ *     public final get
+ *
+ *   // module name: main
+ * }
+ */
+@kotlin.Metadata()
 public abstract @interface Anno {
 
     public abstract java.lang.String value();
@@ -14,9 +25,22 @@ public abstract @interface Anno {
 
 package test;
 
-import java.lang.System;
-
+/**
+ * package {
+ *
+ *   // signature: topLevelFun(Ljava/lang/String;)V
+ *   public final fun kotlin/String.topLevelFun(): kotlin/Unit
+ *
+ *   // getter: getTopLevelVal(I)Ljava/lang/String;
+ *   // synthetic method for annotations: getTopLevelVal$annotations(I)V
+ *   public final val kotlin/Int.topLevelVal: kotlin/String
+ *     public final (* non-default *) get
+ *
+ *   // module name: main
+ * }
+ */
 @kotlin.Metadata()
+@kotlin.jvm.JvmName(name = "AnnotationsTest")
 public final class AnnotationsTest {
 
     public AnnotationsTest() {
@@ -24,18 +48,19 @@ public final class AnnotationsTest {
     }
 
     @Anno(value = "top-level-fun")
-    public static final void topLevelFun(@org.jetbrains.annotations.NotNull()
-    @Anno(value = "top-level-fun-receiver")
-    java.lang.String $receiver) {
+    public static final void topLevelFun(@Anno(value = "top-level-fun-receiver")
+    @org.jetbrains.annotations.NotNull()
+    java.lang.String $this$topLevelFun) {
     }
 
     @Anno(value = "top-level-val")
-    public static void topLevelVal$annotations(int p0) {
+    @java.lang.Deprecated()
+    public static void getTopLevelVal$annotations(int p0) {
     }
 
     @org.jetbrains.annotations.NotNull()
     public static final java.lang.String getTopLevelVal(@Anno(value = "top-level-val-receiver")
-    int $receiver) {
+    int $this$topLevelVal) {
         return null;
     }
 }
@@ -44,10 +69,28 @@ public final class AnnotationsTest {
 
 package test;
 
-import java.lang.System;
-
-@kotlin.Metadata()
 @Anno(value = "enum")
+/**
+ * public final enum class test/Enum : kotlin/Enum<test/Enum> {
+ *
+ *   // signature: <init>(Ljava/lang/String;II)V
+ *   private constructor(x: kotlin/Int)
+ *
+ *   // field: x:I
+ *   // getter: getX()I
+ *   public final val x: kotlin/Int
+ *     public final get
+ *
+ *   WHITE,
+ *
+ *   BLACK,
+ *
+ *   // module name: main
+ *
+ *   // has Enum.entries
+ * }
+ */
+@kotlin.Metadata()
 public enum Enum {
     @Anno(value = "white")
     /*public static final*/ WHITE /* = new Enum() */,
@@ -55,13 +98,18 @@ public enum Enum {
     /*public static final*/ BLACK /* = new Enum() */;
     private final int x = 0;
 
+    @Anno(value = "enum-constructor")
+    Enum(@Anno(value = "x")
+    int x) {
+    }
+
     public final int getX() {
         return 0;
     }
 
-    @Anno(value = "enum-constructor")
-    Enum(@Anno(value = "x")
-    int x) {
+    @org.jetbrains.annotations.NotNull()
+    public static kotlin.enums.EnumEntries<test.Enum> getEntries() {
+        return null;
     }
 }
 
@@ -69,45 +117,70 @@ public enum Enum {
 
 package test;
 
-import java.lang.System;
-
-@kotlin.Metadata()
 @Anno(value = "clazz")
+/**
+ * public abstract class test/Test : kotlin/Any {
+ *
+ *   // signature: <init>(Ljava/lang/String;)V
+ *   protected constructor(v: kotlin/String)
+ *
+ *   // signature: abstractMethod()Ljava/lang/String;
+ *   public abstract fun abstractMethod(): kotlin/String
+ *
+ *   // getter: getAbstractVal()Ljava/lang/String;
+ *   // synthetic method for annotations: getAbstractVal$annotations()V
+ *   public abstract val abstractVal: kotlin/String
+ *     public abstract get
+ *
+ *   // field: v:Ljava/lang/String;
+ *   // getter: getV()Ljava/lang/String;
+ *   // setter: setV(Ljava/lang/String;)V
+ *   // synthetic method for annotations: getV$annotations()V
+ *   public final var v: kotlin/String
+ *     public final get
+ *     public final set
+ *
+ *   // module name: main
+ * }
+ */
+@kotlin.Metadata()
 public abstract class Test {
     @org.jetbrains.annotations.NotNull()
     private java.lang.String v;
 
+    @Anno(value = "test-constructor")
+    protected Test(@Anno(value = "v-param")
     @org.jetbrains.annotations.NotNull()
-    @Anno(value = "abstract-method")
-    public abstract java.lang.String abstractMethod();
-
-    @Anno(value = "abstract-val")
-    public static void abstractVal$annotations() {
+    java.lang.String v) {
+        super();
     }
 
-    @org.jetbrains.annotations.NotNull()
-    public abstract java.lang.String getAbstractVal();
-
-    @Anno(value = "v-property")
-    public static void v$annotations() {
-    }
-
-    @org.jetbrains.annotations.NotNull()
     @Anno(value = "v-get")
+    @org.jetbrains.annotations.NotNull()
     public final java.lang.String getV() {
         return null;
     }
 
+    @Anno(value = "v-property")
+    @java.lang.Deprecated()
+    public static void getV$annotations() {
+    }
+
     @Anno(value = "v-set")
-    public final void setV(@org.jetbrains.annotations.NotNull()
-    @Anno(value = "v-setparam")
+    public final void setV(@Anno(value = "v-setparam")
+    @org.jetbrains.annotations.NotNull()
     java.lang.String p0) {
     }
 
-    @Anno(value = "test-constructor")
-    protected Test(@org.jetbrains.annotations.NotNull()
-    @Anno(value = "v-param")
-    java.lang.String v) {
-        super();
+    @Anno(value = "abstract-method")
+    @org.jetbrains.annotations.NotNull()
+    public abstract java.lang.String abstractMethod();
+
+    @org.jetbrains.annotations.NotNull()
+    public abstract java.lang.String getAbstractVal();
+
+    @Anno(value = "abstract-val")
+    @java.lang.Deprecated()
+    public static void getAbstractVal$annotations() {
     }
 }

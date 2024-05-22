@@ -17,34 +17,48 @@ import org.jetbrains.kotlin.lexer.KtTokens;
 %{
     private static final class State {
         final int lBraceCount;
+        final int requiredInterpolationPrefix;
         final int state;
 
-        public State(int state, int lBraceCount) {
+        public State(int state, int lBraceCount, int requiredInterpolationPrefix) {
             this.state = state;
             this.lBraceCount = lBraceCount;
+            this.requiredInterpolationPrefix = requiredInterpolationPrefix;
         }
 
         @Override
         public String toString() {
-            return "yystate = " + state + (lBraceCount == 0 ? "" : "lBraceCount = " + lBraceCount);
+            return "yystate = " + state
+                + (lBraceCount == 0 ? "" : "lBraceCount = " + lBraceCount)
+                + (requiredInterpolationPrefix == -1 ? "" : "requiredInterpolationPrefix = " + requiredInterpolationPrefix);
         }
     }
 
     private final Stack<State> states = new Stack<State>();
     private int lBraceCount;
+    private int requiredInterpolationPrefix;
 
     private int commentStart;
     private int commentDepth;
 
     private void pushState(int state) {
-        states.push(new State(yystate(), lBraceCount));
+        states.push(new State(yystate(), lBraceCount, requiredInterpolationPrefix));
         lBraceCount = 0;
+        requiredInterpolationPrefix = -1;
         yybegin(state);
+    }
+
+    private void pushInterpolationPrefix(int interpolationPrefix) {
+        states.push(new State(yystate(), lBraceCount, requiredInterpolationPrefix));
+        lBraceCount = 0;
+        requiredInterpolationPrefix = interpolationPrefix;
+        yybegin(STRING_PREFIX);
     }
 
     private void popState() {
         State state = states.pop();
         lBraceCount = state.lBraceCount;
+        requiredInterpolationPrefix = state.requiredInterpolationPrefix;
         yybegin(state.state);
     }
 
@@ -68,7 +82,7 @@ import org.jetbrains.kotlin.lexer.KtTokens;
   return;
 %eof}
 
-%xstate STRING RAW_STRING SHORT_TEMPLATE_ENTRY BLOCK_COMMENT DOC_COMMENT
+%xstate STRING_PREFIX STRING RAW_STRING SHORT_TEMPLATE_ENTRY BLOCK_COMMENT DOC_COMMENT
 %state LONG_TEMPLATE_ENTRY UNMATCHED_BACKTICK
 
 DIGIT=[0-9]
@@ -83,7 +97,7 @@ LETTER = [:letter:]|_
 IDENTIFIER_PART=[:digit:]|{LETTER}
 PLAIN_IDENTIFIER={LETTER} {IDENTIFIER_PART}*
 // TODO: this one MUST allow everything accepted by the runtime
-// TODO: Replace backticks by one backslash in the begining
+// TODO: Replace backticks with one backslash at the beginning
 ESCAPED_IDENTIFIER = `[^`\n]+`
 IDENTIFIER = {PLAIN_IDENTIFIER}|{ESCAPED_IDENTIFIER}
 FIELD_IDENTIFIER = \${IDENTIFIER}
@@ -92,10 +106,12 @@ EOL_COMMENT="/""/"[^\n]*
 SHEBANG_COMMENT="#!"[^\n]*
 
 INTEGER_LITERAL={DECIMAL_INTEGER_LITERAL}|{HEX_INTEGER_LITERAL}|{BIN_INTEGER_LITERAL}
-DECIMAL_INTEGER_LITERAL=(0|([1-9]({DIGIT_OR_UNDERSCORE})*))({LONG_SUFFIX})?
-HEX_INTEGER_LITERAL=0[Xx]({HEX_DIGIT_OR_UNDERSCORE})*({LONG_SUFFIX})?
-BIN_INTEGER_LITERAL=0[Bb]({DIGIT_OR_UNDERSCORE})*({LONG_SUFFIX})?
+DECIMAL_INTEGER_LITERAL=(0|([1-9]({DIGIT_OR_UNDERSCORE})*)){TYPED_INTEGER_SUFFIX}
+HEX_INTEGER_LITERAL=0[Xx]({HEX_DIGIT_OR_UNDERSCORE})*{TYPED_INTEGER_SUFFIX}
+BIN_INTEGER_LITERAL=0[Bb]({DIGIT_OR_UNDERSCORE})*{TYPED_INTEGER_SUFFIX}
 LONG_SUFFIX=[Ll]
+UNSIGNED_SUFFIX=[Uu]
+TYPED_INTEGER_SUFFIX = {UNSIGNED_SUFFIX}?{LONG_SUFFIX}?
 
 //FLOAT_LITERAL=(({FLOATING_POINT_LITERAL1})[Ff])|(({FLOATING_POINT_LITERAL2})[Ff])|(({FLOATING_POINT_LITERAL3})[Ff])|(({FLOATING_POINT_LITERAL4})[Ff])
 //DOUBLE_LITERAL=(({FLOATING_POINT_LITERAL1})[Dd]?)|(({FLOATING_POINT_LITERAL2})[Dd]?)|(({FLOATING_POINT_LITERAL3})[Dd]?)|(({FLOATING_POINT_LITERAL4})[Dd])
@@ -111,21 +127,29 @@ CHARACTER_LITERAL="'"([^\\\'\n]|{ESCAPE_SEQUENCE})*("'"|\\)?
 // TODO: introduce symbols (e.g. 'foo) as another way to write string literals
 ESCAPE_SEQUENCE=\\(u{HEX_DIGIT}{HEX_DIGIT}{HEX_DIGIT}{HEX_DIGIT}|[^\n])
 
+INTERPOLATION = \$+
 // ANY_ESCAPE_SEQUENCE = \\[^]
 THREE_QUO = (\"\"\")
 THREE_OR_MORE_QUO = ({THREE_QUO}\"*)
 
 REGULAR_STRING_PART=[^\\\"\n\$]+
-SHORT_TEMPLATE_ENTRY=\${IDENTIFIER}
+SHORT_TEMPLATE_ENTRY={INTERPOLATION}{IDENTIFIER}
 LONELY_DOLLAR=\$
-LONG_TEMPLATE_ENTRY_START=\$\{
+LONG_TEMPLATE_ENTRY_START={INTERPOLATION}\{
 LONELY_BACKTICK=`
 
 %%
 
 // String templates
 
-{THREE_QUO}                      { pushState(RAW_STRING); return KtTokens.OPEN_QUOTE; }
+{INTERPOLATION}?\" {
+                       int interpolationPrefix = yylength() - 1;
+                       pushInterpolationPrefix(Math.max(interpolationPrefix, 1));
+                       yypushback(1);
+                       if (interpolationPrefix != 0) return KtTokens.INTERPOLATION_PREFIX;
+                   }
+
+<STRING_PREFIX> {THREE_QUO}      { yybegin(RAW_STRING); return KtTokens.OPEN_QUOTE; }
 <RAW_STRING> \n                  { return KtTokens.REGULAR_STRING_PART; }
 <RAW_STRING> \"                  { return KtTokens.REGULAR_STRING_PART; }
 <RAW_STRING> \\                  { return KtTokens.REGULAR_STRING_PART; }
@@ -141,17 +165,31 @@ LONELY_BACKTICK=`
                                     }
                                  }
 
-\"                          { pushState(STRING); return KtTokens.OPEN_QUOTE; }
+<STRING_PREFIX> \"          { yybegin(STRING); return KtTokens.OPEN_QUOTE; }
 <STRING> \n                 { popState(); yypushback(1); return KtTokens.DANGLING_NEWLINE; }
 <STRING> \"                 { popState(); return KtTokens.CLOSING_QUOTE; }
 <STRING> {ESCAPE_SEQUENCE}  { return KtTokens.ESCAPE_SEQUENCE; }
 
 <STRING, RAW_STRING> {REGULAR_STRING_PART}         { return KtTokens.REGULAR_STRING_PART; }
-<STRING, RAW_STRING> {SHORT_TEMPLATE_ENTRY}        {
-                                                        pushState(SHORT_TEMPLATE_ENTRY);
-                                                        yypushback(yylength() - 1);
-                                                        return KtTokens.SHORT_TEMPLATE_ENTRY_START;
-                                                   }
+<STRING, RAW_STRING> {SHORT_TEMPLATE_ENTRY}
+                                       {
+                                           int interpolationPrefix = 0;
+                                           for (int i = 0; i < yylength(); i++) {
+                                               if (yycharat(i) == '$') { interpolationPrefix++; }
+                                               else { break; }
+                                           }
+                                           int rest = yylength() - interpolationPrefix;
+                                           if (interpolationPrefix == requiredInterpolationPrefix) {
+                                               pushState(SHORT_TEMPLATE_ENTRY);
+                                               yypushback(yylength() - interpolationPrefix);
+                                               return KtTokens.SHORT_TEMPLATE_ENTRY_START;
+                                           } else if (interpolationPrefix < requiredInterpolationPrefix) {
+                                               return KtTokens.REGULAR_STRING_PART;
+                                           } else {
+                                               yypushback(requiredInterpolationPrefix + rest);
+                                               return KtTokens.REGULAR_STRING_PART;
+                                           }
+                                       }
 // Only *this* keyword is itself an expression valid in this position
 // *null*, *true* and *false* are also keywords and expression, but it does not make sense to put them
 // in a string template for it'd be easier to just type them in without a dollar
@@ -159,7 +197,19 @@ LONELY_BACKTICK=`
 <SHORT_TEMPLATE_ENTRY> {IDENTIFIER}    { popState(); return KtTokens.IDENTIFIER; }
 
 <STRING, RAW_STRING> {LONELY_DOLLAR}               { return KtTokens.REGULAR_STRING_PART; }
-<STRING, RAW_STRING> {LONG_TEMPLATE_ENTRY_START}   { pushState(LONG_TEMPLATE_ENTRY); return KtTokens.LONG_TEMPLATE_ENTRY_START; }
+<STRING, RAW_STRING> {LONG_TEMPLATE_ENTRY_START}
+                                       {
+                                           int interpolationPrefix = yylength() - 1;
+                                           if (interpolationPrefix == requiredInterpolationPrefix) {
+                                               pushState(LONG_TEMPLATE_ENTRY);
+                                               return KtTokens.LONG_TEMPLATE_ENTRY_START;
+                                           } else if (interpolationPrefix < requiredInterpolationPrefix) {
+                                               return KtTokens.REGULAR_STRING_PART;
+                                           } else {
+                                               yypushback(requiredInterpolationPrefix + 1);
+                                               return KtTokens.REGULAR_STRING_PART;
+                                           }
+                                       }
 
 <LONG_TEMPLATE_ENTRY> "{"              { lBraceCount++; return KtTokens.LBRACE; }
 <LONG_TEMPLATE_ENTRY> "}"              {
@@ -213,7 +263,7 @@ LONELY_BACKTICK=`
         }
     }
 
-    .|{WHITE_SPACE_CHAR} {}
+    [\s\S] {}
 }
 
 // Mere mortals
@@ -285,6 +335,7 @@ LONELY_BACKTICK=`
 "=="         { return KtTokens.EQEQ      ; }
 "!="         { return KtTokens.EXCLEQ    ; }
 "&&"         { return KtTokens.ANDAND    ; }
+"&"          { return KtTokens.AND       ; }
 "||"         { return KtTokens.OROR      ; }
 "*="         { return KtTokens.MULTEQ    ; }
 "/="         { return KtTokens.DIVEQ     ; }
@@ -294,6 +345,7 @@ LONELY_BACKTICK=`
 "->"         { return KtTokens.ARROW     ; }
 "=>"         { return KtTokens.DOUBLE_ARROW; }
 ".."         { return KtTokens.RANGE     ; }
+"..<"        { return KtTokens.RANGE_UNTIL; }
 "::"         { return KtTokens.COLONCOLON; }
 "["          { return KtTokens.LBRACKET  ; }
 "]"          { return KtTokens.RBRACKET  ; }
@@ -312,7 +364,7 @@ LONELY_BACKTICK=`
 ">"          { return KtTokens.GT        ; }
 "?"          { return KtTokens.QUEST     ; }
 ":"          { return KtTokens.COLON     ; }
-";;"          { return KtTokens.DOUBLE_SEMICOLON;}
+";;"         { return KtTokens.DOUBLE_SEMICOLON;}
 ";"          { return KtTokens.SEMICOLON ; }
 "="          { return KtTokens.EQ        ; }
 ","          { return KtTokens.COMMA     ; }
@@ -322,7 +374,7 @@ LONELY_BACKTICK=`
 {LONELY_BACKTICK} { pushState(UNMATCHED_BACKTICK); return TokenType.BAD_CHARACTER; }
 
 // error fallback
-.            { return TokenType.BAD_CHARACTER; }
+[\s\S]       { return TokenType.BAD_CHARACTER; }
 // error fallback for exclusive states
 <STRING, RAW_STRING, SHORT_TEMPLATE_ENTRY, BLOCK_COMMENT, DOC_COMMENT> .
              { return TokenType.BAD_CHARACTER; }

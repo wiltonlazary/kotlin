@@ -1,6 +1,7 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER
 class A {
     constructor(x: Int)
 }
 
-val x = A(<!NO_VALUE_FOR_PARAMETER!>)<!>
+val x = A<!NO_VALUE_FOR_PARAMETER!>()<!>

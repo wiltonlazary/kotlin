@@ -1,9 +1,8 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 var log = ""
 var postponed: () -> Unit = { }
@@ -11,7 +10,7 @@ var complete = false
 
 suspend fun suspendHere(x: String): Unit {
     log += "suspendHere($x);"
-    return suspendCoroutineOrReturn { c ->
+    return suspendCoroutineUninterceptedOrReturn { c ->
         postponed = { c.resume(Unit) }
         log += "suspended;"
         COROUTINE_SUSPENDED

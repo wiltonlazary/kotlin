@@ -26,5 +26,25 @@ interface CompilationResults : Remote {
 }
 
 enum class CompilationResultCategory(val code: Int) {
-    IC_COMPILE_ITERATION(0)
+    IC_COMPILE_ITERATION(0),
+    BUILD_REPORT_LINES(1),
+    VERBOSE_BUILD_REPORT_LINES(2),
+    BUILD_METRICS(3)
 }
+
+data class BuildMetricsValue(
+    val key: CompilationPerformanceMetrics,
+    val value: Long
+): Serializable
+
+enum class CompilationPerformanceMetrics {
+    COMPILER_INITIALIZATION,
+    CODE_ANALYSIS,
+    ANALYZED_LINES_NUMBER,
+    ANALYSIS_LPS,
+    CODE_GENERATION,
+    CODE_GENERATED_LINES_NUMBER,
+    CODE_GENERATION_LPS,
+}
+
+

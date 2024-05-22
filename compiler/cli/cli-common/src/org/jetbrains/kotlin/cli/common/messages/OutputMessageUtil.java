@@ -17,7 +17,6 @@
 package org.jetbrains.kotlin.cli.common.messages;
 
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,6 +24,7 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.io.Serializable;
 import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.Collection;
 
 public class OutputMessageUtil {
@@ -42,6 +42,12 @@ public class OutputMessageUtil {
     public static String formatOutputMessage(Collection<File> sourceFiles, File outputFile) {
         return OUTPUT_FILES_PREFIX + "\n" + outputFile.getPath() + "\n" +
                SOURCE_FILES_PREFIX + "\n" + StringUtil.join(sourceFiles, "\n");
+    }
+
+    @NotNull
+    public static String formatOutputMessage(Collection<String> sourceFilePaths, String outputFilePath) {
+        return OUTPUT_FILES_PREFIX + "\n" + outputFilePath + "\n" +
+               SOURCE_FILES_PREFIX + "\n" + StringUtil.join(sourceFilePaths, "\n");
     }
 
     @Nullable
@@ -69,7 +75,7 @@ public class OutputMessageUtil {
     }
 
     private static Collection<File> parseSourceFiles(String[] strings, int start) {
-        Collection<File> sourceFiles = ContainerUtil.newArrayList();
+        Collection<File> sourceFiles = new ArrayList<>();
         for (int i = start; i < strings.length; i++) {
             sourceFiles.add(new File(strings[i]));
         }

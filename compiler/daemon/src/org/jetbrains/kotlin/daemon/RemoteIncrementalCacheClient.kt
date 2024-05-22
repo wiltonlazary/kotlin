@@ -16,15 +16,18 @@
 
 package org.jetbrains.kotlin.daemon
 
-import org.jetbrains.kotlin.daemon.common.CompilerCallbackServicesFacade
 import org.jetbrains.kotlin.daemon.common.DummyProfiler
 import org.jetbrains.kotlin.daemon.common.Profiler
+import org.jetbrains.kotlin.daemon.common.withMeasure
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCache
 import org.jetbrains.kotlin.load.kotlin.incremental.components.JvmPackagePartProto
 import org.jetbrains.kotlin.modules.TargetId
 
-class RemoteIncrementalCacheClient(val facade: CompilerCallbackServicesFacade, val target: TargetId, val profiler: Profiler = DummyProfiler()): IncrementalCache {
-
+class RemoteIncrementalCacheClient(
+    @Suppress("DEPRECATION") val facade: org.jetbrains.kotlin.daemon.common.CompilerCallbackServicesFacade,
+    val target: TargetId,
+    val profiler: Profiler = DummyProfiler()
+): IncrementalCache {
     override fun getObsoletePackageParts(): Collection<String> = profiler.withMeasure(this) { facade.incrementalCache_getObsoletePackageParts(target) }
 
     override fun getObsoleteMultifileClasses(): Collection<String> = profiler.withMeasure(this) { facade.incrementalCache_getObsoleteMultifileClassFacades(target) }

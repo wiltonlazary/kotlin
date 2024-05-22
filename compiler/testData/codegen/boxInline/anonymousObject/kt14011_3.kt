@@ -17,9 +17,8 @@ import test.*
 var result = "fail"
 fun box(): String {
     inline1 {
-        inline2 { { result ="OK" }() }()
+        inline2 { { result ="OK" }.let { it() } }()
     }
 
     return result
 }
-

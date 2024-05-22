@@ -1,8 +1,8 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1112
+// KJS_WITH_FULL_RUNTIME
+// EXPECTED_REACHABLE_NODES: 1281
 package foo
 
-// CHECK_FUNCTIONS_HAVE_SAME_LINES: syntaxTestInline syntaxTest
+// CHECK_FUNCTIONS_HAVE_SAME_LINES: syntaxTestInline syntaxTest TARGET_BACKENDS=JS
 
 inline fun syntaxTestInline() {
     var result: Int = -0
@@ -67,6 +67,8 @@ fun syntaxTest() {
     syntaxTestInline()
 }
 
+// CHECK_BREAKS_COUNT: function=box count=0 TARGET_BACKENDS=JS_IR
+// CHECK_LABELS_COUNT: function=box name=$l$block count=0 TARGET_BACKENDS=JS_IR
 fun box(): String {
     syntaxTest()
     return "OK"

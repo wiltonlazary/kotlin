@@ -25,18 +25,19 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.scopes.utils.takeSnapshot
 import org.jetbrains.kotlin.util.collectionUtils.getFirstClassifierDiscriminateHeaders
 import org.jetbrains.kotlin.util.collectionUtils.getFromAllScopes
+import org.jetbrains.kotlin.util.collectionUtils.listOfNonEmptyScopes
 import org.jetbrains.kotlin.utils.Printer
-import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 
-class LexicalChainedScope @JvmOverloads constructor(
+class LexicalChainedScope private constructor(
     parent: LexicalScope,
     override val ownerDescriptor: DeclarationDescriptor,
     override val isOwnerDescriptorAccessibleByLabel: Boolean,
     override val implicitReceiver: ReceiverParameterDescriptor?,
+    override val contextReceiversGroup: List<ReceiverParameterDescriptor>,
     override val kind: LexicalScopeKind,
     // NB. Here can be very special subtypes of MemberScope (e.g., DeprecatedMemberScope).
     // Please, do not leak them outside of LexicalChainedScope, because other parts of compiler are not ready to work with them
-    private val memberScopes: List<MemberScope>,
+    private val memberScopes: Array<MemberScope>,
     @Deprecated("This value is temporary hack for resolve -- don't use it!")
     val isStaticScope: Boolean = false
 ) : LexicalScope {
@@ -49,7 +50,7 @@ class LexicalChainedScope @JvmOverloads constructor(
         getFirstClassifierDiscriminateHeaders(memberScopes) { it.getContributedClassifier(name, location) }
 
     override fun getContributedClassifierIncludeDeprecated(name: Name, location: LookupLocation): DescriptorWithDeprecation<ClassifierDescriptor>? {
-        val (firstClassifier, isFirstDeprecated) = memberScopes.firstNotNullResult {
+        val (firstClassifier, isFirstDeprecated) = memberScopes.firstNotNullOfOrNull {
             it.getContributedClassifierIncludeDeprecated(name, location)
         } ?: return null
 
@@ -74,8 +75,16 @@ class LexicalChainedScope @JvmOverloads constructor(
 
     override fun printStructure(p: Printer) {
         p.println(
-            this::class.java.simpleName, ": ", kind, "; for descriptor: ", ownerDescriptor.name,
-            " with implicitReceiver: ", implicitReceiver?.value ?: "NONE", " {"
+            this::class.java.simpleName,
+            ": ",
+            kind,
+            "; for descriptor: ",
+            ownerDescriptor.name,
+            " with implicitReceiver: ",
+            implicitReceiver?.value ?: "NONE",
+            " with contextReceiversGroup: ",
+            if (contextReceiversGroup.isEmpty()) "NONE" else contextReceiversGroup.joinToString { it.value.toString() },
+            " {"
         )
         p.pushIndent()
 
@@ -90,4 +99,31 @@ class LexicalChainedScope @JvmOverloads constructor(
         p.println("}")
     }
 
+    override fun definitelyDoesNotContainName(name: Name): Boolean {
+        return memberScopes.all { it.definitelyDoesNotContainName(name) }
+    }
+
+    override fun recordLookup(name: Name, location: LookupLocation) {
+        memberScopes.forEach { it.recordLookup(name, location) }
+    }
+
+    companion object {
+
+        @JvmOverloads
+        fun create(
+            parent: LexicalScope,
+            ownerDescriptor: DeclarationDescriptor,
+            isOwnerDescriptorAccessibleByLabel: Boolean,
+            implicitReceiver: ReceiverParameterDescriptor?,
+            contextReceiversGroup: List<ReceiverParameterDescriptor>,
+            kind: LexicalScopeKind,
+            vararg memberScopes: MemberScope?,
+            isStaticScope: Boolean = false
+        ): LexicalScope =
+            LexicalChainedScope(
+                parent, ownerDescriptor, isOwnerDescriptorAccessibleByLabel, implicitReceiver, contextReceiversGroup, kind,
+                listOfNonEmptyScopes(*memberScopes).toTypedArray(),
+                isStaticScope
+            )
+    }
 }

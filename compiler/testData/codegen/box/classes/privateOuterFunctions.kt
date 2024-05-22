@@ -1,4 +1,3 @@
-// IGNORE_BACKEND: NATIVE
 class C {
     private fun String.ext() : String = ""
     private fun f() {}
@@ -7,7 +6,7 @@ class C {
         {
             "".ext()
             f()
-        }.invoke()
+        }.let { it.invoke() }
 
         object : Runnable {
             public override fun run() {

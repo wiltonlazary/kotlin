@@ -1,11 +1,10 @@
-// IGNORE_BACKEND: NATIVE
 class C{
     private var v : Int = 0
 
     public fun foo() : Int {
         {
             v = v + 1
-        }.invoke()
+        }.let { it.invoke() }
 
         object : Runnable {
             public override fun run() {

@@ -20,19 +20,61 @@ import org.jetbrains.kotlin.codegen.inline.MaxStackFrameSizeAndLocalsCalculator
 import org.jetbrains.kotlin.codegen.inline.insnText
 import org.jetbrains.kotlin.codegen.optimization.removeNodeGetNext
 import org.jetbrains.kotlin.codegen.pseudoInsns.PseudoInsn
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.org.objectweb.asm.MethodVisitor
-import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Opcodes.*
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.*
 
 val AbstractInsnNode.isMeaningful: Boolean
     get() =
-        when (this.type) {
+        when (this.nodeType) {
             AbstractInsnNode.LABEL, AbstractInsnNode.LINE, AbstractInsnNode.FRAME -> false
             else -> true
         }
+
+val AbstractInsnNode.isBranchOrCall: Boolean
+    get() =
+        when (this.nodeType) {
+            AbstractInsnNode.JUMP_INSN,
+            AbstractInsnNode.TABLESWITCH_INSN,
+            AbstractInsnNode.LOOKUPSWITCH_INSN,
+            AbstractInsnNode.METHOD_INSN -> true
+            else -> false
+        }
+
+private val opcodeToNodeType = IntArray(IFNONNULL + 1) {
+    when (it) {
+        in NOP..DCONST_1, in IALOAD..SALOAD, in IASTORE..LXOR, in I2L..DCMPG, in IRETURN..RETURN,
+        ARRAYLENGTH, ATHROW, MONITORENTER, MONITOREXIT -> AbstractInsnNode.INSN
+        in BIPUSH..SIPUSH, NEWARRAY -> AbstractInsnNode.INT_INSN
+        in ILOAD..ALOAD, in ISTORE..ASTORE, RET -> AbstractInsnNode.VAR_INSN
+        NEW, ANEWARRAY, CHECKCAST, INSTANCEOF -> AbstractInsnNode.TYPE_INSN
+        in GETSTATIC..PUTFIELD -> AbstractInsnNode.FIELD_INSN
+        in INVOKEVIRTUAL..INVOKEINTERFACE -> AbstractInsnNode.METHOD_INSN
+        INVOKEDYNAMIC -> AbstractInsnNode.INVOKE_DYNAMIC_INSN
+        in IFEQ..JSR, IFNULL, IFNONNULL -> AbstractInsnNode.JUMP_INSN
+        LDC -> AbstractInsnNode.LDC_INSN
+        IINC -> AbstractInsnNode.IINC_INSN
+        TABLESWITCH -> AbstractInsnNode.TABLESWITCH_INSN
+        LOOKUPSWITCH -> AbstractInsnNode.LOOKUPSWITCH_INSN
+        MULTIANEWARRAY -> AbstractInsnNode.MULTIANEWARRAY_INSN
+        else -> -1
+    }
+}
+
+// Faster version of `AbstractInsnNode.getType`
+val AbstractInsnNode.nodeType: Int
+    get() {
+        return when (val opcode = this.opcode) {
+            -1 -> when (this) {
+                is LabelNode -> AbstractInsnNode.LABEL
+                is FrameNode -> AbstractInsnNode.FRAME
+                is LineNumberNode -> AbstractInsnNode.LINE
+                else -> -1
+            }
+            else -> opcodeToNodeType.getOrElse(opcode) { -1 }
+        }
+    }
 
 class InsnSequence(val from: AbstractInsnNode, val to: AbstractInsnNode?) : Sequence<AbstractInsnNode> {
     constructor(insnList: InsnList) : this(insnList.first, null)
@@ -51,7 +93,7 @@ class InsnSequence(val from: AbstractInsnNode, val to: AbstractInsnNode?) : Sequ
     }
 }
 
-fun InsnList.asSequence() = InsnSequence(this)
+fun InsnList.asSequence(): Sequence<AbstractInsnNode> = if (size() == 0) emptySequence() else InsnSequence(this)
 
 fun MethodNode.prepareForEmitting() {
     stripOptimizationMarkers()
@@ -69,19 +111,23 @@ fun MethodNode.prepareForEmitting() {
     while (!current.isMeaningful) {
         val prev = current.previous
 
-        if (current.type == AbstractInsnNode.LINE) {
+        if (current.nodeType == AbstractInsnNode.LINE) {
             instructions.remove(current)
         }
 
         current = prev
     }
+    updateMaxStack()
+}
+
+fun MethodNode.updateMaxStack() {
     maxStack = -1
     accept(
         MaxStackFrameSizeAndLocalsCalculator(
-            Opcodes.ASM5, access, desc,
-            object : MethodVisitor(Opcodes.ASM5) {
+            API_VERSION, access, desc,
+            object : MethodVisitor(API_VERSION) {
                 override fun visitMaxs(maxStack: Int, maxLocals: Int) {
-                    this@prepareForEmitting.maxStack = maxStack
+                    this@updateMaxStack.maxStack = maxStack
                 }
             })
     )
@@ -90,10 +136,10 @@ fun MethodNode.prepareForEmitting() {
 fun MethodNode.stripOptimizationMarkers() {
     var insn = instructions.first
     while (insn != null) {
-        if (isOptimizationMarker(insn)) {
-            insn = instructions.removeNodeGetNext(insn)
+        insn = if (isOptimizationMarker(insn)) {
+            instructions.removeNodeGetNext(insn)
         } else {
-            insn = insn.next
+            insn.next
         }
     }
 }
@@ -109,6 +155,20 @@ fun MethodNode.removeEmptyCatchBlocks() {
 
 fun MethodNode.removeUnusedLocalVariables() {
     val used = BooleanArray(maxLocals) { false }
+
+    // Arguments are always used whether or not they are in the local variable table
+    // or used by instructions.
+    var argumentIndex = 0
+    val isStatic = (access and ACC_STATIC) != 0
+    if (!isStatic) {
+        used[argumentIndex++] = true
+    }
+    for (argumentType in Type.getArgumentTypes(desc)) {
+        for (i in 0 until argumentType.size) {
+            used[argumentIndex++] = true
+        }
+    }
+
     for (insn in instructions) {
         when (insn) {
             is VarInsnNode -> {
@@ -149,7 +209,7 @@ private fun VarInsnNode.isSize2LoadStoreOperation() =
     opcode == LLOAD || opcode == DLOAD || opcode == LSTORE || opcode == DSTORE
 
 fun MethodNode.remapLocalVariables(remapping: IntArray) {
-    for (insn in instructions.toArray()) {
+    for (insn in instructions) {
         when (insn) {
             is VarInsnNode ->
                 insn.`var` = remapping[insn.`var`]
@@ -206,8 +266,8 @@ val AbstractInsnNode.intConstant: Int?
 
 fun insnListOf(vararg insns: AbstractInsnNode) = InsnList().apply { insns.forEach { add(it) } }
 
-fun AbstractInsnNode.isStoreOperation(): Boolean = opcode in Opcodes.ISTORE..Opcodes.ASTORE
-fun AbstractInsnNode.isLoadOperation(): Boolean = opcode in Opcodes.ILOAD..Opcodes.ALOAD
+fun AbstractInsnNode.isStoreOperation(): Boolean = opcode in ISTORE..ASTORE
+fun AbstractInsnNode.isLoadOperation(): Boolean = opcode in ILOAD..ALOAD
 
 val AbstractInsnNode?.debugText
     get() =
@@ -217,7 +277,7 @@ internal inline fun <reified T : AbstractInsnNode> AbstractInsnNode.isInsn(opcod
     takeInsnIf(opcode, condition) != null
 
 internal inline fun <reified T : AbstractInsnNode> AbstractInsnNode.takeInsnIf(opcode: Int, condition: T.() -> Boolean): T? =
-    takeIf { it.opcode == opcode }?.safeAs<T>()?.takeIf { it.condition() }
+    (takeIf { it.opcode == opcode } as? T)?.takeIf { it.condition() }
 
 fun InsnList.removeAll(nodes: Collection<AbstractInsnNode>) {
     for (node in nodes) remove(node)

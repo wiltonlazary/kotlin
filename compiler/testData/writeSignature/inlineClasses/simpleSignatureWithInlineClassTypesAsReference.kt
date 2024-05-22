@@ -1,4 +1,4 @@
-// !LANGUAGE: +InlineClasses
+// LANGUAGE: +InlineClasses
 
 inline class Foo(val x: Int?)
 
@@ -10,10 +10,10 @@ object Test {
     fun asReturn(): Bar = TODO()
 }
 
-// method: Test::asParam
+// method: Test::asParam-GWb7d6U
 // jvm signature: (Ljava/lang/Integer;)V
 // generic signature: null
 
-// method: Test::asReturn
+// method: Test::asReturn-tzJxzxE
 // jvm signature: ()LSimpleClass;
 // generic signature: null

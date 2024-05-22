@@ -22,11 +22,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.descriptors.*;
-import org.jetbrains.kotlin.descriptors.annotations.*;
+import org.jetbrains.kotlin.descriptors.annotations.Annotations;
 import org.jetbrains.kotlin.descriptors.impl.ValueParameterDescriptorImpl;
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation;
 import org.jetbrains.kotlin.load.java.descriptors.JavaMethodDescriptor;
-import org.jetbrains.kotlin.load.java.descriptors.UtilKt;
 import org.jetbrains.kotlin.load.java.structure.JavaMethod;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
@@ -67,12 +66,10 @@ public class SignaturesPropagationData {
         JavaMethodDescriptor autoMethodDescriptor =
                 createAutoMethodDescriptor(containingClass, method, autoReturnType, autoValueParameters, autoTypeParameters);
 
-        boolean hasStableParameterNames = autoValueParameters.stream().allMatch(it -> UtilKt.getParameterNameAnnotation(it) != null);
-
         superFunctions = getSuperFunctionsForMethod(method, autoMethodDescriptor, containingClass);
         modifiedValueParameters = superFunctions.isEmpty()
-                                  ? new ValueParameters(null, autoValueParameters, hasStableParameterNames)
-                                  : modifyValueParametersAccordingToSuperMethods(autoValueParameters, hasStableParameterNames);
+                                  ? new ValueParameters(null, autoValueParameters, false)
+                                  : modifyValueParametersAccordingToSuperMethods(autoValueParameters);
     }
 
     @NotNull
@@ -87,16 +84,16 @@ public class SignaturesPropagationData {
                 Annotations.Companion.getEMPTY(),
                 method.getName(),
                 //TODO: what to do?
-                SourceElement.NO_SOURCE
+                SourceElement.NO_SOURCE,
+                false
         );
         autoMethodDescriptor.initialize(
-                /* receiverParameterType = */ null,
-                containingClass.getThisAsReceiverParameter(),
+                null, containingClass.getThisAsReceiverParameter(), CollectionsKt.emptyList(),
                 autoTypeParameters,
                 autoValueParameters,
                 autoReturnType,
                 Modality.OPEN,
-                Visibilities.PUBLIC
+                DescriptorVisibilities.PUBLIC
         );
         return autoMethodDescriptor;
     }
@@ -121,10 +118,7 @@ public class SignaturesPropagationData {
         signatureErrors.add(error);
     }
 
-    private ValueParameters modifyValueParametersAccordingToSuperMethods(
-            @NotNull List<ValueParameterDescriptor> parameters,
-            boolean annotatedWithParameterName
-    ) {
+    private ValueParameters modifyValueParametersAccordingToSuperMethods(@NotNull List<ValueParameterDescriptor> parameters) {
         KotlinType resultReceiverType = null;
         List<ValueParameterDescriptor> resultParameters = new ArrayList<>(parameters.size());
 
@@ -165,15 +159,12 @@ public class SignaturesPropagationData {
                     }
                 }
 
-                AnnotationDescriptor currentName = UtilKt.getParameterNameAnnotation(originalParam);
-                boolean shouldTakeOldName = currentName == null && stableName != null;
-
                 resultParameters.add(new ValueParameterDescriptorImpl(
                         originalParam.getContainingDeclaration(),
                         null,
                         shouldBeExtension ? originalIndex - 1 : originalIndex,
                         originalParam.getAnnotations(),
-                        shouldTakeOldName ? stableName : originalParam.getName(),
+                        stableName != null ? stableName : originalParam.getName(),
                         altType,
                         originalParam.declaresDefaultValue(),
                         originalParam.isCrossinline(),
@@ -184,8 +175,7 @@ public class SignaturesPropagationData {
             }
         }
 
-        boolean hasStableParameterNames =
-                annotatedWithParameterName || CollectionsKt.any(superFunctions, CallableDescriptor::hasStableParameterNames);
+        boolean hasStableParameterNames = CollectionsKt.any(superFunctions, CallableDescriptor::hasStableParameterNames);
 
         return new ValueParameters(resultReceiverType, resultParameters, hasStableParameterNames);
     }
@@ -202,7 +192,7 @@ public class SignaturesPropagationData {
         Method autoSignature = null;
         boolean autoMethodContainsVararg = SignaturePropagationUtilKt.containsVarargs(autoMethodDescriptor);
         for (KotlinType supertype : containingClass.getTypeConstructor().getSupertypes()) {
-            Collection<SimpleFunctionDescriptor> superFunctionCandidates =
+            Collection<? extends SimpleFunctionDescriptor> superFunctionCandidates =
                     supertype.getMemberScope().getContributedFunctions(name, NoLookupLocation.WHEN_GET_SUPER_MEMBERS);
 
             if (!autoMethodContainsVararg && !SignaturePropagationUtilKt.containsAnyNotTrivialSignature(superFunctionCandidates)) continue;

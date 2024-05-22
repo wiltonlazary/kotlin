@@ -16,14 +16,20 @@
 
 package org.jetbrains.kotlin.backend.common
 
-import org.jetbrains.kotlin.backend.common.descriptors.DescriptorsFactory
-import org.jetbrains.kotlin.backend.common.descriptors.SharedVariablesManager
+import org.jetbrains.kotlin.backend.common.ir.Ir
+import org.jetbrains.kotlin.backend.common.ir.SharedVariablesManager
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
-import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
+import org.jetbrains.kotlin.ir.IrBuiltIns
+import org.jetbrains.kotlin.ir.declarations.IrFactory
+import org.jetbrains.kotlin.ir.types.IrTypeSystemContext
+import org.jetbrains.kotlin.name.FqName
 
 interface BackendContext {
+    val ir: Ir<CommonBackendContext>
     val builtIns: KotlinBuiltIns
     val irBuiltIns: IrBuiltIns
+    val typeSystem: IrTypeSystemContext
     val sharedVariablesManager: SharedVariablesManager
-    val descriptorsFactory: DescriptorsFactory
+    val internalPackageFqn: FqName
+    val irFactory: IrFactory
 }

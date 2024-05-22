@@ -1,0 +1,65 @@
+KtFunctionSymbol:
+  annotationsList: [
+    kotlin/OptIn(markerClass = [kotlin.contracts.ExperimentalContracts::class])
+      psi: KtAnnotationEntry
+  ]
+  callableIdIfNonLocal: /referenceReceiverInContract
+  contextReceivers: []
+  contractEffects: [
+    KtContractConditionalContractEffectDeclaration:
+      effect:
+        KtContractReturnsSuccessfullyEffectDeclaration:
+      condition:
+        KtContractBooleanValueParameterExpression:
+          parameterSymbol:
+            KtReceiverParameterSymbol:
+              annotationsList: []
+              origin: SOURCE
+              owningCallableSymbol: KtFunctionSymbol(/referenceReceiverInContract)
+              type: KtUsualClassType:
+                annotationsList: []
+                ownTypeArguments: []
+                type: kotlin/Boolean
+              getContainingFileSymbol: KtFileSymbol(referenceBooleanReceiverInContract.kt)
+              getContainingModule: KtSourceModule "Sources of main"
+              deprecationStatus: null
+  ]
+  hasStableParameterNames: true
+  isActual: false
+  isBuiltinFunctionInvoke: false
+  isExpect: false
+  isExtension: true
+  isExternal: false
+  isInfix: false
+  isInline: false
+  isOperator: false
+  isOverride: false
+  isStatic: false
+  isSuspend: false
+  isTailRec: false
+  modality: FINAL
+  name: referenceReceiverInContract
+  origin: SOURCE
+  receiverParameter: KtReceiverParameterSymbol:
+    annotationsList: []
+    origin: SOURCE
+    owningCallableSymbol: KtFunctionSymbol(/referenceReceiverInContract)
+    type: KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: kotlin/Boolean
+    getContainingFileSymbol: KtFileSymbol(referenceBooleanReceiverInContract.kt)
+    getContainingModule: KtSourceModule "Sources of main"
+    deprecationStatus: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: kotlin/Unit
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  valueParameters: []
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(referenceBooleanReceiverInContract.kt)
+  getContainingJvmClassName: ReferenceBooleanReceiverInContractKt
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null

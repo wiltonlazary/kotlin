@@ -20,7 +20,6 @@ import org.jetbrains.kotlin.builtins.DefaultBuiltIns
 import org.jetbrains.kotlin.cfg.pseudocode.PseudoValue
 import org.jetbrains.kotlin.cfg.pseudocode.PseudocodeImpl
 import org.jetbrains.kotlin.cfg.pseudocode.TypePredicate
-import org.jetbrains.kotlin.cfg.pseudocode.getExpectedTypePredicate
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.eval.InstructionWithValue
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
@@ -79,9 +78,9 @@ abstract class AbstractPseudoValueTest : AbstractPseudocodeTest() {
             valueDescriptions[value to element] = valueDescription(element, value)
         }
 
-        val elementColumnWidth = elementToValues.keys.map { elementText(it).length }.max() ?: 1
-        val valueColumnWidth = allValues.map { valueDecl(it).length }.max()!!
-        val valueDescColumnWidth = valueDescriptions.values.map { it.length }.max()!!
+        val elementColumnWidth = elementToValues.keys.maxOfOrNull { elementText(it).length } ?: 1
+        val valueColumnWidth = allValues.maxOf { valueDecl(it).length }
+        val valueDescColumnWidth = valueDescriptions.values.maxOf { it.length }
 
         for ((ve, description) in valueDescriptions.entries) {
             val (value, element) = ve
@@ -91,7 +90,7 @@ abstract class AbstractPseudoValueTest : AbstractPseudocodeTest() {
                      "%1$-${valueColumnWidth}s".format(valueDecl(value)) +
                      "   " +
                      "%1$-${valueDescColumnWidth}s".format(description)
-            out.appendln(line.trimEnd())
+            out.appendLine(line.trimEnd())
         }
     }
 

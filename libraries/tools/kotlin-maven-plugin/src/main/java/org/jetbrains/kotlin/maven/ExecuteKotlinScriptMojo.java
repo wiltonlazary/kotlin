@@ -1,23 +1,13 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.maven;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.util.Disposer;
+import kotlin.script.experimental.jvm.JvmScriptingHostConfigurationKt;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.DefaultArtifact;
 import org.apache.maven.artifact.handler.ArtifactHandler;
@@ -34,31 +24,34 @@ import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.component.repository.ComponentDependency;
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys;
+import org.jetbrains.kotlin.cli.common.config.KotlinSourceRoot;
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler;
 import org.jetbrains.kotlin.cli.jvm.config.JvmClasspathRoot;
+import org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt;
 import org.jetbrains.kotlin.codegen.GeneratedClassLoader;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
+import org.jetbrains.kotlin.compiler.plugin.ComponentRegistrar;
 import org.jetbrains.kotlin.config.CommonConfigurationKeys;
 import org.jetbrains.kotlin.config.CompilerConfiguration;
-import org.jetbrains.kotlin.config.JVMConfigurationKeys;
-import org.jetbrains.kotlin.config.KotlinSourceRoot;
-import org.jetbrains.kotlin.load.java.JvmAbi;
+import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.psi.KtScript;
-import org.jetbrains.kotlin.script.ReflectionUtilKt;
-import org.jetbrains.kotlin.scripting.compiler.plugin.ScriptingCompilerConfigurationExtensionKt;
-import org.jetbrains.kotlin.utils.PathUtil;
+import org.jetbrains.kotlin.scripting.compiler.plugin.ConfigurationKt;
+import org.jetbrains.kotlin.scripting.compiler.plugin.ScriptingCompilerConfigurationComponentRegistrar;
+import org.jetbrains.kotlin.utils.ParametersMapKt;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static org.jetbrains.kotlin.cli.jvm.JvmArgumentsKt.configureJdkHomeFromSystemProperty;
 
 /**
  * Allows to execute kotlin script files during the build process.
@@ -138,17 +131,17 @@ public class ExecuteKotlinScriptMojo extends AbstractMojo {
                 buildDirectory.mkdirs();
             }
 
-            File scriptFile = File.createTempFile("kotlin-maven-plugin-inline-script-", ".tmp.kts", buildDirectory);
-            FileOutputStream stream = new FileOutputStream(scriptFile);
-            stream.write(script.getBytes("UTF-8"));
-            stream.close();
+            Path scriptFile = Files.createTempFile(buildDirectory.toPath(), "kotlin-maven-plugin-inline-script-", ".tmp.kts");
+            try (BufferedWriter writer = Files.newBufferedWriter(scriptFile, StandardCharsets.UTF_8)) {
+                writer.write(script);
+            }
 
             try {
-                executeScriptFile(scriptFile);
+                executeScriptFile(scriptFile.toFile());
             } finally {
-                boolean deleted = scriptFile.delete();
+                boolean deleted = Files.deleteIfExists(scriptFile);
                 if (!deleted) {
-                    getLog().warn("Error deleting " + scriptFile.getAbsolutePath());
+                    getLog().warn("Error deleting " + scriptFile.toAbsolutePath());
                 }
             }
         } catch (IOException e) {
@@ -159,14 +152,20 @@ public class ExecuteKotlinScriptMojo extends AbstractMojo {
     private void executeScriptFile(File scriptFile) throws MojoExecutionException {
         initCompiler();
 
-        Disposable rootDisposable = Disposer.newDisposable();
+        Disposable rootDisposable = Disposer.newDisposable("Disposable for ExecuteKotlinScriptMojo.executeScriptFile");
 
         try {
             MavenPluginLogMessageCollector messageCollector = new MavenPluginLogMessageCollector(getLog());
 
             CompilerConfiguration configuration = new CompilerConfiguration();
 
-            configuration.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, messageCollector);
+            configuration.put(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, messageCollector);
+            configuration.put(CommonConfigurationKeys.ALLOW_ANY_SCRIPTS_IN_SOURCE_ROOTS, true);
+
+            configuration.add(ComponentRegistrar.Companion.getPLUGIN_COMPONENT_REGISTRARS(),
+                              new ScriptingCompilerConfigurationComponentRegistrar());
+
+            configureJdkHomeFromSystemProperty(configuration);
 
             List<File> deps = new ArrayList<>();
 
@@ -174,20 +173,22 @@ public class ExecuteKotlinScriptMojo extends AbstractMojo {
 
             for (File item: deps) {
                 if (item.exists()) {
-                    configuration.add(JVMConfigurationKeys.CONTENT_ROOTS, new JvmClasspathRoot(item));
+                    configuration.add(CLIConfigurationKeys.CONTENT_ROOTS, new JvmClasspathRoot(item));
                     getLog().debug("Adding to classpath: " + item.getAbsolutePath());
                 } else {
                     getLog().debug("Skipping non-existing dependency: " + item.getAbsolutePath());
                 }
             }
 
-            configuration.add(JVMConfigurationKeys.CONTENT_ROOTS, new KotlinSourceRoot(scriptFile.getAbsolutePath()));
-            configuration.put(CommonConfigurationKeys.MODULE_NAME, JvmAbi.DEFAULT_MODULE_NAME);
+            configuration.add(CLIConfigurationKeys.CONTENT_ROOTS, new KotlinSourceRoot(scriptFile.getAbsolutePath(), false, null));
+            configuration.put(CommonConfigurationKeys.MODULE_NAME, JvmProtoBufUtil.DEFAULT_MODULE_NAME);
 
-            ScriptingCompilerConfigurationExtensionKt.configureScriptDefinitions(
-                    scriptTemplates, configuration, this.getClass().getClassLoader(), messageCollector, new HashMap<>()
+            ConfigurationKt.configureScriptDefinitions(
+                    scriptTemplates, configuration, this.getClass().getClassLoader(), messageCollector,
+                    JvmScriptingHostConfigurationKt.getDefaultJvmScriptingHostConfiguration()
             );
 
+            JvmContentRootsKt.configureJdkClasspathRoots(configuration);
             KotlinCoreEnvironment environment = KotlinCoreEnvironment.createForProduction(rootDisposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES);
 
             GenerationState state = KotlinToJVMBytecodeCompiler.INSTANCE.analyzeAndGenerate(environment);
@@ -203,7 +204,7 @@ public class ExecuteKotlinScriptMojo extends AbstractMojo {
             try {
                 Class<?> klass = classLoader.loadClass(nameForScript.asString());
                 ExecuteKotlinScriptMojo.INSTANCE = this;
-                if (ReflectionUtilKt.tryConstructClassFromStringArgs(klass, scriptArguments) == null)
+                if (ParametersMapKt.tryConstructClassFromStringArgs(klass, scriptArguments) == null)
                     throw new ScriptExecutionException(scriptFile, "unable to construct script");
             } catch (ClassNotFoundException e) {
                 throw new ScriptExecutionException(scriptFile, "internal error", e);
@@ -242,7 +243,7 @@ public class ExecuteKotlinScriptMojo extends AbstractMojo {
     }
 
     private List<File> getThisPluginDependencies() {
-        return plugin.getDependencies().stream().map(this::getDependencyFile).collect(Collectors.toList());
+        return plugin.getArtifacts().stream().map(this::getArtifactFile).collect(Collectors.toList());
     }
 
     private File getThisPluginAsDependency() {

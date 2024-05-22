@@ -1,4 +1,4 @@
-// EXPECTED_REACHABLE_NODES: 1113
+// EXPECTED_REACHABLE_NODES: 1283
 package foo
 
 // CHECK_CONTAINS_NO_CALLS: squareMultipliedByTwo except=imul
@@ -20,6 +20,9 @@ internal inline fun inline3(a: Int): Int {
     return i1
 }
 
+// CHECK_BREAKS_COUNT: function=squareMultipliedByTwo count=2 TARGET_BACKENDS=JS_IR
+// CHECK_LABELS_COUNT: function=squareMultipliedByTwo name=$l$block count=1 TARGET_BACKENDS=JS_IR
+// CHECK_LABELS_COUNT: function=squareMultipliedByTwo name=$l$block_0 count=1 TARGET_BACKENDS=JS_IR
 internal fun squareMultipliedByTwo(a: Int): Int {
     return inline3(a)
 }

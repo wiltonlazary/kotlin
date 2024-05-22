@@ -1,24 +1,15 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls
 
 import com.intellij.lang.ASTNode
+import com.intellij.openapi.util.ThrowableComputable
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.util.AstLoadingFilter
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
@@ -31,9 +22,9 @@ import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.bindingContextUtil.recordDataFlowInfo
 import org.jetbrains.kotlin.resolve.bindingContextUtil.recordScope
-import org.jetbrains.kotlin.resolve.calls.callResolverUtil.ResolveArgumentsMode
-import org.jetbrains.kotlin.resolve.calls.callUtil.getCalleeExpressionIfAny
-import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.util.ResolveArgumentsMode
+import org.jetbrains.kotlin.resolve.calls.util.getCalleeExpressionIfAny
+import org.jetbrains.kotlin.resolve.calls.util.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.context.BasicCallResolutionContext
 import org.jetbrains.kotlin.resolve.calls.context.CheckArgumentTypesMode
 import org.jetbrains.kotlin.resolve.calls.context.ContextDependency.INDEPENDENT
@@ -54,10 +45,11 @@ import org.jetbrains.kotlin.resolve.calls.util.CallMaker
 import org.jetbrains.kotlin.resolve.calls.util.FakeCallableDescriptorForObject
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
 import org.jetbrains.kotlin.resolve.scopes.receivers.*
-import org.jetbrains.kotlin.types.ErrorUtils
-import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.TypeUtils
+import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.types.error.ErrorUtils
 import org.jetbrains.kotlin.types.TypeUtils.NO_EXPECTED_TYPE
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
+import org.jetbrains.kotlin.types.error.ErrorTypeKind
 import org.jetbrains.kotlin.types.expressions.DataFlowAnalyzer
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingContext
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingServices
@@ -74,7 +66,8 @@ class CallExpressionResolver(
     private val builtIns: KotlinBuiltIns,
     private val qualifiedExpressionResolver: QualifiedExpressionResolver,
     private val languageVersionSettings: LanguageVersionSettings,
-    private val dataFlowValueFactory: DataFlowValueFactory
+    private val dataFlowValueFactory: DataFlowValueFactory,
+    private val kotlinTypeRefiner: KotlinTypeRefiner
 ) {
     private lateinit var expressionTypingServices: ExpressionTypingServices
 
@@ -232,7 +225,8 @@ class CallExpressionResolver(
             if (functionDescriptor is ConstructorDescriptor) {
                 val constructedClass = functionDescriptor.constructedClass
                 if (DescriptorUtils.isAnnotationClass(constructedClass) && !canInstantiateAnnotationClass(callExpression, context.trace)) {
-                    context.trace.report(ANNOTATION_CLASS_CONSTRUCTOR_CALL.on(callExpression))
+                    val supported = context.languageVersionSettings.supportsFeature(LanguageFeature.InstantiationOfAnnotationClasses)
+                    if (!supported) context.trace.report(ANNOTATION_CLASS_CONSTRUCTOR_CALL.on(callExpression))
                 }
                 if (DescriptorUtils.isEnumClass(constructedClass)) {
                     context.trace.report(ENUM_CLASS_CONSTRUCTOR_CALL.on(callExpression))
@@ -280,7 +274,7 @@ class CallExpressionResolver(
                 context.trace.report(
                     FUNCTION_EXPECTED.on(
                         calleeExpression, calleeExpression,
-                        type ?: ErrorUtils.createErrorType("")
+                        type ?: ErrorUtils.createErrorType(ErrorTypeKind.ERROR_EXPECTED_TYPE)
                     )
                 )
                 argumentTypeResolver.analyzeArgumentsAndRecordTypes(
@@ -299,23 +293,31 @@ class CallExpressionResolver(
 
     private fun KtQualifiedExpression.elementChain(context: ExpressionTypingContext) =
         qualifiedExpressionResolver.resolveQualifierInExpressionAndUnroll(this, context) { nameExpression ->
-            val resolutionResult = resolveSimpleName(context, nameExpression)
+            val temporaryTraceAndCache =
+                TemporaryTraceAndCache.create(context, "trace to resolve as local variable or property", nameExpression)
+            val resolutionResult = resolveSimpleName(context, nameExpression, temporaryTraceAndCache)
 
             if (resolutionResult.isSingleResult && resolutionResult.resultingDescriptor is FakeCallableDescriptorForObject) {
                 false
             } else when (resolutionResult.resultCode) {
                 NAME_NOT_FOUND, CANDIDATES_WITH_WRONG_RECEIVER -> false
-                else -> !context.languageVersionSettings.supportsFeature(LanguageFeature.NewInference) || resolutionResult.isSuccess
+                else -> {
+                    val newInferenceEnabled = context.languageVersionSettings.supportsFeature(LanguageFeature.NewInference)
+                    val success = !newInferenceEnabled || resolutionResult.isSuccess
+                    if (newInferenceEnabled && success) {
+                        temporaryTraceAndCache.commit()
+                    }
+                    success
+                }
             }
         }
 
     private fun resolveSimpleName(
-        context: ExpressionTypingContext, expression: KtSimpleNameExpression
+        context: ExpressionTypingContext, expression: KtSimpleNameExpression, traceAndCache: TemporaryTraceAndCache
     ): OverloadResolutionResults<VariableDescriptor> {
-        val temporaryForVariable = TemporaryTraceAndCache.create(context, "trace to resolve as local variable or property", expression)
         val call = CallMaker.makePropertyCall(null, null, expression)
         val contextForVariable = BasicCallResolutionContext.create(
-            context.replaceTraceAndCache(temporaryForVariable), call, CheckArgumentTypesMode.CHECK_VALUE_ARGUMENTS
+            context.replaceTraceAndCache(traceAndCache), call, CheckArgumentTypesMode.CHECK_VALUE_ARGUMENTS
         )
         return callResolver.resolveSimpleProperty(contextForVariable)
     }
@@ -345,21 +347,43 @@ class CallExpressionResolver(
             KotlinTypeInfo {
         var initialDataFlowInfoForArguments = context.dataFlowInfo
         val receiverDataFlowValue = (receiver as? ReceiverValue)?.let { dataFlowValueFactory.createDataFlowValue(it, context) }
-        val receiverCanBeNull = receiverDataFlowValue != null &&
-                initialDataFlowInfoForArguments.getStableNullability(receiverDataFlowValue).canBeNull()
+
+        val receiverCanBeNull = receiverDataFlowValue != null && initialDataFlowInfoForArguments.getStableNullability(receiverDataFlowValue).canBeNull()
+        val shouldNullifySafeCallType =
+            receiverCanBeNull || context.languageVersionSettings.supportsFeature(LanguageFeature.SafeCallsAreAlwaysNullable)
+
+        val callOperationNode = AstLoadingFilter.forceAllowTreeLoading(element.qualified.containingFile, ThrowableComputable {
+            element.node
+        })
+
         if (receiverDataFlowValue != null && element.safe) {
             // Additional "receiver != null" information should be applied if we consider a safe call
-            if (receiverCanBeNull) {
+            if (shouldNullifySafeCallType) {
                 initialDataFlowInfoForArguments = initialDataFlowInfoForArguments.disequate(
                     receiverDataFlowValue, DataFlowValue.nullValue(builtIns), languageVersionSettings
                 )
-            } else if (receiver is ReceiverValue) {
-                reportUnnecessarySafeCall(context.trace, receiver.type, element.node, receiver)
+            }
+            if (!receiverCanBeNull) {
+                reportUnnecessarySafeCall(
+                    context.trace,
+                    receiver.type,
+                    element.qualified,
+                    callOperationNode,
+                    receiver,
+                    context.languageVersionSettings
+                )
             }
         }
 
         val selector = element.selector
-        var selectorTypeInfo = getUnsafeSelectorTypeInfo(receiver, element.node, selector, context, initialDataFlowInfoForArguments)
+
+        @OptIn(TypeRefinement::class)
+        var selectorTypeInfo =
+            getUnsafeSelectorTypeInfo(receiver, callOperationNode, selector, context, initialDataFlowInfoForArguments)
+                .run {
+                    val type = type ?: return@run this
+                    replaceType(kotlinTypeRefiner.refineType(type))
+                }
 
         if (receiver is Qualifier) {
             resolveDeferredReceiverInQualifiedExpression(receiver, selector, context)
@@ -367,7 +391,7 @@ class CallExpressionResolver(
 
         val selectorType = selectorTypeInfo.type
         if (selectorType != null) {
-            if (element.safe && receiverCanBeNull) {
+            if (element.safe && shouldNullifySafeCallType) {
                 selectorTypeInfo = selectorTypeInfo.replaceType(TypeUtils.makeNullable(selectorType))
             }
             // TODO : this is suspicious: remove this code?
@@ -428,7 +452,14 @@ class CallExpressionResolver(
         var branchPointDataFlowInfo = receiverTypeInfo.dataFlowInfo
 
         for (element in elementChain) {
-            val receiverType = receiverTypeInfo.type ?: ErrorUtils.createErrorType("Type for " + element.receiver.text)
+            val receiverType = receiverTypeInfo.type
+                ?: ErrorUtils.createErrorType(
+                    ErrorTypeKind.ERROR_RECEIVER_TYPE,
+                    when (val receiver = element.receiver) {
+                        is KtNameReferenceExpression -> receiver.getReferencedName()
+                        else -> receiver.text
+                    }
+                )
 
             val receiver = trace.get(BindingContext.QUALIFIER, element.receiver)
                     ?: ExpressionReceiver.create(element.receiver, receiverType, trace.bindingContext)
@@ -480,7 +511,7 @@ class CallExpressionResolver(
 
     companion object {
 
-        private fun canInstantiateAnnotationClass(expression: KtCallExpression, trace: BindingTrace): Boolean {
+        fun canInstantiateAnnotationClass(expression: KtCallExpression, trace: BindingTrace): Boolean {
             //noinspection unchecked
             var parent: PsiElement? = PsiTreeUtil.getParentOfType(expression, KtValueArgument::class.java, KtParameter::class.java)
             if (parent is KtValueArgument) {
@@ -503,15 +534,22 @@ class CallExpressionResolver(
             } ?: false
 
         fun reportUnnecessarySafeCall(
-            trace: BindingTrace, type: KotlinType,
-            callOperationNode: ASTNode, explicitReceiver: Receiver?
-        ) = trace.report(
+            trace: BindingTrace,
+            type: KotlinType,
+            callElement: KtQualifiedExpression,
+            callOperationNode: ASTNode,
+            explicitReceiver: Receiver?,
+            languageVersionSettings: LanguageVersionSettings
+        ) {
             if (explicitReceiver is ExpressionReceiver && explicitReceiver.expression is KtSuperExpression) {
-                UNEXPECTED_SAFE_CALL.on(callOperationNode.psi)
-            } else {
-                UNNECESSARY_SAFE_CALL.on(callOperationNode.psi, type)
+                trace.report(UNEXPECTED_SAFE_CALL.on(callOperationNode.psi))
+            } else if (!type.isError) {
+                trace.report(UNNECESSARY_SAFE_CALL.on(callOperationNode.psi, type))
+                if (!languageVersionSettings.supportsFeature(LanguageFeature.SafeCallsAreAlwaysNullable)) {
+                    trace.report(SAFE_CALL_WILL_CHANGE_NULLABILITY.on(callElement))
+                }
             }
-        )
+        }
 
         private fun checkNestedClassAccess(
             expression: KtQualifiedExpression,

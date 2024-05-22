@@ -19,8 +19,10 @@ package org.jetbrains.kotlin.psi;
 import com.intellij.extapi.psi.ASTWrapperPsiElement;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.Language;
-import com.intellij.psi.*;
-import com.intellij.psi.impl.source.resolve.reference.ReferenceProvidersRegistry;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiElementVisitor;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiReference;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.idea.KotlinLanguage;
@@ -43,6 +45,7 @@ public class KtElementImpl extends ASTWrapperPsiElement implements KtElement {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public final void accept(@NotNull PsiElementVisitor visitor) {
         if (visitor instanceof KtVisitor) {
             accept((KtVisitor) visitor, null);
@@ -57,9 +60,9 @@ public class KtElementImpl extends ASTWrapperPsiElement implements KtElement {
     public KtFile getContainingKtFile() {
         PsiFile file = getContainingFile();
         if(!(file instanceof KtFile))  {
-            String fileString = (file != null && file.isValid()) ? file.getText() : "";
+            String fileString = (file != null && file.isValid()) ? (" " + file.getText()) : "";
             throw new IllegalStateException("KtElement not inside KtFile: " + file + fileString +
-                                            "for element " + this + " of type " + this.getClass() + " node = " + getNode());
+                                            " for element " + this + " of type " + this.getClass() + " node = " + getNode());
         }
         return (KtFile) file;
     }
@@ -81,6 +84,7 @@ public class KtElementImpl extends ASTWrapperPsiElement implements KtElement {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public PsiReference getReference() {
         PsiReference[] references = getReferences();
         if (references.length == 1) return references[0];
@@ -90,7 +94,7 @@ public class KtElementImpl extends ASTWrapperPsiElement implements KtElement {
     @NotNull
     @Override
     public PsiReference[] getReferences() {
-        return ReferenceProvidersRegistry.getReferencesFromProviders(this, PsiReferenceService.Hints.NO_HINTS);
+        return KotlinReferenceProvidersService.getReferencesFromProviders(this);
     }
 
     @NotNull

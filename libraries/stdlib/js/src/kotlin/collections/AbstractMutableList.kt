@@ -1,33 +1,54 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
+
 /*
  * Based on GWT AbstractList
  * Copyright 2007 Google Inc.
 */
 
+@file:JsFileName("AbstractMutableListJs")
 
 package kotlin.collections
 
 /**
  * Provides a skeletal implementation of the [MutableList] interface.
  *
- * @param E the type of elements contained in the list. The list is invariant on its element type.
+ * @param E the type of elements contained in the list. The list is invariant in its element type.
  */
 public actual abstract class AbstractMutableList<E> protected actual constructor() : AbstractMutableCollection<E>(), MutableList<E> {
-    protected var modCount: Int = 0
+    /**
+     * The number of times this list is structurally modified.
+     *
+     * A modification is considered to be structural if it changes the list size,
+     * or otherwise changes it in a way that iterations in progress may return incorrect results.
+     *
+     * This value can be used by iterators returned by [iterator] and [listIterator]
+     * to provide fail-fast behavior when a concurrent modification is detected during iteration.
+     * [ConcurrentModificationException] will be thrown in this case.
+     */
+    protected actual var modCount: Int = 0
 
     abstract override fun add(index: Int, element: E): Unit
     abstract override fun removeAt(index: Int): E
     abstract override fun set(index: Int, element: E): E
 
+    /**
+     * Adds the specified element to the end of this list.
+     *
+     * @return `true` because the list is always modified as the result of this operation.
+     */
     actual override fun add(element: E): Boolean {
+        checkIsMutable()
         add(size, element)
         return true
     }
 
     actual override fun addAll(index: Int, elements: Collection<E>): Boolean {
+        AbstractList.checkPositionIndex(index, size)
+
+        checkIsMutable()
         var _index = index
         var changed = false
         for (e in elements) {
@@ -38,34 +59,28 @@ public actual abstract class AbstractMutableList<E> protected actual constructor
     }
 
     actual override fun clear() {
+        checkIsMutable()
         removeRange(0, size)
     }
 
-    actual override fun removeAll(elements: Collection<E>): Boolean = removeAll { it in elements }
-    actual override fun retainAll(elements: Collection<E>): Boolean = removeAll { it !in elements }
+    actual override fun removeAll(elements: Collection<E>): Boolean {
+        checkIsMutable()
+        return removeAll { it in elements }
+    }
+
+    actual override fun retainAll(elements: Collection<E>): Boolean {
+        checkIsMutable()
+        return removeAll { it !in elements }
+    }
 
 
     actual override fun iterator(): MutableIterator<E> = IteratorImpl()
 
     actual override fun contains(element: E): Boolean = indexOf(element) >= 0
 
-    actual override fun indexOf(element: E): Int {
-        for (index in 0..lastIndex) {
-            if (get(index) == element) {
-                return index
-            }
-        }
-        return -1
-    }
+    actual override fun indexOf(element: E): Int = indexOfFirst { it == element }
 
-    actual override fun lastIndexOf(element: E): Int {
-        for (index in lastIndex downTo 0) {
-            if (get(index) == element) {
-                return index
-            }
-        }
-        return -1
-    }
+    actual override fun lastIndexOf(element: E): Int = indexOfLast { it == element }
 
     actual override fun listIterator(): MutableListIterator<E> = listIterator(0)
     actual override fun listIterator(index: Int): MutableListIterator<E> = ListIteratorImpl(index)
@@ -76,7 +91,7 @@ public actual abstract class AbstractMutableList<E> protected actual constructor
     /**
      * Removes the range of elements from this list starting from [fromIndex] and ending with but not including [toIndex].
      */
-    protected open fun removeRange(fromIndex: Int, toIndex: Int) {
+    protected actual open fun removeRange(fromIndex: Int, toIndex: Int) {
         val iterator = listIterator(fromIndex)
         repeat(toIndex - fromIndex) {
             iterator.next()
@@ -85,9 +100,14 @@ public actual abstract class AbstractMutableList<E> protected actual constructor
     }
 
     /**
-     * Compares this list with another list instance with the ordered structural equality.
+     * Checks if the two specified lists are *structurally* equal to one another.
      *
-     * @return true, if [other] instance is a [List] of the same size, which contains the same elements in the same order.
+     * Two lists are considered structurally equal if they have the same size, and elements at corresponding indices are equal.
+     * Elements are compared for equality using the [equals][Any.equals] function.
+     * For floating point numbers, this means `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
+     *
+     * @param other the list to compare with this list.
+     * @return `true` if [other] is a [List] that is structurally equal to this list, `false` otherwise.
      */
     override fun equals(other: Any?): Boolean {
         if (other === this) return true
@@ -159,7 +179,7 @@ public actual abstract class AbstractMutableList<E> protected actual constructor
 
         override fun set(element: E) {
             check(last != -1) { "Call next() or previous() before updating element value with the iterator." }
-            this@AbstractMutableList[last] = element
+            set(last, element)
         }
     }
 
@@ -198,7 +218,14 @@ public actual abstract class AbstractMutableList<E> protected actual constructor
             return list.set(fromIndex + index, element)
         }
 
+        override fun removeRange(fromIndex: Int, toIndex: Int) {
+            list.removeRange(this.fromIndex + fromIndex, this.fromIndex + toIndex)
+            _size -= toIndex - fromIndex
+        }
+
         override val size: Int get() = _size
+
+        internal override fun checkIsMutable(): Unit = list.checkIsMutable()
     }
 
 }

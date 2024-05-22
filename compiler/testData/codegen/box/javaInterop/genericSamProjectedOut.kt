@@ -1,6 +1,6 @@
 // TARGET_BACKEND: JVM
-// WITH_RUNTIME
 // FILE: example/Hello.java
+
 package example;
 
 @FunctionalInterface
@@ -16,11 +16,16 @@ public class SomeJavaClass<A> {
         ((Hello)hello).invoke("OK");
     }
 
-    public void plus(Hello<A> hello) {
+    public SomeJavaClass<A> plus(Hello<A> hello) {
         ((Hello)hello).invoke("OK");
+        return this;
     }
 
     public void get(Hello<A> hello) {
+        ((Hello)hello).invoke("OK");
+    }
+
+    public void set(int i, Hello<A> hello) {
         ((Hello)hello).invoke("OK");
     }
 }
@@ -29,13 +34,10 @@ public class SomeJavaClass<A> {
 import example.SomeJavaClass
 
 fun box(): String {
-    val a: SomeJavaClass<out String> = SomeJavaClass()
+    var a: SomeJavaClass<out String> = SomeJavaClass()
 
     var result = "fail"
 
-    // a::someFunction parameter has type of Nothing
-    // while it's completely safe to pass a lambda for a SAM
-    // since Hello is effectively contravariant by its parameter
     a.someFunction {
         result = it
     }
@@ -55,6 +57,20 @@ fun box(): String {
     }]
 
     if (result != "OK") return "fail 3: $result"
+
+    result = "fail"
+
+    a += {
+        result = it
+    }
+
+    if (result != "OK") return "fail 4: $result"
+
+    result = "fail"
+
+    a[0] = { result = it }
+
+    if (result != "OK") return "fail 5: $result"
 
     return "OK"
 }

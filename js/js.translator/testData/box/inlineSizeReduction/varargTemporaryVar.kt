@@ -1,8 +1,9 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1132
-// CHECK_VARS_COUNT: function=test1 count=0
-// CHECK_VARS_COUNT: function=test2 count=0
-// CHECK_VARS_COUNT: function=test3 count=1
+// EXPECTED_REACHABLE_NODES: 1283
+
+// FIXME: The IR backend generates a lot of redundant vars
+// CHECK_VARS_COUNT: function=test1 count=0 TARGET_BACKENDS=JS
+// CHECK_VARS_COUNT: function=test2 count=0 TARGET_BACKENDS=JS
+// CHECK_VARS_COUNT: function=test3 count=1 TARGET_BACKENDS=JS
 
 inline fun foo(vararg x: String) = x.size
 

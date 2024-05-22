@@ -1,12 +1,13 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package generators
 
-import java.io.*
 import templates.*
+import java.io.File
+import kotlin.system.exitProcess
 
 /**
  * Generates methods in the standard library which are mostly identical
@@ -34,26 +35,38 @@ fun main(args: Array<String>) {
         ComparableOps
     )
 
-    require(args.size == 1) { "Expecting Kotlin project home path as an argument" }
-    val baseDir = File(args.first())
+    val targetBaseDirs = mutableMapOf<KotlinTarget, File>()
 
-    COPYRIGHT_NOTICE = readCopyrightNoticeFromProfile(baseDir.resolve(".idea/copyright/apache.xml"))
-
-    fun File.resolveExistingDir(subpath: String) = resolve(subpath).also {
-        require(it.isDirectory) { "Directory $it doesn't exist"}
-    }
-
-    val commonDir = baseDir.resolveExistingDir("libraries/stdlib/common/src/generated")
-    val jvmDir = baseDir.resolveExistingDir("libraries/stdlib/jvm/src/generated")
-    val jsDir = baseDir.resolveExistingDir("libraries/stdlib/js/src/generated")
-
-    templateGroups.groupByFileAndWrite { (platform, source) ->
-        //        File("build/out/$platform/$source.kt")
-        when (platform) {
-            Platform.Common -> commonDir.resolve("_${source.name.capitalize()}.kt")
-            Platform.JVM -> jvmDir.resolve("_${source.name.capitalize()}Jvm.kt")
-            Platform.JS -> jsDir.resolve("_${source.name.capitalize()}Js.kt")
-            Platform.Native -> error("Native is unsupported yet")
+    when (args.size) {
+        1 -> {
+            val baseDir = File(args.first())
+            targetBaseDirs[KotlinTarget.Common] = baseDir.resolveExistingDir("libraries/stdlib/common/src/generated")
+            targetBaseDirs[KotlinTarget.JVM] = baseDir.resolveExistingDir("libraries/stdlib/jvm/src/generated")
+            targetBaseDirs[KotlinTarget.JS] = baseDir.resolveExistingDir("libraries/stdlib/js/src/generated")
+            targetBaseDirs[KotlinTarget.WASM] = baseDir.resolveExistingDir("libraries/stdlib/wasm/src/generated")
+            targetBaseDirs[KotlinTarget.Native] = baseDir.resolveExistingDir("kotlin-native/runtime/src/main/kotlin/generated")
+        }
+        else -> {
+            println("""Parameters:
+    <kotlin-base-dir> - generates sources for common, jvm, js, ir-js, native targets using paths derived from specified base path
+""")
+            exitProcess(1)
         }
     }
+
+    templateGroups.groupByFileAndWrite(targetsToGenerate = targetBaseDirs.keys) { (target, source) ->
+        val targetDir = targetBaseDirs[target] ?: error("Target $target directory is not configured")
+        val platformSuffix = when (val platform = target.platform) {
+            Platform.Common -> ""
+            Platform.Native -> if (target.backend == Backend.Wasm) "Wasm" else "Native"
+            else -> platform.name.lowercase().capitalize()
+        }
+        targetDir.resolve("_${source.name.capitalize()}$platformSuffix.kt")
+    }
+}
+
+fun File.resolveExistingDir(subpath: String) = resolve(subpath).also { it.requireExistingDir() }
+
+fun File.requireExistingDir() {
+    require(isDirectory) { "Directory $this doesn't exist" }
 }

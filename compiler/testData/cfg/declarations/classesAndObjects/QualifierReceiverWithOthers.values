@@ -24,8 +24,8 @@ object C {
 operator fun X.invoke() = println("Hello!")
 ---------------------
 println             !<v1>: *
-"Hello!"            <v0>: *                                    NEW: r("Hello!") -> <v0>
-println("Hello!")   <v2>: {<: [ERROR : Error function type]}   NEW: magic[UNRESOLVED_CALL](println("Hello!")|<v0>, !<v1>) -> <v2>
+"Hello!"            <v0>: *                                                                NEW: r("Hello!") -> <v0>
+println("Hello!")   <v2>: {<: [Error type: Return type for function cannot be resolved]}   NEW: magic[UNRESOLVED_CALL](println("Hello!")|<v0>, !<v1>) -> <v2>
 =====================
 == with ==
 inline fun <T, R> with(receiver: T, block: T.() -> R): R = receiver.block()
@@ -44,9 +44,9 @@ fun use() = with(C) {
     }
 }
 ---------------------
-C                                 <v0>: C                                    NEW: r(C) -> <v0>
-{ with(B) { A.foo() } }           <v1>: {<: C.() -> ???}                     NEW: r({ with(B) { A.foo() } }) -> <v1>
-with(C) { with(B) { A.foo() } }   <v2>: {<: [ERROR : Error function type]}   NEW: call(with(C) { with(B) { A.foo() } }, with|<v0>, <v1>) -> <v2>
+C                                 <v0>: C                                                                NEW: r(C) -> <v0>
+{ with(B) { A.foo() } }           <v1>: {<: C.() -> ???}                                                 NEW: r({ with(B) { A.foo() } }) -> <v1>
+with(C) { with(B) { A.foo() } }   <v2>: {<: [Error type: Return type for function cannot be resolved]}   NEW: call(with(C) { with(B) { A.foo() } }, with|<v0>, <v1>) -> <v2>
 =====================
 == anonymous_0 ==
 {
@@ -65,11 +65,11 @@ with(B) { A.foo() }   <v2>: {<: ???}           COPY
         A.foo()
     }
 ---------------------
-          <v0>: B                                    NEW: magic[IMPLICIT_RECEIVER](foo) -> <v0>
-          <v3>: C                                    NEW: magic[IMPLICIT_RECEIVER](foo()) -> <v3>
-A         <v1>: A.Companion                          NEW: r(A, Companion) -> <v1>
-foo       <v2>: X                                    NEW: r(foo|<v0>, <v1>) -> <v2>
-foo()     <v4>: {<: [ERROR : Error function type]}   NEW: call(foo(), invoke|<v2>, <v3>) -> <v4>
-A.foo()   <v4>: {<: [ERROR : Error function type]}   COPY
-A.foo()   <v4>: {<: [ERROR : Error function type]}   COPY
+          <v0>: B             NEW: magic[IMPLICIT_RECEIVER](foo) -> <v0>
+          <v3>: C             NEW: magic[IMPLICIT_RECEIVER](foo()) -> <v3>
+A         <v1>: A.Companion   NEW: r(A, Companion) -> <v1>
+foo       <v2>: X             NEW: r(foo|<v0>, <v1>) -> <v2>
+foo()     <v4>: {<: ???}      NEW: call(foo(), invoke|<v2>, <v3>) -> <v4>
+A.foo()   <v4>: {<: ???}      COPY
+A.foo()   <v4>: {<: ???}      COPY
 =====================

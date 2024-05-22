@@ -1,8 +1,8 @@
-// IGNORE_BACKEND: JS
-// IGNORE_BACKEND: NATIVE
+// TARGET_BACKEND: JVM
+// TARGET_BACKEND: JVM_IR
 
 // No kotlin-reflect.jar in this test
-// WITH_RUNTIME
+// WITH_STDLIB
 
 import kotlin.reflect.KProperty
 

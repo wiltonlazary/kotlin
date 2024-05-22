@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER -ABSTRACT_SUPER_CALL
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER -ABSTRACT_SUPER_CALL
 
 abstract class A {
     open fun foo(a: String = "default") {

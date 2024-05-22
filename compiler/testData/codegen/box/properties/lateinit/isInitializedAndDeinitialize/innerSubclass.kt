@@ -1,6 +1,5 @@
-// IGNORE_BACKEND: NATIVE
-// LANGUAGE_VERSION: 1.2
-// WITH_RUNTIME
+// WITH_STDLIB
+// LANGUAGE: -NativeJsProhibitLateinitIsInitializedIntrinsicWithoutPrivateAccess
 
 open class Foo {
     lateinit var bar: String

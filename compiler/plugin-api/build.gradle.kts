@@ -4,15 +4,15 @@ plugins {
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 dependencies {
-    compile(project(":compiler:util"))
-    compile(project(":compiler:frontend"))
-    compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
+    api(project(":compiler:util"))
+    api(project(":compiler:frontend"))
+    compileOnly(intellijCore())
 }
 
 sourceSets {
     "main" { projectDefault() }
     "test" {}
 }
+
+optInToExperimentalCompilerApi()

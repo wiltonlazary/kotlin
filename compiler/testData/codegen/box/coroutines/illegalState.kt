@@ -1,12 +1,11 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
-import helpers.*
 // TARGET_BACKEND: JVM
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import helpers.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
-suspend fun suspendHere(): Unit = suspendCoroutineOrReturn { x ->
+suspend fun suspendHere(): Unit = suspendCoroutineUninterceptedOrReturn { x ->
     x.resume(Unit)
     COROUTINE_SUSPENDED
 }
@@ -22,7 +21,7 @@ fun builder2(c: suspend () -> Unit) {
     delegateField.setAccessible(true)
     val originalContinuation = delegateField.get(continuation)
 
-    val declaredField = originalContinuation.javaClass.superclass.getDeclaredField("label")
+    val declaredField = originalContinuation.javaClass.getDeclaredField("label")
     declaredField.setAccessible(true)
     declaredField.set(originalContinuation, -3)
     continuation.resume(Unit)
@@ -35,7 +34,7 @@ fun box(): String {
             suspendHere()
         }
         return "fail 1"
-    } catch (e: kotlin.KotlinNullPointerException) {
+    } catch (e: NullPointerException) {
     }
 
     try {
@@ -54,7 +53,7 @@ fun box(): String {
             result = "fail 5"
         }
         return "fail 6"
-    } catch (e: kotlin.KotlinNullPointerException) {
+    } catch (e: NullPointerException) {
     }
 
     try {

@@ -1,4 +1,4 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 
 enum class TestEnum1 {
     TEST1, TEST2
@@ -41,4 +41,10 @@ enum class TestEnum4(val x: Int) {
 
 enum class TestEnum5(val x: Int = 0) {
     TEST1, TEST2(), TEST3(0)
+}
+
+fun f(): Int = 1
+
+enum class TestEnum6(val x: Int, val y: Int) {
+    TEST(y = f(), x = f())
 }

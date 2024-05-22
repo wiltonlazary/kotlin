@@ -1,5 +1,5 @@
-// !WITH_NEW_INFERENCE
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER
 
 class Example
 
@@ -22,7 +22,7 @@ fun a() {
             val b = Example()
 
             consumeString(a + b)
-            consumeInt(<!NI;TYPE_MISMATCH!>a <!NI;OPERATOR_MODIFIER_REQUIRED!>-<!> b<!>)
+            consumeInt(a - b)
 
             consumeString(a plus b)
             consumeInt(a minus b)

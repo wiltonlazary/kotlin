@@ -1,0 +1,4 @@
+expression: av
+expected type: KtIntersectionType:
+  annotationsList: []
+  type: it(kotlin/Int & kotlin/String)

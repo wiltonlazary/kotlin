@@ -17,17 +17,25 @@
 package org.jetbrains.kotlin.incremental.storage
 
 import com.intellij.util.io.BooleanDataDescriptor
+import org.jetbrains.kotlin.incremental.IncrementalCompilationContext
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
 import java.io.File
 
-internal class DirtyClassesJvmNameMap(storageFile: File) : AbstractDirtyClassesMap<JvmClassName>(JvmClassNameTransformer, storageFile)
-internal class DirtyClassesFqNameMap(storageFile: File) : AbstractDirtyClassesMap<FqName>(FqNameTransformer, storageFile)
+internal class DirtyClassesJvmNameMap(
+    storageFile: File,
+    icContext: IncrementalCompilationContext,
+) : AbstractDirtyClassesMap<JvmClassName>(JvmClassNameTransformer, storageFile, icContext)
+internal class DirtyClassesFqNameMap(
+    storageFile: File,
+    icContext: IncrementalCompilationContext,
+) : AbstractDirtyClassesMap<FqName>(FqNameTransformer, storageFile, icContext)
 
 internal abstract class AbstractDirtyClassesMap<Name>(
-        private val nameTransformer: NameTransformer<Name>,
-        storageFile: File
-) : BasicStringMap<Boolean>(storageFile, BooleanDataDescriptor.INSTANCE) {
+    private val nameTransformer: NameTransformer<Name>,
+    storageFile: File,
+    icContext: IncrementalCompilationContext,
+) : BasicStringMap<Boolean>(storageFile, BooleanDataDescriptor.INSTANCE, icContext) {
     fun markDirty(className: Name) {
         storage[nameTransformer.asString(className)] = true
     }
@@ -37,10 +45,10 @@ internal abstract class AbstractDirtyClassesMap<Name>(
     }
 
     fun getDirtyOutputClasses(): Collection<Name> =
-            storage.keys.map { nameTransformer.asName(it) }
+        storage.keys.map { nameTransformer.asName(it) }
 
     fun isDirty(className: Name): Boolean =
-            storage.contains(nameTransformer.asString(className))
+        storage.contains(nameTransformer.asString(className))
 
     override fun dumpValue(value: Boolean) = ""
 }

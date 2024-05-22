@@ -1,4 +1,3 @@
-// !LANGUAGE: +MultiPlatformProjects
 // MODULE: m1-common
 // FILE: common.kt
 
@@ -16,7 +15,7 @@ fun test() {
     FooBar()
 }
 
-// MODULE: m2-jvm(m1-common)
+// MODULE: m2-jvm()()(m1-common)
 // FILE: jvm.kt
 
 actual class Foo

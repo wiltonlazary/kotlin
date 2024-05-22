@@ -1,10 +1,9 @@
-// !CHECK_TYPE
-// !WITH_NEW_INFERENCE
+// CHECK_TYPE
 interface Tr<T> {
     var v: Tr<T>
 }
 
 fun test(t: Tr<*>) {
-    <!OI;SETTER_PROJECTED_OUT!>t.v<!> = t
+    <!SETTER_PROJECTED_OUT!>t.v<!> = t
     t.v checkType { _<Tr<*>>() }
 }

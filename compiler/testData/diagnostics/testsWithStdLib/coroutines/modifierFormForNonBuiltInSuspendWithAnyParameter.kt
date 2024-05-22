@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // SKIP_TXT
 
 fun <R> suspend(block: R) = block
@@ -7,6 +8,7 @@ class A {
 }
 
 @Target(AnnotationTarget.EXPRESSION)
+@Retention(AnnotationRetention.SOURCE)
 annotation class Ann
 
 fun bar() {
@@ -34,7 +36,7 @@ fun bar() {
 
     suspend<Nothing?>(null)
 
-    val <!UNUSED_VARIABLE!>w<!>: (Any?) -> Any? = ::suspend
+    val w: (Any?) -> Any? = ::suspend
 
     A().<!MODIFIER_FORM_FOR_NON_BUILT_IN_SUSPEND!>suspend<!> {
         println()

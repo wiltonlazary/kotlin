@@ -1,5 +1,5 @@
+// WITH_STDLIB
 // FILE: 1.kt
-// WITH_RUNTIME
 package test
 
 public class Holder(var value: String = "") {
@@ -37,9 +37,7 @@ public inline fun <R> doCallWithException(h: Holder, block: ()-> R) : R {
 // FILE: 2.kt
 
 import test.*
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
-import kotlin.test.fail
+import kotlin.test.*
 
 fun test1(): Holder {
     val h = Holder("")

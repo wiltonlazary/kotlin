@@ -19,7 +19,7 @@ package org.jetbrains.kotlin.codegen.range.forLoop
 import org.jetbrains.kotlin.codegen.ExpressionCodegen
 import org.jetbrains.kotlin.codegen.StackValue
 import org.jetbrains.kotlin.codegen.filterOutDescriptorsWithSpecialNames
-import org.jetbrains.kotlin.codegen.getElementType
+import org.jetbrains.kotlin.types.getElementType
 import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
 import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -44,6 +44,7 @@ abstract class AbstractForLoopGenerator(
 
     protected var loopParameterVar: Int = -1
     protected lateinit var loopParameterType: Type
+    protected lateinit var loopParameterKotlinType: KotlinType
 
     override fun beforeLoop() {
         val loopParameter = forExpression.loopParameter ?: return
@@ -51,11 +52,13 @@ abstract class AbstractForLoopGenerator(
         if (multiParameter != null) {
             // E tmp<e> = tmp<iterator>.next()
             loopParameterType = asmElementType
+            loopParameterKotlinType = elementType
             loopParameterVar = createLoopTempVariable(asmElementType)
         } else {
             // E e = tmp<iterator>.next()
             val parameterDescriptor = bindingContext.get(BindingContext.VALUE_PARAMETER, loopParameter)
-            loopParameterType = codegen.asmType(parameterDescriptor!!.type)
+            loopParameterKotlinType = parameterDescriptor!!.type
+            loopParameterType = codegen.asmType(loopParameterKotlinType)
             loopParameterVar = codegen.myFrameMap.enter(parameterDescriptor, loopParameterType)
             scheduleLeaveVariable(Runnable {
                 codegen.myFrameMap.leave(parameterDescriptor)
@@ -98,13 +101,17 @@ abstract class AbstractForLoopGenerator(
             })
         }
 
-        v.visitLabel(destructuringStartLabel)
-
         codegen.initializeDestructuringDeclarationVariables(
             destructuringDeclaration,
             TransientReceiver(elementType),
             StackValue.local(loopParameterVar, asmElementType)
         )
+
+        // Start the scope for the destructuring variables only after a values
+        // has been written to their locals slot. Otherwise, we can generate
+        // type-incorrect locals information because the local could have previously
+        // been used for a value of incompatible type.
+        v.visitLabel(destructuringStartLabel)
     }
 
     protected abstract fun assignToLoopParameter()

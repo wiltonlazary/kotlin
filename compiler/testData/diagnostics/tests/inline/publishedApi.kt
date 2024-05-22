@@ -1,8 +1,11 @@
-// !DIAGNOSTICS: -EXPOSED_PARAMETER_TYPE -NOTHING_TO_INLINE
+// DIAGNOSTICS: -EXPOSED_PARAMETER_TYPE -NOTHING_TO_INLINE
+
+// FIR_IDENTICAL
+
 inline fun call(a: A) {
     a.test()
     publishedTopLevel()
-    
+
     a.publishedVar
     a.publishedVar = 1
 
@@ -23,7 +26,7 @@ inline var inlineVar: Int
         publishedVarTopLevel = 1
         return 1
     }
-    set(<!UNUSED_PARAMETER!>value<!>) {
+    set(value) {
         val a = A()
         a.test()
         publishedTopLevel()
@@ -88,7 +91,7 @@ internal class A {
             return 1
         }
 
-        set(<!UNUSED_PARAMETER!>value<!>) {
+        set(value) {
             publicFun()
             <!NON_PUBLIC_CALL_FROM_PUBLIC_INLINE!>internalFun<!>()
             <!NON_PUBLIC_CALL_FROM_PUBLIC_INLINE!>privateFun<!>()
@@ -147,7 +150,7 @@ inline internal var publishedVarTopLevel: Int
         return 1
     }
 
-    set(<!UNUSED_PARAMETER!>value<!>) {
+    set(value) {
         publicFun()
         <!NON_PUBLIC_CALL_FROM_PUBLIC_INLINE!>internalFun<!>()
         <!NON_PUBLIC_CALL_FROM_PUBLIC_INLINE!>privateFun<!>()

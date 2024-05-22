@@ -1,0 +1,34 @@
+KtNamedClassOrObjectSymbol:
+  annotationsList: []
+  classIdIfNonLocal: kotlin/io/FileWalkDirection
+  classKind: ENUM_CLASS
+  companionObject: null
+  contextReceivers: []
+  isActual: false
+  isData: false
+  isExpect: false
+  isExternal: false
+  isFun: false
+  isInline: false
+  isInner: false
+  modality: FINAL
+  name: FileWalkDirection
+  origin: LIBRARY
+  superTypes: [
+    KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: [
+        KtUsualClassType:
+          annotationsList: []
+          ownTypeArguments: []
+          type: kotlin/io/FileWalkDirection
+      ]
+      type: kotlin/Enum<kotlin/io/FileWalkDirection>
+  ]
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  visibility: Public
+  getContainingFileSymbol: null
+  getContainingModule: KtLibraryModule "Library kotlin-stdlib"
+  annotationApplicableTargets: null
+  deprecationStatus: null

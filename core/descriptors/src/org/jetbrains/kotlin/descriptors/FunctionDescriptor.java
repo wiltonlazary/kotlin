@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.descriptors;
@@ -19,6 +8,7 @@ package org.jetbrains.kotlin.descriptors;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
+import org.jetbrains.kotlin.mpp.FunctionSymbolMarker;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.kotlin.types.TypeSubstitution;
@@ -27,7 +17,7 @@ import org.jetbrains.kotlin.types.TypeSubstitutor;
 import java.util.Collection;
 import java.util.List;
 
-public interface FunctionDescriptor extends CallableMemberDescriptor {
+public interface FunctionDescriptor extends CallableMemberDescriptor, FunctionSymbolMarker {
     @Override
     @NotNull
     DeclarationDescriptor getContainingDeclaration();
@@ -65,7 +55,7 @@ public interface FunctionDescriptor extends CallableMemberDescriptor {
 
     @NotNull
     @Override
-    FunctionDescriptor copy(DeclarationDescriptor newOwner, Modality modality, Visibility visibility, Kind kind, boolean copyOverrides);
+    FunctionDescriptor copy(DeclarationDescriptor newOwner, Modality modality, DescriptorVisibility visibility, Kind kind, boolean copyOverrides);
 
     boolean isOperator();
 
@@ -78,12 +68,6 @@ public interface FunctionDescriptor extends CallableMemberDescriptor {
     boolean isHiddenForResolutionEverywhereBesideSupercalls();
 
     boolean isSuspend();
-
-    interface UserDataKey<V> {}
-
-    // TODO: pull up userdata related members to DeclarationDescriptor and use more efficient implementation (e.g. THashMap)
-    @Nullable
-    <V> V getUserData(UserDataKey<V> key);
 
     @NotNull
     @Override
@@ -100,7 +84,7 @@ public interface FunctionDescriptor extends CallableMemberDescriptor {
 
         @NotNull
         @Override
-        CopyBuilder<D> setVisibility(@NotNull Visibility visibility);
+        CopyBuilder<D> setVisibility(@NotNull DescriptorVisibility visibility);
 
         @NotNull
         @Override
@@ -122,10 +106,14 @@ public interface FunctionDescriptor extends CallableMemberDescriptor {
         CopyBuilder<D> setTypeParameters(@NotNull List<TypeParameterDescriptor> parameters);
 
         @NotNull
+        @Override
         CopyBuilder<D> setReturnType(@NotNull KotlinType type);
 
         @NotNull
-        CopyBuilder<D> setExtensionReceiverType(@Nullable KotlinType type);
+        CopyBuilder<D> setContextReceiverParameters(@NotNull List<ReceiverParameterDescriptor> contextReceiverParameters);
+
+        @NotNull
+        CopyBuilder<D> setExtensionReceiverParameter(@Nullable ReceiverParameterDescriptor extensionReceiverParameter);
 
         @NotNull
         @Override
@@ -139,13 +127,11 @@ public interface FunctionDescriptor extends CallableMemberDescriptor {
         CopyBuilder<D> setSignatureChange();
 
         @NotNull
+        @Override
         CopyBuilder<D> setPreserveSourceElement();
 
         @NotNull
         CopyBuilder<D> setDropOriginalInContainingParts();
-
-        @NotNull
-        CopyBuilder<D> setDropSuspend();
 
         @NotNull
         CopyBuilder<D> setHiddenToOvercomeSignatureClash();

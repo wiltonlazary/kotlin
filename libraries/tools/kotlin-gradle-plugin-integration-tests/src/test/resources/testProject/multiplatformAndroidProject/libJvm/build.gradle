@@ -1,6 +1,0 @@
-apply plugin: 'kotlin-platform-jvm'
-
-dependencies {
-    expectedBy project(":lib")
-    compile 'com.google.guava:guava:20.0'
-}

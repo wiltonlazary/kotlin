@@ -26,31 +26,27 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.kotlin.backend.common.output.OutputFile;
 import org.jetbrains.kotlin.backend.common.output.OutputFileCollection;
+import org.jetbrains.kotlin.codegen.extensions.ClassFileFactoryFinalizerExtension;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
-import org.jetbrains.kotlin.config.AnalysisFlag;
-import org.jetbrains.kotlin.descriptors.ClassDescriptor;
-import org.jetbrains.kotlin.descriptors.DescriptorUtilKt;
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
-import org.jetbrains.kotlin.incremental.components.NoLookupLocation;
+import org.jetbrains.kotlin.config.JvmAnalysisFlags;
+import org.jetbrains.kotlin.config.LanguageVersion;
 import org.jetbrains.kotlin.load.kotlin.ModuleMappingUtilKt;
-import org.jetbrains.kotlin.load.kotlin.PackagePartClassUtils;
 import org.jetbrains.kotlin.metadata.ProtoBuf;
+import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion;
 import org.jetbrains.kotlin.metadata.jvm.JvmModuleProtoBuf;
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmMetadataVersion;
 import org.jetbrains.kotlin.metadata.jvm.deserialization.ModuleMapping;
 import org.jetbrains.kotlin.metadata.jvm.deserialization.ModuleMappingKt;
 import org.jetbrains.kotlin.metadata.jvm.deserialization.PackageParts;
-import org.jetbrains.kotlin.name.ClassId;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.resolve.CompilerDeserializationConfiguration;
-import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin;
 import org.jetbrains.kotlin.serialization.StringTableImpl;
 import org.jetbrains.org.objectweb.asm.Type;
 
 import java.io.File;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static org.jetbrains.kotlin.codegen.JvmCodegenUtil.getMappingFileName;
@@ -58,20 +54,27 @@ import static org.jetbrains.kotlin.codegen.JvmCodegenUtil.getMappingFileName;
 public class ClassFileFactory implements OutputFileCollection {
     private final GenerationState state;
     private final ClassBuilderFactory builderFactory;
-    private final Map<String, OutAndSourceFileList> generators = new LinkedHashMap<>();
+    private final List<ClassFileFactoryFinalizerExtension> finalizers;
+    private final Map<String, OutAndSourceFileList> generators = Collections.synchronizedMap(new LinkedHashMap<>());
 
     private boolean isDone = false;
 
-    private final Set<File> packagePartSourceFiles = new HashSet<>();
-    private final Map<String, PackageParts> partsGroupedByPackage = new LinkedHashMap<>();
+    private final Set<File> sourceFiles = new HashSet<>();
+    private final PackagePartRegistry packagePartRegistry = new PackagePartRegistry();
 
-    public ClassFileFactory(@NotNull GenerationState state, @NotNull ClassBuilderFactory builderFactory) {
+    public ClassFileFactory(@NotNull GenerationState state, @NotNull ClassBuilderFactory builderFactory, @NotNull List<ClassFileFactoryFinalizerExtension> finalizers) {
         this.state = state;
         this.builderFactory = builderFactory;
+        this.finalizers = finalizers;
     }
 
     public GenerationState getGenerationState() {
         return state;
+    }
+
+    @NotNull
+    public PackagePartRegistry getPackagePartRegistry() {
+        return packagePartRegistry;
     }
 
     @NotNull
@@ -96,10 +99,26 @@ public class ClassFileFactory implements OutputFileCollection {
         return answer;
     }
 
+    @NotNull
+    public ClassBuilder newVisitor(
+            @NotNull JvmDeclarationOrigin origin,
+            @NotNull Type asmType,
+            @NotNull List<File> sourceFiles
+    ) {
+        ClassBuilder answer = builderFactory.newClassBuilder(origin);
+        generators.put(
+                asmType.getInternalName() + ".class",
+                new ClassBuilderAndSourceFileList(answer, sourceFiles)
+        );
+        return answer;
+    }
+
     public void done() {
         if (!isDone) {
             isDone = true;
-            writeModuleMappings();
+            for (ClassFileFactoryFinalizerExtension extension : finalizers) {
+                extension.finalizeClassFactory(this);
+            }
         }
     }
 
@@ -107,61 +126,47 @@ public class ClassFileFactory implements OutputFileCollection {
         generators.clear();
     }
 
-    private void writeModuleMappings() {
-        JvmModuleProtoBuf.Module.Builder builder = JvmModuleProtoBuf.Module.newBuilder();
-        String outputFilePath = getMappingFileName(state.getModuleName());
-
-        for (PackageParts part : ClassFileUtilsKt.addCompiledPartsAndSort(partsGroupedByPackage.values(), state)) {
-            part.addTo(builder);
-        }
-
-        List<String> experimental = state.getLanguageVersionSettings().getFlag(AnalysisFlag.getExperimental());
-        if (!experimental.isEmpty()) {
-            writeExperimentalMarkers(state.getModule(), builder, experimental);
-        }
-
-        JvmModuleProtoBuf.Module moduleProto = builder.build();
-        if (moduleProto.getSerializedSize() == 0) return;
-
-        generators.put(outputFilePath, new OutAndSourceFileList(CollectionsKt.toList(packagePartSourceFiles)) {
+    public void setModuleMapping(JvmModuleProtoBuf.Module moduleProto) {
+        generators.put(getMappingFileName(state.getModuleName()), new OutAndSourceFileList(CollectionsKt.toList(sourceFiles)) {
             @Override
             public byte[] asBytes(ClassBuilderFactory factory) {
-                return ModuleMappingKt.serializeToByteArray(moduleProto, JvmMetadataVersion.INSTANCE.toArray());
+                int flags = 0;
+                if (state.getLanguageVersionSettings().getFlag(JvmAnalysisFlags.getStrictMetadataVersionSemantics())) {
+                    flags |= ModuleMapping.STRICT_METADATA_VERSION_SEMANTICS_FLAG;
+                }
+                return ModuleMappingKt.serializeToByteArray(moduleProto, getMetadataVersionToUseForModuleMapping(), flags);
             }
 
             @Override
             public String asText(ClassBuilderFactory factory) {
-                try {
-                    return new String(asBytes(factory), "UTF-8");
-                }
-                catch (UnsupportedEncodingException e) {
-                    throw new RuntimeException(e);
-                }
+                return new String(asBytes(factory), StandardCharsets.UTF_8);
             }
         });
     }
 
-    private static void writeExperimentalMarkers(
-            @NotNull ModuleDescriptor module,
-            @NotNull JvmModuleProtoBuf.Module.Builder builder,
-            @NotNull List<String> experimental
-    ) {
-        StringTableImpl stringTable = new StringTableImpl();
-        for (String fqName : experimental) {
-            ClassDescriptor descriptor =
-                    DescriptorUtilKt.resolveClassByFqName(module, new FqName(fqName), NoLookupLocation.FOR_ALREADY_TRACKED);
-            if (descriptor != null) {
-                ProtoBuf.Annotation.Builder annotation = ProtoBuf.Annotation.newBuilder();
-                ClassId classId = DescriptorUtilsKt.getClassId(descriptor);
-                if (classId != null) {
-                    annotation.setId(stringTable.getQualifiedClassNameIndex(classId.asString(), false));
-                    builder.addAnnotation(annotation);
-                }
-            }
+    @NotNull
+    private BinaryVersion getMetadataVersionToUseForModuleMapping() {
+        BinaryVersion version = state.getConfig().getMetadataVersion();
+        if (version.getMajor() == LanguageVersion.KOTLIN_2_0.getMajor() &&
+            version.getMinor() == LanguageVersion.KOTLIN_2_0.getMinor()) {
+            // If language version is >= 2.0, we're using metadata version 1.9.*. This is needed because before Kotlin 1.8.20-RC, there was
+            // a bug in determining whether module metadata is written in the pre-1.4 format, or in the 1.4+ format with an extra integer
+            // for module-wide flags (see https://github.com/jetbrains/kotlin/commit/25c600c556a5).
+            //
+            // Normally it should not be possible to suffer from it because we have only one version forward compatibility on JVM. However,
+            // with `-Xskip-metadata-version-check`, which is used in Gradle, pre-1.8.20-RC Kotlin compilers were trying to read the 2.0
+            // module metadata in the wrong format and failed with an exception: KT-62531.
+            //
+            // Since module metadata is not supposed to have any changes in 2.0, we're using the metadata version 1.9 as a workaround. This
+            // way, it's still written in the 1.4+ format, and old compilers will correctly understand that it's written in the 1.4+ format.
+            //
+            // Patch version does not affect anything, so we can use any number, for example 9999 to make it more recognizable that it's
+            // not a real Kotlin version, and rather a substitute for the 2.0 metadata version.
+            //
+            // This workaround can be removed once we no longer support language version 2.0.
+            return new JvmMetadataVersion(1, 9, 9999);
         }
-        Pair<ProtoBuf.StringTable, ProtoBuf.QualifiedNameTable> tables = stringTable.buildProto();
-        builder.setStringTable(tables.getFirst());
-        builder.setQualifiedNameTable(tables.getSecond());
+        return version;
     }
 
     @NotNull
@@ -185,9 +190,25 @@ public class ClassFileFactory implements OutputFileCollection {
     @NotNull
     @TestOnly
     public String createText() {
+        return createText(null);
+    }
+
+    private static class ModuleMappingException extends RuntimeException {
+        public ModuleMappingException(String message) {
+            super(message);
+        }
+    }
+
+    @NotNull
+    @TestOnly
+    public String createText(@Nullable String ignorePrefixPath) {
+        // NB this method is frequently used in JVM BE tests to display generated bytecode in case of test failure.
+        // It should be permissive, and should try to handle exceptions gracefully (otherwise you would make JVM BE devs unhappy).
+
         StringBuilder answer = new StringBuilder();
 
         for (OutputFile file : asList()) {
+            if (ignorePrefixPath != null && file.getRelativePath().startsWith(ignorePrefixPath)) continue;
             File relativePath = new File(file.getRelativePath());
             answer.append("@").append(relativePath).append('\n');
             switch (FilesKt.getExtension(relativePath)) {
@@ -195,19 +216,27 @@ public class ClassFileFactory implements OutputFileCollection {
                     answer.append(file.asText());
                     break;
                 case "kotlin_module": {
-                    ModuleMapping mapping = ModuleMappingUtilKt.loadModuleMapping(
-                            ModuleMapping.Companion, file.asByteArray(), relativePath.getPath(),
-                            CompilerDeserializationConfiguration.Default.INSTANCE
-                    );
-                    for (Map.Entry<String, PackageParts> entry : mapping.getPackageFqName2Parts().entrySet()) {
-                        FqName packageFqName = new FqName(entry.getKey());
-                        PackageParts packageParts = entry.getValue();
-                        answer.append("<package ").append(packageFqName).append(": ").append(packageParts.getParts()).append(">\n");
+                    try {
+                        ModuleMapping mapping = ModuleMappingUtilKt.loadModuleMapping(
+                                ModuleMapping.Companion, file.asByteArray(), relativePath.getPath(),
+                                CompilerDeserializationConfiguration.Default.INSTANCE,
+                                version -> {
+                                    throw new ModuleMappingException("Generated module has incompatible JVM metadata version: " + version);
+                                }
+                        );
+                        for (Map.Entry<String, PackageParts> entry : mapping.getPackageFqName2Parts().entrySet()) {
+                            FqName packageFqName = new FqName(entry.getKey());
+                            PackageParts packageParts = entry.getValue();
+                            answer.append("<package ").append(packageFqName).append(": ").append(packageParts.getParts()).append(">\n");
+                        }
+                        break;
+                    } catch (ModuleMappingException e) {
+                        answer.append(relativePath).append(": ").append(e.getMessage()).append("\n");
+                        break;
                     }
-                    break;
                 }
                 default:
-                    throw new UnsupportedOperationException("Unknown OutputFile: " + file);
+                    answer.append("Unknown output file: ").append(file);
             }
         }
 
@@ -227,33 +256,31 @@ public class ClassFileFactory implements OutputFileCollection {
     @NotNull
     public PackageCodegen forPackage(@NotNull FqName fqName, @NotNull Collection<KtFile> files) {
         assert !isDone : "Already done!";
-        registerPackagePartSourceFiles(files);
-        return state.getCodegenFactory().createPackageCodegen(state, files, fqName, buildNewPackagePartRegistry(fqName));
+        sourceFiles.addAll(toIoFilesIgnoringNonPhysical(files));
+        return new PackageCodegenImpl(state, files, fqName);
     }
 
     @NotNull
     public MultifileClassCodegen forMultifileClass(@NotNull FqName facadeFqName, @NotNull Collection<KtFile> files) {
         assert !isDone : "Already done!";
-        registerPackagePartSourceFiles(files);
-        return state.getCodegenFactory().createMultifileClassCodegen(state, files, facadeFqName, buildNewPackagePartRegistry(facadeFqName.parent()));
+        sourceFiles.addAll(toIoFilesIgnoringNonPhysical(files));
+        return new MultifileClassCodegenImpl(state, files, facadeFqName);
     }
 
-    private PackagePartRegistry buildNewPackagePartRegistry(@NotNull FqName packageFqName) {
-        String packageFqNameAsString = packageFqName.asString();
-        return (partInternalName, facadeInternalName) -> {
-            PackageParts packageParts = partsGroupedByPackage.computeIfAbsent(packageFqNameAsString, PackageParts::new);
-            packageParts.addPart(partInternalName, facadeInternalName);
-        };
-    }
-
-    private void registerPackagePartSourceFiles(Collection<KtFile> files) {
-        packagePartSourceFiles.addAll(toIoFilesIgnoringNonPhysical(PackagePartClassUtils.getFilesWithCallables(files)));
+    public void registerSourceFiles(@NotNull Collection<File> files) {
+        for (File file : files) {
+            // We ignore non-physical files here, because this code is needed to tell the make what inputs affect which outputs
+            // a non-physical file cannot be processed by make
+            if (file == null) continue;
+            sourceFiles.add(file);
+        }
     }
 
     @NotNull
     private static List<File> toIoFilesIgnoringNonPhysical(@NotNull Collection<? extends PsiFile> psiFiles) {
         List<File> result = new ArrayList<>(psiFiles.size());
         for (PsiFile psiFile : psiFiles) {
+            if (psiFile == null) continue;
             VirtualFile virtualFile = psiFile.getVirtualFile();
             // We ignore non-physical files here, because this code is needed to tell the make what inputs affect which outputs
             // a non-physical file cannot be processed by make
@@ -327,7 +354,9 @@ public class ClassFileFactory implements OutputFileCollection {
 
         @Override
         public byte[] asBytes(ClassBuilderFactory factory) {
-            return factory.asBytes(classBuilder);
+            synchronized(this) {
+                return factory.asBytes(classBuilder);
+            }
         }
 
         @Override
@@ -355,6 +384,7 @@ public class ClassFileFactory implements OutputFileCollection {
         }
     }
 
+    // TODO: remove after cleanin up IDE counterpart
     @TestOnly
     public List<KtFile> getInputFiles() {
         return state.getFiles();

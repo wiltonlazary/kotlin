@@ -1,0 +1,32 @@
+KtNamedClassOrObjectSymbol:
+  annotationsList: [
+    <error>()
+      psi: null
+  ]
+  classIdIfNonLocal: JavaClass
+  classKind: CLASS
+  companionObject: null
+  contextReceivers: []
+  isActual: false
+  isData: false
+  isExpect: false
+  isExternal: false
+  isFun: false
+  isInline: false
+  isInner: false
+  modality: OPEN
+  name: JavaClass
+  origin: JAVA
+  superTypes: [
+    KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: kotlin/Any
+  ]
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  visibility: Public
+  getContainingFileSymbol: null
+  getContainingModule: KtSourceModule "Sources of main"
+  annotationApplicableTargets: null
+  deprecationStatus: null

@@ -1,7 +1,6 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
-// WITH_RUNTIME
+// WITH_STDLIB
 // KT-4485 getGenericInterfaces vs getInterfaces for kotlin classes
 
 class SimpleClass

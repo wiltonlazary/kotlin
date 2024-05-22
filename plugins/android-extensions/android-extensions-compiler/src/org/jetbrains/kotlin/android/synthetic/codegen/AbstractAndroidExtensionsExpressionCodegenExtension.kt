@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.android.synthetic.codegen
@@ -21,7 +21,6 @@ import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
-import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassOrAny
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
@@ -92,7 +91,7 @@ abstract class AbstractAndroidExtensionsExpressionCodegenExtension : ExpressionC
         return StackValue.functionCall(Type.VOID_TYPE, null) {
             val bytecodeClassName = c.typeMapper.mapType(container).internalName
 
-            actualReceiver.put(c.typeMapper.mapType(container), it)
+            actualReceiver.put(c.typeMapper.mapType(container), container.defaultType, it)
             it.invokevirtual(bytecodeClassName, CLEAR_CACHE_METHOD_NAME, "()V", false)
         }
     }
@@ -153,38 +152,6 @@ abstract class AbstractAndroidExtensionsExpressionCodegenExtension : ExpressionC
         context.generateCachedFindViewByIdFunction()
         context.generateClearCacheFunction()
         context.generateCacheField()
-
-        if (containerOptions.containerType.isFragment) {
-            val classMembers = container.unsubstitutedMemberScope.getContributedDescriptors()
-            val onDestroy = classMembers.firstOrNull { it is FunctionDescriptor && it.isOnDestroyFunction() }
-            if (onDestroy == null) {
-                context.generateOnDestroyFunctionForFragment()
-            }
-        }
-    }
-
-    private fun FunctionDescriptor.isOnDestroyFunction(): Boolean {
-        return kind == CallableMemberDescriptor.Kind.DECLARATION
-               && name.asString() == ON_DESTROY_METHOD_NAME
-               && (visibility == Visibilities.INHERITED || visibility == Visibilities.PUBLIC)
-               && (valueParameters.isEmpty())
-               && (typeParameters.isEmpty())
-    }
-
-    // This generates a simple onDestroy(): Unit = super.onDestroy() function.
-    // CLEAR_CACHE_METHOD_NAME() method call will be inserted in ClassBuilder interceptor.
-    private fun SyntheticPartsGenerateContext.generateOnDestroyFunctionForFragment() {
-        val methodVisitor = classBuilder.newMethod(JvmDeclarationOrigin.NO_ORIGIN, ACC_PUBLIC or ACC_SYNTHETIC, ON_DESTROY_METHOD_NAME, "()V", null, null)
-        methodVisitor.visitCode()
-        val iv = InstructionAdapter(methodVisitor)
-
-        val containerType = state.typeMapper.mapClass(container)
-
-        iv.load(0, containerType)
-        iv.invokespecial(state.typeMapper.mapClass(container.getSuperClassOrAny()).internalName, ON_DESTROY_METHOD_NAME, "()V", false)
-        iv.areturn(Type.VOID_TYPE)
-
-        FunctionCodegen.endVisit(methodVisitor, ON_DESTROY_METHOD_NAME, classOrObject)
     }
 
     private fun SyntheticPartsGenerateContext.generateClearCacheFunction() {

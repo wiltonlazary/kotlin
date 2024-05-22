@@ -1,57 +1,53 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls.tower
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.Errors
+import org.jetbrains.kotlin.extensions.internal.CandidateInterceptor
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.*
+import org.jetbrains.kotlin.resolve.ImplicitIntegerCoercion.isEnabledFor
 import org.jetbrains.kotlin.resolve.calls.ArgumentTypeResolver
+import org.jetbrains.kotlin.resolve.calls.CallTransformer
 import org.jetbrains.kotlin.resolve.calls.DiagnosticReporterByTrackingStrategy
-import org.jetbrains.kotlin.resolve.calls.callResolverUtil.getEffectiveExpectedType
-import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
-import org.jetbrains.kotlin.resolve.calls.callUtil.isFakeElement
+import org.jetbrains.kotlin.resolve.calls.checkers.AdditionalTypeChecker
 import org.jetbrains.kotlin.resolve.calls.checkers.CallChecker
 import org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerContext
 import org.jetbrains.kotlin.resolve.calls.components.AdditionalDiagnosticReporter
-import org.jetbrains.kotlin.resolve.calls.components.isVararg
 import org.jetbrains.kotlin.resolve.calls.context.BasicCallResolutionContext
 import org.jetbrains.kotlin.resolve.calls.context.CallPosition
 import org.jetbrains.kotlin.resolve.calls.inference.buildResultingSubstitutor
-import org.jetbrains.kotlin.resolve.calls.inference.components.FreshVariableNewTypeSubstitutor
 import org.jetbrains.kotlin.resolve.calls.inference.components.NewTypeSubstitutor
-import org.jetbrains.kotlin.resolve.calls.inference.components.NewTypeSubstitutorByConstructorMap
-import org.jetbrains.kotlin.resolve.calls.inference.substitute
-import org.jetbrains.kotlin.resolve.calls.inference.substituteAndApproximateCapturedTypes
 import org.jetbrains.kotlin.resolve.calls.model.*
-import org.jetbrains.kotlin.resolve.calls.resolvedCallUtil.makeNullableTypeIfSafeReceiver
-import org.jetbrains.kotlin.resolve.calls.results.ResolutionStatus
-import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValueFactory
-import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
+import org.jetbrains.kotlin.resolve.calls.smartcasts.SmartCastManager
 import org.jetbrains.kotlin.resolve.calls.tasks.TracingStrategy
+import org.jetbrains.kotlin.resolve.calls.util.getEffectiveExpectedType
+import org.jetbrains.kotlin.resolve.calls.util.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.util.isFakeElement
+import org.jetbrains.kotlin.resolve.calls.util.makeNullableTypeIfSafeReceiver
+import org.jetbrains.kotlin.resolve.constants.CompileTimeConstant
+import org.jetbrains.kotlin.resolve.constants.IntegerLiteralTypeConstructor
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
-import org.jetbrains.kotlin.resolve.scopes.receivers.CastImplicitClassReceiver
-import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitClassReceiver
+import org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 import org.jetbrains.kotlin.types.*
-import org.jetbrains.kotlin.types.checker.NewCapturedType
+import org.jetbrains.kotlin.types.error.ErrorScopeKind
+import org.jetbrains.kotlin.types.error.ErrorUtils
 import org.jetbrains.kotlin.types.expressions.DataFlowAnalyzer
 import org.jetbrains.kotlin.types.expressions.DoubleColonExpressionResolver
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingServices
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils
-import org.jetbrains.kotlin.types.typeUtil.contains
-import org.jetbrains.kotlin.utils.addToStdlib.cast
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
-import java.util.*
+import org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContextDelegate
 
 class KotlinToResolvedCallTransformer(
     private val callCheckers: Iterable<CallChecker>,
+    private val additionalTypeCheckers: Iterable<AdditionalTypeChecker>,
     private val dataFlowAnalyzer: DataFlowAnalyzer,
     private val argumentTypeResolver: ArgumentTypeResolver,
     private val constantExpressionEvaluator: ConstantExpressionEvaluator,
@@ -61,68 +57,96 @@ class KotlinToResolvedCallTransformer(
     private val additionalDiagnosticReporter: AdditionalDiagnosticReporter,
     private val moduleDescriptor: ModuleDescriptor,
     private val dataFlowValueFactory: DataFlowValueFactory,
-    private val builtIns: KotlinBuiltIns
+    private val builtIns: KotlinBuiltIns,
+    private val typeSystemContext: TypeSystemInferenceExtensionContextDelegate,
+    private val smartCastManager: SmartCastManager,
+    private val typeApproximator: TypeApproximator,
+    private val missingSupertypesResolver: MissingSupertypesResolver,
+    private val candidateInterceptor: CandidateInterceptor,
+    private val callComponents: KotlinCallComponents,
 ) {
     companion object {
         private val REPORT_MISSING_NEW_INFERENCE_DIAGNOSTIC
             get() = false
+
+        fun keyForPartiallyResolvedCall(resolvedCallAtom: ResolvedCallAtom): Call {
+            val psiKotlinCall = resolvedCallAtom.atom.psiKotlinCall
+            return if (psiKotlinCall is PSIKotlinCallForInvoke)
+                psiKotlinCall.baseCall.psiCall
+            else
+                psiKotlinCall.psiCall
+        }
     }
 
     fun <D : CallableDescriptor> onlyTransform(
         resolvedCallAtom: ResolvedCallAtom,
-        diagnostics: Collection<KotlinCallDiagnostic>
-    ): ResolvedCall<D> = transformToResolvedCall(resolvedCallAtom, null, null, diagnostics)
+        diagnostics: Collection<KotlinCallDiagnostic>,
+    ): NewAbstractResolvedCall<D> = transformToResolvedCall(resolvedCallAtom, null, null, diagnostics)
 
     fun <D : CallableDescriptor> transformAndReport(
         baseResolvedCall: CallResolutionResult,
         context: BasicCallResolutionContext,
-        tracingStrategy: TracingStrategy
-    ): ResolvedCall<D> {
+        tracingStrategy: TracingStrategy,
+    ): NewAbstractResolvedCall<D> {
         return when (baseResolvedCall) {
             is PartialCallResolutionResult -> {
                 val candidate = baseResolvedCall.resultCallAtom
 
-                val psiKotlinCall = candidate.atom.psiKotlinCall
-                val psiCall = if (psiKotlinCall is PSIKotlinCallForInvoke)
-                    psiKotlinCall.baseCall.psiCall
-                else
-                    psiKotlinCall.psiCall
+                val psiCall = keyForPartiallyResolvedCall(candidate)
 
-                context.trace.record(BindingContext.ONLY_RESOLVED_CALL, psiCall, baseResolvedCall)
-                context.inferenceSession.addPartialCallInfo(
-                    PSIPartialCallInfo(baseResolvedCall, context, tracingStrategy)
-                )
+                context.trace.record(BindingContext.ONLY_RESOLVED_CALL, psiCall, PartialCallContainer(baseResolvedCall))
+                context.trace.record(BindingContext.PARTIAL_CALL_RESOLUTION_CONTEXT, psiCall, context)
 
-                createStubResolvedCallAndWriteItToTrace(candidate, context.trace, baseResolvedCall.diagnostics)
-            }
-
-            is CompletedCallResolutionResult, is ErrorCallResolutionResult -> {
-                val candidate = (baseResolvedCall as SingleCallResolutionResult).resultCallAtom
-
-                if (baseResolvedCall is CompletedCallResolutionResult) {
-                    context.inferenceSession.addCompletedCallInfo(PSICompletedCallInfo(baseResolvedCall, context, tracingStrategy))
-                }
-
-                if (context.inferenceSession.writeOnlyStubs()) {
-                    return createStubResolvedCallAndWriteItToTrace(
-                        candidate,
-                        context.trace,
-                        baseResolvedCall.diagnostics,
-                        completedCall = true
+                if (baseResolvedCall.forwardToInferenceSession) {
+                    context.inferenceSession.addPartialCallInfo(
+                        PSIPartialCallInfo(baseResolvedCall, context, tracingStrategy),
                     )
                 }
 
-                val resultSubstitutor = baseResolvedCall.constraintSystem.buildResultingSubstitutor()
-                val ktPrimitiveCompleter = ResolvedAtomCompleter(
-                    resultSubstitutor, context.trace, context, this, expressionTypingServices, argumentTypeResolver,
-                    doubleColonExpressionResolver, builtIns, deprecationResolver, moduleDescriptor, dataFlowValueFactory
-                )
+                createStubResolvedCallAndWriteItToTrace<D>(candidate, context.trace, baseResolvedCall.diagnostics, substitutor = null)
+            }
 
-                for (subKtPrimitive in candidate.subResolvedAtoms) {
-                    ktPrimitiveCompleter.completeAll(subKtPrimitive)
+            is CompletedCallResolutionResult, is ErrorCallResolutionResult -> {
+                @Suppress("USELESS_CAST") // K2 warning suppression, TODO: KT-62472
+                val candidate = (baseResolvedCall as SingleCallResolutionResult).resultCallAtom
+
+                val resultSubstitutor =
+                    baseResolvedCall.constraintSystem.getBuilder().currentStorage().buildResultingSubstitutor(typeSystemContext)
+                if (context.inferenceSession.writeOnlyStubs(baseResolvedCall)) {
+                    val stub = createStubResolvedCallAndWriteItToTrace<CallableDescriptor>(
+                        candidate,
+                        context.trace,
+                        baseResolvedCall.diagnostics,
+                        substitutor = resultSubstitutor,
+                    )
+
+                    forwardCallToInferenceSession(baseResolvedCall, context, stub, tracingStrategy)
+
+                    @Suppress("UNCHECKED_CAST")
+                    return stub as NewAbstractResolvedCall<D>
                 }
 
-                ktPrimitiveCompleter.completeResolvedCall(candidate, baseResolvedCall.diagnostics) as ResolvedCall<D>
+                val ktPrimitiveCompleter = ResolvedAtomCompleter(
+                    resultSubstitutor, context, this, expressionTypingServices, argumentTypeResolver,
+                    doubleColonExpressionResolver, builtIns, deprecationResolver, moduleDescriptor, dataFlowValueFactory,
+                    typeApproximator, missingSupertypesResolver,
+                    callComponents,
+                )
+
+                if (context.inferenceSession.shouldCompleteResolvedSubAtomsOf(candidate)) {
+                    candidate.subResolvedAtoms?.forEach { subKtPrimitive ->
+                        ktPrimitiveCompleter.completeAll(subKtPrimitive)
+                    }
+                }
+
+                @Suppress("UNCHECKED_CAST")
+                val resolvedCall = ktPrimitiveCompleter.completeResolvedCall(
+                    candidate, baseResolvedCall.completedDiagnostic(resultSubstitutor),
+                ) as NewAbstractResolvedCall<D>
+
+                forwardCallToInferenceSession(baseResolvedCall, context, resolvedCall, tracingStrategy)
+
+                resolvedCall
             }
 
             is SingleCallResolutionResult -> error("Call resolution result for one candidate didn't transformed: $baseResolvedCall")
@@ -130,19 +154,30 @@ class KotlinToResolvedCallTransformer(
         }
     }
 
+    private fun forwardCallToInferenceSession(
+        baseResolvedCall: CallResolutionResult,
+        context: BasicCallResolutionContext,
+        resolvedCall: NewAbstractResolvedCall<*>,
+        tracingStrategy: TracingStrategy,
+    ) {
+        if (baseResolvedCall is CompletedCallResolutionResult) {
+            context.inferenceSession.addCompletedCallInfo(PSICompletedCallInfo(baseResolvedCall, context, resolvedCall, tracingStrategy))
+        }
+    }
+
     fun <D : CallableDescriptor> createStubResolvedCallAndWriteItToTrace(
         candidate: ResolvedCallAtom,
         trace: BindingTrace,
         diagnostics: Collection<KotlinCallDiagnostic>,
-        completedCall: Boolean = false
-    ): ResolvedCall<D> {
-        val substitutor = if (completedCall) NewTypeSubstitutorByConstructorMap(emptyMap()) else null
+        substitutor: NewTypeSubstitutor?,
+    ): NewAbstractResolvedCall<D> {
         val result = transformToResolvedCall<D>(candidate, trace, substitutor, diagnostics)
         val psiKotlinCall = candidate.atom.psiKotlinCall
-        val tracing = psiKotlinCall.safeAs<PSIKotlinCallForInvoke>()?.baseCall?.tracingStrategy ?: psiKotlinCall.tracingStrategy
+        val tracing = (psiKotlinCall as? PSIKotlinCallForInvoke)?.baseCall?.tracingStrategy ?: psiKotlinCall.tracingStrategy
 
         tracing.bindReference(trace, result)
         tracing.bindResolvedCall(trace, result)
+
         return result
     }
 
@@ -150,15 +185,29 @@ class KotlinToResolvedCallTransformer(
         completedCallAtom: ResolvedCallAtom,
         trace: BindingTrace?,
         resultSubstitutor: NewTypeSubstitutor? = null, // if substitutor is not null, it means that this call is completed
-        diagnostics: Collection<KotlinCallDiagnostic>
-    ): ResolvedCall<D> {
+        diagnostics: Collection<KotlinCallDiagnostic>,
+    ): NewAbstractResolvedCall<D> {
         val psiKotlinCall = completedCallAtom.atom.psiKotlinCall
+
+        completedCallAtom.setCandidateDescriptor(
+            candidateInterceptor.interceptResolvedCallAtomCandidate(
+                completedCallAtom.candidateDescriptor,
+                completedCallAtom,
+                trace,
+                resultSubstitutor,
+                diagnostics
+            )
+        )
+
         return if (psiKotlinCall is PSIKotlinCallForInvoke) {
+            val diagnosticsForVariableCall = if (completedCallAtom.candidateDescriptor is FunctionDescriptor) emptyList() else diagnostics
+            val diagnosticsForFunctionCall = if (completedCallAtom.candidateDescriptor is FunctionDescriptor) diagnostics else emptyList()
+
             @Suppress("UNCHECKED_CAST")
             NewVariableAsFunctionResolvedCallImpl(
-                createOrGet(psiKotlinCall.variableCall.resolvedCall, trace, resultSubstitutor, diagnostics),
-                createOrGet(completedCallAtom, trace, resultSubstitutor, diagnostics)
-            ) as ResolvedCall<D>
+                createOrGet(psiKotlinCall.variableCall.resolvedCall, trace, resultSubstitutor, diagnosticsForVariableCall),
+                createOrGet(completedCallAtom, trace, resultSubstitutor, diagnosticsForFunctionCall),
+            ) as NewAbstractResolvedCall<D>
         } else {
             createOrGet(completedCallAtom, trace, resultSubstitutor, diagnostics)
         }
@@ -168,8 +217,8 @@ class KotlinToResolvedCallTransformer(
         completedSimpleAtom: ResolvedCallAtom,
         trace: BindingTrace?,
         resultSubstitutor: NewTypeSubstitutor?,
-        diagnostics: Collection<KotlinCallDiagnostic>
-    ): NewResolvedCallImpl<D> {
+        diagnostics: Collection<KotlinCallDiagnostic>,
+    ): NewAbstractResolvedCall<D> {
         if (trace != null) {
             val storedResolvedCall = completedSimpleAtom.atom.psiKotlinCall.getResolvedPsiKotlinCall<D>(trace)
             if (storedResolvedCall != null) {
@@ -178,7 +227,19 @@ class KotlinToResolvedCallTransformer(
                 return storedResolvedCall
             }
         }
-        return NewResolvedCallImpl(completedSimpleAtom, resultSubstitutor, diagnostics)
+
+        return if (completedSimpleAtom.atom.callKind == KotlinCallKind.CALLABLE_REFERENCE) {
+            NewCallableReferenceResolvedCall(
+                completedSimpleAtom as ResolvedCallableReferenceCallAtom,
+                typeApproximator,
+                expressionTypingServices.languageVersionSettings,
+                resultSubstitutor
+            )
+        } else {
+            NewResolvedCallImpl(
+                completedSimpleAtom, resultSubstitutor, diagnostics, typeApproximator, expressionTypingServices.languageVersionSettings
+            )
+        }
     }
 
     fun runCallCheckers(resolvedCall: ResolvedCall<*>, callCheckerContext: CallCheckerContext) {
@@ -199,47 +260,107 @@ class KotlinToResolvedCallTransformer(
         }
     }
 
-    // todo very beginning code
-    fun runArgumentsChecks(
-        context: BasicCallResolutionContext,
-        trace: BindingTrace,
-        resolvedCall: NewResolvedCallImpl<*>
+    fun runAdditionalReceiversCheckers(resolvedCall: ResolvedCall<*>, context: BasicCallResolutionContext) {
+        context.checkReceiver(
+            resolvedCall,
+            resolvedCall.resultingDescriptor.extensionReceiverParameter,
+            resolvedCall.extensionReceiver,
+            resolvedCall.explicitReceiverKind.isExtensionReceiver,
+            implicitInvokeCheck = false,
+        )
+        context.checkReceiver(
+            resolvedCall,
+            resolvedCall.resultingDescriptor.dispatchReceiverParameter,
+            resolvedCall.dispatchReceiver,
+            resolvedCall.explicitReceiverKind.isDispatchReceiver,
+            implicitInvokeCheck = context.call is CallTransformer.CallForImplicitInvoke,
+        )
+
+    }
+
+    private fun BasicCallResolutionContext.checkReceiver(
+        resolvedCall: ResolvedCall<*>,
+        receiverParameter: ReceiverParameterDescriptor?,
+        receiverArgument: ReceiverValue?,
+        isExplicitReceiver: Boolean,
+        implicitInvokeCheck: Boolean,
     ) {
+        if (receiverParameter == null || receiverArgument == null) return
+        val safeAccess = isExplicitReceiver && !implicitInvokeCheck && resolvedCall.call.isSemanticallyEquivalentToSafeCall
+        additionalTypeCheckers.forEach { it.checkReceiver(receiverParameter, receiverArgument, safeAccess, this) }
+    }
+
+    // todo very beginning code
+    fun runArgumentsChecks(context: BasicCallResolutionContext, resolvedCall: NewAbstractResolvedCall<*>) {
+        if (resolvedCall !is NewResolvedCallImpl<*>) return
 
         for (valueArgument in resolvedCall.call.valueArguments) {
             val argumentMapping = resolvedCall.getArgumentMapping(valueArgument!!)
+            val parameter: ValueParameterDescriptor?
             val (expectedType, callPosition) = when (argumentMapping) {
-                is ArgumentMatch -> Pair(
-                    getEffectiveExpectedType(argumentMapping.valueParameter, valueArgument, context),
-                    CallPosition.ValueArgumentPosition(resolvedCall, argumentMapping.valueParameter, valueArgument)
-                )
-                else -> Pair(TypeUtils.NO_EXPECTED_TYPE, CallPosition.Unknown)
+                is ArgumentMatch -> {
+                    parameter = argumentMapping.valueParameter
+
+                    // We should take expected type from the last used conversion
+                    // TODO: move this logic into ParameterTypeConversion
+                    val expectedType =
+                        resolvedCall.getExpectedTypeForUnitConvertedArgument(valueArgument)
+                            ?: resolvedCall.getExpectedTypeForSuspendConvertedArgument(valueArgument)
+                            ?: resolvedCall.getExpectedTypeForSamConvertedArgument(valueArgument)
+                            ?: getEffectiveExpectedType(argumentMapping.valueParameter, valueArgument, context)
+                    Pair(
+                        expectedType,
+                        CallPosition.ValueArgumentPosition(resolvedCall, argumentMapping.valueParameter, valueArgument),
+                    )
+                }
+                else -> {
+                    parameter = null
+                    Pair(TypeUtils.NO_EXPECTED_TYPE, CallPosition.Unknown)
+                }
             }
             val newContext =
                 context.replaceDataFlowInfo(resolvedCall.dataFlowInfoForArguments.getInfo(valueArgument))
                     .replaceExpectedType(expectedType)
                     .replaceCallPosition(callPosition)
-                    .replaceBindingTrace(trace)
 
-            // todo external argument
 
+            val constantConvertedArgument = resolvedCall.getArgumentTypeForConstantConvertedArgument(valueArgument)
             val argumentExpression = valueArgument.getArgumentExpression() ?: continue
-            updateRecordedType(argumentExpression, newContext, resolvedCall.isReallySuccess())
-        }
 
+            if (constantConvertedArgument != null) {
+                context.trace.record(BindingContext.COMPILE_TIME_VALUE, argumentExpression, constantConvertedArgument)
+                BindingContextUtils.updateRecordedType(
+                    constantConvertedArgument.unknownIntegerType, argumentExpression, context.trace, false
+                )
+            }
+
+            if (!valueArgument.isExternal()) {
+                updateRecordedType(
+                    argumentExpression,
+                    parameter,
+                    newContext,
+                    constantConvertedArgument?.unknownIntegerType?.unwrap(),
+                    resolvedCall.isReallySuccess()
+                )
+            }
+        }
     }
 
     fun updateRecordedType(
         expression: KtExpression,
+        parameter: ValueParameterDescriptor?,
         context: BasicCallResolutionContext,
-        reportErrorForTypeMismatch: Boolean
+        convertedArgumentType: UnwrappedType?,
+        reportErrorForTypeMismatch: Boolean,
     ): KotlinType? {
         val deparenthesized = expression.let {
             KtPsiUtil.getLastElementDeparenthesized(it, context.statementFilter)
         } ?: return null
 
         val recordedType = context.trace.getType(deparenthesized)
-        var updatedType = getResolvedCallForArgumentExpression(deparenthesized, context)?.run {
+        val recordedTypeForParenthesized = context.trace.getType(expression)
+
+        var updatedType = convertedArgumentType ?: getResolvedCallForArgumentExpression(deparenthesized, context)?.run {
             makeNullableTypeIfSafeReceiver(resultingDescriptor.returnType, context)
         } ?: recordedType
 
@@ -249,27 +370,56 @@ class KotlinToResolvedCallTransformer(
             updatedType = argumentTypeResolver.updateResultArgumentTypeIfNotDenotable(context, deparenthesized) ?: updatedType
         }
 
-        updatedType = updateRecordedTypeForArgument(updatedType, recordedType, expression, context)
+        var reportErrorDuringTypeCheck = reportErrorForTypeMismatch
 
-        dataFlowAnalyzer.checkType(updatedType, deparenthesized, context, reportErrorForTypeMismatch)
+        if (parameter != null && isEnabledFor(parameter, context.languageVersionSettings)) {
+            val argumentCompileTimeValue = context.trace[BindingContext.COMPILE_TIME_VALUE, deparenthesized]
+            if (argumentCompileTimeValue != null && argumentCompileTimeValue.parameters.isConvertableConstVal) {
+                val generalNumberType = createTypeForConvertableConstant(argumentCompileTimeValue)
+                if (generalNumberType != null) {
+                    updatedType = argumentTypeResolver.updateResultArgumentTypeIfNotDenotable(
+                        context.trace, context.statementFilter, context.expectedType, generalNumberType, expression,
+                    )
+                    reportErrorDuringTypeCheck = true
+                }
+
+            }
+        } else if (convertedArgumentType != null) {
+            context.trace.report(Errors.SIGNED_CONSTANT_CONVERTED_TO_UNSIGNED.on(deparenthesized))
+        }
+
+        updatedType = updateRecordedTypeForArgument(updatedType, recordedType, recordedTypeForParenthesized, expression, context)
+
+        dataFlowAnalyzer.checkType(updatedType, deparenthesized, context, reportErrorDuringTypeCheck)
 
         return updatedType
     }
 
-    private fun getResolvedCallForArgumentExpression(expression: KtExpression, context: BasicCallResolutionContext) =
+    private fun createTypeForConvertableConstant(constant: CompileTimeConstant<*>): SimpleType? {
+        val value = (constant.getValue(TypeUtils.NO_EXPECTED_TYPE) as? Number)?.toLong() ?: return null
+        val typeConstructor = IntegerLiteralTypeConstructor(value, moduleDescriptor, constant.parameters)
+        return KotlinTypeFactory.simpleTypeWithNonTrivialMemberScope(
+            TypeAttributes.Empty, typeConstructor, emptyList(), false,
+            ErrorUtils.createErrorScope(ErrorScopeKind.INTEGER_LITERAL_TYPE_SCOPE, throwExceptions = true, typeConstructor.toString()),
+        )
+    }
+
+    fun getResolvedCallForArgumentExpression(expression: KtExpression, context: BasicCallResolutionContext) =
         if (!ExpressionTypingUtils.dependsOnExpectedType(expression))
             null
         else
-            expression.getResolvedCall(context.trace.bindingContext)
+            expression.getResolvedCall(context.trace.bindingContext) as? NewAbstractResolvedCall<*>
 
     // See CallCompleter#updateRecordedTypeForArgument
     private fun updateRecordedTypeForArgument(
         updatedType: KotlinType?,
         recordedType: KotlinType?,
+        recordedTypeForParenthesized: KotlinType?,
         argumentExpression: KtExpression,
-        context: BasicCallResolutionContext
+        context: BasicCallResolutionContext,
     ): KotlinType? {
-        if ((!ErrorUtils.containsErrorType(recordedType) && recordedType == updatedType) || updatedType == null) return updatedType
+        if ((!ErrorUtils.containsErrorType(recordedType) && recordedType == updatedType && recordedType == recordedTypeForParenthesized) || updatedType == null)
+            return updatedType
 
         val expressions = ArrayList<KtExpression>().also { expressions ->
             var expression: KtExpression? = argumentExpression
@@ -314,321 +464,98 @@ class KotlinToResolvedCallTransformer(
         return expressionType != null && TypeUtils.isNullableType(expressionType)
     }
 
-    internal fun bindAndReport(
-        context: BasicCallResolutionContext,
-        trace: BindingTrace,
-        resolvedCall: ResolvedCall<*>,
-        diagnostics: Collection<KotlinCallDiagnostic>
-    ) {
-        resolvedCall.safeAs<NewResolvedCallImpl<*>>()?.let { bindAndReport(context, trace, it, diagnostics) }
-        resolvedCall.safeAs<NewVariableAsFunctionResolvedCallImpl>()?.let { bindAndReport(context, trace, it, diagnostics) }
+    internal fun bind(trace: BindingTrace, resolvedCall: ResolvedCall<*>) {
+        (resolvedCall as? NewAbstractResolvedCall<*>)?.let { bind(trace, it) }
+        (resolvedCall as? NewVariableAsFunctionResolvedCallImpl)?.let { bind(trace, it) }
     }
 
-    private fun bindAndReport(
+    fun reportDiagnostics(
         context: BasicCallResolutionContext,
         trace: BindingTrace,
-        simpleResolvedCall: NewResolvedCallImpl<*>,
-        diagnostics: Collection<KotlinCallDiagnostic>
+        resolvedCall: NewAbstractResolvedCall<*>,
+        diagnostics: Collection<KotlinCallDiagnostic>,
     ) {
-        val tracing = simpleResolvedCall.resolvedCallAtom.atom.psiKotlinCall.tracingStrategy
+        when (resolvedCall) {
+            is NewVariableAsFunctionResolvedCallImpl -> {
+                val variableCall = resolvedCall.variableCall
+                val functionCall = resolvedCall.functionCall
+
+                reportCallDiagnostic(context, trace, variableCall, variableCall.resultingDescriptor, diagnostics)
+                reportCallDiagnostic(context, trace, functionCall, functionCall.resultingDescriptor, emptyList())
+            }
+            else -> {
+                val resolvedCallAtom = resolvedCall.resolvedCallAtom
+                if (resolvedCallAtom != null) {
+                    reportCallDiagnostic(context, trace, resolvedCall, resolvedCall.resultingDescriptor, diagnostics)
+                }
+            }
+        }
+    }
+
+    private fun bind(trace: BindingTrace, simpleResolvedCall: NewAbstractResolvedCall<*>) {
+        val tracing = simpleResolvedCall.psiKotlinCall.tracingStrategy
 
         tracing.bindReference(trace, simpleResolvedCall)
         tracing.bindResolvedCall(trace, simpleResolvedCall)
-
-        reportCallDiagnostic(context, trace, simpleResolvedCall.resolvedCallAtom, simpleResolvedCall.resultingDescriptor, diagnostics)
     }
 
-    private fun bindAndReport(
-        context: BasicCallResolutionContext,
-        trace: BindingTrace,
-        variableAsFunction: NewVariableAsFunctionResolvedCallImpl,
-        diagnostics: Collection<KotlinCallDiagnostic>
-    ) {
+    private fun bind(trace: BindingTrace, variableAsFunction: NewVariableAsFunctionResolvedCallImpl) {
         val outerTracingStrategy = variableAsFunction.baseCall.tracingStrategy
         val variableCall = variableAsFunction.variableCall
         val functionCall = variableAsFunction.functionCall
 
         outerTracingStrategy.bindReference(trace, variableCall)
         outerTracingStrategy.bindResolvedCall(trace, variableAsFunction)
-        functionCall.kotlinCall.psiKotlinCall.tracingStrategy.bindReference(trace, functionCall)
-
-        reportCallDiagnostic(context, trace, variableCall.resolvedCallAtom, variableCall.resultingDescriptor, diagnostics)
-        reportCallDiagnostic(context, trace, functionCall.resolvedCallAtom, functionCall.resultingDescriptor, emptyList())
+        functionCall.psiKotlinCall.tracingStrategy.bindReference(trace, functionCall)
     }
 
     fun reportCallDiagnostic(
         context: BasicCallResolutionContext,
         trace: BindingTrace,
-        completedCallAtom: ResolvedCallAtom,
+        resolvedCall: NewAbstractResolvedCall<*>,
         resultingDescriptor: CallableDescriptor,
-        diagnostics: Collection<KotlinCallDiagnostic>
+        diagnostics: Collection<KotlinCallDiagnostic>,
     ) {
         val trackingTrace = TrackingBindingTrace(trace)
         val newContext = context.replaceBindingTrace(trackingTrace)
-        val diagnosticReporter =
-            DiagnosticReporterByTrackingStrategy(constantExpressionEvaluator, newContext, completedCallAtom.atom.psiKotlinCall, context.dataFlowValueFactory)
 
         val diagnosticHolder = KotlinDiagnosticsHolder.SimpleHolder()
-        additionalDiagnosticReporter.reportAdditionalDiagnostics(completedCallAtom, resultingDescriptor, diagnosticHolder, diagnostics)
+        val resolvedCallAtom = resolvedCall.resolvedCallAtom
 
-        for (diagnostic in diagnostics + diagnosticHolder.getDiagnostics()) {
+        if (resolvedCallAtom != null) {
+            additionalDiagnosticReporter.reportAdditionalDiagnostics(resolvedCallAtom, resultingDescriptor, diagnosticHolder, diagnostics)
+        }
+
+        val allDiagnostics = diagnostics + diagnosticHolder.getDiagnostics()
+
+        val diagnosticReporter = DiagnosticReporterByTrackingStrategy(
+            constantExpressionEvaluator,
+            newContext,
+            resolvedCall.psiKotlinCall,
+            context.dataFlowValueFactory,
+            allDiagnostics,
+            smartCastManager,
+            typeSystemContext
+        )
+
+        for (diagnostic in allDiagnostics) {
             trackingTrace.reported = false
             diagnostic.report(diagnosticReporter)
+
+            if (diagnostic is ResolvedUsingDeprecatedVisibility) {
+                reportResolvedUsingDeprecatedVisibility(
+                    resolvedCall.psiKotlinCall.psiCall, resolvedCall.candidateDescriptor, resultingDescriptor, diagnostic, trace,
+                )
+            }
 
             val dontRecordToTraceAsIs = diagnostic is ResolutionDiagnostic && diagnostic !is VisibilityError
             val shouldReportMissingDiagnostic = !trackingTrace.reported && !dontRecordToTraceAsIs
             if (shouldReportMissingDiagnostic && REPORT_MISSING_NEW_INFERENCE_DIAGNOSTIC) {
                 val factory =
+                    @OptIn(ApplicabilityDetail::class)
                     if (diagnostic.candidateApplicability.isSuccess) Errors.NEW_INFERENCE_DIAGNOSTIC else Errors.NEW_INFERENCE_ERROR
                 trace.report(factory.on(diagnosticReporter.psiKotlinCall.psiCall.callElement, "Missing diagnostic: $diagnostic"))
             }
         }
     }
-}
-
-class TrackingBindingTrace(val trace: BindingTrace) : BindingTrace by trace {
-    var reported: Boolean = false
-
-    override fun report(diagnostic: Diagnostic) {
-        trace.report(diagnostic)
-        reported = true
-    }
-
-    fun markAsReported() {
-        reported = true
-    }
-}
-
-sealed class NewAbstractResolvedCall<D : CallableDescriptor>() : ResolvedCall<D> {
-    abstract val argumentMappingByOriginal: Map<ValueParameterDescriptor, ResolvedCallArgument>
-    abstract val kotlinCall: KotlinCall
-
-    protected var argumentToParameterMap: Map<ValueArgument, ArgumentMatchImpl>? = null
-    protected var _valueArguments: Map<ValueParameterDescriptor, ResolvedValueArgument>? = null
-
-    private var nonTrivialUpdatedResultInfo: DataFlowInfo? = null
-
-    override fun getCall(): Call = kotlinCall.psiKotlinCall.psiCall
-
-    override fun getValueArguments(): Map<ValueParameterDescriptor, ResolvedValueArgument> {
-        if (_valueArguments == null) {
-            _valueArguments = createValueArguments()
-        }
-        return _valueArguments!!
-    }
-
-    override fun getValueArgumentsByIndex(): List<ResolvedValueArgument>? {
-        val arguments = ArrayList<ResolvedValueArgument?>(candidateDescriptor.valueParameters.size)
-        for (i in 0..candidateDescriptor.valueParameters.size - 1) {
-            arguments.add(null)
-        }
-
-        for ((parameterDescriptor, value) in valueArguments) {
-            val oldValue = arguments.set(parameterDescriptor.index, value)
-            if (oldValue != null) {
-                return null
-            }
-        }
-
-        if (arguments.any { it == null }) return null
-
-        @Suppress("UNCHECKED_CAST")
-        return arguments as List<ResolvedValueArgument>
-    }
-
-    override fun getArgumentMapping(valueArgument: ValueArgument): ArgumentMapping {
-        if (argumentToParameterMap == null) {
-            argumentToParameterMap = argumentToParameterMap(resultingDescriptor, valueArguments)
-        }
-        return argumentToParameterMap!![valueArgument] ?: ArgumentUnmapped
-    }
-
-    override fun getDataFlowInfoForArguments() = object : DataFlowInfoForArguments {
-        override fun getResultInfo(): DataFlowInfo = nonTrivialUpdatedResultInfo ?: kotlinCall.psiKotlinCall.resultDataFlowInfo
-
-        override fun getInfo(valueArgument: ValueArgument): DataFlowInfo {
-            val externalPsiCallArgument = kotlinCall.externalArgument?.psiCallArgument
-            if (externalPsiCallArgument?.valueArgument == valueArgument) {
-                return externalPsiCallArgument.dataFlowInfoAfterThisArgument
-            }
-            return kotlinCall.psiKotlinCall.dataFlowInfoForArguments.getInfo(valueArgument)
-        }
-    }
-
-    // Currently, updated only with info from effect system
-    internal fun updateResultingDataFlowInfo(dataFlowInfo: DataFlowInfo) {
-        if (dataFlowInfo == DataFlowInfo.EMPTY) return
-        assert(nonTrivialUpdatedResultInfo == null) {
-            "Attempt to rewrite resulting dataFlowInfo enhancement for call: $kotlinCall"
-        }
-        nonTrivialUpdatedResultInfo = dataFlowInfo.and(kotlinCall.psiKotlinCall.resultDataFlowInfo)
-    }
-
-    private fun argumentToParameterMap(
-        resultingDescriptor: CallableDescriptor,
-        valueArguments: Map<ValueParameterDescriptor, ResolvedValueArgument>
-    ): Map<ValueArgument, ArgumentMatchImpl> =
-        LinkedHashMap<ValueArgument, ArgumentMatchImpl>().also { result ->
-            for (parameter in resultingDescriptor.valueParameters) {
-                val resolvedArgument = valueArguments[parameter] ?: continue
-                for (arguments in resolvedArgument.arguments) {
-                    result[arguments] = ArgumentMatchImpl(parameter).apply { recordMatchStatus(ArgumentMatchStatus.SUCCESS) }
-                }
-            }
-        }
-
-    private fun createValueArguments(): Map<ValueParameterDescriptor, ResolvedValueArgument> =
-        LinkedHashMap<ValueParameterDescriptor, ResolvedValueArgument>().also { result ->
-            for ((originalParameter, resolvedCallArgument) in argumentMappingByOriginal) {
-                val resultingParameter = resultingDescriptor.valueParameters[originalParameter.index]
-                result[resultingParameter] = when (resolvedCallArgument) {
-                    ResolvedCallArgument.DefaultArgument ->
-                        DefaultValueArgument.DEFAULT
-                    is ResolvedCallArgument.SimpleArgument -> {
-                        val valueArgument = resolvedCallArgument.callArgument.psiCallArgument.valueArgument
-                        if (resultingParameter.isVararg)
-                            VarargValueArgument().apply { addArgument(valueArgument) }
-                        else
-                            ExpressionValueArgument(valueArgument)
-                    }
-                    is ResolvedCallArgument.VarargArgument ->
-                        VarargValueArgument().apply {
-                            resolvedCallArgument.arguments.map { it.psiCallArgument.valueArgument }.forEach { addArgument(it) }
-                        }
-                }
-            }
-        }
-
-}
-
-class NewResolvedCallImpl<D : CallableDescriptor>(
-    val resolvedCallAtom: ResolvedCallAtom,
-    substitutor: NewTypeSubstitutor?,
-    private var diagnostics: Collection<KotlinCallDiagnostic>
-) : NewAbstractResolvedCall<D>() {
-    var isCompleted = false
-        private set
-    private lateinit var resultingDescriptor: D
-
-    private lateinit var typeArguments: List<UnwrappedType>
-
-    private var extensionReceiver = resolvedCallAtom.extensionReceiverArgument?.receiver?.receiverValue
-    private var dispatchReceiver = resolvedCallAtom.dispatchReceiverArgument?.receiver?.receiverValue
-    private var smartCastDispatchReceiverType: KotlinType? = null
-
-    override val kotlinCall: KotlinCall get() = resolvedCallAtom.atom
-
-    override fun getStatus(): ResolutionStatus = getResultApplicability(diagnostics).toResolutionStatus()
-
-    override val argumentMappingByOriginal: Map<ValueParameterDescriptor, ResolvedCallArgument>
-        get() = resolvedCallAtom.argumentMappingByOriginal
-
-    override fun getCandidateDescriptor(): D = resolvedCallAtom.candidateDescriptor as D
-    override fun getResultingDescriptor(): D = resultingDescriptor
-    override fun getExtensionReceiver(): ReceiverValue? = extensionReceiver
-    override fun getDispatchReceiver(): ReceiverValue? = dispatchReceiver
-    override fun getExplicitReceiverKind(): ExplicitReceiverKind = resolvedCallAtom.explicitReceiverKind
-
-    override fun getTypeArguments(): Map<TypeParameterDescriptor, KotlinType> {
-        val typeParameters = candidateDescriptor.typeParameters.takeIf { it.isNotEmpty() } ?: return emptyMap()
-        return typeParameters.zip(typeArguments).toMap()
-    }
-
-    override fun getSmartCastDispatchReceiverType(): KotlinType? = smartCastDispatchReceiverType
-
-    fun updateExtensionReceiverWithSmartCastIfNeeded(smartCastExtensionReceiverType: KotlinType) {
-        if (extensionReceiver is ImplicitClassReceiver) {
-            extensionReceiver = CastImplicitClassReceiver(
-                (extensionReceiver as ImplicitClassReceiver).classDescriptor,
-                smartCastExtensionReceiverType
-            )
-        }
-    }
-
-    fun setSmartCastDispatchReceiverType(smartCastDispatchReceiverType: KotlinType) {
-        this.smartCastDispatchReceiverType = smartCastDispatchReceiverType
-    }
-
-    fun updateDiagnostics(completedDiagnostics: Collection<KotlinCallDiagnostic>) {
-        diagnostics = completedDiagnostics
-    }
-
-    private fun updateExtensionReceiverType(newType: KotlinType) {
-        if (extensionReceiver?.type == newType) return
-        extensionReceiver = extensionReceiver?.replaceType(newType)
-    }
-
-    private fun updateDispatchReceiverType(newType: KotlinType) {
-        if (dispatchReceiver?.type == newType) return
-        dispatchReceiver = dispatchReceiver?.replaceType(newType)
-    }
-
-    fun setResultingSubstitutor(substitutor: NewTypeSubstitutor?) {
-        //clear cached values
-        argumentToParameterMap = null
-        _valueArguments = null
-        if (substitutor != null) {
-            // todo: add asset that we do not complete call many times
-            isCompleted = true
-
-            dispatchReceiver?.type?.let {
-                val newType = substitutor.safeSubstitute(it.unwrap())
-                updateDispatchReceiverType(newType)
-            }
-
-            extensionReceiver?.type?.let {
-                val newType = substitutor.safeSubstitute(it.unwrap())
-                updateExtensionReceiverType(newType)
-            }
-        }
-
-        resultingDescriptor = run {
-            val candidateDescriptor = resolvedCallAtom.candidateDescriptor
-            val containsCapturedTypes = resolvedCallAtom.candidateDescriptor.returnType?.contains { it is NewCapturedType } ?: false
-
-            when {
-                candidateDescriptor is FunctionDescriptor ||
-                        (candidateDescriptor is PropertyDescriptor && (candidateDescriptor.typeParameters.isNotEmpty() || containsCapturedTypes)) ->
-                    // this code is very suspicious. Now it is very useful for BE, because they cannot do nothing with captured types,
-                    // but it seems like temporary solution.
-                    candidateDescriptor.substitute(resolvedCallAtom.substitutor).substituteAndApproximateCapturedTypes(
-                        substitutor ?: FreshVariableNewTypeSubstitutor.Empty
-                    )
-                else ->
-                    candidateDescriptor
-            }
-        } as D
-
-        typeArguments = resolvedCallAtom.substitutor.freshVariables.map {
-            val substituted = (substitutor ?: FreshVariableNewTypeSubstitutor.Empty).safeSubstitute(it.defaultType)
-            TypeApproximator().approximateToSuperType(substituted, TypeApproximatorConfiguration.CapturedTypesApproximation) ?: substituted
-        }
-    }
-
-    init {
-        setResultingSubstitutor(substitutor)
-    }
-}
-
-fun ResolutionCandidateApplicability.toResolutionStatus(): ResolutionStatus = when (this) {
-    ResolutionCandidateApplicability.RESOLVED, ResolutionCandidateApplicability.RESOLVED_LOW_PRIORITY -> ResolutionStatus.SUCCESS
-    ResolutionCandidateApplicability.INAPPLICABLE_WRONG_RECEIVER -> ResolutionStatus.RECEIVER_TYPE_ERROR
-    else -> ResolutionStatus.OTHER_ERROR
-}
-
-class NewVariableAsFunctionResolvedCallImpl(
-    override val variableCall: NewResolvedCallImpl<VariableDescriptor>,
-    override val functionCall: NewResolvedCallImpl<FunctionDescriptor>
-) : VariableAsFunctionResolvedCall, ResolvedCall<FunctionDescriptor> by functionCall {
-    val baseCall get() = functionCall.resolvedCallAtom.atom.psiKotlinCall.cast<PSIKotlinCallForInvoke>().baseCall
-}
-
-fun ResolvedCall<*>.isNewNotCompleted(): Boolean {
-    if (this is NewVariableAsFunctionResolvedCallImpl) {
-        return !functionCall.isCompleted
-    }
-    if (this is NewResolvedCallImpl<*>) {
-        return !isCompleted
-    }
-    return false
 }

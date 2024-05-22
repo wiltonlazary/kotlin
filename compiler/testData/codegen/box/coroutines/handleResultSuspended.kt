@@ -1,14 +1,13 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 class Controller {
     var log = ""
 
-    suspend fun <T> suspendAndLog(value: T): T = suspendCoroutineOrReturn { x ->
+    suspend fun <T> suspendAndLog(value: T): T = suspendCoroutineUninterceptedOrReturn { x ->
         log += "suspend($value);"
         x.resume(value)
         COROUTINE_SUSPENDED

@@ -19,13 +19,10 @@ package org.jetbrains.kotlin.codegen;
 import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.codegen.inline.FileMapping;
+import org.jetbrains.kotlin.codegen.inline.SourceMapper;
 import org.jetbrains.kotlin.codegen.serialization.JvmSerializationBindings;
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin;
-import org.jetbrains.org.objectweb.asm.AnnotationVisitor;
-import org.jetbrains.org.objectweb.asm.ClassVisitor;
-import org.jetbrains.org.objectweb.asm.FieldVisitor;
-import org.jetbrains.org.objectweb.asm.MethodVisitor;
+import org.jetbrains.org.objectweb.asm.*;
 
 public interface ClassBuilder {
     @NotNull
@@ -48,13 +45,19 @@ public interface ClassBuilder {
             @Nullable String[] exceptions
     );
 
+    @NotNull RecordComponentVisitor newRecordComponent(
+            @NotNull String name,
+            @NotNull String desc,
+            @Nullable String signature
+    );
+
     @NotNull
     JvmSerializationBindings getSerializationBindings();
 
     @NotNull
     AnnotationVisitor newAnnotation(@NotNull String desc, boolean visible);
 
-    void done();
+    void done(boolean generateSmapCopyToAnnotation);
 
     @NotNull
     ClassVisitor getVisitor();
@@ -71,12 +74,12 @@ public interface ClassBuilder {
 
     void visitSource(@NotNull String name, @Nullable String debug);
 
+    void visitSMAP(@NotNull SourceMapper smap, boolean backwardsCompatibleSyntax);
+
     void visitOuterClass(@NotNull String owner, @Nullable String name, @Nullable String desc);
 
     void visitInnerClass(@NotNull String name, @Nullable String outerName, @Nullable String innerName, int access);
 
     @NotNull
     String getThisName();
-
-    void addSMAP(FileMapping mapping);
 }

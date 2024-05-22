@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.codegen.when;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.codegen.ExpressionCodegen;
+import org.jetbrains.kotlin.psi.KtWhenEntry;
 import org.jetbrains.kotlin.psi.KtWhenExpression;
 import org.jetbrains.kotlin.resolve.constants.ConstantValue;
 import org.jetbrains.org.objectweb.asm.Label;
@@ -33,12 +34,17 @@ public class IntegralConstantsSwitchCodegen extends SwitchCodegen {
     }
 
     @Override
-    protected void processConstant(@NotNull ConstantValue<?> constant, @NotNull Label entryLabel) {
+    protected void processConstant(@NotNull ConstantValue<?> constant, @NotNull Label entryLabel, @NotNull KtWhenEntry entry) {
         assert constant.getValue() != null : "constant value should not be null";
         int value = (constant.getValue() instanceof Number)
                     ? ((Number) constant.getValue()).intValue()
                     : ((Character) constant.getValue()).charValue();
 
         putTransitionOnce(value, entryLabel);
+    }
+
+    @Override
+    protected void generateSubjectValueToIndex() {
+        // Do nothing: subject is an int value
     }
 }

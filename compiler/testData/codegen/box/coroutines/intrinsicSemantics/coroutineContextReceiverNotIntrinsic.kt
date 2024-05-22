@@ -1,8 +1,7 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
-import COROUTINES_PACKAGE.*
+import kotlin.coroutines.*
 import kotlin.test.assertEquals
 
 @Suppress("DEPRECATION_ERROR")
@@ -29,12 +28,12 @@ class Controller {
             override val context: CoroutineContext
                 get() = EmptyCoroutineContext
 
-            override fun resumeWithException(exception: Throwable) {
-                fromSuspension = "Exception: " + exception.message!!
-            }
-
-            override fun resume(value: String) {
-                fromSuspension = value
+            override fun resumeWith(value: Result<String>) {
+                fromSuspension = try {
+                    value.getOrThrow()
+                } catch (exception: Throwable) {
+                    "Exception: " + exception.message!!
+                }
             }
         })
 
@@ -55,6 +54,27 @@ fun box(): String {
     res = v.builder { controllerSuspendHere() }
     if (res != "OK") {
         return "fail 3 $res"
+    }
+    res = v.builder {
+        suspend {}()
+        controllerMultipleArgs(1, 1, 1)
+    }
+    if (res != "OK") {
+        return "fail 4 $res"
+    }
+    res = v.builder {
+        suspend {}()
+        if (coroutineContext == EmptyCoroutineContext) "$coroutineContext == $EmptyCoroutineContext" else "OK"
+    }
+    if (res != "OK") {
+        return "fail 5 $res"
+    }
+    res = v.builder {
+        suspend {}()
+        controllerSuspendHere()
+    }
+    if (res != "OK") {
+        return "fail 6 $res"
     }
 
     return "OK"

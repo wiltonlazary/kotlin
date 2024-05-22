@@ -1,5 +1,4 @@
-// !LANGUAGE: +ArrayLiteralsInAnnotations
-
+// FIR_IDENTICAL
 const val ONE = 1
 
 annotation class Foo(

@@ -1,5 +1,5 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
+// TARGET_BACKEND: JVM_IR
 
 interface A {
     val method : (() -> Unit )?
@@ -19,7 +19,7 @@ fun test(a : A) {
     }
 }
 
-public fun box() : String {
+fun box() : String {
     AImpl().test
     test(AImpl())
     return "OK"

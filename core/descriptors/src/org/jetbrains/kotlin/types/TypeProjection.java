@@ -17,8 +17,10 @@
 package org.jetbrains.kotlin.types;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner;
+import org.jetbrains.kotlin.types.model.TypeArgumentMarker;
 
-public interface TypeProjection {
+public interface TypeProjection extends TypeArgumentMarker {
     @NotNull
     Variance getProjectionKind();
 
@@ -26,4 +28,11 @@ public interface TypeProjection {
     KotlinType getType();
 
     boolean isStarProjection();
+
+    @NotNull
+    @TypeRefinement
+    TypeProjection refine(@NotNull KotlinTypeRefiner kotlinTypeRefiner);
+
+    @NotNull
+    TypeProjection replaceType(@NotNull KotlinType type);
 }

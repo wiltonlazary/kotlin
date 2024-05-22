@@ -1,4 +1,5 @@
-// !LANGUAGE: +InlineClasses
+// NO_CHECK_LAMBDA_INLINING
+// LANGUAGE: +InlineClasses
 
 // FILE: 1.kt
 
@@ -10,7 +11,10 @@ inline class A(val x: Int) {
     inline fun result(other: A): String = if (other.x == x) "OK" else "fail"
 }
 
+inline fun stub() {}
+
 // FILE: 2.kt
+// ^ TODO
 
 import test.*
 

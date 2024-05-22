@@ -1,5 +1,5 @@
-// !WITH_NEW_INFERENCE
-// !LANGUAGE: +BooleanElvisBoundSmartCasts
+// FIR_IDENTICAL
+// LANGUAGE: +BooleanElvisBoundSmartCasts
 // See KT-20752
 
 class Unstable {
@@ -18,7 +18,7 @@ fun foo(list: StringList, arg: Unstable) {
     list.remove(arg.first)
     if (arg.first?.isEmpty() ?: false) {
         // Should be still resolved to extension, without smart cast or smart cast impossible
-        list.remove(<!OI;SMARTCAST_IMPOSSIBLE!>arg.first<!>)
+        list.remove(arg.first)
     }
 }
 
@@ -36,6 +36,6 @@ fun bar(list: BooleanList, arg: UnstableBoolean) {
     list.remove(arg.first)
     if (arg.first ?: false) {
         // Should be still resolved to extension, without smart cast or smart cast impossible
-        list.remove(<!OI;SMARTCAST_IMPOSSIBLE!>arg.first<!>)
+        list.remove(arg.first)
     }
 }

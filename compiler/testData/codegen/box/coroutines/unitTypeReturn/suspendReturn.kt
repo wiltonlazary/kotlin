@@ -1,16 +1,15 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 var result = "0"
 
 suspend fun suspendHere(x: Int): Unit {
     if (x == 0) return
     result = "OK"
-    return suspendCoroutineOrReturn { x ->
+    return suspendCoroutineUninterceptedOrReturn { x ->
         x.resume(Unit)
         COROUTINE_SUSPENDED
     }

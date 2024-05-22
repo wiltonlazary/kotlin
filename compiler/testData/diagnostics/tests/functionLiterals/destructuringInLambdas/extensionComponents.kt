@@ -1,5 +1,6 @@
-// !CHECK_TYPE
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// CHECK_TYPE
+// DIAGNOSTICS: -UNUSED_PARAMETER
 class A
 
 operator fun A.component1() = 1

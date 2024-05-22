@@ -1,7 +1,8 @@
-// !LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect
-// !DIAGNOSTICS: -INVISIBLE_REFERENCE -INVISIBLE_MEMBER
+// LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect
+// OPT_IN: kotlin.contracts.ExperimentalContracts
+// DIAGNOSTICS: -INVISIBLE_REFERENCE -INVISIBLE_MEMBER
 
-import kotlin.internal.contracts.*
+import kotlin.contracts.*
 
 fun <T> myRun(block: () -> T): T {
     contract {
@@ -85,7 +86,19 @@ class DefiniteInitializationInInitSection {
     <!MUST_BE_INITIALIZED_OR_BE_ABSTRACT!>val y: Int<!>
 
     init {
-        myRun { x = 42 }
+        myRun { <!CAPTURED_VAL_INITIALIZATION!>x<!> = 42 }
         unknownRun { <!CAPTURED_MEMBER_VAL_INITIALIZATION!>y<!> = 239 }
     }
+}
+
+class DefiniteInitializationAfterThrow {
+    fun test() {
+        val a: Int
+        myRun {
+            if (bar()) throw RuntimeException()
+            a = 42
+        }
+        a.hashCode()
+    }
+    fun bar() = false
 }

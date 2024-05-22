@@ -16,48 +16,33 @@
 
 package org.jetbrains.kotlin.load.java
 
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.ClassKind
-import org.jetbrains.kotlin.incremental.components.NoLookupLocation
-import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
-import org.jetbrains.kotlin.utils.extractRadix
+import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
+import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
+import org.jetbrains.kotlin.load.java.descriptors.JavaMethodDescriptor
+import org.jetbrains.kotlin.load.java.lazy.LazyJavaAnnotations
+import org.jetbrains.kotlin.load.java.lazy.LazyJavaResolverContext
+import org.jetbrains.kotlin.load.java.structure.JavaWildcardType
+import org.jetbrains.kotlin.resolve.deprecation.DescriptorBasedDeprecationInfo
+import org.jetbrains.kotlin.resolve.deprecation.DeprecationLevelValue
 
-sealed class JavaDefaultValue
-class EnumEntry(val descriptor: ClassDescriptor) : JavaDefaultValue()
-class Constant(val value: Any) : JavaDefaultValue()
+class DeprecationCausedByFunctionNInfo(override val target: DeclarationDescriptor) : DescriptorBasedDeprecationInfo() {
+    override val deprecationLevel: DeprecationLevelValue
+        get() = DeprecationLevelValue.ERROR
+    override val message: String
+        get() = "Java members containing references to ${JavaToKotlinClassMap.FUNCTION_N_FQ_NAME} are not supported"
+}
 
-fun KotlinType.lexicalCastFrom(value: String): JavaDefaultValue? {
-    val typeDescriptor = constructor.declarationDescriptor
-    if (typeDescriptor is ClassDescriptor && typeDescriptor.kind == ClassKind.ENUM_CLASS) {
-        val descriptor = typeDescriptor.unsubstitutedInnerClassesScope.getContributedClassifier(
-                Name.identifier(value),
-                NoLookupLocation.FROM_BACKEND
-        )
+internal fun Visibility.toDescriptorVisibility(): DescriptorVisibility = JavaDescriptorVisibilities.toDescriptorVisibility(this)
 
-        return if (descriptor is ClassDescriptor && descriptor.kind == ClassKind.ENUM_ENTRY) EnumEntry(descriptor) else null
-    }
+fun isJspecifyEnabledInStrictMode(javaTypeEnhancementState: JavaTypeEnhancementState) =
+    javaTypeEnhancementState.getReportLevelForAnnotation(JSPECIFY_ANNOTATIONS_PACKAGE) == ReportLevel.STRICT
 
-    val type = this.makeNotNullable()
-    val (number, radix) = extractRadix(value)
-    val result: Any? = try {
-        when {
-            KotlinBuiltIns.isBoolean(type) -> value.toBoolean()
-            KotlinBuiltIns.isChar(type) -> value.singleOrNull()
-            KotlinBuiltIns.isByte(type) -> number.toByteOrNull(radix)
-            KotlinBuiltIns.isShort(type) -> number.toShortOrNull(radix)
-            KotlinBuiltIns.isInt(type) -> number.toIntOrNull(radix)
-            KotlinBuiltIns.isLong(type) -> number.toLongOrNull(radix)
-            KotlinBuiltIns.isFloat(type) -> value.toFloatOrNull()
-            KotlinBuiltIns.isDouble(type) -> value.toDoubleOrNull()
-            KotlinBuiltIns.isString(type) -> value
-            else -> null
-        }
-    } catch (e: IllegalArgumentException) {
-        null
-    }
+fun hasErasedValueParameters(memberDescriptor: CallableMemberDescriptor) =
+    memberDescriptor is FunctionDescriptor && memberDescriptor.getUserData(JavaMethodDescriptor.HAS_ERASED_VALUE_PARAMETERS) == true
 
-    return if (result != null) Constant(result) else null
+// For now it's supported only for RxJava3 annotations, see KT-53041
+fun extractNullabilityAnnotationOnBoundedWildcard(c: LazyJavaResolverContext, wildcardType: JavaWildcardType): AnnotationDescriptor? {
+    require(wildcardType.bound != null) { "Nullability annotations on unbounded wildcards aren't supported" }
+    return LazyJavaAnnotations(c, wildcardType).find { annotation -> RXJAVA3_ANNOTATIONS.any { annotation.fqName == it } }
 }

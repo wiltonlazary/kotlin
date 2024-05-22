@@ -1,5 +1,4 @@
-// !WITH_NEW_INFERENCE
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// DIAGNOSTICS: -UNUSED_VARIABLE
 // FILE: A.java
 public class A {
     public static int foo() {return 1;}
@@ -21,7 +20,7 @@ fun test() {
 
     class B: A() {
         init {
-            val a: Int = <!NI;TYPE_MISMATCH, TYPE_MISMATCH!>foo()<!> // todo
+            val a: Int = <!TYPE_MISMATCH!>foo()<!> // todo
         }
     }
 }

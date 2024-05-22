@@ -1,5 +1,3 @@
-// IGNORE_BACKEND: JVM
-
 var log = ""
 fun log(a: String) {
     log += a + ";"

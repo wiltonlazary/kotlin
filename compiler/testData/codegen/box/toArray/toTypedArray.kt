@@ -1,8 +1,5 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS
-// missing isArrayOf on JS
-
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// WITH_STDLIB
 
 fun box(): String {
     val array = listOf(2, 3, 9).toTypedArray()

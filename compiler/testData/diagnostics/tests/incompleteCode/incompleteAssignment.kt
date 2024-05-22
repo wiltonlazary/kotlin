@@ -1,3 +1,5 @@
+// COMPARE_WITH_LIGHT_TREE
+
 package sum
 
 import java.util.*
@@ -7,7 +9,7 @@ fun sum(a : IntArray) : Int {
     for (e in a)
         <!UNRESOLVED_REFERENCE!>res<!> <!DEBUG_INFO_MISSING_UNRESOLVED!>+=<!><!SYNTAX!><!>
 }
-fun main(args : Array<String>) {
+fun main() {
     test(0)
     test(1, 1)
     test(-1, -1, 0)

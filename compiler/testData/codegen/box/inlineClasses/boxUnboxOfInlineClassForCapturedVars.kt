@@ -1,6 +1,9 @@
-// !LANGUAGE: +InlineClasses
+// WITH_STDLIB
+// WORKS_WHEN_VALUE_CLASS
+// LANGUAGE: +ValueClasses
 
-inline class UInt(private val value: Int) {
+OPTIONAL_JVM_INLINE_ANNOTATION
+value class UInt(private val value: Int) {
     operator fun plus(other: UInt): UInt = UInt(value + other.asValue())
 
     fun asValue(): Int = value

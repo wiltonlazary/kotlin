@@ -1,5 +1,6 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1109
+// EXPECTED_REACHABLE_NODES: 1281
+// IGNORE_BACKEND: JS_IR, JS_IR_ES6
+
 fun box(): String {
     val a = CharArray(1)
     val aType = jsTypeOf(a.asDynamic()[0])
@@ -22,6 +23,22 @@ fun box(): String {
 
     val bType3 = jsTypeOf(b[0].asDynamic())
     if (bType3 != "number") return "fail6: $bType3"
+
+    if (a.asDynamic().constructor.name != "Uint16Array") return "fail7: ${a.asDynamic().constructor.name}"
+    if (b.asDynamic().constructor.name != "Array") return "fail8: ${b.asDynamic().constructor.name}"
+
+    val c = charArrayOf('Q')
+    val cType = jsTypeOf(c.asDynamic()[0])
+    if (cType != "number") return "fail9: $cType"
+
+    c[0] = 'W'
+    val cType2 = jsTypeOf(c.asDynamic()[0])
+    if (cType2 != "number") return "fail10: $cType2"
+
+    val cType3 = jsTypeOf(c[0].asDynamic())
+    if (cType3 != "number") return "fail11: $cType3"
+
+    if (c.asDynamic().constructor.name != "Uint16Array") return "fail12: ${c.asDynamic().constructor.name}"
 
     return "OK"
 }

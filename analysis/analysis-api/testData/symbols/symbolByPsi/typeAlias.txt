@@ -1,0 +1,79 @@
+KtTypeParameterSymbol:
+  annotationsList: []
+  isReified: false
+  name: T
+  origin: SOURCE
+  typeParameters: []
+  upperBounds: []
+  variance: INVARIANT
+  getContainingFileSymbol: KtFileSymbol(typeAlias.kt)
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null
+
+KtNamedClassOrObjectSymbol:
+  annotationsList: []
+  classIdIfNonLocal: X
+  classKind: CLASS
+  companionObject: null
+  contextReceivers: []
+  isActual: false
+  isData: false
+  isExpect: false
+  isExternal: false
+  isFun: false
+  isInline: false
+  isInner: false
+  modality: FINAL
+  name: X
+  origin: SOURCE
+  superTypes: [
+    KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: kotlin/Any
+  ]
+  symbolKind: TOP_LEVEL
+  typeParameters: [
+    KtTypeParameterSymbol(T)
+  ]
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(typeAlias.kt)
+  getContainingModule: KtSourceModule "Sources of main"
+  annotationApplicableTargets: null
+  deprecationStatus: null
+
+KtTypeParameterSymbol:
+  annotationsList: []
+  isReified: false
+  name: Z
+  origin: SOURCE
+  typeParameters: []
+  upperBounds: []
+  variance: INVARIANT
+  getContainingFileSymbol: KtFileSymbol(typeAlias.kt)
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null
+
+KtTypeAliasSymbol:
+  annotationsList: []
+  classIdIfNonLocal: Y
+  expandedType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: [
+      KtTypeParameterType:
+        annotationsList: []
+        type: Z
+    ]
+    type: X<Z>
+  isActual: false
+  isExpect: false
+  name: Y
+  origin: SOURCE
+  symbolKind: TOP_LEVEL
+  typeParameters: [
+    KtTypeParameterSymbol(Z)
+  ]
+  visibility: Private
+  getContainingFileSymbol: KtFileSymbol(typeAlias.kt)
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null

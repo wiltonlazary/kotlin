@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // FILE: JavaClass.java
 public class JavaClass {
     void from(String s) {}
@@ -5,7 +6,7 @@ public class JavaClass {
 }
 
 // FILE: kotlin.kt
-fun main(args : Array<String>) {
+fun main() {
     JavaClass().from()
     JavaClass().from("")
     JavaClass().from("", "")

@@ -1,8 +1,0 @@
-fun foo() {
-    val a: kotlin.test.Asserter?
-    if (<caret>) {
-        a = null
-    }
-
-    a?.charAt(1)
-}

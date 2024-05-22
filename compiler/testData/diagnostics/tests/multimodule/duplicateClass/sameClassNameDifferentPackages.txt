@@ -19,7 +19,6 @@ package p {
     }
 }
 
-
 // -- Module: <m2> --
 package
 
@@ -32,5 +31,3 @@ public final class A {
     public open override /*1*/ /*fake_override*/ fun toString(): kotlin.String
 }
 
-package p {
-}

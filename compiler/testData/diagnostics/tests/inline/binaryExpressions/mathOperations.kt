@@ -1,4 +1,6 @@
-// !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_VARIABLE -NOTHING_TO_INLINE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -CONFLICTING_JVM_DECLARATIONS -CONFLICTING_OVERLOADS
+// FIR_IDENTICAL
+// LANGUAGE: +ForbidExtensionCallsOnInlineFunctionalParameters
+// DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_VARIABLE -NOTHING_TO_INLINE -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -CONFLICTING_JVM_DECLARATIONS -CONFLICTING_OVERLOADS
 operator fun <T, U> Function1<T, U>.minus(p: Function1<T, U>) {
 
 }
@@ -16,13 +18,13 @@ inline operator fun <T, U, V> @ExtensionFunctionType Function2<T, U, V>.plus(p: 
 }
 
 inline fun <T, U, V> inlineFunWithInvoke(s: (p: T) -> U, ext: T.(p: U) -> V) {
-    s + s
-    ext + ext
+    <!USAGE_IS_NOT_INLINABLE!>s<!> + s
+    <!USAGE_IS_NOT_INLINABLE!>ext<!> + ext
 }
 
 inline fun <T, U, V> inlineFunWithInvoke(s: (p: T) -> U, ext: T.(p: U) -> V) {
-    s + s
-    ext + ext
+    <!USAGE_IS_NOT_INLINABLE!>s<!> + s
+    <!USAGE_IS_NOT_INLINABLE!>ext<!> + ext
 }
 
 inline fun <T, U> Function1<T, U>.submit() {

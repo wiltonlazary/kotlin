@@ -1,6 +1,0 @@
-foo()    // ERROR: error: unresolved reference: foo...
-/** unresolved.kts:1 error: unresolved reference: foo
-
-foo()
-
-^ */

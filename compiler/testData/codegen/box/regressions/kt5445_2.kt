@@ -1,7 +1,6 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
-// WITH_RUNTIME
+// WITH_STDLIB
 // FILE: 1.kt
 
 package test2
@@ -14,7 +13,7 @@ class C : A() {
     }
 }
 
-public fun box(): String {
+fun box(): String {
     return C().a()
 }
 

@@ -1,7 +1,9 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
+
+@file:Suppress("unused")
 
 package kotlin.jvm.internal
 
@@ -12,7 +14,7 @@ private fun notSupportedError(): Nothing {
 }
 
 @SinceKotlin("1.1")
-open class LocalVariableReference : PropertyReference0() {
+public open class LocalVariableReference : PropertyReference0() {
     override fun getOwner(): KDeclarationContainer = notSupportedError()
 
     override fun get(): Any? = notSupportedError()
@@ -20,7 +22,7 @@ open class LocalVariableReference : PropertyReference0() {
 }
 
 @SinceKotlin("1.1")
-open class MutableLocalVariableReference : MutablePropertyReference0() {
+public open class MutableLocalVariableReference : MutablePropertyReference0() {
     override fun getOwner(): KDeclarationContainer = notSupportedError()
 
     override fun get(): Any? = notSupportedError()

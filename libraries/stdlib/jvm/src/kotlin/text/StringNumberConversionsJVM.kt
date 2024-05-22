@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:kotlin.jvm.JvmMultifileClass
@@ -9,9 +9,6 @@
 
 package kotlin.text
 
-import kotlin.*
-
-
 /**
  * Returns a string representation of this [Byte] value in the specified [radix].
  *
@@ -19,7 +16,7 @@ import kotlin.*
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
-public actual inline fun Byte.toString(radix: Int): String = this.toInt().toString(checkRadix(radix))
+public actual inline fun Byte.toString(radix: Int): String = this.toInt().toString(radix)
 
 /**
  * Returns a string representation of this [Short] value in the specified [radix].
@@ -28,7 +25,7 @@ public actual inline fun Byte.toString(radix: Int): String = this.toInt().toStri
  */
 @SinceKotlin("1.1")
 @kotlin.internal.InlineOnly
-public actual inline fun Short.toString(radix: Int): String = this.toInt().toString(checkRadix(radix))
+public actual inline fun Short.toString(radix: Int): String = this.toInt().toString(radix)
 
 /**
  * Returns a string representation of this [Int] value in the specified [radix].
@@ -49,10 +46,13 @@ public actual inline fun Int.toString(radix: Int): String = java.lang.Integer.to
 public actual inline fun Long.toString(radix: Int): String = java.lang.Long.toString(this, checkRadix(radix))
 
 /**
- * Returns `true` if the contents of this string is equal to the word "true", ignoring case, and `false` otherwise.
+ * Returns `true` if this string is not `null` and its content is equal to the word "true", ignoring case, and `false` otherwise.
+ *
+ * There are also strict versions of the function available on non-nullable String, [toBooleanStrict] and [toBooleanStrictOrNull].
  */
+@SinceKotlin("1.4")
 @kotlin.internal.InlineOnly
-public actual inline fun String.toBoolean(): Boolean = java.lang.Boolean.parseBoolean(this)
+public actual inline fun String?.toBoolean(): Boolean = java.lang.Boolean.parseBoolean(this)
 
 /**
  * Parses the string as a signed [Byte] number and returns the result.

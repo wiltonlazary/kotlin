@@ -4,14 +4,18 @@ plugins {
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 dependencies {
-    compile(intellijDep()) { includeJars("util") }
-    testCompile(project(":core:util.runtime"))
-    testCompile(projectTests(":compiler:tests-common"))
-    testCompile(projectDist(":kotlin-stdlib"))
-    testCompile(commonDep("junit:junit"))
+    testApi(project(":core:util.runtime"))
+    testApi(projectTests(":compiler:test-infrastructure-utils"))
+    testApi(kotlinStdlib())
+    testImplementation(libs.junit4)
+    testApi(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testApi(project(":generators"))
+
+    testImplementation(commonDependency("org.jetbrains.kotlin:kotlin-reflect")) { isTransitive = false }
+    testRuntimeOnly(project(":core:descriptors.runtime"))
 }
 
 sourceSets {

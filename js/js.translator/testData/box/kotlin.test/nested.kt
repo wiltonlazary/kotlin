@@ -1,5 +1,9 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1200
+// EXPECTED_REACHABLE_NODES: 1735
+// KJS_WITH_FULL_RUNTIME
+// SKIP_DCE_DRIVEN
+// RUN_UNIT_TESTS
+
+import common.*
 import kotlin.test.Test
 
 class Outer {
@@ -17,7 +21,7 @@ class Outer {
         }
 
         inner class Inneer {
-            @Test fun inneerTest() {
+            @Test fun innermostTest() {
                 call(prop + "Inneer")
             }
         }
@@ -65,7 +69,7 @@ fun box() = checkLog {
                 call("propInner")
             }
             suite("Inneer") {
-                test("inneerTest") {
+                test("innermostTest") {
                     call("propInneer")
                 }
             }

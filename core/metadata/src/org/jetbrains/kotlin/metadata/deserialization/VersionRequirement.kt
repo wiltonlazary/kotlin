@@ -1,12 +1,12 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.metadata.deserialization
 
 import org.jetbrains.kotlin.metadata.ProtoBuf
-import org.jetbrains.kotlin.protobuf.MessageLite
+import org.jetbrains.kotlin.protobuf.MessageLiteOrBuilder
 
 class VersionRequirementTable private constructor(private val infos: List<ProtoBuf.VersionRequirement>) {
     operator fun get(id: Int): ProtoBuf.VersionRequirement? = infos.getOrNull(id)
@@ -81,16 +81,20 @@ class VersionRequirement(
         "since $version $level" + (if (errorCode != null) " error $errorCode" else "") + (if (message != null) ": $message" else "")
 
     companion object {
-        fun create(proto: MessageLite, nameResolver: NameResolver, table: VersionRequirementTable): VersionRequirement? {
-            val id = when (proto) {
-                is ProtoBuf.Class -> if (proto.hasVersionRequirement()) proto.versionRequirement else return null
-                is ProtoBuf.Constructor -> if (proto.hasVersionRequirement()) proto.versionRequirement else return null
-                is ProtoBuf.Function -> if (proto.hasVersionRequirement()) proto.versionRequirement else return null
-                is ProtoBuf.Property -> if (proto.hasVersionRequirement()) proto.versionRequirement else return null
-                is ProtoBuf.TypeAlias -> if (proto.hasVersionRequirement()) proto.versionRequirement else return null
+        fun create(proto: MessageLiteOrBuilder, nameResolver: NameResolver, table: VersionRequirementTable): List<VersionRequirement> {
+            val ids = when (proto) {
+                is ProtoBuf.Class -> proto.versionRequirementList
+                is ProtoBuf.Constructor -> proto.versionRequirementList
+                is ProtoBuf.Function -> proto.versionRequirementList
+                is ProtoBuf.Property -> proto.versionRequirementList
+                is ProtoBuf.TypeAlias -> proto.versionRequirementList
                 else -> throw IllegalStateException("Unexpected declaration: ${proto::class.java}")
             }
 
+            return ids.mapNotNull { id -> create(id, nameResolver, table) }
+        }
+
+        fun create(id: Int, nameResolver: NameResolver, table: VersionRequirementTable): VersionRequirement? {
             val info = table[id] ?: return null
 
             val version = Version.decode(

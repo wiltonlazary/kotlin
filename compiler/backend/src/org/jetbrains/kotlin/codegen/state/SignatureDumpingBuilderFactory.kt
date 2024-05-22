@@ -95,13 +95,13 @@ class SignatureDumpingBuilderFactory(
             return super.newField(origin, access, name, desc, signature, value)
         }
 
-        override fun done() {
+        override fun done(generateSmapCopyToAnnotation: Boolean) {
             if (firstClassWritten) outputStream.append(",\n") else firstClassWritten = true
             outputStream.append("\t{\n")
             origin.descriptor?.let {
                 outputStream.append("\t\t").appendNameValue("declaration", TYPE_RENDERER.render(it)).append(",\n")
                 (it as? DeclarationDescriptorWithVisibility)?.visibility?.let {
-                    outputStream.append("\t\t").appendNameValue("visibility", it.displayName).append(",\n")
+                    outputStream.append("\t\t").appendNameValue("visibility", it.internalDisplayName).append(",\n")
                 }
             }
             outputStream.append("\t\t").appendNameValue("class", javaClassName).append(",\n")
@@ -112,7 +112,7 @@ class SignatureDumpingBuilderFactory(
                 append("\t\t\t{")
                 descriptor?.let {
                     (it as? DeclarationDescriptorWithVisibility)?.visibility?.let {
-                        appendNameValue("visibility", it.displayName).append(",\t")
+                        appendNameValue("visibility", it.internalDisplayName).append(",\t")
                     }
                     appendNameValue("declaration", MEMBER_RENDERER.render(it)).append(", ")
 
@@ -122,7 +122,7 @@ class SignatureDumpingBuilderFactory(
             }}
             outputStream.append("\n\t\t]\n\t}")
 
-            super.done()
+            super.done(generateSmapCopyToAnnotation)
         }
     }
 }
@@ -140,8 +140,8 @@ private fun jsonEscape(value: String): String = buildString {
             '\r' -> append("\\r")
             '\"' -> append("\\\"")
             '\\' -> append("\\\\")
-            else -> if (ch.toInt() < 32) {
-                append("\\u" + Integer.toHexString(ch.toInt()).padStart(4, '0'))
+            else -> if (ch.code < 32) {
+                append("\\u" + Integer.toHexString(ch.code).padStart(4, '0'))
             }
             else {
                 append(ch)

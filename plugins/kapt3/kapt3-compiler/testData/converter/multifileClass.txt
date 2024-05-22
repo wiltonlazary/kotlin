@@ -1,7 +1,11 @@
 package test;
 
-import java.lang.System;
-
+/**
+ * multi-file class {
+ *   // test/M1__AKt
+ *   // test/M1__BKt
+ * }
+ */
 @kotlin.Metadata()
 public final class M1 {
 
@@ -20,8 +24,11 @@ public final class M1 {
 
 package test;
 
-import java.lang.System;
-
+/**
+ * multi-file class {
+ *   // test/M2__CKt
+ * }
+ */
 @kotlin.Metadata()
 public final class M2 {
 

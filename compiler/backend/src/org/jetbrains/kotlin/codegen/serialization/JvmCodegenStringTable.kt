@@ -1,11 +1,11 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.serialization
 
-import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
+import org.jetbrains.kotlin.codegen.state.KotlinTypeMapperBase
 import org.jetbrains.kotlin.descriptors.ClassifierDescriptorWithTypeParameters
 import org.jetbrains.kotlin.descriptors.PackageFragmentDescriptor
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmNameResolver
@@ -15,20 +15,21 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.serialization.DescriptorAwareStringTable
 
 class JvmCodegenStringTable @JvmOverloads constructor(
-    private val typeMapper: KotlinTypeMapper,
+    private val typeMapper: KotlinTypeMapperBase,
     nameResolver: JvmNameResolver? = null
 ) : JvmStringTable(nameResolver), DescriptorAwareStringTable {
-    override fun getLocalClassIdReplacement(descriptor: ClassifierDescriptorWithTypeParameters): ClassId {
-        val container = descriptor.containingDeclaration
-        return when (container) {
+    override fun getLocalClassIdReplacement(descriptor: ClassifierDescriptorWithTypeParameters): ClassId =
+        when (val container = descriptor.containingDeclaration) {
             is ClassifierDescriptorWithTypeParameters -> getLocalClassIdReplacement(container).createNestedClassId(descriptor.name)
             is PackageFragmentDescriptor -> {
                 throw IllegalStateException("getLocalClassIdReplacement should only be called for local classes: $descriptor")
             }
             else -> {
                 val fqName = FqName(typeMapper.mapClass(descriptor).internalName.replace('/', '.'))
-                ClassId(fqName.parent(), FqName.topLevel(fqName.shortName()), true)
+                ClassId(fqName.parent(), FqName.topLevel(fqName.shortName()), isLocal = true)
             }
         }
-    }
+
+    override val isLocalClassIdReplacementKeptGeneric: Boolean
+        get() = true
 }

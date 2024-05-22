@@ -1,4 +1,3 @@
-
 object Whatever {
     operator fun getValue(thisRef: Any?, prop: Any?) = "OK"
 }
@@ -9,5 +8,5 @@ fun box(): String {
         object {
             val keys = key
         }.keys
-    } ()
+    }.let { it() }
 }

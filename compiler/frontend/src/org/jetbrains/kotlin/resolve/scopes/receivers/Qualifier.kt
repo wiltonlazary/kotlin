@@ -25,11 +25,11 @@ import org.jetbrains.kotlin.psi.psiUtil.getTopmostParentQualifiedExpressionForSe
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.classValueType
 import org.jetbrains.kotlin.resolve.scopes.ChainedMemberScope
+import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.resolve.scopes.MemberScopeImpl
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.utils.Printer
-import java.util.*
 
 interface Qualifier : QualifierReceiver {
     val referenceExpression: KtSimpleNameExpression
@@ -71,17 +71,13 @@ class ClassQualifier(
     }
 
     override val staticScope: MemberScope
-        get() {
-            val scopes = ArrayList<MemberScope>(2)
-
-            scopes.add(descriptor.staticScope)
-
-            if (descriptor.kind != ClassKind.ENUM_ENTRY) {
-                scopes.add(descriptor.unsubstitutedInnerClassesScope)
-            }
-
-            return ChainedMemberScope("Static scope for ${descriptor.name} as class or object", scopes)
-        }
+        get() =
+            if (descriptor.kind == ClassKind.ENUM_ENTRY) descriptor.staticScope
+            else ChainedMemberScope.create(
+                "Static scope for ${descriptor.name} as class or object",
+                descriptor.staticScope,
+                descriptor.unsubstitutedInnerClassesScope
+            )
 
     override fun toString() = "Class{$descriptor}"
 }
@@ -99,15 +95,32 @@ class TypeAliasQualifier(
     override val staticScope: MemberScope
         get() = when {
             DescriptorUtils.isEnumClass(classDescriptor) ->
-                ChainedMemberScope(
+                ChainedMemberScope.create(
                     "Static scope for typealias ${descriptor.name}",
-                    listOf(classDescriptor.staticScope, EnumEntriesScope())
+                    classDescriptor.staticScope,
+                    EnumEntriesScope()
                 )
             else ->
                 classDescriptor.staticScope
         }
 
+    /**
+     * We cannot use [org.jetbrains.kotlin.descriptors.ClassDescriptor.getUnsubstitutedMemberScope] directly,
+     * because we do not allow complete resolve through type aliases yet (see KT-15298).
+     *
+     * However, we want to allow to resolve and autocomplete enum constants even through type aliases;
+     * that's why we use [org.jetbrains.kotlin.descriptors.ClassDescriptor.getUnsubstitutedMemberScope],
+     * but filter only enum entries.
+     */
     private inner class EnumEntriesScope : MemberScopeImpl() {
+        override fun getContributedDescriptors(
+            kindFilter: DescriptorKindFilter,
+            nameFilter: (Name) -> Boolean
+        ): Collection<DeclarationDescriptor> =
+            classDescriptor.unsubstitutedInnerClassesScope
+                .getContributedDescriptors(kindFilter, nameFilter)
+                .filter { DescriptorUtils.isEnumEntry(it) }
+
         override fun getContributedClassifier(name: Name, location: LookupLocation): ClassifierDescriptor? =
             classDescriptor.unsubstitutedInnerClassesScope
                 .getContributedClassifier(name, location)

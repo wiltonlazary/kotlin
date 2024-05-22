@@ -1,6 +1,6 @@
-// !WITH_NEW_INFERENCE
-// !CHECK_TYPE
-// !DIAGNOSTICS: -UNUSED_PARAMETER, -UNUSED_VARIABLE
+// FIR_IDENTICAL
+// CHECK_TYPE
+// DIAGNOSTICS: -UNUSED_PARAMETER, -UNUSED_VARIABLE
 
 class AbstractSelector<S, I>
 class SelectorFor<S>
@@ -23,7 +23,7 @@ fun test(s: SelectorFor<State>): Double {
     d checkType { _<AbstractSelector<State, Unit>>() }
 
     val e = s { return p1 }
-    e checkType { <!NI;DEBUG_INFO_UNRESOLVED_WITH_TARGET, NI;UNRESOLVED_REFERENCE_WRONG_RECEIVER!>_<!><AbstractSelector<State, Nothing>>() }
+    e checkType { _<AbstractSelector<State, Nothing>>() }
 
-    <!OI;UNREACHABLE_CODE!>return<!> null!!
+    return null!!
 }

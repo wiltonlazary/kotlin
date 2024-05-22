@@ -1,0 +1,50 @@
+KtSamConstructorSymbol:
+  annotationsList: []
+  callableIdIfNonLocal: java/lang/Runnable
+  contextReceivers: []
+  hasStableParameterNames: true
+  isExtension: false
+  name: Runnable
+  origin: SAM_CONSTRUCTOR
+  receiverParameter: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: java/lang/Runnable
+  symbolKind: SAM_CONSTRUCTOR
+  typeParameters: []
+  valueParameters: [
+    KtValueParameterSymbol:
+      annotationsList: []
+      callableIdIfNonLocal: null
+      contextReceivers: []
+      generatedPrimaryConstructorProperty: null
+      hasDefaultValue: false
+      isCrossinline: false
+      isExtension: false
+      isImplicitLambdaParameter: false
+      isNoinline: false
+      isVararg: false
+      name: function
+      origin: SAM_CONSTRUCTOR
+      receiverParameter: null
+      returnType: KtFunctionalType:
+        annotationsList: []
+        ownTypeArguments: [
+          KtUsualClassType:
+            annotationsList: []
+            ownTypeArguments: []
+            type: kotlin/Unit
+        ]
+        type: kotlin/Function0<kotlin/Unit>
+      symbolKind: LOCAL
+      typeParameters: []
+      getContainingFileSymbol: null
+      getContainingJvmClassName: null
+      getContainingModule: KtSourceModule "Sources of main"
+      deprecationStatus: null
+  ]
+  getContainingFileSymbol: null
+  getContainingJvmClassName: null
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null

@@ -1,6 +1,7 @@
-// IGNORE_BACKEND: NATIVE
-// FILE: 1.kt
 // WITH_REFLECT
+// TARGET_BACKEND: JVM
+// IGNORE_INLINER_K2: IR
+// FILE: 1.kt
 package test
 
 inline fun <R> call(s: () -> R) = s()

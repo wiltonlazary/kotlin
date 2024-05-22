@@ -19,17 +19,27 @@ package org.jetbrains.kotlin.js.analyzer
 import org.jetbrains.kotlin.analyzer.AnalysisResult
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.types.ErrorUtils
+import java.io.File
 
-class JsAnalysisResult(
+open class JsAnalysisResult(
         val bindingTrace: BindingTrace,
-        moduleDescriptor: ModuleDescriptor
-) : AnalysisResult(bindingTrace.bindingContext, moduleDescriptor) {
+        moduleDescriptor: ModuleDescriptor,
+        shouldGenerateCode: Boolean
+) : AnalysisResult(bindingTrace.bindingContext, moduleDescriptor, shouldGenerateCode) {
 
     companion object {
         @JvmStatic fun success(trace: BindingTrace, module: ModuleDescriptor): JsAnalysisResult {
-            return JsAnalysisResult(trace, module)
+            return JsAnalysisResult(trace, module, true)
+        }
+
+        @JvmStatic fun success(trace: BindingTrace, module: ModuleDescriptor, shouldGenerateCode: Boolean): JsAnalysisResult {
+            return JsAnalysisResult(trace, module, shouldGenerateCode)
         }
     }
+
+    class RetryWithAdditionalRoots(
+        bindingTrace: BindingTrace,
+        moduleDescriptor: ModuleDescriptor,
+        val additionalKotlinRoots: List<File>,
+    ) : JsAnalysisResult(bindingTrace, moduleDescriptor,false)
 }

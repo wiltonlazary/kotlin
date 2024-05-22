@@ -1,5 +1,4 @@
-// IGNORE_BACKEND: JS, NATIVE
-// WITH_RUNTIME
+// WITH_STDLIB
 
 fun box(): String {
     val s = StringBuilder()

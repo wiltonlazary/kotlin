@@ -23,6 +23,12 @@ import org.jetbrains.kotlin.metadata.ProtoBuf
 fun ProtoBuf.Class.supertypes(typeTable: TypeTable): List<ProtoBuf.Type> =
     supertypeList.takeIf(Collection<*>::isNotEmpty) ?: supertypeIdList.map { typeTable[it] }
 
+fun ProtoBuf.Class.inlineClassUnderlyingType(typeTable: TypeTable): ProtoBuf.Type? = when {
+    hasInlineClassUnderlyingType() -> inlineClassUnderlyingType
+    hasInlineClassUnderlyingTypeId() -> typeTable[inlineClassUnderlyingTypeId]
+    else -> null
+}
+
 fun ProtoBuf.Type.Argument.type(typeTable: TypeTable): ProtoBuf.Type? = when {
     hasType() -> type
     hasTypeId() -> typeTable[typeId]
@@ -107,3 +113,12 @@ fun ProtoBuf.Expression.isInstanceType(typeTable: TypeTable): ProtoBuf.Type? = w
     hasIsInstanceTypeId() -> typeTable[isInstanceTypeId]
     else -> null
 }
+
+fun ProtoBuf.Class.contextReceiverTypes(typeTable: TypeTable): List<ProtoBuf.Type> =
+    contextReceiverTypeList.takeIf(Collection<*>::isNotEmpty) ?: contextReceiverTypeIdList.map { typeTable[it] }
+
+fun ProtoBuf.Function.contextReceiverTypes(typeTable: TypeTable): List<ProtoBuf.Type> =
+    contextReceiverTypeList.takeIf(Collection<*>::isNotEmpty) ?: contextReceiverTypeIdList.map { typeTable[it] }
+
+fun ProtoBuf.Property.contextReceiverTypes(typeTable: TypeTable): List<ProtoBuf.Type> =
+    contextReceiverTypeList.takeIf(Collection<*>::isNotEmpty) ?: contextReceiverTypeIdList.map { typeTable[it] }

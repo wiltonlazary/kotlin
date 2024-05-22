@@ -1,4 +1,5 @@
-// !LANGUAGE: +LateinitTopLevelProperties
+// FIR_IDENTICAL
+// LANGUAGE: +LateinitTopLevelProperties
 
 object Delegate {
     operator fun getValue(instance: Any?, property: Any) : String = ""

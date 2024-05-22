@@ -1,0 +1,51 @@
+KtFunctionSymbol:
+  annotationsList: []
+  callableIdIfNonLocal: /foo
+  contextReceivers: []
+  contractEffects: []
+  hasStableParameterNames: true
+  isActual: false
+  isBuiltinFunctionInvoke: false
+  isExpect: false
+  isExtension: true
+  isExternal: false
+  isInfix: false
+  isInline: false
+  isOperator: false
+  isOverride: false
+  isStatic: false
+  isSuspend: false
+  isTailRec: false
+  modality: FINAL
+  name: foo
+  origin: SOURCE
+  receiverParameter: KtReceiverParameterSymbol:
+    annotationsList: []
+    origin: SOURCE
+    owningCallableSymbol: KtFunctionSymbol(/foo)
+    type: KtUsualClassType:
+      annotationsList: [
+        Anno1()
+          psi: KtAnnotationEntry
+        Anno2()
+          psi: KtAnnotationEntry
+        Anno3()
+          psi: KtAnnotationEntry
+      ]
+      ownTypeArguments: []
+      type: @R|Anno1|()  @R|Anno2|()  @R|Anno3|()  BaseInterface
+    getContainingFileSymbol: KtFileSymbol(typeAnnotationsOnFunctionReceiverType.kt)
+    getContainingModule: KtSourceModule "Sources of main"
+    deprecationStatus: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: kotlin/Unit
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  valueParameters: []
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(typeAnnotationsOnFunctionReceiverType.kt)
+  getContainingJvmClassName: TypeAnnotationsOnFunctionReceiverTypeKt
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null

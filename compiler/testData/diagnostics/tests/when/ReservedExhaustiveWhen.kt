@@ -1,23 +1,32 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+/*
+ * KOTLIN DIAGNOSTICS SPEC TEST (NEGATIVE)
+ *
+ * SPEC VERSION: 0.1-152
+ * PRIMARY LINKS: expressions, when-expression -> paragraph 2 -> sentence 1
+ * expressions, when-expression -> paragraph 5 -> sentence 1
+ * expressions, when-expression, exhaustive-when-expressions -> paragraph 2 -> sentence 1
+ */
+
+// DIAGNOSTICS: -UNUSED_PARAMETER
 
 infix fun Any.sealed(a: Any?) {}
 
-val x = 1 <!UNSUPPORTED!>sealed<!> when (1) {
+val x = 1 <!UNSUPPORTED_SEALED_WHEN!>sealed<!> when (1) {
     1 -> 1
     else -> 2
 }
 
-val x1 = 1 <!UNSUPPORTED!>sealed<!> /**/ when (1) {
+val x1 = 1 <!UNSUPPORTED_SEALED_WHEN!>sealed<!> /**/ when (1) {
     1 -> 1
     else -> 2
 }
 
 fun foo() {
-    <!UNRESOLVED_REFERENCE, UNSUPPORTED!>sealed<!><!SYNTAX!><!> when {
+    <!UNRESOLVED_REFERENCE, UNSUPPORTED_SEALED_WHEN!>sealed<!><!SYNTAX!><!> when {
         else -> {}
     }
 
-    1 <!UNSUPPORTED!>sealed<!> when {
+    1 <!UNSUPPORTED_SEALED_WHEN!>sealed<!> when {
         else -> {}
     }
 
@@ -25,12 +34,12 @@ fun foo() {
         else -> {}
     })
 
-    <!UNUSED_EXPRESSION!>1<!>
-    <!UNRESOLVED_REFERENCE, UNSUPPORTED!>sealed<!><!SYNTAX!><!> when {
+    1
+    <!UNRESOLVED_REFERENCE, UNSUPPORTED_SEALED_WHEN!>sealed<!><!SYNTAX!><!> when {
         else -> {}
     }
 
-    1 <!UNSUPPORTED!>sealed<!>
+    1 <!UNSUPPORTED_SEALED_WHEN!>sealed<!>
     when {
         else -> {}
     }

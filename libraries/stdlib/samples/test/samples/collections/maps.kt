@@ -44,6 +44,13 @@ class Maps {
         }
 
         @Sample
+        fun sortedMapWithComparatorFromPairs() {
+            val map = sortedMapOf(compareBy<String> { it.length }.thenBy { it }, Pair("abc", 1), Pair("c", 3), Pair("bd", 4), Pair("bc", 2))
+            assertPrints(map.keys, "[c, bc, bd, abc]")
+            assertPrints(map.values, "[3, 2, 4, 1]")
+        }
+
+        @Sample
         fun emptyReadOnlyMap() {
             val map = emptyMap<String, Int>()
             assertTrue(map.isEmpty())
@@ -55,6 +62,17 @@ class Maps {
         @Sample
         fun emptyMutableMap() {
             val map = mutableMapOf<Int, Any?>()
+            assertTrue(map.isEmpty())
+
+            map[1] = "x"
+            map[2] = 1.05
+            // Now map contains something:
+            assertPrints(map, "{1=x, 2=1.05}")
+        }
+
+        @Sample
+        fun emptyHashMap() {
+            val map = hashMapOf<Int, Any?>()
             assertTrue(map.isEmpty())
 
             map[1] = "x"
@@ -104,6 +122,88 @@ class Maps {
                                          // prints: meal - 12.4
                                          // prints: dessert - 5.8
             }
+        }
+
+
+        @Sample
+        fun mapIsNullOrEmpty() {
+            val nullMap: Map<String, Any>? = null
+            assertTrue(nullMap.isNullOrEmpty())
+
+            val emptyMap: Map<String, Any>? = emptyMap<String, Any>()
+            assertTrue(emptyMap.isNullOrEmpty())
+
+            val map: Map<Char, Int>? = mapOf('a' to 1, 'b' to 2, 'c' to 3)
+            assertFalse(map.isNullOrEmpty())
+        }
+
+        @Sample
+        fun mapOrEmpty() {
+            val nullMap: Map<String, Any>? = null
+            assertPrints(nullMap.orEmpty(), "{}")
+
+            val map: Map<Char, Int>? = mapOf('a' to 1, 'b' to 2, 'c' to 3)
+            assertPrints(map.orEmpty(), "{a=1, b=2, c=3}")
+        }
+
+        @Sample
+        fun mapIfEmpty() {
+            val emptyMap: Map<String, Int> = emptyMap()
+
+            val emptyOrNull = emptyMap.ifEmpty { null }
+            assertPrints(emptyOrNull, "null")
+
+            val emptyOrDefault: Map<String, Any> = emptyMap.ifEmpty { mapOf("s" to "a") }
+            assertPrints(emptyOrDefault, "{s=a}")
+
+            val nonEmptyMap = mapOf("x" to 1)
+            val sameMap = nonEmptyMap.ifEmpty { null }
+            assertTrue(nonEmptyMap === sameMap)
+        }
+
+        @Sample
+        fun containsValue() {
+            val map: Map<String, Int> = mapOf("x" to 1, "y" to 2)
+
+            // member containsValue is used
+            assertTrue(map.containsValue(1))
+
+            // extension containsValue is used when the argument type is a supertype of the map value type
+            assertTrue(map.containsValue(1 as Number))
+            assertTrue(map.containsValue(2 as Any))
+
+            assertFalse(map.containsValue("string" as Any))
+
+            // map.containsValue("string") // cannot call extension when the argument type and the map value type are unrelated at all
+        }
+
+        @Sample
+        fun containsKey() {
+            val map: Map<String, Int> = mapOf("x" to 1)
+
+            assertTrue(map.contains("x"))
+            assertTrue("x" in map)
+
+            assertFalse(map.contains("y"))
+            assertFalse("y" in map)
+        }
+
+        @Sample
+        fun mapIsNotEmpty() {
+            fun totalValue(statisticsMap: Map<String, Int>): String =
+                when {
+                    statisticsMap.isNotEmpty() -> {
+                        val total = statisticsMap.values.sum()
+                        "Total: [$total]"
+                    }
+                    else -> "<No values>"
+                }
+
+            val emptyStats: Map<String, Int> = mapOf()
+            assertPrints(totalValue(emptyStats), "<No values>")
+
+            val stats: Map<String, Int> = mapOf("Store #1" to 1247, "Store #2" to 540)
+            assertPrints(totalValue(stats), "Total: [1787]")
         }
 
     }
@@ -225,6 +325,13 @@ class Maps {
             assertPrints(map2, "{beverage=2.7$, meal=12.4$}")
         }
 
+        @Sample
+        fun mapNotNull() {
+            val map = mapOf("Alice" to 20, "Tom" to 13, "Bob" to 18)
+            val adults = map.mapNotNull { (name, age) -> name.takeIf { age >= 18 } }
+
+            assertPrints(adults, "[Alice, Bob]")
+        }
 
         @Sample
         fun mapToSortedMap() {
@@ -251,7 +358,21 @@ class Maps {
             assertPrints(props.getProperty("z", "fail"), "fail")
         }
 
-    }
+        @Sample
+        fun mapToList() {
+            val peopleToAge = mapOf("Alice" to 20, "Bob" to 21)
+            assertPrints(
+                peopleToAge.map { (name, age) -> "$name is $age years old" },
+                "[Alice is 20 years old, Bob is 21 years old]"
+            )
+            assertPrints(peopleToAge.map { it.value }, "[20, 21]")
+        }
 
+        @Sample
+        fun flatMap() {
+            val map = mapOf("122" to 2, "3455" to 3)
+            assertPrints(map.flatMap { (key, value) -> key.take(value).toList() }, "[1, 2, 3, 4, 5]")
+        }
+    }
 }
 

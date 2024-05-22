@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:JvmName("ByteStreamsKt")
@@ -117,8 +117,22 @@ public fun InputStream.copyTo(out: OutputStream, bufferSize: Int = DEFAULT_BUFFE
  *
  * **Note**: It is the caller's responsibility to close this stream.
  */
+@Deprecated("Use readBytes() overload without estimatedSize parameter", ReplaceWith("readBytes()"))
+@DeprecatedSinceKotlin(warningSince = "1.3", errorSince = "1.5")
 public fun InputStream.readBytes(estimatedSize: Int = DEFAULT_BUFFER_SIZE): ByteArray {
-    val buffer = ByteArrayOutputStream(Math.max(estimatedSize, this.available()))
+    val buffer = ByteArrayOutputStream(maxOf(estimatedSize, this.available()))
+    copyTo(buffer)
+    return buffer.toByteArray()
+}
+
+/**
+ * Reads this stream completely into a byte array.
+ *
+ * **Note**: It is the caller's responsibility to close this stream.
+ */
+@SinceKotlin("1.3")
+public fun InputStream.readBytes(): ByteArray {
+    val buffer = ByteArrayOutputStream(maxOf(DEFAULT_BUFFER_SIZE, this.available()))
     copyTo(buffer)
     return buffer.toByteArray()
 }

@@ -36,7 +36,7 @@ import org.jetbrains.kotlin.js.translate.reference.ReferenceTranslator;
 import org.jetbrains.kotlin.psi.KtBlockExpression;
 import org.jetbrains.kotlin.psi.KtDeclarationWithBody;
 import org.jetbrains.kotlin.psi.KtExpression;
-import org.jetbrains.kotlin.resolve.source.KotlinSourceElementKt;
+import org.jetbrains.kotlin.resolve.source.PsiSourceElementKt;
 import org.jetbrains.kotlin.types.KotlinType;
 
 import java.util.ArrayList;
@@ -97,7 +97,7 @@ public final class FunctionBodyTranslator extends AbstractTranslator {
             JsExpression defaultValue = Translation.translateAsExpression(defaultArgument, context, defaultArgBlock);
 
             // parameterName = defaultValue
-            PsiElement psi = KotlinSourceElementKt.getPsi(valueParameter.getSource());
+            PsiElement psi = PsiSourceElementKt.getPsi(valueParameter.getSource());
             JsStatement assignStatement = assignment(jsNameRef, defaultValue).source(psi).makeStmt();
 
             JsStatement thenStatement = JsAstUtils.mergeStatementInBlockIfNeeded(assignStatement, defaultArgBlock);
@@ -132,15 +132,15 @@ public final class FunctionBodyTranslator extends AbstractTranslator {
 
     @NotNull
     private JsBlock translate() {
-        KtExpression jetBodyExpression = declaration.getBodyExpression();
-        assert jetBodyExpression != null : "Cannot translate a body of an abstract function.";
+        KtExpression ktExpression = declaration.getBodyExpression();
+        assert ktExpression != null : "Cannot translate a body of an abstract function.";
         JsBlock jsBlock = new JsBlock();
 
 
-        JsNode jsBody = Translation.translateExpression(jetBodyExpression, context(), jsBlock);
+        JsNode jsBody = Translation.translateExpression(ktExpression, context(), jsBlock);
         jsBlock.getStatements().addAll(mayBeWrapWithReturn(jsBody).getStatements());
 
-        if (jetBodyExpression instanceof KtBlockExpression &&
+        if (ktExpression instanceof KtBlockExpression &&
             descriptor.getReturnType() != null && KotlinBuiltIns.isUnit(descriptor.getReturnType()) &&
             !KotlinBuiltIns.isUnit(TranslationUtils.getReturnTypeForCoercion(descriptor))) {
             ClassDescriptor unit = context().getCurrentModule().getBuiltIns().getUnit();
@@ -161,9 +161,7 @@ public final class FunctionBodyTranslator extends AbstractTranslator {
     }
 
     private boolean mustAddReturnToGeneratedFunctionBody() {
-        KotlinType functionReturnType = descriptor.getReturnType();
-        assert functionReturnType != null : "Function return typed type must be resolved.";
-        return (!declaration.hasBlockBody()) && !(KotlinBuiltIns.isUnit(functionReturnType) && !descriptor.isSuspend());
+        return !declaration.hasBlockBody() && (KotlinBuiltIns.mayReturnNonUnitValue(descriptor) || descriptor.isSuspend());
     }
 
     @NotNull

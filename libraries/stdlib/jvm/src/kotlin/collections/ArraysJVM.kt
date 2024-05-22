@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:kotlin.jvm.JvmMultifileClass
@@ -25,7 +25,7 @@ public actual inline fun <reified T> Array<out T>?.orEmpty(): Array<out T> = thi
 public inline fun ByteArray.toString(charset: Charset): String = String(this, charset)
 
 /**
- * Returns a *typed* array containing all of the elements of this collection.
+ * Returns a *typed* array containing all the elements of this collection.
  *
  * Allocates an array of runtime type `T` having its size equal to the size of this collection
  * and populates the array with the elements of this collection.
@@ -43,3 +43,18 @@ internal actual fun <T> arrayOfNulls(reference: Array<T>, size: Int): Array<T> {
     @Suppress("UNCHECKED_CAST")
     return java.lang.reflect.Array.newInstance(reference.javaClass.componentType, size) as Array<T>
 }
+
+@SinceKotlin("1.3")
+internal fun copyOfRangeToIndexCheck(toIndex: Int, size: Int) {
+    if (toIndex > size) throw IndexOutOfBoundsException("toIndex ($toIndex) is greater than size ($size).")
+}
+
+
+@SinceKotlin("1.3")
+@PublishedApi
+@kotlin.jvm.JvmName("contentDeepHashCode")
+internal fun <T> Array<out T>?.contentDeepHashCodeImpl(): Int =
+// returns valid result for unsigned arrays by accident:
+// hash code of an inline class, which an unsigned array is,
+// is calculated structurally as in a data class
+    java.util.Arrays.deepHashCode(this)

@@ -71,7 +71,7 @@ public class AnnotationGenTest extends CodegenTestCase {
         assertNotNull(getDeprecatedAnnotationFromList(srcClassMethod.getParameterAnnotations()[0]));
     }
 
-    public void testAnnotationForParamInInstanceFunction() throws NoSuchFieldException, NoSuchMethodException {
+    public void testAnnotationForParamInInstanceFunction() throws NoSuchMethodException {
         loadText("class A() { fun x(@[java.lang.Deprecated] i: Int) {}}");
         Class<?> aClass = generateClass("A");
         Method x = aClass.getMethod("x", int.class);
@@ -81,7 +81,7 @@ public class AnnotationGenTest extends CodegenTestCase {
         assertNotNull(getDeprecatedAnnotationFromList(annotations));
     }
 
-    public void testAnnotationForParamInInstanceExtensionFunction() throws NoSuchFieldException, NoSuchMethodException {
+    public void testAnnotationForParamInInstanceExtensionFunction() throws NoSuchMethodException {
         loadText("class A() { fun String.x(@[java.lang.Deprecated] i: Int) {}}");
         Class<?> aClass = generateClass("A");
         Method x = aClass.getMethod("x", String.class, int.class);
@@ -91,7 +91,7 @@ public class AnnotationGenTest extends CodegenTestCase {
         assertNotNull(getDeprecatedAnnotationFromList(annotations));
     }
 
-    public void testParamInConstructor() throws NoSuchFieldException, NoSuchMethodException {
+    public void testParamInConstructor() throws NoSuchMethodException {
         loadText("class A (@[java.lang.Deprecated] x: Int) {}");
         Class<?> aClass = generateClass("A");
         Constructor constructor = aClass.getDeclaredConstructor(int.class);
@@ -101,7 +101,7 @@ public class AnnotationGenTest extends CodegenTestCase {
         assertNotNull(getDeprecatedAnnotationFromList(annotations));
     }
 
-    public void testParamInEnumConstructor() throws NoSuchFieldException, NoSuchMethodException {
+    public void testParamInEnumConstructor() throws NoSuchMethodException {
         loadText("enum class E(@[java.lang.Deprecated] p: String)");
         Class<?> klass = generateClass("E");
         Constructor constructor = klass.getDeclaredConstructor(String.class, int.class, String.class);
@@ -111,7 +111,7 @@ public class AnnotationGenTest extends CodegenTestCase {
         assertNotNull(getDeprecatedAnnotationFromList(annotations));
     }
 
-    public void testParamInInnerConstructor() throws NoSuchFieldException, NoSuchMethodException {
+    public void testParamInInnerConstructor() throws NoSuchMethodException {
         loadText("class Outer { inner class Inner(@[java.lang.Deprecated] x: Int) }");
         Class<?> outer = generateClass("Outer");
         Class<?> inner = outer.getDeclaredClasses()[0];
@@ -134,7 +134,7 @@ public class AnnotationGenTest extends CodegenTestCase {
         assertNull(aClass.getDeclaredMethod("setX", int.class).getAnnotation(Deprecated.class));
         assertNotNull(aClass.getDeclaredField("x").getAnnotation(Deprecated.class));
     }
-    
+
     public void testAnnotationWithParamForParamInFunction() throws Exception {
         loadText("import java.lang.annotation.*\n" +
                  "@java.lang.annotation.Retention(RetentionPolicy.RUNTIME) annotation class A(val a: String)\n" +
@@ -162,13 +162,13 @@ public class AnnotationGenTest extends CodegenTestCase {
             }
         }
         return null;
-    } 
+    }
 
     public void testConstructor() throws NoSuchFieldException, NoSuchMethodException {
         loadText("class A @[java.lang.Deprecated] constructor() {}");
         Class<?> aClass = generateClass("A");
-        Constructor x = aClass.getDeclaredConstructor();
-        Deprecated annotation = (Deprecated) x.getAnnotation(Deprecated.class);
+        Constructor<?> x = aClass.getDeclaredConstructor();
+        Deprecated annotation = x.getAnnotation(Deprecated.class);
         assertNotNull(annotation);
     }
 
@@ -181,8 +181,8 @@ public class AnnotationGenTest extends CodegenTestCase {
 
     public void testClass() throws NoSuchFieldException, NoSuchMethodException {
         loadText("@[java.lang.Deprecated] class A () {}");
-        Class aClass = generateClass("A");
-        Deprecated annotation = (Deprecated) aClass.getAnnotation(Deprecated.class);
+        Class<?> aClass = generateClass("A");
+        Deprecated annotation = aClass.getAnnotation(Deprecated.class);
         assertNotNull(annotation);
     }
 
@@ -196,22 +196,16 @@ public class AnnotationGenTest extends CodegenTestCase {
         assertEquals("java.lang.annotation.Annotation", interfaces[0].getName());
     }
 
-    public void testAnnotationClassWithStringProperty()
-        throws
-        NoSuchFieldException,
-        NoSuchMethodException,
-        ClassNotFoundException,
-        IllegalAccessException,
-        InstantiationException,
-        InvocationTargetException {
+    public void testAnnotationClassWithStringProperty() throws ClassNotFoundException, IllegalAccessException, InvocationTargetException {
         loadText("import java.lang.annotation.*\n" +
                  "" +
                  "@java.lang.annotation.Retention(RetentionPolicy.RUNTIME) annotation class A(val a: String)\n" +
                  "" +
                  "@A(\"239\") class B()");
-        Class aClass = generateClass("A");
+        @SuppressWarnings("unchecked")
+        Class<? extends Annotation> aClass = (Class) generateClass("A");
 
-        Retention annotation = (Retention)aClass.getAnnotation(Retention.class);
+        Retention annotation = aClass.getAnnotation(Retention.class);
         RetentionPolicy value = annotation.value();
         assertEquals(RetentionPolicy.RUNTIME, value);
 
@@ -230,22 +224,17 @@ public class AnnotationGenTest extends CodegenTestCase {
     }
 
     public void testAnnotationClassWithAnnotationProperty()
-        throws
-        NoSuchFieldException,
-        NoSuchMethodException,
-        ClassNotFoundException,
-        IllegalAccessException,
-        InstantiationException,
-        InvocationTargetException {
+            throws NoSuchMethodException, ClassNotFoundException, IllegalAccessException, InvocationTargetException {
         loadText("import java.lang.annotation.*\n" +
                  "" +
                  "annotation class C(val c: String)\n" +
                  "@java.lang.annotation.Retention(RetentionPolicy.RUNTIME) annotation class A(val a: C)\n" +
                  "" +
                  "@A(C(\"239\")) class B()");
-        Class aClass = generateClass("A");
+        @SuppressWarnings("unchecked")
+        Class<? extends Annotation> aClass = (Class) generateClass("A");
 
-        Retention annotation = (Retention)aClass.getAnnotation(Retention.class);
+        Retention annotation = aClass.getAnnotation(Retention.class);
         RetentionPolicy value = annotation.value();
         assertEquals(RetentionPolicy.RUNTIME, value);
 
@@ -268,21 +257,16 @@ public class AnnotationGenTest extends CodegenTestCase {
     }
 
     public void testAnnotationClassWithStringArrayProperty()
-            throws
-            NoSuchFieldException,
-            NoSuchMethodException,
-            ClassNotFoundException,
-            IllegalAccessException,
-            InstantiationException,
-            InvocationTargetException {
+            throws ClassNotFoundException, IllegalAccessException, InvocationTargetException {
         loadText("import java.lang.annotation.*\n" +
                  "" +
                  "@java.lang.annotation.Retention(RetentionPolicy.RUNTIME) annotation class A(val a: Array<String>)\n" +
                  "" +
                  "@A(arrayOf(\"239\",\"932\")) class B()");
-        Class aClass = generateClass("A");
+        @SuppressWarnings("unchecked")
+        Class<? extends Annotation> aClass = (Class) generateClass("A");
 
-        Retention annotation = (Retention)aClass.getAnnotation(Retention.class);
+        Retention annotation = aClass.getAnnotation(Retention.class);
         RetentionPolicy value = annotation.value();
         assertEquals(RetentionPolicy.RUNTIME, value);
 
@@ -298,26 +282,20 @@ public class AnnotationGenTest extends CodegenTestCase {
         assertNotNull(bClassAnnotation);
 
         Object invoke = methods[0].invoke(bClassAnnotation);
-        assertEquals("239", ((String[])invoke)[0]);
-        assertEquals("932", ((String[])invoke)[1]);
+        assertEquals("239", ((String[]) invoke)[0]);
+        assertEquals("932", ((String[]) invoke)[1]);
     }
 
-    public void testAnnotationClassWithIntArrayProperty()
-            throws
-            NoSuchFieldException,
-            NoSuchMethodException,
-            ClassNotFoundException,
-            IllegalAccessException,
-            InstantiationException,
-            InvocationTargetException {
+    public void testAnnotationClassWithIntArrayProperty() throws ClassNotFoundException, IllegalAccessException, InvocationTargetException {
         loadText("import java.lang.annotation.*\n" +
                  "" +
                  "@java.lang.annotation.Retention(RetentionPolicy.RUNTIME) annotation class A(val a: IntArray)\n" +
                  "" +
                  "@A(intArrayOf(239,932)) class B()");
-        Class aClass = generateClass("A");
+        @SuppressWarnings("unchecked")
+        Class<? extends Annotation> aClass = (Class) generateClass("A");
 
-        Retention annotation = (Retention)aClass.getAnnotation(Retention.class);
+        Retention annotation = aClass.getAnnotation(Retention.class);
         RetentionPolicy value = annotation.value();
         assertEquals(RetentionPolicy.RUNTIME, value);
 
@@ -333,24 +311,17 @@ public class AnnotationGenTest extends CodegenTestCase {
         assertNotNull(bClassAnnotation);
 
         Object invoke = methods[0].invoke(bClassAnnotation);
-        assertEquals(239, ((int[])invoke)[0]);
-        assertEquals(932, ((int[])invoke)[1]);
+        assertEquals(239, ((int[]) invoke)[0]);
+        assertEquals(932, ((int[]) invoke)[1]);
     }
 
-    public void testAnnotationClassWithEnumArrayProperty()
-            throws
-            NoSuchFieldException,
-            NoSuchMethodException,
-            ClassNotFoundException,
-            IllegalAccessException,
-            InstantiationException,
-            InvocationTargetException {
+    public void testAnnotationClassWithEnumArrayProperty() {
         loadText("import java.lang.annotation.*\n" +
                  "" +
                  "@java.lang.annotation.Target(ElementType.TYPE, ElementType.METHOD) annotation class A");
-        Class aClass = generateClass("A");
+        Class<?> aClass = generateClass("A");
 
-        Target annotation = (Target)aClass.getAnnotation(Target.class);
+        Target annotation = aClass.getAnnotation(Target.class);
         ElementType[] value = annotation.value();
         assertEquals(2, value.length);
 
@@ -359,20 +330,15 @@ public class AnnotationGenTest extends CodegenTestCase {
     }
 
     public void testAnnotationClassWithAnnotationArrayProperty()
-            throws
-            NoSuchFieldException,
-            NoSuchMethodException,
-            ClassNotFoundException,
-            IllegalAccessException,
-            InstantiationException,
-            InvocationTargetException {
+            throws ClassNotFoundException, IllegalAccessException, InvocationTargetException {
         loadText("import java.lang.annotation.*\n" +
                  "import java.lang.annotation.Retention\n" +
                  "" +
                  "@Retention(RetentionPolicy.RUNTIME) annotation class A(val a: Array<Retention>)\n" +
                  "" +
                  "@A(arrayOf(Retention(RetentionPolicy.RUNTIME),Retention(RetentionPolicy.SOURCE))) class B()");
-        Class aClass = generateClass("A");
+        @SuppressWarnings("unchecked")
+        Class<? extends Annotation> aClass = (Class) generateClass("A");
 
         Method[] methods = aClass.getDeclaredMethods();
         assertEquals(1, methods.length);
@@ -383,7 +349,7 @@ public class AnnotationGenTest extends CodegenTestCase {
         assertNotNull(bClassAnnotation);
 
         Object invoke = methods[0].invoke(bClassAnnotation);
-        Retention[] invoke1 = (Retention[])invoke;
+        Retention[] invoke1 = (Retention[]) invoke;
         assertEquals(2, invoke1.length);
         assertEquals(invoke1[0].value(), RetentionPolicy.RUNTIME);
         assertEquals(invoke1[1].value(), RetentionPolicy.SOURCE);

@@ -23,8 +23,10 @@ import org.jetbrains.kotlin.cli.common.CLICompiler
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.js.K2JSCompiler
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
+import org.jetbrains.kotlin.cli.metadata.K2MetadataCompiler
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.TestCaseWithTmpdir
+import org.jetbrains.kotlin.utils.PathUtil
 import java.io.File
 import java.util.jar.JarOutputStream
 import java.util.jar.Manifest
@@ -50,15 +52,15 @@ abstract class AbstractKotlinCompilerIntegrationTest : TestCaseWithTmpdir() {
      * @return [destination]
      */
     protected fun compileLibrary(
-            libraryName: String,
-            destination: File = File(tmpdir, "$libraryName.jar"),
-            additionalOptions: List<String> = emptyList(),
-            compileJava: (sourceDir: File, javaFiles: List<File>, outputDir: File) -> Boolean = { _, javaFiles, outputDir ->
-                KotlinTestUtils.compileJavaFiles(javaFiles, listOf("-d", outputDir.path))
-            },
-            checkKotlinOutput: (String) -> Unit = { actual -> assertEquals(normalizeOutput("" to ExitCode.OK), actual) },
-            manifest: Manifest? = null,
-            vararg extraClassPath: File
+        libraryName: String,
+        destination: File = File(tmpdir, "$libraryName.jar"),
+        additionalOptions: List<String> = emptyList(),
+        compileJava: (sourceDir: File, javaFiles: List<File>, outputDir: File) -> Boolean = { _, javaFiles, outputDir ->
+            KotlinTestUtils.compileJavaFiles(javaFiles, listOf("-d", outputDir.path))
+        },
+        checkKotlinOutput: (String) -> Unit = { actual -> assertEquals(normalizeOutput("" to ExitCode.OK), actual) },
+        manifest: Manifest? = null,
+        extraClassPath: List<File> = emptyList()
     ): File {
         val sourceDir = File(testDataDirectory, libraryName)
         val javaFiles = FileUtil.findFilesByMask(JAVA_FILES, sourceDir)
@@ -69,7 +71,7 @@ abstract class AbstractKotlinCompilerIntegrationTest : TestCaseWithTmpdir() {
 
         val outputDir = if (isJar) File(tmpdir, "output-$libraryName") else destination
         if (kotlinFiles.isNotEmpty()) {
-            val output = compileKotlin(libraryName, outputDir, extraClassPath.toList(), K2JVMCompiler(), additionalOptions, expectedFileName = null)
+            val output = compileKotlin(libraryName, outputDir, extraClassPath, K2JVMCompiler(), additionalOptions, expectedFileName = null)
             checkKotlinOutput(normalizeOutput(output))
         }
 
@@ -83,13 +85,12 @@ abstract class AbstractKotlinCompilerIntegrationTest : TestCaseWithTmpdir() {
         if (isJar) {
             destination.delete()
             val stream =
-                    if (manifest != null) JarOutputStream(destination.outputStream(), manifest)
-                    else JarOutputStream(destination.outputStream())
+                if (manifest != null) JarOutputStream(destination.outputStream(), manifest)
+                else JarOutputStream(destination.outputStream())
             stream.use { jar ->
                 ZipUtil.addDirToZipRecursively(jar, destination, outputDir, "", null, null)
             }
-        }
-        else assertNull("Manifest is ignored if destination is not a .jar file", manifest)
+        } else assertNull("Manifest is ignored if destination is not a .jar file", manifest)
 
         return destination
     }
@@ -104,50 +105,81 @@ abstract class AbstractKotlinCompilerIntegrationTest : TestCaseWithTmpdir() {
         additionalOptions: List<String> = emptyList(),
         checkKotlinOutput: (String) -> Unit = { actual -> assertEquals(normalizeOutput("" to ExitCode.OK), actual) }
     ): File {
-        val destination = File(tmpdir, "$libraryName.js")
+        val destination = File(tmpdir, libraryName)
         val output = compileKotlin(
             libraryName, destination, compiler = K2JSCompiler(), additionalOptions = additionalOptions, expectedFileName = null
         )
         checkKotlinOutput(normalizeOutput(output))
-        return File(tmpdir, "$libraryName.meta.js")
+        return destination
     }
 
-    private fun normalizeOutput(output: Pair<String, ExitCode>): String {
-        return AbstractCliTest.getNormalizedCompilerOutput(output.first, output.second, testDataDirectory.path)
-                .replace(FileUtil.toSystemIndependentName(tmpdir.absolutePath), "\$TMP_DIR\$")
+    /**
+     * Compiles all .kt sources under the directory named [libraryName] to a directory named "[libraryName]" in [tmpdir]
+     *
+     * @return the path to the corresponding directory
+     */
+    protected fun compileCommonLibrary(
+        libraryName: String,
+        additionalOptions: List<String> = emptyList(),
+        checkKotlinOutput: (String) -> Unit = { actual -> assertEquals(normalizeOutput("" to ExitCode.OK), actual) }
+    ): File {
+        val destination = File(tmpdir, libraryName)
+        val output = compileKotlin(
+            libraryName, destination, compiler = K2MetadataCompiler(), additionalOptions = additionalOptions, expectedFileName = null
+        )
+        checkKotlinOutput(normalizeOutput(output))
+        return destination
     }
 
-    protected fun compileKotlin(
-            fileName: String,
-            output: File,
-            classpath: List<File> = emptyList(),
-            compiler: CLICompiler<*> = K2JVMCompiler(),
-            additionalOptions: List<String> = emptyList(),
-            expectedFileName: String? = "output.txt"
+    protected fun normalizeOutput(output: Pair<String, ExitCode>): String {
+        return AbstractCliTest.getNormalizedCompilerOutput(
+            output.first,
+            output.second,
+            testDataDirectory.path,
+            tmpdir.absolutePath
+        ).removeFirWarning()
+            .replace(FileUtil.toSystemIndependentName(tmpdir.absolutePath), "\$TMP_DIR\$")
+    }
+
+    private fun String.removeFirWarning(): String {
+        return this.replace(
+            "warning: language version 2.0 is experimental, there are no backwards compatibility guarantees for new language and library features\n", ""
+        )
+    }
+
+    protected open fun compileKotlin(
+        fileName: String,
+        output: File,
+        classpath: List<File> = emptyList(),
+        compiler: CLICompiler<*> = K2JVMCompiler(),
+        additionalOptions: List<String> = emptyList(),
+        expectedFileName: String? = "output.txt",
+        additionalSources: List<String> = emptyList(),
     ): Pair<String, ExitCode> {
         val args = mutableListOf<String>()
         val sourceFile = File(testDataDirectory, fileName)
         assert(sourceFile.exists()) { "Source file does not exist: ${sourceFile.absolutePath}" }
         args.add(sourceFile.path)
 
+        additionalSources.mapTo(args) { File(testDataDirectory, it).path }
+
         if (compiler is K2JSCompiler) {
-            if (classpath.isNotEmpty()) {
-                args.add("-libraries")
-                args.add(classpath.joinToString(File.pathSeparator))
-            }
-            args.add("-output")
+            args.add("-libraries")
+            args.add((classpath + PathUtil.kotlinPathsForCompiler.jsStdLibKlibPath).joinToString(File.pathSeparator))
+            args.add("-Xir-produce-klib-dir")
+            args.add("-Xir-only")
+            args.add("-ir-output-dir")
             args.add(output.path)
-            args.add("-meta-info")
-        }
-        else if (compiler is K2JVMCompiler) {
+            args.add("-ir-output-name")
+            args.add("out")
+        } else if (compiler is K2JVMCompiler || compiler is K2MetadataCompiler) {
             if (classpath.isNotEmpty()) {
                 args.add("-classpath")
                 args.add(classpath.joinToString(File.pathSeparator))
             }
             args.add("-d")
             args.add(output.path)
-        }
-        else {
+        } else {
             throw UnsupportedOperationException(compiler.toString())
         }
 

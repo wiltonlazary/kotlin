@@ -1,7 +1,8 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// IGNORE_BACKEND_K2: JVM_IR, JS_IR
+// FIR status: wrong ABSTRACT_MEMBER_NOT_IMPLEMENTED, probably provoked by override mapping error
+// TARGET_BACKEND: JVM
 
-// WITH_RUNTIME
+// WITH_STDLIB
 // FILE: A.java
 
 public class A extends AImpl implements java.util.List<String> {

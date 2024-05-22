@@ -1,4 +1,3 @@
-// !LANGUAGE: +MultiPlatformProjects
 // MODULE: m1-common
 // FILE: common.kt
 
@@ -11,5 +10,5 @@ expect enum class En<!EXPECTED_ENUM_CONSTRUCTOR!>(x: Int)<!> {
 }
 
 expect enum class En2 {
-    E1<!SUPERTYPE_INITIALIZED_IN_EXPECTED_CLASS, NO_CONSTRUCTOR!>()<!>
+    E1<!NO_CONSTRUCTOR, SUPERTYPE_INITIALIZED_IN_EXPECTED_CLASS!>()<!>
 }

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.js
@@ -51,3 +51,11 @@ public external val definedExternally: Nothing
  *        including parameters. You can't refer to functions, properties and classes by their short names.
  */
 public external fun js(code: String): dynamic
+
+
+/**
+ * Function corresponding to JavaScript's `typeof` operator
+ */
+// @JsIntrinsic
+//  To prevent people to insert @OptIn every time
+public external fun jsTypeOf(a: Any?): String

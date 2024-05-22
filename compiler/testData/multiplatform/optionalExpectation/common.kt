@@ -1,10 +1,10 @@
-// WITH_RUNTIME
-// ADDITIONAL_COMPILER_ARGUMENTS: -Xuse-experimental=kotlin.ExperimentalMultiplatform
+// WITH_STDLIB
+// ADDITIONAL_COMPILER_ARGUMENTS: -opt-in=kotlin.ExperimentalMultiplatform
 
 @OptionalExpectation
 expect annotation class A()
 
-expect class C {
+class C {
     @A
-    fun f()
+    fun f() {}
 }

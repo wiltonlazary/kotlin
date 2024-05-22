@@ -17,7 +17,6 @@
 package samples.collections
 
 import samples.*
-import kotlin.coroutines.experimental.buildIterator
 
 @RunWith(Enclosed::class)
 class Iterables {
@@ -27,7 +26,7 @@ class Iterables {
         @Sample
         fun iterable() {
             val iterable = Iterable {
-                buildIterator {
+                iterator {
                     yield(42)
                     yieldAll(1..5 step 2)
                 }
@@ -71,6 +70,19 @@ class Iterables {
             val listB = listOf(1, 2, 3, 4)
             val result = listA.zip(listB) { a, b -> "$a$b" }
             assertPrints(result, "[a1, b2, c3]")
+        }
+
+        @Sample
+        fun partition() {
+            data class Person(val name: String, val age: Int) {
+                override fun toString(): String {
+                    return "$name - $age"
+                }
+            }
+
+            val list = listOf(Person("Tom", 18), Person("Andy", 32), Person("Sarah", 22))
+            val result = list.partition { it.age < 30 }
+            assertPrints(result, "([Tom - 18, Sarah - 22], [Andy - 32])")
         }
     }
 }

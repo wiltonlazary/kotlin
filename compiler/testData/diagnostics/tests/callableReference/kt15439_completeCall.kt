@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE, -UNUSED_VARIABLE
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_VARIABLE, -UNUSED_VARIABLE
 
 fun test() {
     data class Pair<F, S>(val first: F, val second: S)

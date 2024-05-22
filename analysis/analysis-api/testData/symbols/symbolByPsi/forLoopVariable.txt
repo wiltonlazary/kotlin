@@ -1,0 +1,54 @@
+KtLocalVariableSymbol:
+  annotationsList: []
+  callableIdIfNonLocal: null
+  contextReceivers: []
+  isExtension: false
+  isVal: true
+  name: loopVariable
+  origin: SOURCE
+  receiverParameter: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: kotlin/Int
+  symbolKind: LOCAL
+  typeParameters: []
+  getContainingFileSymbol: KtFileSymbol(forLoopVariable.kt)
+  getContainingJvmClassName: null
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null
+
+KtFunctionSymbol:
+  annotationsList: []
+  callableIdIfNonLocal: /usage
+  contextReceivers: []
+  contractEffects: []
+  hasStableParameterNames: true
+  isActual: false
+  isBuiltinFunctionInvoke: false
+  isExpect: false
+  isExtension: false
+  isExternal: false
+  isInfix: false
+  isInline: false
+  isOperator: false
+  isOverride: false
+  isStatic: false
+  isSuspend: false
+  isTailRec: false
+  modality: FINAL
+  name: usage
+  origin: SOURCE
+  receiverParameter: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: kotlin/Unit
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  valueParameters: []
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(forLoopVariable.kt)
+  getContainingJvmClassName: ForLoopVariableKt
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null

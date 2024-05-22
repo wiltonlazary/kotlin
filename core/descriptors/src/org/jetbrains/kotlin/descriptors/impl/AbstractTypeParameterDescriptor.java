@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
 import org.jetbrains.kotlin.name.Name;
+import org.jetbrains.kotlin.resolve.DescriptorEquivalenceForOverrides;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
 import org.jetbrains.kotlin.resolve.scopes.LazyScopeAdapter;
 import org.jetbrains.kotlin.resolve.scopes.MemberScope;
@@ -30,6 +31,8 @@ import org.jetbrains.kotlin.resolve.scopes.TypeIntersectionScope;
 import org.jetbrains.kotlin.storage.NotNullLazyValue;
 import org.jetbrains.kotlin.storage.StorageManager;
 import org.jetbrains.kotlin.types.*;
+import org.jetbrains.kotlin.types.error.ErrorTypeKind;
+import org.jetbrains.kotlin.types.error.ErrorUtils;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -42,6 +45,7 @@ public abstract class AbstractTypeParameterDescriptor extends DeclarationDescrip
 
     private final NotNullLazyValue<TypeConstructor> typeConstructor;
     private final NotNullLazyValue<SimpleType> defaultType;
+    private final StorageManager storageManager;
 
     protected AbstractTypeParameterDescriptor(
             @NotNull final StorageManager storageManager,
@@ -69,19 +73,20 @@ public abstract class AbstractTypeParameterDescriptor extends DeclarationDescrip
             @Override
             public SimpleType invoke() {
                 return KotlinTypeFactory.simpleTypeWithNonTrivialMemberScope(
-                        Annotations.Companion.getEMPTY(),
+                        TypeAttributes.Companion.getEmpty(),
                         getTypeConstructor(), Collections.<TypeProjection>emptyList(), false,
-                        new LazyScopeAdapter(storageManager.createLazyValue(
+                        new LazyScopeAdapter(
                                 new Function0<MemberScope>() {
                                     @Override
                                     public MemberScope invoke() {
                                         return TypeIntersectionScope.create("Scope for type parameter " + name.asString(), getUpperBounds());
                                     }
                                 }
-                        ))
+                        )
                 );
             }
         });
+        this.storageManager = storageManager;
     }
 
     protected abstract void reportSupertypeLoopError(@NotNull KotlinType type);
@@ -134,9 +139,20 @@ public abstract class AbstractTypeParameterDescriptor extends DeclarationDescrip
         return (TypeParameterDescriptor) super.getOriginal();
     }
 
+    @NotNull
+    protected List<KotlinType> processBoundsWithoutCycles(@NotNull List<KotlinType> bounds) {
+        return bounds;
+    }
+
     @Override
     public <R, D> R accept(DeclarationDescriptorVisitor<R, D> visitor, D data) {
         return visitor.visitTypeParameterDescriptor(this, data);
+    }
+
+    @NotNull
+    @Override
+    public StorageManager getStorageManager() {
+        return storageManager;
     }
 
     private class TypeParameterTypeConstructor extends AbstractTypeConstructor {
@@ -198,10 +214,26 @@ public abstract class AbstractTypeParameterDescriptor extends DeclarationDescrip
             AbstractTypeParameterDescriptor.this.reportSupertypeLoopError(type);
         }
 
+        @NotNull
+        @Override
+        protected List<KotlinType> processSupertypesWithoutCycles(@NotNull List<KotlinType> supertypes) {
+            return processBoundsWithoutCycles(supertypes);
+        }
+
         @Nullable
         @Override
         protected KotlinType defaultSupertypeIfEmpty() {
-            return ErrorUtils.createErrorType("Cyclic upper bounds");
+            return ErrorUtils.createErrorType(ErrorTypeKind.CYCLIC_UPPER_BOUNDS);
+        }
+
+        @Override
+        protected boolean isSameClassifier(@NotNull ClassifierDescriptor classifier) {
+            return classifier instanceof TypeParameterDescriptor &&
+                   DescriptorEquivalenceForOverrides.INSTANCE.areTypeParametersEquivalent(
+                           AbstractTypeParameterDescriptor.this,
+                           (TypeParameterDescriptor) classifier,
+                           true
+                   );
         }
     }
 }

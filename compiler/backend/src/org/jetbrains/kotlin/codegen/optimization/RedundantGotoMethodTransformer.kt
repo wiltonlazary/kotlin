@@ -19,11 +19,7 @@ package org.jetbrains.kotlin.codegen.optimization
 import org.jetbrains.kotlin.codegen.optimization.common.isMeaningful
 import org.jetbrains.kotlin.codegen.optimization.transformer.MethodTransformer
 import org.jetbrains.org.objectweb.asm.Opcodes
-import org.jetbrains.org.objectweb.asm.tree.AbstractInsnNode
-import org.jetbrains.org.objectweb.asm.tree.JumpInsnNode
-import org.jetbrains.org.objectweb.asm.tree.LabelNode
-import org.jetbrains.org.objectweb.asm.tree.LineNumberNode
-import org.jetbrains.org.objectweb.asm.tree.MethodNode
+import org.jetbrains.org.objectweb.asm.tree.*
 
 class RedundantGotoMethodTransformer : MethodTransformer() {
     /**
@@ -31,6 +27,7 @@ class RedundantGotoMethodTransformer : MethodTransformer() {
      *  (1) subsequent labels
      *      ...
      *      goto Label (can be removed)
+     *      nop        (any number of them, or maybe none; will be removed by RedundantNopsCleanupMethodTransformer)
      *      Label:
      *      ...
      *  (2) indirect goto
@@ -49,6 +46,10 @@ class RedundantGotoMethodTransformer : MethodTransformer() {
         var pendingGoto: JumpInsnNode? = null
 
         for (insn in insns) {
+            // We can remove jumps over labels, NOPs, GOTOs with the same target, and fake
+            // instructions used to describe the current frame state. We have to keep jumps
+            // over line numbers, though, as otherwise something like an `if` with an empty
+            // `else` will trigger a breakpoint inside the `else` even when the condition is true.
             when {
                 insn is LabelNode -> {
                     currentLabels.add(insn)
@@ -62,8 +63,7 @@ class RedundantGotoMethodTransformer : MethodTransformer() {
                         currentLabels.clear()
                     }
                 }
-                insn is LineNumberNode -> pendingGoto = null
-                insn.isMeaningful -> {
+                insn is LineNumberNode || (insn.isMeaningful && insn.opcode != Opcodes.NOP) -> {
                     currentLabels.clear()
                     pendingGoto = null
                 }
@@ -71,11 +71,12 @@ class RedundantGotoMethodTransformer : MethodTransformer() {
         }
 
         // Rewrite branch instructions.
-        if (!labelsToReplace.isEmpty()) {
+        if (labelsToReplace.isNotEmpty()) {
             insns.filterIsInstance<JumpInsnNode>().forEach { rewriteLabelIfNeeded(it, labelsToReplace) }
         }
 
         for (insnToRemove in insnsToRemove) {
+            methodNode.instructions.insertBefore(insnToRemove, InsnNode(Opcodes.NOP))
             methodNode.instructions.remove(insnToRemove)
         }
     }

@@ -46,12 +46,14 @@ class MockApplicationCreationTracingInstrumenter(private val debugInfo: Boolean)
             loader.getResource("org/jetbrains/kotlin/testFramework/MockComponentManagerCreationTracer.class") != null
 
     override fun transform(
-            loader: ClassLoader,
-            className: String,
+            loader: ClassLoader?,
+            className: String?,
             classBeingRedefined: Class<*>?,
-            protectionDomain: ProtectionDomain,
+            protectionDomain: ProtectionDomain?,
             classfileBuffer: ByteArray
     ): ByteArray? {
+        if (className == null || loader == null) return null
+
         if (loader::class.java.name == "org.jetbrains.kotlin.preloading.MemoryBasedClassLoader") return null
 
         if (className == "com/intellij/mock/MockComponentManager" && isMockComponentManagerCreationTracerCanBeLoaded(loader)) {
@@ -70,7 +72,7 @@ class MockApplicationCreationTracingInstrumenter(private val debugInfo: Boolean)
             predicate: (name: String, desc: String) -> Boolean,
             transform: (original: MethodVisitor) -> MethodVisitor
     ): ClassVisitor {
-        return object : ClassVisitor(Opcodes.ASM6, out) {
+        return object : ClassVisitor(Opcodes.API_VERSION, out) {
 
             var visited = false
 
@@ -95,7 +97,7 @@ class MockApplicationCreationTracingInstrumenter(private val debugInfo: Boolean)
 
     private fun transformMockComponentManagerPicoContainer(out: ClassVisitor): ClassVisitor {
         return createMethodTransformClassVisitor(out, { name, _ -> name == "getComponentInstance" }) { original ->
-            object : MethodVisitor(Opcodes.ASM6, original) {
+            object : MethodVisitor(Opcodes.API_VERSION, original) {
                 override fun visitCode() {
                     super.visitCode()
                     visitLabel(Label())
@@ -115,7 +117,7 @@ class MockApplicationCreationTracingInstrumenter(private val debugInfo: Boolean)
 
     private fun transformMockComponentManager(out: ClassVisitor): ClassVisitor {
         return createMethodTransformClassVisitor(out, { name, _ -> name == "<init>" }) { original ->
-            object : MethodVisitor(Opcodes.ASM6, original) {
+            object : MethodVisitor(Opcodes.API_VERSION, original) {
                 override fun visitInsn(opcode: Int) {
                     if (opcode == Opcodes.RETURN) {
                         visitVarInsn(Opcodes.ALOAD, 0)

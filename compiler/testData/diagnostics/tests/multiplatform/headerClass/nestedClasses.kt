@@ -1,6 +1,13 @@
-// !LANGUAGE: +MultiPlatformProjects
+// DIAGNOSTICS: -UNUSED_PARAMETER
 // MODULE: m1-common
 // FILE: common.kt
+import kotlin.reflect.KProperty
+
+fun <T> lazy(initializer: () -> T): Lazy<T> = TODO()
+
+interface Lazy<out T> {
+    operator fun getValue(thisRef: Any?, property: KProperty<*>): T = TODO()
+}
 
 expect class OuterClass {
     class NestedClass {
@@ -8,6 +15,8 @@ expect class OuterClass {
             class Another {
                 fun f(s: String)
                 val p: Int
+                val c: Int = <!EXPECTED_PROPERTY_INITIALIZER, EXPECTED_PROPERTY_INITIALIZER{JVM}!>1<!>
+                val a: Int <!EXPECTED_DELEGATED_PROPERTY, EXPECTED_DELEGATED_PROPERTY{JVM}!>by lazy { 1 }<!>
             }
         }
     }
@@ -28,7 +37,9 @@ expect object OuterObject {
     object NestedObject
 }
 
-// MODULE: m2-jvm(m1-common)
+fun TODO(): Nothing = null!!
+
+// MODULE: m2-jvm()()(m1-common)
 // FILE: jvm.kt
 
 actual class OuterClass {
@@ -37,6 +48,8 @@ actual class OuterClass {
             actual class Another {
                 actual fun f(s: String) {}
                 actual val p: Int = 42
+                actual val c: Int = 2
+                actual val a: Int = 3
             }
         }
     }

@@ -1,4 +1,5 @@
 // TARGET_BACKEND: JVM
+// JVM_TARGET: 1.8
 // FILE: Test.kt
 open class KFoo {
     fun foo(): String {

@@ -1,23 +1,13 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.js.translate.callTranslator
 
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.builtins.isFunctionTypeOrSubtype
+import org.jetbrains.kotlin.builtins.isSuspendFunctionTypeOrSubtype
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
@@ -30,9 +20,8 @@ import org.jetbrains.kotlin.js.translate.reference.CallExpressionTranslator
 import org.jetbrains.kotlin.js.translate.utils.*
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.Call.CallType
-import org.jetbrains.kotlin.psi.KtExpression
-import org.jetbrains.kotlin.resolve.calls.callResolverUtil.isInvokeCallOnVariable
-import org.jetbrains.kotlin.resolve.calls.callUtil.isSafeCall
+import org.jetbrains.kotlin.resolve.calls.util.isInvokeCallOnVariable
+import org.jetbrains.kotlin.resolve.calls.util.isSafeCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind.*
@@ -108,22 +97,22 @@ private fun translateCall(
     if (resolvedCall is VariableAsFunctionResolvedCall) {
         assert(explicitReceivers.extensionReceiver == null) { "VariableAsFunctionResolvedCall must have one receiver" }
         val variableCall = resolvedCall.variableCall
+        val isFunctionType = variableCall.resultingDescriptor.type.run { isFunctionTypeOrSubtype || isSuspendFunctionTypeOrSubtype }
+        val inlineCall = if (isFunctionType) variableCall else resolvedCall
 
-        return if (variableCall.expectedReceivers()) {
+        val newExplicitReceivers = if (variableCall.expectedReceivers()) {
             val newReceiver = CallTranslator.translateGet(context, variableCall, explicitReceivers.extensionOrDispatchReceiver)
-            translateFunctionCall(context, resolvedCall.functionCall, resolvedCall.variableCall, ExplicitReceivers(newReceiver))
+            ExplicitReceivers(newReceiver)
         } else {
             val dispatchReceiver = CallTranslator.translateGet(context, variableCall, null)
-            val isFunctionType = resolvedCall.variableCall.resultingDescriptor.type.isFunctionTypeOrSubtype
-            val inlineCall = if (isFunctionType) resolvedCall.variableCall else resolvedCall
             if (explicitReceivers.extensionOrDispatchReceiver == null) {
-                translateFunctionCall(context, resolvedCall.functionCall, inlineCall, ExplicitReceivers(dispatchReceiver))
-            }
-            else {
-                translateFunctionCall(context, resolvedCall.functionCall, inlineCall,
-                                      ExplicitReceivers(dispatchReceiver, explicitReceivers.extensionOrDispatchReceiver))
+                ExplicitReceivers(dispatchReceiver)
+            } else {
+                ExplicitReceivers(dispatchReceiver, explicitReceivers.extensionOrDispatchReceiver)
             }
         }
+
+        return translateFunctionCall(context, resolvedCall.functionCall, inlineCall, newExplicitReceivers)
     }
 
     val call = resolvedCall.call
@@ -148,8 +137,7 @@ private fun translateFunctionCall(
     var callExpression = callInfo.translateFunctionCall()
 
     if (CallExpressionTranslator.shouldBeInlined(inlineResolvedCall.resultingDescriptor, context)) {
-        setInlineCallMetadata(callExpression, resolvedCall.call.callElement as KtExpression,
-                              inlineResolvedCall.resultingDescriptor, context)
+        setInlineCallMetadata(callExpression, resolvedCall.call.callElement, inlineResolvedCall.resultingDescriptor, context)
     }
 
     if (resolvedCall.resultingDescriptor.isSuspend) {
@@ -169,7 +157,6 @@ private fun translateFunctionCall(
     return callExpression
 }
 
-
 private fun mayBeMarkByRangeMetadata(resolvedCall: ResolvedCall<out FunctionDescriptor>, callExpression: JsExpression) {
     when (resolvedCall.resultingDescriptor.fqNameSafe) {
         intRangeToFqName -> {
@@ -179,10 +166,10 @@ private fun mayBeMarkByRangeMetadata(resolvedCall: ResolvedCall<out FunctionDesc
             callExpression.range = Pair(RangeType.LONG, RangeKind.RANGE_TO)
         }
         untilFqName -> when (resolvedCall.resultingDescriptor.returnType?.constructor?.declarationDescriptor?.fqNameUnsafe) {
-            KotlinBuiltIns.FQ_NAMES.intRange -> {
+            StandardNames.FqNames.intRange -> {
                 callExpression.range = Pair(RangeType.INT, RangeKind.UNTIL)
             }
-            KotlinBuiltIns.FQ_NAMES.longRange -> {
+            StandardNames.FqNames.longRange -> {
                 callExpression.range = Pair(RangeType.LONG, RangeKind.UNTIL)
             }
         }

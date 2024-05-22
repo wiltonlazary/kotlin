@@ -1,4 +1,5 @@
-// !CHECK_TYPE
+// FIR_IDENTICAL
+// CHECK_TYPE
 
 // FILE: Predicate.java
 import org.jetbrains.annotations.NotNull;
@@ -8,8 +9,8 @@ public interface Predicate<T extends CharSequence> {
     boolean invoke(@NotNull T t);
 }
 // FILE: Main.kt
-fun process(<!UNUSED_PARAMETER!>x<!>: Predicate<String>) {}
-fun main(args: Array<String>) {
+fun process(x: Predicate<String>) {}
+fun main() {
     process(Predicate { x -> x checkType { _<String>() }
         true
     })

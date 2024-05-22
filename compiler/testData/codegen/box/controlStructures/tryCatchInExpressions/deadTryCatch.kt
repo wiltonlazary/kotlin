@@ -1,3 +1,4 @@
+
 inline fun catchAll(x: String, block: () -> Unit): String {
     try {
         block()

@@ -1,5 +1,4 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
 // WITH_REFLECT
 
@@ -28,11 +27,7 @@ fun check(f: KFunction<Any>) {
 
 fun box(): String {
     check(::K)
-
-    // Workaround KT-8596
-    val nested = K::Nested
-    check(nested)
-
+    check(K::Nested)
     check(K::Inner)
     check(::Secondary)
 

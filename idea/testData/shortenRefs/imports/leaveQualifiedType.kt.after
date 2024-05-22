@@ -1,3 +1,0 @@
-import java.util.Date
-
-class A : java.sql.Date

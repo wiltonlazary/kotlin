@@ -1,7 +1,8 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
+
 /*
  * Based on GWT AbstractMap
  * Copyright 2007 Google Inc.
@@ -14,8 +15,8 @@ package kotlin.collections
  *
  * The implementor is required to implement [entries] property, which should return read-only set of map entries.
  *
- * @param K the type of map keys. The map is invariant on its key type.
- * @param V the type of map values. The map is covariant on its value type.
+ * @param K the type of map keys. The map is invariant in its key type.
+ * @param V the type of map values. The map is covariant in its value type.
  */
 @SinceKotlin("1.1")
 public abstract class AbstractMap<K, out V> protected constructor() : Map<K, V> {
@@ -98,7 +99,7 @@ public abstract class AbstractMap<K, out V> protected constructor() : Map<K, V> 
             return _keys!!
         }
 
-    @kotlin.jvm.Volatile
+    @kotlin.concurrent.Volatile
     private var _keys: Set<K>? = null
 
 
@@ -134,7 +135,7 @@ public abstract class AbstractMap<K, out V> protected constructor() : Map<K, V> 
             return _values!!
         }
 
-    @kotlin.jvm.Volatile
+    @kotlin.concurrent.Volatile
     private var _values: Collection<V>? = null
 
     private fun implFindEntry(key: K): Map.Entry<K, V>? = entries.firstOrNull { it.key == key }

@@ -1,13 +1,14 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package test.io
 
+import test.assertArrayContentEquals
 import java.io.*
-import java.util.*
 import kotlin.io.walkTopDown
+import kotlin.random.Random
 import kotlin.test.*
 
 class FilesTest {
@@ -16,12 +17,14 @@ class FilesTest {
     private val isBackslashSeparator = File.separatorChar == '\\'
 
 
+    @Suppress("DEPRECATION")
     @Test fun testPath() {
         val fileSuf = System.currentTimeMillis().toString()
         val file1 = createTempFile("temp", fileSuf)
         assertTrue(file1.path.endsWith(fileSuf), file1.path)
     }
 
+    @Suppress("DEPRECATION")
     @Test fun testCreateTempDir() {
         val dirSuf = System.currentTimeMillis().toString()
         val dir1 = createTempDir("temp", dirSuf)
@@ -31,16 +34,17 @@ class FilesTest {
         }
 
         val dir2 = createTempDir("temp")
-        assertTrue(dir2.exists() && dir2.isDirectory && dir2.name.endsWith(".tmp"))
+        assertTrue(dir2.exists() && dir2.isDirectory && dir2.name.startsWith("temp") && dir2.name.endsWith(".tmp"))
 
         val dir3 = createTempDir()
-        assertTrue(dir3.exists() && dir3.isDirectory)
+        assertTrue(dir3.exists() && dir3.isDirectory && dir3.name.startsWith("tmp") && dir3.name.endsWith(".tmp"))
 
         dir1.delete()
         dir2.delete()
         dir3.delete()
     }
 
+    @Suppress("DEPRECATION")
     @Test fun testCreateTempFile() {
         val fileSuf = System.currentTimeMillis().toString()
         val file1 = createTempFile("temp", fileSuf)
@@ -50,16 +54,17 @@ class FilesTest {
         }
 
         val file2 = createTempFile("temp")
-        assertTrue(file2.exists() && file2.name.endsWith(".tmp"))
+        assertTrue(file2.exists() && file2.name.startsWith("temp") && file2.name.endsWith(".tmp"))
 
         val file3 = createTempFile()
-        assertTrue(file3.exists())
+        assertTrue(file3.exists() && file3.name.startsWith("tmp") && file3.name.endsWith(".tmp"))
 
         file1.delete()
         file2.delete()
         file3.delete()
     }
 
+    @Suppress("DEPRECATION")
     @Test fun listFilesWithFilter() {
         val dir = createTempDir("temp")
 
@@ -360,9 +365,74 @@ class FilesTest {
         assertEquals("log", File("/my.dir/log").nameWithoutExtension)
     }
 
+    private class FixedLengthFile(path: String, private val length: Long) : File(path) {
+        override fun length(): Long = length
+    }
+
+    @Test fun writeReadText() {
+        val file = @Suppress("DEPRECATION") createTempFile()
+        try {
+            val expected = String(CharArray(DEFAULT_BUFFER_SIZE * 2) { Random.nextInt(0, 1024).toChar() })
+            file.writeText(expected)
+            run {
+                val actual1 = file.readText()
+                assertEquals(expected.length, actual1.length)
+                assertTrue(expected.equals(actual1), "Expected to read the same content back")
+            }
+
+            val fileLength = file.length()
+            val testLengths = listOf(0L, *Array(3) { Random.nextLong(fileLength) })
+
+            for (length in testLengths) {
+                val shorterFile = FixedLengthFile(file.path, length)
+                val actual2 = shorterFile.readText()
+                assertEquals(expected.length, actual2.length)
+                assertTrue(expected.equals(actual2), "Expected to read the same content back")
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test fun writeReadBytes() {
+        val file = @Suppress("DEPRECATION") createTempFile()
+        try {
+            val expected = Random.nextBytes(DEFAULT_BUFFER_SIZE * 4)
+            file.writeBytes(expected)
+            run {
+                val actual1 = file.readBytes()
+                assertArrayContentEquals(expected, actual1, "Expected to read the same content back")
+            }
+
+            val fileLength = file.length()
+            val testLengths = listOf(0L, *Array(3) { Random.nextLong(fileLength) })
+
+            for (length in testLengths) {
+                val shorterFile = FixedLengthFile(file.path, length)
+                val actual2 = shorterFile.readBytes()
+                assertEquals(actual2.size, expected.size)
+                assertArrayContentEquals(expected, actual2, "Expected to read the same content back")
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test fun readVirtualFile() {
+        val virtualFile = File("/proc/self/cmdline")
+        if (virtualFile.exists() && virtualFile.length() == 0L) {
+            val allBytes = virtualFile.readBytes()
+            assertNotEquals(0, allBytes.size)
+
+            val allText = virtualFile.readText()
+            assertNotEquals(0, allText.length)
+            println(allText)
+        }
+    }
+
     @Test fun testCopyTo() {
-        val srcFile = createTempFile()
-        val dstFile = createTempFile()
+        val srcFile = @Suppress("DEPRECATION") createTempFile()
+        val dstFile = @Suppress("DEPRECATION") createTempFile()
         try {
             srcFile.writeText("Hello, World!")
             assertFailsWith(FileAlreadyExistsException::class, "copy do not overwrite existing file") {
@@ -427,8 +497,8 @@ class FilesTest {
 
     @Test fun copyToNameWithoutParent() {
         val currentDir = File("").absoluteFile!!
-        val srcFile = createTempFile()
-        val dstFile = createTempFile(directory = currentDir)
+        val srcFile = @Suppress("DEPRECATION") createTempFile()
+        val dstFile = @Suppress("DEPRECATION") createTempFile(directory = currentDir)
         try {
             srcFile.writeText("Hello, World!", Charsets.UTF_8)
             dstFile.delete()
@@ -446,7 +516,7 @@ class FilesTest {
     }
 
     @Test fun deleteRecursively() {
-        val dir = createTempDir()
+        val dir = @Suppress("DEPRECATION") createTempDir()
         dir.delete()
         dir.mkdir()
         val subDir = File(dir, "subdir");
@@ -486,7 +556,7 @@ class FilesTest {
         assertTrue(dst.exists())
         assertEquals(src.isFile, dst.isFile, message)
         if (dst.isFile) {
-            assertTrue(Arrays.equals(src.readBytes(), dst.readBytes()), message)
+            assertArrayContentEquals(src.readBytes(), dst.readBytes(), message)
         }
     }
 
@@ -497,6 +567,7 @@ class FilesTest {
         }
     }
 
+    @Suppress("DEPRECATION")
     @Test fun copyRecursively() {
         val src = createTempDir()
         val dst = createTempDir()
@@ -563,6 +634,7 @@ class FilesTest {
         }
     }
 
+    @Suppress("DEPRECATION")
     @Test fun copyRecursivelyWithOverwrite() {
         val src = createTempDir()
         val dst = createTempDir()
@@ -609,7 +681,7 @@ class FilesTest {
     }
 
     @Test fun helpers2() {
-        val file = createTempFile()
+        val file = @Suppress("DEPRECATION") createTempFile()
         val writer = file.printWriter()
         val str1 = "Hello, world!"
         val str2 = "Everything is wonderful!"

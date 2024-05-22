@@ -1,6 +1,6 @@
 // IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1124
-package foo
+// IGNORE_BACKEND: JS_IR_ES6
+// EXPECTED_REACHABLE_NODES: 1294
 
 @JsName("AA") object A {
     @JsName("foo") fun bar() = "A.foo"
@@ -11,12 +11,12 @@ package foo
 }
 
 fun testA() = js("""
-var a = JS_TESTS.foo.AA;
+var a = main.AA;
 return a.foo();
 """)
 
 fun testB() = js("""
-var b = new JS_TESTS.foo.BB();
+var b = new main.BB();
 return b.foo();
 """)
 

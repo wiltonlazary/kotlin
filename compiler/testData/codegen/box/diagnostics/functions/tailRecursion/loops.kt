@@ -1,6 +1,3 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// DONT_RUN_GENERATED_CODE: JS
-// IGNORE_BACKEND: JS
 
 tailrec fun test(x : Int) : Int {
     var z = if (x > 3) 3 else x

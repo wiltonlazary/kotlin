@@ -1,5 +1,5 @@
 package test
 
-sealed class Base
+import kotlin.reflect.*
 
-class Derived : Base()
+abstract class Some : KSuspendFunction0<Unit>

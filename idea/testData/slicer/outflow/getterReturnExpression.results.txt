@@ -1,4 +1,0 @@
-5 return <bold>0</bold>
-4 	<bold>get(): Int {</bold>
-9 		val x = <bold>foo</bold>
-9 			val <bold>x = foo</bold>

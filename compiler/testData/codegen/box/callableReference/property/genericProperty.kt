@@ -1,4 +1,6 @@
+// LANGUAGE: -ForbidUsingExtensionPropertyTypeParameterInDelegate
 //For KT-6020
+
 import kotlin.reflect.KProperty1
 import kotlin.reflect.KMutableProperty1
 import kotlin.reflect.KProperty

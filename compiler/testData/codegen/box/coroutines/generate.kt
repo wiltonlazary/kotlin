@@ -1,10 +1,9 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
 // FULL_JDK
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 fun box(): String {
     val x = gen().joinToString()
@@ -43,19 +42,16 @@ class GeneratedIterator<T>(block: suspend Generator<T>.() -> Unit) : AbstractIte
     private var nextStep: Continuation<Unit> = block.createCoroutine(this, object : Continuation<Unit> {
         override val context = EmptyCoroutineContext
 
-        override fun resume(data: Unit) {
+        override fun resumeWith(data: Result<Unit>) {
+            data.getOrThrow()
             done()
-        }
-
-        override fun resumeWithException(exception: Throwable) {
-            throw exception
         }
     })
 
     override fun computeNext() {
         nextStep.resume(Unit)
     }
-    suspend override fun yield(value: T) = suspendCoroutineOrReturn<Unit> { c ->
+    suspend override fun yield(value: T) = suspendCoroutineUninterceptedOrReturn<Unit> { c ->
         setNext(value)
         nextStep = c
 

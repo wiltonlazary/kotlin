@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER
 @Target() annotation class empty
 
 <!WRONG_ANNOTATION_TARGET!>@empty<!> annotation class derived

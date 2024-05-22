@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.resolve.NonReportingOverrideStrategy
 import org.jetbrains.kotlin.resolve.OverridingUtil
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.storage.getValue
+import org.jetbrains.kotlin.utils.filterIsInstanceAnd
 import org.jetbrains.kotlin.utils.Printer
 import org.jetbrains.kotlin.utils.compact
 import java.util.*
@@ -47,11 +48,11 @@ abstract class GivenFunctionsMemberScope(
     }
 
     override fun getContributedFunctions(name: Name, location: LookupLocation): Collection<SimpleFunctionDescriptor> {
-        return allDescriptors.filterIsInstance<SimpleFunctionDescriptor>().filter { it.name == name }
+        return allDescriptors.filterIsInstanceAnd { it.name == name }
     }
 
     override fun getContributedVariables(name: Name, location: LookupLocation): Collection<PropertyDescriptor> {
-        return allDescriptors.filterIsInstance<PropertyDescriptor>().filter { it.name == name }
+        return allDescriptors.filterIsInstanceAnd { it.name == name }
     }
 
     private fun createFakeOverrides(functionsFromCurrent: List<FunctionDescriptor>): List<DeclarationDescriptor> {
@@ -61,7 +62,7 @@ abstract class GivenFunctionsMemberScope(
                 .filterIsInstance<CallableMemberDescriptor>()
         for ((name, group) in allSuperDescriptors.groupBy { it.name }) {
             for ((isFunction, descriptors) in group.groupBy { it is FunctionDescriptor }) {
-                OverridingUtil.generateOverridesInFunctionGroup(
+                OverridingUtil.DEFAULT.generateOverridesInFunctionGroup(
                         name,
                         /* membersFromSupertypes = */ descriptors,
                         /* membersFromCurrent = */ if (isFunction) functionsFromCurrent.filter { it.name == name } else listOf(),

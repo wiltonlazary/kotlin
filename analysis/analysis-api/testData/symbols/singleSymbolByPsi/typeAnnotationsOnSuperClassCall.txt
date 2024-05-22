@@ -1,0 +1,36 @@
+KtNamedClassOrObjectSymbol:
+  annotationsList: []
+  classIdIfNonLocal: Foo
+  classKind: CLASS
+  companionObject: null
+  contextReceivers: []
+  isActual: false
+  isData: false
+  isExpect: false
+  isExternal: false
+  isFun: false
+  isInline: false
+  isInner: false
+  modality: FINAL
+  name: Foo
+  origin: SOURCE
+  superTypes: [
+    KtUsualClassType:
+      annotationsList: [
+        Anno1()
+          psi: KtAnnotationEntry
+        Anno2()
+          psi: KtAnnotationEntry
+        Anno3()
+          psi: KtAnnotationEntry
+      ]
+      ownTypeArguments: []
+      type: @R|Anno1|()  @R|Anno2|()  @R|Anno3|()  BaseClass
+  ]
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(typeAnnotationsOnSuperClassCall.kt)
+  getContainingModule: KtSourceModule "Sources of main"
+  annotationApplicableTargets: null
+  deprecationStatus: null

@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_VALUE
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_VALUE
 
 fun foo(k: Int): Int {
     val i: Int

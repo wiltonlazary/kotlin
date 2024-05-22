@@ -18,15 +18,18 @@ package org.jetbrains.kotlin.resolve.scopes
 
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.incremental.components.LookupLocation
+import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.scopes.MemberScope.Companion.ALL_NAME_FILTER
 import org.jetbrains.kotlin.utils.Printer
 import org.jetbrains.kotlin.utils.addToStdlib.flatMapToNullable
 import java.lang.reflect.Modifier
 
 interface MemberScope : ResolutionScope {
 
-    override fun getContributedVariables(name: Name, location: LookupLocation): Collection<PropertyDescriptor>
-    override fun getContributedFunctions(name: Name, location: LookupLocation): Collection<SimpleFunctionDescriptor>
+    override fun getContributedVariables(name: Name, location: LookupLocation): Collection<@JvmWildcard PropertyDescriptor>
+
+    override fun getContributedFunctions(name: Name, location: LookupLocation): Collection<@JvmWildcard SimpleFunctionDescriptor>
 
     /**
      * These methods may return a superset of an actual names' set
@@ -45,6 +48,8 @@ interface MemberScope : ResolutionScope {
             p.println("Empty member scope")
         }
 
+        override fun definitelyDoesNotContainName(name: Name): Boolean = true
+
         override fun getFunctionNames() = emptySet<Name>()
         override fun getVariableNames() = emptySet<Name>()
         override fun getClassifierNames() = emptySet<Name>()
@@ -55,9 +60,20 @@ interface MemberScope : ResolutionScope {
     }
 }
 
-fun MemberScope.computeAllNames() = getClassifierNames()?.let { getFunctionNames() + getVariableNames() + it }
+fun MemberScope.computeAllNames() = getClassifierNames()?.let { classifierNames ->
+    getFunctionNames().toMutableSet().also {
+        it.addAll(getVariableNames())
+        it.addAll(classifierNames)
+    }
+}
 
-fun Collection<MemberScope>.flatMapClassifierNamesOrNull(): MutableSet<Name>? =
+inline fun MemberScope.findFirstFunction(name: String, predicate: (CallableMemberDescriptor) -> Boolean) =
+    getContributedFunctions(Name.identifier(name), NoLookupLocation.FROM_BACKEND).first(predicate)
+
+inline fun MemberScope.findFirstVariable(name: String, predicate: (CallableMemberDescriptor) -> Boolean) =
+    getContributedVariables(Name.identifier(name), NoLookupLocation.FROM_BACKEND).firstOrNull(predicate)
+
+fun Iterable<MemberScope>.flatMapClassifierNamesOrNull(): MutableSet<Name>? =
         flatMapToNullable(hashSetOf(), MemberScope::getClassifierNames)
 
 /**
@@ -65,7 +81,7 @@ fun Collection<MemberScope>.flatMapClassifierNamesOrNull(): MutableSet<Name>? =
  */
 fun MemberScope.getDescriptorsFiltered(
         kindFilter: DescriptorKindFilter = DescriptorKindFilter.ALL,
-        nameFilter: (Name) -> Boolean = { true }
+        nameFilter: (Name) -> Boolean = ALL_NAME_FILTER
 ): Collection<DeclarationDescriptor> {
     if (kindFilter.kindMask == 0) return listOf()
     return getContributedDescriptors(kindFilter, nameFilter).filter { kindFilter.accepts(it) && nameFilter(it.name) }
@@ -130,6 +146,24 @@ class DescriptorKindFilter(
         }
     }
 
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as DescriptorKindFilter
+
+        if (excludes != other.excludes) return false
+        if (kindMask != other.kindMask) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = excludes.hashCode()
+        result = 31 * result + kindMask
+        return result
+    }
+
     companion object {
         private var nextMaskValue: Int = 0x01
         private fun nextMask() = nextMaskValue.apply { nextMaskValue = nextMaskValue shl 1 }
@@ -164,7 +198,6 @@ class DescriptorKindFilter(
                     val filter = field.get(null) as? DescriptorKindFilter
                     if (filter != null) MaskToName(filter.kindMask, field.name) else null
                 }
-                .toList()
 
         private val DEBUG_MASK_BIT_NAMES = staticFields<DescriptorKindFilter>()
                 .filter { it.type == Integer.TYPE }
@@ -173,7 +206,6 @@ class DescriptorKindFilter(
                     val isOneBitMask = mask == (mask and (-mask))
                     if (isOneBitMask) MaskToName(mask, field.name) else null
                 }
-                .toList()
 
         private inline fun <reified T : Any> staticFields() = T::class.java.fields.filter { Modifier.isStatic(it.modifiers) }
     }

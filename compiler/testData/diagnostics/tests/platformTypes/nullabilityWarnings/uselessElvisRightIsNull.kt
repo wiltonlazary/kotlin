@@ -1,4 +1,4 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// DIAGNOSTICS: -UNUSED_PARAMETER
 
 // FILE: J.java
 
@@ -24,6 +24,12 @@ public class JJJ {
     public static JJJ staticNNN;
 }
 
+// FILE: JJJJ.java
+
+public interface JJJJ<R> {
+    R get();
+}
+
 // FILE: k.kt
 
 fun test() {
@@ -37,3 +43,5 @@ fun test() {
 
 fun foo(a: Any?) {
 }
+
+fun <R> test2(j: JJJJ<R>) = j.get() ?: null

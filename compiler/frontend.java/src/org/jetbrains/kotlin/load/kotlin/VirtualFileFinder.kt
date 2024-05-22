@@ -19,20 +19,25 @@ package org.jetbrains.kotlin.load.kotlin
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.annotations.TestOnly
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.load.java.structure.JavaClass
 import org.jetbrains.kotlin.load.java.structure.impl.VirtualFileBoundJavaClass
+import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmMetadataVersion
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.utils.sure
 
 abstract class VirtualFileFinder : KotlinClassFinder {
     abstract fun findVirtualFileWithHeader(classId: ClassId): VirtualFile?
 
-    override fun findKotlinClass(classId: ClassId): KotlinJvmBinaryClass? {
+    abstract fun findSourceOrBinaryVirtualFile(classId: ClassId): VirtualFile?
+
+    override fun findKotlinClassOrContent(classId: ClassId, jvmMetadataVersion: JvmMetadataVersion): KotlinClassFinder.Result? {
         val file = findVirtualFileWithHeader(classId) ?: return null
-        return KotlinBinaryClassCache.getKotlinBinaryClass(file)
+        return KotlinBinaryClassCache.getKotlinBinaryClassOrClassFileContent(file, jvmMetadataVersion)
     }
 
-    override fun findKotlinClass(javaClass: JavaClass): KotlinJvmBinaryClass? {
+    override fun findKotlinClassOrContent(javaClass: JavaClass, jvmMetadataVersion: JvmMetadataVersion): KotlinClassFinder.Result? {
         var file = (javaClass as? VirtualFileBoundJavaClass)?.virtualFile ?: return null
 
         if (javaClass.outerClass != null) {
@@ -41,7 +46,7 @@ abstract class VirtualFileFinder : KotlinClassFinder {
             file = file.parent!!.findChild(classFileName(javaClass) + ".class").sure { "Virtual file not found for $javaClass" }
         }
 
-        return KotlinBinaryClassCache.getKotlinBinaryClass(file)
+        return KotlinBinaryClassCache.getKotlinBinaryClassOrClassFileContent(file, jvmMetadataVersion)
     }
 
     private fun classFileName(jClass: JavaClass): String {
@@ -51,7 +56,11 @@ abstract class VirtualFileFinder : KotlinClassFinder {
     }
 
     companion object SERVICE {
+        fun getInstance(project: Project, module: ModuleDescriptor): VirtualFileFinder =
+            VirtualFileFinderFactory.getInstance(project).create(project, module)
+
+        @TestOnly
         fun getInstance(project: Project): VirtualFileFinder =
-                VirtualFileFinderFactory.getInstance(project).create(GlobalSearchScope.allScope(project))
+            VirtualFileFinderFactory.getInstance(project).create(GlobalSearchScope.allScope(project))
     }
 }

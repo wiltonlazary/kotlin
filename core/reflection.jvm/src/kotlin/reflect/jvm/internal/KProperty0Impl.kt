@@ -21,38 +21,42 @@ import kotlin.LazyThreadSafetyMode.PUBLICATION
 import kotlin.reflect.KMutableProperty0
 import kotlin.reflect.KProperty0
 
-internal open class KProperty0Impl<out R> : KProperty0<R>, KPropertyImpl<R> {
+internal open class KProperty0Impl<out V> : KProperty0<V>, KPropertyImpl<V> {
     constructor(container: KDeclarationContainerImpl, descriptor: PropertyDescriptor) : super(container, descriptor)
 
-    constructor(container: KDeclarationContainerImpl, name: String, signature: String, boundReceiver: Any?) : super(container, name, signature, boundReceiver)
+    constructor(container: KDeclarationContainerImpl, name: String, signature: String, boundReceiver: Any?) : super(
+        container, name, signature, boundReceiver
+    )
 
-    private val getter_ = ReflectProperties.lazy { Getter(this) }
+    private val _getter = lazy(PUBLICATION) { Getter(this) }
 
-    override val getter: Getter<R> get() = getter_()
+    override val getter: Getter<V> get() = _getter.value
 
-    override fun get(): R = getter.call()
+    override fun get(): V = getter.call()
 
-    private val delegateFieldValue = lazy(PUBLICATION) { getDelegate(computeDelegateField(), boundReceiver) }
+    private val delegateValue = lazy(PUBLICATION) { getDelegateImpl(computeDelegateSource(), null, null) }
 
-    override fun getDelegate(): Any? = delegateFieldValue.value
+    override fun getDelegate(): Any? = delegateValue.value
 
-    override fun invoke(): R = get()
+    override fun invoke(): V = get()
 
     class Getter<out R>(override val property: KProperty0Impl<R>) : KPropertyImpl.Getter<R>(), KProperty0.Getter<R> {
         override fun invoke(): R = property.get()
     }
 }
 
-internal class KMutableProperty0Impl<R> : KProperty0Impl<R>, KMutableProperty0<R> {
+internal class KMutableProperty0Impl<V> : KProperty0Impl<V>, KMutableProperty0<V> {
     constructor(container: KDeclarationContainerImpl, descriptor: PropertyDescriptor) : super(container, descriptor)
 
-    constructor(container: KDeclarationContainerImpl, name: String, signature: String, boundReceiver: Any?) : super(container, name, signature, boundReceiver)
+    constructor(container: KDeclarationContainerImpl, name: String, signature: String, boundReceiver: Any?) : super(
+        container, name, signature, boundReceiver
+    )
 
-    private val setter_ = ReflectProperties.lazy { Setter(this) }
+    private val _setter = lazy(PUBLICATION) { Setter(this) }
 
-    override val setter: Setter<R> get() = setter_()
+    override val setter: Setter<V> get() = _setter.value
 
-    override fun set(value: R) = setter.call(value)
+    override fun set(value: V) = setter.call(value)
 
     class Setter<R>(override val property: KMutableProperty0Impl<R>) : KPropertyImpl.Setter<R>(), KMutableProperty0.Setter<R> {
         override fun invoke(value: R): Unit = property.set(value)

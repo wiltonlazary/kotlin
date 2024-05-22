@@ -16,63 +16,70 @@
 
 package org.jetbrains.kotlin.ir.builders
 
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.PropertyDescriptor
+import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationParent
 import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.declarations.impl.IrVariableImpl
-import org.jetbrains.kotlin.ir.descriptors.IrTemporaryVariableDescriptor
-import org.jetbrains.kotlin.ir.descriptors.IrTemporaryVariableDescriptorImpl
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
-import org.jetbrains.kotlin.ir.symbols.impl.IrClassSymbolImpl
-import org.jetbrains.kotlin.ir.symbols.impl.IrFieldSymbolImpl
-import org.jetbrains.kotlin.ir.symbols.impl.createFunctionSymbol
+import org.jetbrains.kotlin.ir.symbols.impl.*
+import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.types.KotlinType
 
 class Scope(val scopeOwnerSymbol: IrSymbol) {
-    val scopeOwner: DeclarationDescriptor get() = scopeOwnerSymbol.descriptor
-
-    @Deprecated("Creates unbound symbol")
-    constructor(descriptor: DeclarationDescriptor) : this(createSymbolForScopeOwner(descriptor))
+    fun getLocalDeclarationParent(): IrDeclarationParent {
+        if (!scopeOwnerSymbol.isBound) throw AssertionError("Unbound symbol: $scopeOwnerSymbol")
+        return when (val scopeOwnerElement = scopeOwnerSymbol.owner) {
+            is IrDeclarationParent -> scopeOwnerElement
+            !is IrDeclaration -> throw AssertionError("Not a declaration: $scopeOwnerElement")
+            else -> scopeOwnerElement.parent
+        }
+    }
 
     private var lastTemporaryIndex: Int = 0
     private fun nextTemporaryIndex(): Int = lastTemporaryIndex++
 
-    fun createDescriptorForTemporaryVariable(
-        type: KotlinType,
-        nameHint: String? = null,
-        isMutable: Boolean = false
-    ): IrTemporaryVariableDescriptor =
-        IrTemporaryVariableDescriptorImpl(scopeOwner, Name.identifier(getNameForTemporary(nameHint)), type, isMutable)
-
-    private fun getNameForTemporary(nameHint: String?): String {
+    fun inventNameForTemporary(prefix: String = "tmp", nameHint: String? = null): String {
         val index = nextTemporaryIndex()
-        return if (nameHint != null) "tmp${index}_$nameHint" else "tmp$index"
+        return if (nameHint != null) "$prefix${index}_$nameHint" else "$prefix$index"
+    }
+
+    private fun getNameForTemporary(nameHint: String?): String =
+        inventNameForTemporary("tmp", nameHint)
+
+    fun createTemporaryVariableDeclaration(
+        irType: IrType,
+        nameHint: String? = null,
+        isMutable: Boolean = false,
+        origin: IrDeclarationOrigin = IrDeclarationOrigin.IR_TEMPORARY_VARIABLE,
+        startOffset: Int,
+        endOffset: Int
+    ): IrVariable {
+        val name = Name.identifier(getNameForTemporary(nameHint))
+        return IrVariableImpl(
+            startOffset, endOffset, origin, IrVariableSymbolImpl(), name,
+            irType, isMutable, isConst = false, isLateinit = false
+        ).apply {
+            parent = getLocalDeclarationParent()
+        }
     }
 
     fun createTemporaryVariable(
         irExpression: IrExpression,
         nameHint: String? = null,
         isMutable: Boolean = false,
-        origin: IrDeclarationOrigin = IrDeclarationOrigin.IR_TEMPORARY_VARIABLE
-    ): IrVariable =
-        IrVariableImpl(
-            irExpression.startOffset, irExpression.endOffset, origin,
-            createDescriptorForTemporaryVariable(irExpression.type, nameHint, isMutable),
-            irExpression
-        )
-}
-
-@Suppress("DeprecatedCallableAddReplaceWith")
-@Deprecated("Creates unbound symbol")
-fun createSymbolForScopeOwner(descriptor: DeclarationDescriptor) =
-    when (descriptor) {
-        is ClassDescriptor -> IrClassSymbolImpl(descriptor)
-        is FunctionDescriptor -> createFunctionSymbol(descriptor)
-        is PropertyDescriptor -> IrFieldSymbolImpl(descriptor)
-        else -> throw AssertionError("Unexpected scopeOwner descriptor: $descriptor")
+        origin: IrDeclarationOrigin = IrDeclarationOrigin.IR_TEMPORARY_VARIABLE,
+        irType: IrType? = null,
+        startOffset: Int = irExpression.startOffset,
+        endOffset: Int = irExpression.endOffset
+    ): IrVariable {
+        return createTemporaryVariableDeclaration(
+            irType ?: irExpression.type,
+            nameHint, isMutable,
+            origin, startOffset, endOffset
+        ).apply {
+            initializer = irExpression
+        }
     }
+}

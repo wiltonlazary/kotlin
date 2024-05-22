@@ -22,13 +22,13 @@ import org.jetbrains.kotlin.ir.expressions.impl.IrCatchImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrTryImpl
 import org.jetbrains.kotlin.psi.KtTryExpression
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
-import org.jetbrains.kotlin.psi.psiUtil.startOffset
+import org.jetbrains.kotlin.psi.psiUtil.startOffsetSkippingComments
 import org.jetbrains.kotlin.resolve.BindingContext
 
-class TryCatchExpressionGenerator(statementGenerator: StatementGenerator) : StatementGeneratorExtension(statementGenerator) {
+internal class TryCatchExpressionGenerator(statementGenerator: StatementGenerator) : StatementGeneratorExtension(statementGenerator) {
     fun generateTryCatch(ktTry: KtTryExpression): IrExpression {
-        val resultType = getInferredTypeWithImplicitCastsOrFail(ktTry)
-        val irTryCatch = IrTryImpl(ktTry.startOffset, ktTry.endOffset, resultType)
+        val resultType = getExpressionTypeWithCoercionToUnitOrFail(ktTry).toIrType()
+        val irTryCatch = IrTryImpl(ktTry.startOffsetSkippingComments, ktTry.endOffset, resultType)
 
         irTryCatch.tryResult = ktTry.tryBlock.genExpr()
 
@@ -38,15 +38,14 @@ class TryCatchExpressionGenerator(statementGenerator: StatementGenerator) : Stat
             val catchParameterDescriptor = getOrFail(BindingContext.VALUE_PARAMETER, ktCatchParameter)
 
             val irCatch = IrCatchImpl(
-                ktCatchClause.startOffset, ktCatchClause.endOffset,
-                context.symbolTable.declareVariable(
-                    ktCatchParameter.startOffset, ktCatchParameter.endOffset,
+                ktCatchClause.startOffsetSkippingComments, ktCatchClause.endOffset,
+                context.symbolTable.descriptorExtension.declareVariable(
+                    ktCatchParameter.startOffsetSkippingComments, ktCatchParameter.endOffset,
                     IrDeclarationOrigin.CATCH_PARAMETER,
-                    catchParameterDescriptor
-                )
-            ).apply {
-                result = ktCatchBody.genExpr()
-            }
+                    catchParameterDescriptor, catchParameterDescriptor.type.toIrType()
+                ),
+                ktCatchBody.genExpr()
+            )
 
             irTryCatch.catches.add(irCatch)
         }

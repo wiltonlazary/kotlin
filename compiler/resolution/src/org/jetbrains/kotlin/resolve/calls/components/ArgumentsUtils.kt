@@ -26,13 +26,14 @@ import org.jetbrains.kotlin.resolve.calls.model.CollectionLiteralKotlinCallArgum
 import org.jetbrains.kotlin.resolve.calls.model.KotlinCallArgument
 import org.jetbrains.kotlin.resolve.calls.model.SimpleKotlinCallArgument
 import org.jetbrains.kotlin.resolve.descriptorUtil.isParameterOfAnnotation
-import org.jetbrains.kotlin.resolve.descriptorUtil.module
-import org.jetbrains.kotlin.resolve.multiplatform.ExpectedActualResolver
+import org.jetbrains.kotlin.resolve.multiplatform.findCompatibleExpectsForActual
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValueWithSmartCastInfo
 import org.jetbrains.kotlin.types.UnwrappedType
 import org.jetbrains.kotlin.types.checker.intersectWrappedTypes
+import org.jetbrains.kotlin.types.checker.prepareArgumentTypeRegardingCaptureTypes
+import org.jetbrains.kotlin.types.typeUtil.isNullableNothing
+import org.jetbrains.kotlin.types.typeUtil.makeNullable
 import org.jetbrains.kotlin.utils.DFS
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 internal fun unexpectedArgument(argument: KotlinCallArgument): Nothing =
     error("Unexpected argument type: $argument, ${argument.javaClass.canonicalName}.")
@@ -40,26 +41,59 @@ internal fun unexpectedArgument(argument: KotlinCallArgument): Nothing =
 // if expression is not stable and has smart casts, then we create this type
 internal val ReceiverValueWithSmartCastInfo.unstableType: UnwrappedType?
     get() {
-        if (isStable || possibleTypes.isEmpty()) return null
-        return intersectWrappedTypes(possibleTypes + receiverValue.type)
+        if (isStable || !hasTypesFromSmartCasts())
+            return if (isStable) null else receiverValue.type.unwrap()
+
+        val intersectionType = intersectWrappedTypes(allOriginalTypes)
+
+        return prepareArgumentTypeRegardingCaptureTypes(intersectionType) ?: intersectionType
     }
 
 // with all smart casts if stable
-internal val ReceiverValueWithSmartCastInfo.stableType: UnwrappedType
+val ReceiverValueWithSmartCastInfo.stableType: UnwrappedType
     get() {
-        if (!isStable || possibleTypes.isEmpty()) return receiverValue.type.unwrap()
-        return intersectWrappedTypes(possibleTypes + receiverValue.type)
+        if (!isStable || !hasTypesFromSmartCasts())
+            return receiverValue.type.unwrap()
+
+        /*
+         * We have to intersect types first as after capturing, subtyping relation may change and some type won't be excluded from intersection type.
+         *
+         * Example:
+         *      allOriginalTypes = [Inv<out CharSequence>, Inv<String>]
+         *      intersect(Inv<out CharSequence>, Inv<String>) = Inv<String>
+         *      capture(Inv<String>) = Inv<String>
+         * But with capturing first:
+         *      capture(Inv<out CharSequence>) = Inv<CapturedType(out CharSequence)>
+         *      capture(Inv<String>) = Inv<String>
+         *      intersect(Inv<CapturedType(out CharSequence)>, Inv<String>) = Inv<CapturedType(out CharSequence)> & Inv<String>
+         *
+         * Such redundant type with captured argument may further lead to contradiction in constraint system or less exact solution.
+         */
+        val intersectionType = intersectWrappedTypes(allOriginalTypes)
+
+        // Intersection type of Nothing with any flexible types will be Nothing!.
+        // This is a bit incorrect as cast to Nothing? or Nothing can result only in Nothing? or Nothing,
+        // otherwise it'll be possible to pass null to some non-nullable type
+        if (intersectionType.isNullableNothing() && !intersectionType.isMarkedNullable) {
+            return intersectionType.makeNullable().unwrap()
+        }
+
+        return prepareArgumentTypeRegardingCaptureTypes(intersectionType) ?: intersectionType
     }
 
 internal fun KotlinCallArgument.getExpectedType(parameter: ParameterDescriptor, languageVersionSettings: LanguageVersionSettings) =
-    if (this.isSpread || this.isArrayAssignedAsNamedArgumentInAnnotation(parameter, languageVersionSettings)) {
+    if (
+        this.isSpread ||
+        this.isArrayAssignedAsNamedArgumentInAnnotation(parameter, languageVersionSettings) ||
+        this.isArrayAssignedAsNamedArgumentInFunction(parameter, languageVersionSettings)
+    ) {
         parameter.type.unwrap()
     } else {
-        parameter.safeAs<ValueParameterDescriptor>()?.varargElementType?.unwrap() ?: parameter.type.unwrap()
+        (parameter as? ValueParameterDescriptor)?.varargElementType?.unwrap() ?: parameter.type.unwrap()
     }
 
 val ValueParameterDescriptor.isVararg: Boolean get() = varargElementType != null
-val ParameterDescriptor.isVararg: Boolean get() = this.safeAs<ValueParameterDescriptor>()?.isVararg ?: false
+val ParameterDescriptor.isVararg: Boolean get() = (this as? ValueParameterDescriptor)?.isVararg ?: false
 
 /**
  * @return `true` iff the parameter has a default value, i.e. declares it, inherits it by overriding a parameter which has a default value,
@@ -76,10 +110,8 @@ fun ValueParameterDescriptor.hasDefaultValue(): Boolean {
 private fun ValueParameterDescriptor.checkExpectedParameter(checker: (ValueParameterDescriptor) -> Boolean): Boolean {
     val function = containingDeclaration
     if (function is FunctionDescriptor && function.isActual) {
-        with(ExpectedActualResolver) {
-            val expected = function.findCompatibleExpectedForActual(function.module).firstOrNull()
-            return expected is FunctionDescriptor && checker(expected.valueParameters[index])
-        }
+        val expected = function.findCompatibleExpectsForActual().firstOrNull()
+        return expected is FunctionDescriptor && checker(expected.valueParameters[index])
     }
     return false
 }
@@ -115,12 +147,29 @@ private fun KotlinCallArgument.isArrayAssignedAsNamedArgumentInAnnotation(
 ): Boolean {
     if (!languageVersionSettings.supportsFeature(LanguageFeature.AssigningArraysToVarargsInNamedFormInAnnotations)) return false
 
-    if (this.argumentName == null || !parameter.isVararg) return false
+    val isAllowedAssigningSingleElementsToVarargsInNamedForm =
+        !languageVersionSettings.supportsFeature(LanguageFeature.ProhibitAssigningSingleElementsToVarargsInNamedForm)
 
-    return isParameterOfAnnotation(parameter) && this.isArrayOrArrayLiteral()
+    if (isAllowedAssigningSingleElementsToVarargsInNamedForm && !isArrayOrArrayLiteral()) return false
+
+    return this.argumentName != null && parameter.isVararg && isParameterOfAnnotation(parameter)
 }
 
-private fun KotlinCallArgument.isArrayOrArrayLiteral(): Boolean {
+private fun KotlinCallArgument.isArrayAssignedAsNamedArgumentInFunction(
+    parameter: ParameterDescriptor,
+    languageVersionSettings: LanguageVersionSettings
+): Boolean {
+    if (!languageVersionSettings.supportsFeature(LanguageFeature.AllowAssigningArrayElementsToVarargsInNamedFormForFunctions)) return false
+
+    val isAllowedAssigningSingleElementsToVarargsInNamedForm =
+        !languageVersionSettings.supportsFeature(LanguageFeature.ProhibitAssigningSingleElementsToVarargsInNamedForm)
+
+    if (isAllowedAssigningSingleElementsToVarargsInNamedForm && !isArrayOrArrayLiteral()) return false
+
+    return this.argumentName != null && parameter.isVararg
+}
+
+fun KotlinCallArgument.isArrayOrArrayLiteral(): Boolean {
     if (this is CollectionLiteralKotlinCallArgument) return true
     if (this !is SimpleKotlinCallArgument) return false
 

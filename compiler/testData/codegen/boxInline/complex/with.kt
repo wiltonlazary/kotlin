@@ -1,5 +1,6 @@
+// WITH_STDLIB
+// NO_CHECK_LAMBDA_INLINING
 // FILE: 1.kt
-// WITH_RUNTIME
 package test
 
 
@@ -30,11 +31,10 @@ public fun Input.copyTo(output: Output, size: Int): Long {
 }
 
 
-public inline fun <T> with2(receiver : T, crossinline body :  T.() -> Unit) : Unit = {receiver.body()}()
+public inline fun <T> with2(receiver : T, crossinline body :  T.() -> Unit) : Unit = {receiver.body()}.let { it() }
 
 // FILE: 2.kt
 
-//NO_CHECK_LAMBDA_INLINING
 import test.*
 
 fun Data.test1(d: Data) : Long  {

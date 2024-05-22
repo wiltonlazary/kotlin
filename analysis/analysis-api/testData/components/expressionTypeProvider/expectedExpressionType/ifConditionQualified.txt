@@ -1,0 +1,5 @@
+expression: fdfd
+expected type: KtUsualClassType:
+  annotationsList: []
+  ownTypeArguments: []
+  type: kotlin/Boolean

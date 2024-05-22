@@ -1,66 +1,100 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 description = "Kotlin JVM metadata manipulation library"
+group = "org.jetbrains.kotlin"
 
 plugins {
     kotlin("jvm")
+    id("jps-compatible")
+    id("org.jetbrains.kotlinx.binary-compatibility-validator")
+    id("org.jetbrains.dokka")
 }
 
-// Change this version before publishing
-version = "0.1-SNAPSHOT"
 
 sourceSets {
     "main" { projectDefault() }
     "test" { projectDefault() }
 }
 
-val shadows by configurations.creating {
-    isTransitive = false
-}
-configurations.getByName("compileOnly").extendsFrom(shadows)
-configurations.getByName("testCompile").extendsFrom(shadows)
+val embedded by configurations
+embedded.isTransitive = false
+configurations.getByName("compileOnly").extendsFrom(embedded)
+configurations.getByName("testApi").extendsFrom(embedded)
 
 dependencies {
-    compile(project(":kotlin-stdlib"))
-    shadows(project(":kotlinx-metadata"))
-    shadows(project(":core:metadata"))
-    shadows(project(":core:metadata.jvm"))
-    shadows(protobufLite())
-    testCompile(commonDep("junit:junit"))
-    testCompile(intellijDep()) { includeJars("asm-all", rootProject = rootProject) }
-    testCompileOnly(project(":kotlin-reflect-api"))
-    testRuntime(projectDist(":kotlin-reflect"))
+    api(kotlinStdlib())
+    embedded(project(":kotlin-metadata"))
+    embedded(project(":core:metadata"))
+    embedded(project(":core:metadata.jvm"))
+    embedded(protobufLite())
+    testImplementation(kotlinTest("junit"))
+    testImplementation(libs.junit4)
+    testImplementation(commonDependency("org.jetbrains.intellij.deps:asm-all"))
+    testImplementation(commonDependency("org.jetbrains.kotlin:kotlin-reflect")) { isTransitive = false }
 }
 
-noDefaultJar()
+kotlin {
+    explicitApi()
+    compilerOptions {
+        freeCompilerArgs.add("-Xallow-kotlin-package")
+    }
+}
 
-val shadowJar = task<ShadowJar>("shadowJar") {
-    callGroovy("manifestAttributes", manifest, project)
-    manifest.attributes["Implementation-Version"] = version
+publish()
 
-    from(the<JavaPluginConvention>().sourceSets["main"].output)
+val runtimeJar = runtimeJarWithRelocation {
+    from(mainSourceSet.output)
     exclude("**/*.proto")
-    configurations = listOf(shadows)
-
-    val artifactRef = outputs.files.singleFile
-    runtimeJarArtifactBy(this, artifactRef)
-    addArtifact("runtime", this, artifactRef)
-}
-
-sourcesJar {
-    for (dependency in shadows.dependencies) {
-        if (dependency is ProjectDependency) {
-            val javaPlugin = dependency.dependencyProject.convention.findPlugin(JavaPluginConvention::class.java)
-            if (javaPlugin != null) {
-                from(javaPlugin.sourceSets["main"].allSource)
-            }
+    relocate("org.jetbrains.kotlin", "kotlin.metadata.internal")
+}.apply {
+    configure {
+        manifest {
+            attributes("Automatic-Module-Name" to "kotlin.metadata.jvm")
         }
     }
 }
 
-javadocJar()
-// publish()
-
-projectTest {
-    workingDir = rootDir
+tasks.apiBuild {
+    inputJar.value(runtimeJar.flatMap { it.archiveFile })
 }
+
+apiValidation {
+    ignoredPackages.add("kotlin.metadata.internal")
+    nonPublicMarkers.addAll(
+        listOf(
+            "kotlin.metadata.internal.IgnoreInApiDump",
+            "kotlin.metadata.jvm.internal.IgnoreInApiDump"
+        )
+    )
+}
+
+tasks.dokkaHtml.configure {
+    outputDirectory.set(layout.buildDirectory.dir("dokka"))
+    pluginsMapConfiguration.set(
+        mapOf(
+            "org.jetbrains.dokka.base.DokkaBase"
+                    to """{ "templatesDir": "${projectDir.toString().replace('\\', '/')}/dokka-templates" }"""
+        )
+    )
+
+    dokkaSourceSets.configureEach {
+        includes.from(project.file("dokka/moduledoc.md").path)
+
+        sourceRoots.from(project(":kotlin-metadata").getSources())
+
+        skipDeprecated.set(true)
+        reportUndocumented.set(true)
+        failOnWarning.set(true)
+
+        perPackageOption {
+            matchingRegex.set("kotlin\\.metadata\\.internal(\$|\\.).*")
+            suppress.set(true)
+            reportUndocumented.set(false)
+        }
+    }
+}
+
+sourcesJar()
+
+javadocJar()

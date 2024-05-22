@@ -1,5 +1,4 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1126
+// EXPECTED_REACHABLE_NODES: 1454
 
 // MODULE: lib1
 // FILE: lib1.kt
@@ -146,11 +145,11 @@ inline fun testImportedLongConstInlineFunLib1() {
     assertEquals(123456789012345L, bigLongConstCopy)
 }
 
-// PROPERTY_READ_COUNT: name=longConst_0 count=1 scope=testImportedLongConstInlinedLocally
+// PROPERTY_READ_COUNT: name=longConst count=1 scope=testImportedLongConstInlinedLocally
 // PROPERTY_READ_COUNT: name=L42 count=1 scope=testImportedLongConstInlinedLocally
 // PROPERTY_READ_COUNT: name=L_42 count=4 scope=testImportedLongConstInlinedLocally
 // PROPERTY_READ_COUNT: name=L84 count=2 scope=testImportedLongConstInlinedLocally
-// PROPERTY_READ_COUNT: name=bigLongConst_0 count=1 scope=testImportedLongConstInlinedLocally
+// PROPERTY_READ_COUNT: name=bigLongConst count=1 scope=testImportedLongConstInlinedLocally
 // PROPERTY_READ_COUNT: name=L123456789012345 count=1 scope=testImportedLongConstInlinedLocally
 private fun testImportedLongConstInlinedLocally() {
     testImportedLongConstInlineFunLib1()
@@ -269,12 +268,12 @@ fun testLib2() {
 // FILE: main.kt
 package foo
 
-// PROPERTY_READ_COUNT: name=longConst count=1 scope=testImportedLongConstInlinedFromOtherModule
-// PROPERTY_READ_COUNT: name=L42 count=1 scope=testImportedLongConstInlinedFromOtherModule
-// PROPERTY_READ_COUNT: name=L_42 count=4 scope=testImportedLongConstInlinedFromOtherModule
-// PROPERTY_READ_COUNT: name=L84 count=2 scope=testImportedLongConstInlinedFromOtherModule
-// PROPERTY_READ_COUNT: name=bigLongConst count=1 scope=testImportedLongConstInlinedFromOtherModule
-// PROPERTY_READ_COUNT: name=L123456789012345 count=1 scope=testImportedLongConstInlinedFromOtherModule
+// PROPERTY_READ_COUNT: name=longConst count=1 scope=testImportedLongConstInlinedFromOtherModule TARGET_BACKENDS=JS
+// PROPERTY_READ_COUNT: name=L42 count=1 scope=testImportedLongConstInlinedFromOtherModule TARGET_BACKENDS=JS
+// PROPERTY_READ_COUNT: name=L_42 count=4 scope=testImportedLongConstInlinedFromOtherModule TARGET_BACKENDS=JS
+// PROPERTY_READ_COUNT: name=L84 count=2 scope=testImportedLongConstInlinedFromOtherModule TARGET_BACKENDS=JS
+// PROPERTY_READ_COUNT: name=bigLongConst count=1 scope=testImportedLongConstInlinedFromOtherModule TARGET_BACKENDS=JS
+// PROPERTY_READ_COUNT: name=L123456789012345 count=1 scope=testImportedLongConstInlinedFromOtherModule TARGET_BACKENDS=JS
 fun testImportedLongConstInlinedFromOtherModule() {
     testImportedLongConstInlineFun()
 }

@@ -1,6 +1,6 @@
-// IGNORE_BACKEND: JS_IR
+// DONT_TARGET_EXACT_BACKEND: WASM
+// WASM_MUTE_REASON: UNSUPPORTED_JS_INTEROP
 // SKIP_MINIFICATION
-package foo
 
 val top = "TOP LEVEL"
 
@@ -11,8 +11,10 @@ fun box(): String {
 
     assertEquals(5, eval("3 + 2"))
 
-    val PACKAGE = "JS_TESTS.foo"
-    assertEquals(top, eval("$PACKAGE.top"))
+    if (testUtils.isLegacyBackend()) {
+        val PACKAGE = "main"
+        assertEquals(top, eval("$PACKAGE.top"))
+    }
 
     return "OK"
 }

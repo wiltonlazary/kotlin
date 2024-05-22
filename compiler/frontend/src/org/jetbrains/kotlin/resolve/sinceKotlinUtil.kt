@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve
@@ -8,12 +8,12 @@ package org.jetbrains.kotlin.resolve
 import org.jetbrains.kotlin.config.ApiVersion
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.descriptors.annotations.Annotated
 import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.resolve.calls.util.FakeCallableDescriptorForTypeAliasObject
-import org.jetbrains.kotlin.resolve.checkers.ExperimentalUsageChecker
+import org.jetbrains.kotlin.resolve.checkers.OptInNames
 import org.jetbrains.kotlin.resolve.constants.ArrayValue
 import org.jetbrains.kotlin.resolve.constants.KClassValue
+import org.jetbrains.kotlin.resolve.descriptorUtil.module
 
 sealed class SinceKotlinAccessibility {
     object Accessible : SinceKotlinAccessibility()
@@ -60,7 +60,7 @@ private data class SinceKotlinValue(
 private fun getSinceKotlinVersionByOverridden(descriptor: CallableMemberDescriptor): SinceKotlinValue? {
     // TODO: combine wasExperimentalMarkerClasses in case of several members with the same minimal API version
     return DescriptorUtils.getAllOverriddenDeclarations(descriptor).map { it.getOwnSinceKotlinVersion() ?: return null }
-        .minBy { it.apiVersion }
+        .minByOrNull { it.apiVersion }
 }
 
 /**
@@ -88,8 +88,8 @@ private fun DeclarationDescriptor.getOwnSinceKotlinVersion(): SinceKotlinValue? 
     (this as? PropertyAccessorDescriptor)?.correspondingProperty?.consider()
 
     val typeAlias = this as? TypeAliasDescriptor
-            ?: (this as? TypeAliasConstructorDescriptor)?.typeAliasDescriptor
-            ?: (this as? FakeCallableDescriptorForTypeAliasObject)?.typeAliasDescriptor
+        ?: (this as? TypeAliasConstructorDescriptor)?.typeAliasDescriptor
+        ?: (this as? FakeCallableDescriptorForTypeAliasObject)?.typeAliasDescriptor
 
     typeAlias?.consider()
 
@@ -102,13 +102,13 @@ private fun DeclarationDescriptor.getOwnSinceKotlinVersion(): SinceKotlinValue? 
     return result
 }
 
-private fun Annotated.loadWasExperimentalMarkerClasses(): List<ClassDescriptor> {
-    val wasExperimental = annotations.findAnnotation(ExperimentalUsageChecker.WAS_EXPERIMENTAL_FQ_NAME)
+private fun DeclarationDescriptor.loadWasExperimentalMarkerClasses(): List<ClassDescriptor> {
+    val wasExperimental = annotations.findAnnotation(OptInNames.WAS_EXPERIMENTAL_FQ_NAME)
     if (wasExperimental != null) {
-        val annotationClasses = wasExperimental.allValueArguments[ExperimentalUsageChecker.WAS_EXPERIMENTAL_ANNOTATION_CLASS]
+        val annotationClasses = wasExperimental.allValueArguments[OptInNames.WAS_EXPERIMENTAL_ANNOTATION_CLASS]
         if (annotationClasses is ArrayValue) {
             return annotationClasses.value.mapNotNull { annotationClass ->
-                (annotationClass as? KClassValue)?.value?.constructor?.declarationDescriptor as? ClassDescriptor
+                (annotationClass as? KClassValue)?.getArgumentType(module)?.constructor?.declarationDescriptor as? ClassDescriptor
             }
         }
     }

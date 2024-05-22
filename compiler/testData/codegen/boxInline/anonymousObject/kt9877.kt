@@ -1,5 +1,6 @@
 // NO_CHECK_LAMBDA_INLINING
-// WITH_RUNTIME
+// WITH_STDLIB
+// KJS_WITH_FULL_RUNTIME
 // FILE: 1.kt
 package test
 
@@ -26,7 +27,7 @@ fun box(): String {
             {
                 locusMap = value
                 gene = "OK"
-            }()
+            }.let { it() }
         }
     }
     return gene

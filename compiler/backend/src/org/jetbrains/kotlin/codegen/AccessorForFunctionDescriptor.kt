@@ -16,14 +16,12 @@
 
 package org.jetbrains.kotlin.codegen
 
-import org.jetbrains.kotlin.codegen.coroutines.*
+import org.jetbrains.kotlin.codegen.coroutines.INITIAL_DESCRIPTOR_FOR_SUSPEND_FUNCTION
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.FunctionDescriptorImpl
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.DescriptorUtils
-
-import java.util.LinkedHashMap
+import java.util.*
 
 class AccessorForFunctionDescriptor(
     override val calleeDescriptor: FunctionDescriptor,
@@ -36,23 +34,24 @@ class AccessorForFunctionDescriptor(
 
     init {
         initialize(
-            DescriptorUtils.getReceiverParameterType(calleeDescriptor.extensionReceiverParameter),
+            calleeDescriptor.extensionReceiverParameter?.copy(this),
             if (calleeDescriptor is ConstructorDescriptor || calleeDescriptor.isJvmStaticInObjectOrClassOrInterface())
                 null
             else
                 calleeDescriptor.dispatchReceiverParameter,
+            calleeDescriptor.contextReceiverParameters.map { p -> p.copy(this) },
             copyTypeParameters(calleeDescriptor),
             copyValueParameters(calleeDescriptor),
             calleeDescriptor.returnType,
             Modality.FINAL,
-            Visibilities.LOCAL
+            DescriptorVisibilities.LOCAL
         )
 
         isSuspend = calleeDescriptor.isSuspend
         if (calleeDescriptor.getUserData(INITIAL_DESCRIPTOR_FOR_SUSPEND_FUNCTION) != null) {
-            userDataMap = LinkedHashMap<FunctionDescriptor.UserDataKey<*>, Any>()
+            userDataMap = LinkedHashMap<CallableDescriptor.UserDataKey<*>, Any>()
             userDataMap[INITIAL_DESCRIPTOR_FOR_SUSPEND_FUNCTION] =
-                    calleeDescriptor.getUserData(INITIAL_DESCRIPTOR_FOR_SUSPEND_FUNCTION)
+                calleeDescriptor.getUserData(INITIAL_DESCRIPTOR_FOR_SUSPEND_FUNCTION)
         }
     }
 

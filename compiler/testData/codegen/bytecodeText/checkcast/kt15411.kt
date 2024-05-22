@@ -1,5 +1,3 @@
-// KT-15411 Unnecessary CHECKCAST bytecode when dealing with null
-
 fun test1(): String? {
     return null
 }

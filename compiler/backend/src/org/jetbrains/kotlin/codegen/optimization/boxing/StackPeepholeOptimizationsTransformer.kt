@@ -16,98 +16,101 @@
 
 package org.jetbrains.kotlin.codegen.optimization.boxing
 
+import org.jetbrains.kotlin.codegen.optimization.common.FastAnalyzer
 import org.jetbrains.kotlin.codegen.optimization.common.findPreviousOrNull
+import org.jetbrains.kotlin.codegen.optimization.common.nodeType
 import org.jetbrains.kotlin.codegen.optimization.transformer.MethodTransformer
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.tree.AbstractInsnNode
-import org.jetbrains.org.objectweb.asm.tree.InsnList
 import org.jetbrains.org.objectweb.asm.tree.InsnNode
+import org.jetbrains.org.objectweb.asm.tree.LdcInsnNode
 import org.jetbrains.org.objectweb.asm.tree.MethodNode
 
 class StackPeepholeOptimizationsTransformer : MethodTransformer() {
     override fun transform(internalClassName: String, methodNode: MethodNode) {
-        while (transformOnce(methodNode)) {
+        while (true) {
+            if (!transformOnce(methodNode)) break
         }
     }
 
     private fun transformOnce(methodNode: MethodNode): Boolean {
-        val actions = ArrayList<(InsnList) -> Unit>()
+        val instructions = methodNode.instructions
+        var changed = false
 
-        val insns = methodNode.instructions.toArray()
+        val isMergeNode = FastAnalyzer.findMergeNodes(methodNode)
 
-        forInsn@ for (i in 1 until insns.size) {
-            val insn = insns[i]
-            val prev = insn.previous
-            val prevNonNop = insn.findPreviousOrNull { it.opcode != Opcodes.NOP } ?: continue@forInsn
+        fun AbstractInsnNode.previousMeaningful() =
+            findPreviousOrNull {
+                it.opcode != Opcodes.NOP && it.nodeType != AbstractInsnNode.LINE &&
+                        (it.nodeType != AbstractInsnNode.LABEL || isMergeNode[instructions.indexOf(it)])
+            }
 
+        var insn: AbstractInsnNode?
+        var next = instructions.first
+        while (next != null) {
+            insn = next
+            next = insn.next
+
+            val prev = insn.previousMeaningful() ?: continue
             when (insn.opcode) {
                 Opcodes.POP -> {
                     when {
-                        prevNonNop.isEliminatedByPop() -> actions.add {
-                            it.set(insn, InsnNode(Opcodes.NOP))
-                            it.remove(prevNonNop)
+                        prev.isEliminatedByPop() -> {
+                            instructions.set(insn, InsnNode(Opcodes.NOP))
+                            instructions.set(prev, InsnNode(Opcodes.NOP))
+                            changed = true
                         }
-                        prevNonNop.opcode == Opcodes.DUP_X1 -> actions.add {
-                            it.remove(insn)
-                            it.set(prevNonNop, InsnNode(Opcodes.SWAP))
+                        prev.opcode == Opcodes.DUP_X1 -> {
+                            instructions.set(insn, InsnNode(Opcodes.NOP))
+                            instructions.set(prev, InsnNode(Opcodes.SWAP))
+                            changed = true
                         }
                     }
                 }
 
                 Opcodes.SWAP -> {
-                    val prevNonNop2 = prevNonNop.findPreviousOrNull { it.opcode != Opcodes.NOP } ?: continue@forInsn
-                    if (prevNonNop.isPurePushOfSize1() && prevNonNop2.isPurePushOfSize1()) {
-                        actions.add {
-                            it.remove(insn)
-                            it.set(prevNonNop, prevNonNop2.clone(emptyMap()))
-                            it.set(prevNonNop2, prevNonNop.clone(emptyMap()))
-                        }
+                    val prev2 = prev.previousMeaningful() ?: continue
+                    if (prev.isPurePushOfSize1() && prev2.isPurePushOfSize1()) {
+                        instructions.set(insn, InsnNode(Opcodes.NOP))
+                        instructions.set(prev, prev2.clone(emptyMap()))
+                        instructions.set(prev2, prev.clone(emptyMap()))
+                        changed = true
                     }
                 }
 
                 Opcodes.I2L -> {
-                    when (prevNonNop.opcode) {
-                        Opcodes.ICONST_0 -> actions.add {
-                            it.remove(insn)
-                            it.set(prevNonNop, InsnNode(Opcodes.LCONST_0))
+                    when (prev.opcode) {
+                        Opcodes.ICONST_0 -> {
+                            instructions.set(insn, InsnNode(Opcodes.NOP))
+                            instructions.set(prev, InsnNode(Opcodes.LCONST_0))
+                            changed = true
                         }
-                        Opcodes.ICONST_1 -> actions.add {
-                            it.remove(insn)
-                            it.set(prevNonNop, InsnNode(Opcodes.LCONST_1))
+                        Opcodes.ICONST_1 -> {
+                            instructions.set(insn, InsnNode(Opcodes.NOP))
+                            instructions.set(prev, InsnNode(Opcodes.LCONST_1))
+                            changed = true
                         }
                     }
                 }
 
                 Opcodes.POP2 -> {
-                    if (prevNonNop.isEliminatedByPop2()) {
-                        actions.add {
-                            it.set(insn, InsnNode(Opcodes.NOP))
-                            it.remove(prevNonNop)
-                        }
-                    } else if (i > 1) {
-                        val prevNonNop2 = prevNonNop.findPreviousOrNull { it.opcode != Opcodes.NOP } ?: continue@forInsn
-                        if (prevNonNop.isEliminatedByPop() && prevNonNop2.isEliminatedByPop()) {
-                            actions.add {
-                                it.set(insn, InsnNode(Opcodes.NOP))
-                                it.remove(prevNonNop)
-                                it.remove(prevNonNop2)
-                            }
+                    if (prev.isEliminatedByPop2()) {
+                        instructions.set(insn, InsnNode(Opcodes.NOP))
+                        instructions.set(prev, InsnNode(Opcodes.NOP))
+                        changed = true
+                    } else {
+                        val prev2 = prev.previousMeaningful() ?: continue
+                        if (prev.isEliminatedByPop() && prev2.isEliminatedByPop()) {
+                            instructions.set(insn, InsnNode(Opcodes.NOP))
+                            instructions.set(prev, InsnNode(Opcodes.NOP))
+                            instructions.set(prev2, InsnNode(Opcodes.NOP))
+                            changed = true
                         }
                     }
                 }
-
-                Opcodes.NOP ->
-                    if (prev.opcode == Opcodes.NOP) {
-                        actions.add {
-                            it.remove(prev)
-                        }
-                    }
             }
         }
-
-        actions.forEach { it(methodNode.instructions) }
-
-        return actions.isNotEmpty()
+        return changed
     }
 
     private fun AbstractInsnNode.isEliminatedByPop() =
@@ -115,20 +118,26 @@ class StackPeepholeOptimizationsTransformer : MethodTransformer() {
                 opcode == Opcodes.DUP
 
     private fun AbstractInsnNode.isPurePushOfSize1(): Boolean =
-        opcode in Opcodes.ACONST_NULL..Opcodes.FCONST_2 ||
-                opcode in Opcodes.BIPUSH..Opcodes.ILOAD ||
-                opcode == Opcodes.FLOAD ||
-                opcode == Opcodes.ALOAD ||
-                isUnitInstance()
+        !isLdcOfSize2() && (
+                opcode in Opcodes.ACONST_NULL..Opcodes.FCONST_2 ||
+                        opcode in Opcodes.BIPUSH..Opcodes.ILOAD ||
+                        opcode == Opcodes.FLOAD ||
+                        opcode == Opcodes.ALOAD ||
+                        isUnitInstance()
+                )
 
     private fun AbstractInsnNode.isEliminatedByPop2() =
         isPurePushOfSize2() ||
                 opcode == Opcodes.DUP2
 
     private fun AbstractInsnNode.isPurePushOfSize2(): Boolean =
-        opcode == Opcodes.LCONST_0 || opcode == Opcodes.LCONST_1 ||
+        isLdcOfSize2() ||
+                opcode == Opcodes.LCONST_0 || opcode == Opcodes.LCONST_1 ||
                 opcode == Opcodes.DCONST_0 || opcode == Opcodes.DCONST_1 ||
                 opcode == Opcodes.LLOAD ||
                 opcode == Opcodes.DLOAD
+
+    private fun AbstractInsnNode.isLdcOfSize2(): Boolean =
+        opcode == Opcodes.LDC && this is LdcInsnNode && (this.cst is Double || this.cst is Long)
 }
 

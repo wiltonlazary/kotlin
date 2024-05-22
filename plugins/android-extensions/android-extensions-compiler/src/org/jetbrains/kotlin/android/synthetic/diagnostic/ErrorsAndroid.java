@@ -21,9 +21,7 @@ import org.jetbrains.kotlin.diagnostics.DiagnosticFactory0;
 import org.jetbrains.kotlin.diagnostics.DiagnosticFactory1;
 import org.jetbrains.kotlin.diagnostics.DiagnosticFactory2;
 import org.jetbrains.kotlin.diagnostics.Errors;
-import org.jetbrains.kotlin.psi.KtAnnotationEntry;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
-import org.jetbrains.kotlin.psi.KtElement;
 import org.jetbrains.kotlin.psi.KtExpression;
 import org.jetbrains.kotlin.types.KotlinType;
 
@@ -56,10 +54,13 @@ public interface ErrorsAndroid {
     DiagnosticFactory1<PsiElement, KtClassOrObject> REDUNDANT_TYPE_PARCELER = DiagnosticFactory1.create(WARNING);
     DiagnosticFactory1<PsiElement, KtClassOrObject> CLASS_SHOULD_BE_PARCELIZE = DiagnosticFactory1.create(ERROR);
 
+    DiagnosticFactory0<PsiElement> INAPPLICABLE_IGNORED_ON_PARCEL = DiagnosticFactory0.create(WARNING);
+    DiagnosticFactory0<PsiElement> INAPPLICABLE_IGNORED_ON_PARCEL_CONSTRUCTOR_PROPERTY = DiagnosticFactory0.create(WARNING);
+
     @SuppressWarnings("UnusedDeclaration")
     Object _initializer = new Object() {
         {
-            Errors.Initializer.initializeFactoryNames(ErrorsAndroid.class);
+            Errors.Initializer.initializeFactoryNamesAndDefaultErrorMessages(ErrorsAndroid.class, DefaultErrorMessagesAndroid.INSTANCE);
         }
     };
 

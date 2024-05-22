@@ -1,4 +1,6 @@
+// FIR_IDENTICAL
 @Target(AnnotationTarget.EXPRESSION)
+@Retention(AnnotationRetention.SOURCE)
 annotation class ExprAnn
 
 @Target(AnnotationTarget.FUNCTION)

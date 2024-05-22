@@ -1,60 +1,95 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
 description = "Kotlin Mock Runtime for Tests"
 
 plugins {
     kotlin("jvm")
+    `maven-publish`
 }
 
-jvmTarget = "1.6"
-javaHome = rootProject.extra["JDK_16"] as String
+project.configureJvmToolchain(JdkMajorVersion.JDK_1_8)
+
+val builtins by configurations.creating {
+    isCanBeResolved = true
+    isCanBeConsumed = false
+    attributes {
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.JAR))
+    }
+}
 
 dependencies {
     compileOnly(project(":kotlin-stdlib"))
-}
-
-sourceSets {
-    "main" {
-        java.apply {
-            srcDir(File(buildDir, "src"))
-        }
-    }
-    "test" {}
+    builtins(project(":core:builtins"))
 }
 
 val copySources by task<Sync> {
-    val stdlibProjectDir = project(":kotlin-stdlib").projectDir
+    val stdlibProjectDir = file("$rootDir/libraries/stdlib/jvm")
 
     from(stdlibProjectDir.resolve("runtime"))
         .include("kotlin/TypeAliases.kt",
                  "kotlin/text/TypeAliases.kt")
     from(stdlibProjectDir.resolve("src"))
-        .include("kotlin/collections/TypeAliases.kt")
+        .include("kotlin/collections/TypeAliases.kt",
+                 "kotlin/enums/EnumEntriesSerializationProxy.kt",
+                 "kotlin/enums/EnumEntriesJVM.kt")
     from(stdlibProjectDir.resolve("../src"))
         .include("kotlin/util/Standard.kt",
                  "kotlin/internal/Annotations.kt",
-                 "kotlin/internal/contracts/ContractBuilder.kt",
-                 "kotlin/internal/contracts/Effect.kt")
-    into(File(buildDir, "src"))
+                 "kotlin/contracts/ContractBuilder.kt",
+                 "kotlin/contracts/Effect.kt",
+                 "kotlin/annotations/WasExperimental.kt",
+                 "kotlin/enums/EnumEntries.kt",
+                 "kotlin/collections/AbstractList.kt",
+                 "kotlin/io/Serializable.kt")
+    into(layout.buildDirectory.dir("src"))
 }
 
-tasks.withType<JavaCompile> {
-    sourceCompatibility = "1.6"
-    targetCompatibility = "1.6"
+sourceSets {
+    "main" {
+        java.srcDir(copySources)
+    }
+    "test" {}
 }
 
-tasks.withType<KotlinCompile> {
+tasks.compileKotlin {
     dependsOn(copySources)
+    val commonSources = listOf(
+        "kotlin/enums/EnumEntries.kt"
+    ).map { copySources.get().destinationDir.resolve(it) }
+    @Suppress("DEPRECATION")
     kotlinOptions {
-        freeCompilerArgs += listOf("-module-name", "kotlin-stdlib", "-Xmulti-platform")
+        languageVersion = "1.9"
+        apiVersion = "2.0"
+        freeCompilerArgs += listOf(
+            "-Xallow-kotlin-package",
+            "-Xexpect-actual-classes",
+            "-Xmulti-platform",
+            "-opt-in=kotlin.RequiresOptIn",
+            "-opt-in=kotlin.contracts.ExperimentalContracts",
+            "-opt-in=kotlin.ExperimentalMultiplatform",
+            "-Xsuppress-api-version-greater-than-language-version-error",
+        )
+        moduleName = "kotlin-stdlib"
+    }
+    doFirst {
+        @Suppress("DEPRECATION")
+        kotlinOptions.freeCompilerArgs += listOf(
+            "-Xcommon-sources=${commonSources.joinToString(File.pathSeparator)}",
+        )
     }
 }
 
 val jar = runtimeJar {
-    dependsOn(":core:builtins:serialize")
-    from(fileTree("${rootProject.extra["distDir"]}/builtins")) { include("kotlin/**") }
+    dependsOn(builtins)
+    from(provider { zipTree(builtins.singleFile) }) { include("kotlin/**") }
 }
 
-val distDir: String by rootProject.extra
+publishing {
+    publications {
+        create<MavenPublication>("internal") {
+            artifact(jar.get())
+        }
+    }
 
-dist(targetName = "kotlin-stdlib-minimal-for-test.jar", targetDir = File(distDir))
+    repositories {
+        maven(rootProject.layout.buildDirectory.dir("internal/repo"))
+    }
+}

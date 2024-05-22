@@ -1,5 +1,7 @@
-// FILE: 1.kt
 // FULL_JDK
+// TARGET_BACKEND: JVM
+
+// FILE: 1.kt
 
 package test
 
@@ -9,7 +11,7 @@ fun test(): String  = ""
 
 inline fun String.switchMapOnce(crossinline mapper: (String) -> String): String {
     Callable(::test)
-    return { mapper(this) }()
+    return { mapper(this) }.let { it() }
 }
 // FILE: 2.kt
 
@@ -23,4 +25,3 @@ fun box() : String {
         }
     }
 }
-

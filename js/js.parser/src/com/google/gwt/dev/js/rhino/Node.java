@@ -203,6 +203,10 @@ public class Node implements Cloneable {
         return first;
     }
 
+    public Node getLastChild() {
+        return last;
+    }
+
     public Node getNext() {
         return next;
     }
@@ -241,6 +245,24 @@ public class Node implements Cloneable {
         if (first == null) {
             first = children;
         }
+    }
+
+    public Comment getCommentsBeforeNode() {
+        return commentBefore;
+    }
+
+    public Comment getCommentsAfterNode() {
+        return commentAfter;
+    }
+
+    public void setCommentsBeforeNode(Comment comment) {
+        if (comment == null) return;
+        commentBefore = comment;
+    }
+
+    public void setCommentsAfterNode(Comment comment) {
+        if (comment == null) return;
+        commentAfter = comment;
     }
 
     public static final int
@@ -346,6 +368,10 @@ public class Node implements Cloneable {
         return position;
     }
 
+    public void setPosition(CodePosition position) {
+        this.position = position;
+    }
+
     /** Can only be called when <tt>getType() == TokenStream.NUMBER</tt> */
     public double getDouble() throws UnsupportedOperationException {
         throw new UnsupportedOperationException(this + " is not a number node");
@@ -402,5 +428,9 @@ public class Node implements Cloneable {
     private Node first;    // first element of a linked list of children
     private Node last;     // last element of a linked list of children
     private CodePosition position;
+
+    private Comment commentBefore;
+
+    private Comment commentAfter;
     private int operation;
 }

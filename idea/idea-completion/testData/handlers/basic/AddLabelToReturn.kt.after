@@ -1,5 +1,0 @@
-val v: Boolean = run {
-    return@run <caret>true
-}
-
-// ELEMENT: "return@run"

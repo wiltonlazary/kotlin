@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.descriptors.impl;
@@ -13,6 +13,7 @@ import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.resolve.scopes.MemberScope;
 import org.jetbrains.kotlin.storage.StorageManager;
 import org.jetbrains.kotlin.types.*;
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner;
 
 import java.util.*;
 
@@ -21,7 +22,7 @@ public class MutableClassDescriptor extends ClassDescriptorBase {
     private final boolean isInner;
 
     private Modality modality;
-    private Visibility visibility;
+    private DescriptorVisibility visibility;
     private TypeConstructor typeConstructor;
     private List<TypeParameterDescriptor> typeParameters;
     private final Collection<KotlinType> supertypes = new ArrayList<KotlinType>();
@@ -73,13 +74,13 @@ public class MutableClassDescriptor extends ClassDescriptorBase {
         return kind;
     }
 
-    public void setVisibility(@NotNull Visibility visibility) {
+    public void setVisibility(@NotNull DescriptorVisibility visibility) {
         this.visibility = visibility;
     }
 
     @NotNull
     @Override
-    public Visibility getVisibility() {
+    public DescriptorVisibility getVisibility() {
         return visibility;
     }
 
@@ -95,6 +96,16 @@ public class MutableClassDescriptor extends ClassDescriptorBase {
 
     @Override
     public boolean isInline() {
+        return false;
+    }
+
+    @Override
+    public boolean isFun() {
+        return false;
+    }
+
+    @Override
+    public boolean isValue() {
         return false;
     }
 
@@ -162,7 +173,7 @@ public class MutableClassDescriptor extends ClassDescriptorBase {
 
     @Override
     @NotNull
-    public MemberScope getUnsubstitutedMemberScope() {
+    public MemberScope getUnsubstitutedMemberScope(@NotNull KotlinTypeRefiner kotlinTypeRefiner) {
         return MemberScope.Empty.INSTANCE; // used for getDefaultType
     }
 
@@ -176,6 +187,12 @@ public class MutableClassDescriptor extends ClassDescriptorBase {
     @Override
     public Collection<ClassDescriptor> getSealedSubclasses() {
         return Collections.emptyList();
+    }
+
+    @Nullable
+    @Override
+    public ValueClassRepresentation<SimpleType> getValueClassRepresentation() {
+        return null;
     }
 
     @Override

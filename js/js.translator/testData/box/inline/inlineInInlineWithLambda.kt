@@ -1,4 +1,4 @@
-// EXPECTED_REACHABLE_NODES: 1114
+// EXPECTED_REACHABLE_NODES: 1286
 var global = ""
 
 fun log(message: String) {
@@ -21,6 +21,8 @@ inline fun shouldBeInlined() {
     log("shouldBeInlined")
 }
 
+// CHECK_BREAKS_COUNT: function=box count=0 TARGET_BACKENDS=JS_IR
+// CHECK_LABELS_COUNT: function=box name=$l$block count=0 TARGET_BACKENDS=JS_IR
 fun box(): String {
     val result = foo()
     if (result != "([(OK)])") return "fail1: $result"

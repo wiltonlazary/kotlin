@@ -17,20 +17,52 @@
 package org.jetbrains.kotlin.psi.stubs.elements;
 
 import com.intellij.lang.ASTNode;
-import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.psi.tree.IElementType;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression;
-import org.jetbrains.kotlin.psi.KtImportDirective;
-import org.jetbrains.kotlin.psi.KtPackageDirective;
 
 public class KtDotQualifiedExpressionElementType extends KtPlaceHolderStubElementType<KtDotQualifiedExpression> {
     public KtDotQualifiedExpressionElementType(@NotNull @NonNls String debugName) {
         super(debugName, KtDotQualifiedExpression.class);
     }
 
+    private static boolean checkNodeTypesTraversal(ASTNode node) {
+
+        IElementType type = node.getElementType();
+        if (type != KtStubElementTypes.DOT_QUALIFIED_EXPRESSION &&
+            type != KtStubElementTypes.REFERENCE_EXPRESSION &&
+            type != KtTokens.IDENTIFIER &&
+            type != KtTokens.DOT
+        ) {
+            return false;
+        }
+
+        for (ASTNode child = node.getFirstChildNode(); child != null; child = child.getTreeNext()) {
+            if (!checkNodeTypesTraversal(child)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     @Override
     public boolean shouldCreateStub(ASTNode node) {
-        return PsiTreeUtil.getParentOfType(node.getPsi(), KtImportDirective.class, KtPackageDirective.class) != null;
+        ASTNode treeParent = node.getTreeParent();
+        if (treeParent == null) return false;
+
+        IElementType parentElementType = treeParent.getElementType();
+        if (parentElementType == KtStubElementTypes.IMPORT_DIRECTIVE ||
+            parentElementType == KtStubElementTypes.PACKAGE_DIRECTIVE ||
+            parentElementType == KtStubElementTypes.VALUE_ARGUMENT ||
+            parentElementType == KtStubElementTypes.CLASS_LITERAL_EXPRESSION ||
+            parentElementType == KtStubElementTypes.DOT_QUALIFIED_EXPRESSION
+        ) {
+            return checkNodeTypesTraversal(node) && super.shouldCreateStub(node);
+        }
+
+        return false;
     }
 }

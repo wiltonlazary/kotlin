@@ -1,3 +1,5 @@
+// FIR_IDENTICAL
+
 package test
 
 import test.Host.foo

@@ -1,0 +1,91 @@
+KtApplicableCallCandidateInfo:
+  candidate = KtSimpleFunctionCall:
+    isImplicitInvoke = false
+    partiallyAppliedSymbol = KtPartiallyAppliedSymbol:
+      dispatchReceiver = KtImplicitReceiverValue:
+        symbol = KtNamedClassOrObjectSymbol:
+          annotationsList: []
+          classIdIfNonLocal: one/two/TopLevelObject.Nested
+          classKind: OBJECT
+          companionObject: null
+          contextReceivers: []
+          isActual: false
+          isData: false
+          isExpect: false
+          isExternal: false
+          isFun: false
+          isInline: false
+          isInner: false
+          modality: FINAL
+          name: Nested
+          origin: SOURCE
+          superTypes: [
+            KtUsualClassType:
+              annotationsList: []
+              ownTypeArguments: []
+              type: kotlin/Any
+          ]
+          symbolKind: CLASS_MEMBER
+          typeParameters: []
+          visibility: Public
+        type = one.two.TopLevelObject.Nested
+      extensionReceiver = null
+      signature = KtFunctionLikeSignature:
+        receiverType = null
+        returnType = kotlin.Unit
+        symbol = one/two/TopLevelObject.Nested.foo(<dispatch receiver>: one.two.TopLevelObject.Nested): kotlin.Unit
+        valueParameters = []
+        callableIdIfNonLocal = one/two/TopLevelObject.Nested.foo
+    typeArgumentsMapping = {}
+    argumentMapping = {}
+  isInBestCandidates = true
+
+KtInapplicableCallCandidateInfo:
+  diagnostic = ERROR<NO_VALUE_FOR_PARAMETER: No value passed for parameter 'i'.>
+  candidate = KtSimpleFunctionCall:
+    isImplicitInvoke = false
+    partiallyAppliedSymbol = KtPartiallyAppliedSymbol:
+      dispatchReceiver = KtImplicitReceiverValue:
+        symbol = KtNamedClassOrObjectSymbol:
+          annotationsList: []
+          classIdIfNonLocal: one/two/TopLevelObject.Nested
+          classKind: OBJECT
+          companionObject: null
+          contextReceivers: []
+          isActual: false
+          isData: false
+          isExpect: false
+          isExternal: false
+          isFun: false
+          isInline: false
+          isInner: false
+          modality: FINAL
+          name: Nested
+          origin: SOURCE
+          superTypes: [
+            KtUsualClassType:
+              annotationsList: []
+              ownTypeArguments: []
+              type: kotlin/Any
+          ]
+          symbolKind: CLASS_MEMBER
+          typeParameters: []
+          visibility: Public
+        type = one.two.TopLevelObject.Nested
+      extensionReceiver = null
+      signature = KtFunctionLikeSignature:
+        receiverType = null
+        returnType = kotlin.Unit
+        symbol = one/two/TopLevelObject.Nested.foo(<dispatch receiver>: one.two.TopLevelObject.Nested, i: kotlin.Int): kotlin.Unit
+        valueParameters = [
+          KtVariableLikeSignature:
+            name = i
+            receiverType = null
+            returnType = kotlin.Int
+            symbol = i: kotlin.Int
+            callableIdIfNonLocal = null
+        ]
+        callableIdIfNonLocal = one/two/TopLevelObject.Nested.foo
+    typeArgumentsMapping = {}
+    argumentMapping = {}
+  isInBestCandidates = false

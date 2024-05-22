@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:JvmName("CharsetsKt")
@@ -17,7 +17,7 @@ import java.nio.charset.*
 public inline fun charset(charsetName: String): Charset = Charset.forName(charsetName)
 
 /**
- * Constant definitions for the standard [charsets](Charset). These
+ * Constant definitions for the standard [charsets][Charset]. These
  * charsets are guaranteed to be available on every implementation of the Java
  * platform.
  */
@@ -70,6 +70,8 @@ public object Charsets {
             utf_32 = charset
             charset
         }
+
+    @Volatile
     private var utf_32: Charset? = null
 
     /**
@@ -82,6 +84,8 @@ public object Charsets {
             utf_32le = charset
             charset
         }
+
+    @Volatile
     private var utf_32le: Charset? = null
 
     /**
@@ -94,6 +98,8 @@ public object Charsets {
             utf_32be = charset
             charset
         }
+
+    @Volatile
     private var utf_32be: Charset? = null
 
 }

@@ -1,4 +1,5 @@
-// WITH_RUNTIME
+// LANGUAGE: -NativeJsProhibitLateinitIsInitializedIntrinsicWithoutPrivateAccess
+// WITH_STDLIB
 
 package test
 

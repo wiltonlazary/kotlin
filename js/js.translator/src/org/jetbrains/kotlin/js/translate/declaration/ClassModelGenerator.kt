@@ -28,7 +28,10 @@ import org.jetbrains.kotlin.js.translate.utils.*
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils.prototypeOf
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils.pureFqn
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.descriptorUtil.*
+import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
+import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperInterfaces
+import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyExternal
+import org.jetbrains.kotlin.resolve.descriptorUtil.isExtension
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.utils.identity
@@ -47,8 +50,8 @@ class ClassModelGenerator(val context: TranslationContext) {
 
     private fun copyDefaultMembers(descriptor: ClassDescriptor, model: JsClassModel) {
         val members = descriptor.unsubstitutedMemberScope
-                .getContributedDescriptors(DescriptorKindFilter.FUNCTIONS)
-                .mapNotNull { it as? CallableMemberDescriptor }
+            .getContributedDescriptors(DescriptorKindFilter.FUNCTIONS)
+            .mapNotNull { it as? CallableMemberDescriptor }
 
         // Traverse fake non-abstract member. Current class does not provide their implementation,
         // it can be inherited from interface.
@@ -90,18 +93,22 @@ class ClassModelGenerator(val context: TranslationContext) {
         val targetClass = member.containingDeclaration as ClassDescriptor
         val fromInterfaceName = context.getNameForDescriptor(fromInterface).ident
 
-        copyMethod(context.getNameForDescriptor(fromClass).ident, fromInterfaceName + Namer.DEFAULT_PARAMETER_IMPLEMENTOR_SUFFIX,
-                   fromClass.containingDeclaration as ClassDescriptor, targetClass, model.postDeclarationBlock)
-        copyMethod(fromInterfaceName, context.getNameForDescriptor(member).ident,
-                   fromInterface.containingDeclaration as ClassDescriptor, targetClass,
-                   model.postDeclarationBlock)
+        copyMethod(
+            context.getNameForDescriptor(fromClass).ident, fromInterfaceName + Namer.DEFAULT_PARAMETER_IMPLEMENTOR_SUFFIX,
+            fromClass.containingDeclaration as ClassDescriptor, targetClass, model.postDeclarationBlock
+        )
+        copyMethod(
+            fromInterfaceName, context.getNameForDescriptor(member).ident,
+            fromInterface.containingDeclaration as ClassDescriptor, targetClass,
+            model.postDeclarationBlock
+        )
 
         return true
     }
 
     private fun copySimpleMember(descriptor: ClassDescriptor, member: CallableMemberDescriptor, model: JsClassModel) {
         // Special case: fake descriptor denotes (possible multiple) private members from different super interfaces
-        if (member.visibility == Visibilities.INVISIBLE_FAKE) return copyInvisibleFakeMember(descriptor, member, model)
+        if (member.visibility == DescriptorVisibilities.INVISIBLE_FAKE) return copyInvisibleFakeMember(descriptor, member, model)
 
         val memberToCopy = findMemberToCopy(member) ?: return
         val classToCopyFrom = memberToCopy.containingDeclaration as ClassDescriptor
@@ -110,8 +117,7 @@ class ClassModelGenerator(val context: TranslationContext) {
         if (memberToCopy is FunctionDescriptor && memberToCopy.hasOrInheritsParametersWithDefaultValue()) {
             val name = context.getNameForDescriptor(member).ident + Namer.DEFAULT_PARAMETER_IMPLEMENTOR_SUFFIX
             copyMethod(name, name, classToCopyFrom, descriptor, model.postDeclarationBlock)
-        }
-        else {
+        } else {
             copyMember(member, classToCopyFrom, descriptor, model)
         }
     }
@@ -138,8 +144,7 @@ class ClassModelGenerator(val context: TranslationContext) {
                         val accessorName = context.getNameForDescriptor(accessor).ident
                         copyMethod(accessorName, accessorName, from, to, model.postDeclarationBlock)
                     }
-                }
-                else {
+                } else {
                     copyProperty(name, from, to, model.postDeclarationBlock)
                 }
             }
@@ -179,9 +184,9 @@ class ClassModelGenerator(val context: TranslationContext) {
         get() = KotlinBuiltIns.isAny(containingDeclaration as ClassDescriptor) || overriddenDescriptors.any { it.isInheritedFromAny }
 
     private fun <T : CallableMemberDescriptor> T.findOverriddenDescriptor(
-            getTypedOverriddenDescriptors: T.() -> Collection<T>,
-            getOriginalDescriptor: T.() -> T,
-            filter: T.() -> Boolean
+        getTypedOverriddenDescriptors: T.() -> Collection<T>,
+        getOriginalDescriptor: T.() -> T,
+        filter: T.() -> Boolean
     ): T? {
         val visitedDescriptors = mutableSetOf<T>()
         val collectedDescriptors = mutableMapOf<T, T>()
@@ -192,8 +197,7 @@ class ClassModelGenerator(val context: TranslationContext) {
 
             if (original.kind.isReal && !original.isEffectivelyExternal()) {
                 collectedDescriptors.putIfAbsent(original, source)
-            }
-            else {
+            } else {
                 overridden.forEach { walk(it, source) }
             }
         }
@@ -205,8 +209,8 @@ class ClassModelGenerator(val context: TranslationContext) {
     }
 
     private fun <T : CallableMemberDescriptor> Collection<T>.removeRepeated(
-            getTypedOverriddenDescriptors: T.() -> Collection<T>,
-            getOriginalDescriptor: T.() -> T
+        getTypedOverriddenDescriptors: T.() -> Collection<T>,
+        getOriginalDescriptor: T.() -> T
     ): List<T> {
         val visitedDescriptors = mutableSetOf<T>()
         fun walk(descriptor: T) {
@@ -231,8 +235,10 @@ class ClassModelGenerator(val context: TranslationContext) {
             val sourceName = context.getNameForDescriptor(key).ident
             val targetName = context.getNameForDescriptor(value).ident
             if (sourceName != targetName) {
-                val statement = generateDelegateCall(descriptor, key, value, JsThisRef(), context, false,
-                                                     descriptor.source.getPsi())
+                val statement = generateDelegateCall(
+                    descriptor, key, value, JsThisRef(), context, false,
+                    descriptor.source.getPsi()
+                )
                 model.postDeclarationBlock.statements += statement
             }
         }
@@ -241,10 +247,7 @@ class ClassModelGenerator(val context: TranslationContext) {
     private fun generateOtherBridges(descriptor: ClassDescriptor, model: JsClassModel) {
         for (memberDescriptor in descriptor.defaultType.memberScope.getContributedDescriptors()) {
             if (memberDescriptor is FunctionDescriptor) {
-                val bridgesToGenerate = generateBridgesForFunctionDescriptor(memberDescriptor, identity()) {
-                    //There is no DefaultImpls in js backend so if method non-abstract it should be recognized as non-abstract on bridges calculation
-                    true
-                }
+                val bridgesToGenerate = generateBridgesForFunctionDescriptor(memberDescriptor, identity())
 
                 for (bridge in bridgesToGenerate) {
                     generateBridge(descriptor, model, bridge)
@@ -253,11 +256,11 @@ class ClassModelGenerator(val context: TranslationContext) {
         }
     }
 
-    private fun generateBridge(descriptor: ClassDescriptor, model: JsClassModel, bridge: Bridge<FunctionDescriptor>) {
+    private fun generateBridge(descriptor: ClassDescriptor, model: JsClassModel, bridge: Bridge<FunctionDescriptor, *>) {
         val fromDescriptor = bridge.from
         val toDescriptor = bridge.to
 
-        if (toDescriptor.visibility == Visibilities.INVISIBLE_FAKE) return
+        if (toDescriptor.visibility == DescriptorVisibilities.INVISIBLE_FAKE) return
 
         val sourceName = context.getNameForDescriptor(fromDescriptor).ident
         val targetName = context.getNameForDescriptor(toDescriptor).ident
@@ -267,16 +270,18 @@ class ClassModelGenerator(val context: TranslationContext) {
             if (fromDescriptor.kind.isReal && fromDescriptor.modality != Modality.ABSTRACT && !toDescriptor.kind.isReal) return
         }
 
-        model.postDeclarationBlock.statements += generateDelegateCall(descriptor, fromDescriptor, toDescriptor, JsThisRef(),
-                                                                      context, false, descriptor.source.getPsi())
+        model.postDeclarationBlock.statements += generateDelegateCall(
+            descriptor, fromDescriptor, toDescriptor, JsThisRef(),
+            context, false, descriptor.source.getPsi()
+        )
     }
 
     private fun copyMethod(
-            sourceName: String,
-            targetName: String,
-            sourceDescriptor: ClassDescriptor,
-            targetDescriptor: ClassDescriptor,
-            block: JsBlock
+        sourceName: String,
+        targetName: String,
+        sourceDescriptor: ClassDescriptor,
+        targetDescriptor: ClassDescriptor,
+        block: JsBlock
     ) {
         if (!context.isFromCurrentModule(targetDescriptor)) return
 
@@ -288,10 +293,10 @@ class ClassModelGenerator(val context: TranslationContext) {
     }
 
     private fun copyProperty(
-            name: String,
-            sourceDescriptor: ClassDescriptor,
-            targetDescriptor: ClassDescriptor,
-            block: JsBlock
+        name: String,
+        sourceDescriptor: ClassDescriptor,
+        targetDescriptor: ClassDescriptor,
+        block: JsBlock
     ) {
         if (!context.isFromCurrentModule(targetDescriptor)) return
 

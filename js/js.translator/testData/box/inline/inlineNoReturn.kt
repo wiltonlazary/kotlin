@@ -1,7 +1,7 @@
-// EXPECTED_REACHABLE_NODES: 1145
+// EXPECTED_REACHABLE_NODES: 1286
 package foo
 
-// CHECK_CONTAINS_NO_CALLS: factAbsNoInline1 except=imul
+// CHECK_CONTAINS_NO_CALLS: factAbsNoInline1 except=imul;Unit_getInstance
 
 internal class State(value: Int) {
     public var value: Int = value
@@ -33,6 +33,8 @@ internal inline fun factAbs(state: State) {
     }
 }
 
+// CHECK_BREAKS_COUNT: function=factAbsNoInline1 count=1 TARGET_BACKENDS=JS_IR
+// CHECK_LABELS_COUNT: function=factAbsNoInline1 name=$l$block count=1 TARGET_BACKENDS=JS_IR
 internal fun factAbsNoInline1(state: State): Int {
     factAbs(state)
     return state.value

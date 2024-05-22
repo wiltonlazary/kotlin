@@ -18,32 +18,36 @@ package org.jetbrains.kotlin.backend.common.bridges
 
 import org.jetbrains.kotlin.utils.DFS
 import java.util.*
+import kotlin.collections.LinkedHashMap
 
 interface FunctionHandle {
     val isDeclaration: Boolean
     val isAbstract: Boolean
 
     /** On finding concrete super declaration we should distinguish non-abstract java8/js default methods from
-    * class ones (see [findConcreteSuperDeclaration] method in bridges.kt).
-    * Note that interface methods with body compiled to jvm 8 target are assumed to be non-abstract in bridges method calculation
-    * (more details in [DescriptorBasedFunctionHandle.isBodyOwner] comment).*/
-    val isInterfaceDeclaration: Boolean
+     * class ones (see [findConcreteSuperDeclaration] method in bridges.kt).
+     * Note that interface methods with body compiled to jvm 8 target are assumed to be non-abstract in bridges method calculation
+     * (more details in [DescriptorBasedFunctionHandle.isBodyOwner] comment).*/
+    val mayBeUsedAsSuperImplementation: Boolean
 
     fun getOverridden(): Iterable<FunctionHandle>
+
+    val mightBeIncorrectCode: Boolean get() = false
 }
 
-data class Bridge<out Signature>(
-        val from: Signature,
-        val to: Signature
+data class Bridge<out Signature, out Function : FunctionHandle>(
+    val from: Signature,
+    val to: Signature,
+    val originalFunctions: Set<Function>
 ) {
     override fun toString() = "$from -> $to"
 }
 
 
 fun <Function : FunctionHandle, Signature> generateBridges(
-        function: Function,
-        signature: (Function) -> Signature
-): Set<Bridge<Signature>> {
+    function: Function,
+    signature: (Function) -> Signature
+): Set<Bridge<Signature, Function>> {
     // If it's an abstract function, no bridges are needed: when an implementation will appear in some concrete subclass, all necessary
     // bridges will be generated there
     if (function.isAbstract) return setOf()
@@ -54,9 +58,9 @@ fun <Function : FunctionHandle, Signature> generateBridges(
     // into some of the super-classes and will be inherited in this class
     if (fake && function.getOverridden().none { it.isAbstract }) return setOf()
 
-    val implementation = findConcreteSuperDeclaration(function)
+    val implementation = findConcreteSuperDeclaration(function) ?: return setOf()
 
-    val bridgesToGenerate = findAllReachableDeclarations(function).mapTo(LinkedHashSet<Signature>(), signature)
+    val bridgesToGenerate = findAllReachableDeclarations(function).groupByTo(LinkedHashMap(), signature)
 
     if (fake) {
         // If it's a concrete fake override, some of the bridges may be inherited from the super-classes. Specifically, bridges for all
@@ -65,14 +69,20 @@ fun <Function : FunctionHandle, Signature> generateBridges(
         @Suppress("UNCHECKED_CAST")
         for (overridden in function.getOverridden() as Iterable<Function>) {
             if (!overridden.isAbstract) {
-                bridgesToGenerate.removeAll(findAllReachableDeclarations(overridden).map(signature))
+                for (reachable in findAllReachableDeclarations(overridden)) {
+                    bridgesToGenerate.remove(signature(reachable))
+                }
             }
         }
     }
 
     val method = signature(implementation)
     bridgesToGenerate.remove(method)
-    return bridgesToGenerate.map { Bridge(it, method) }.toSet()
+    return bridgesToGenerate.entries
+        .map { (overriddenSignature, overriddenFunctions) ->
+            Bridge(overriddenSignature, method, overriddenFunctions.toSet())
+        }
+        .toSet()
 }
 
 fun <Function : FunctionHandle> findAllReachableDeclarations(function: Function): MutableSet<Function> {
@@ -92,8 +102,8 @@ fun <Function : FunctionHandle> findAllReachableDeclarations(function: Function)
  * Given a concrete function, finds an implementation (a concrete declaration) of this function in the supertypes.
  * The implementation is guaranteed to exist because if it wouldn't, the given function would've been abstract
  */
-fun <Function : FunctionHandle> findConcreteSuperDeclaration(function: Function): Function {
-    require(!function.isAbstract, { "Only concrete functions have implementations: $function" })
+fun <Function : FunctionHandle> findConcreteSuperDeclaration(function: Function): Function? {
+    require(!function.isAbstract) { "Only concrete functions have implementations: $function" }
 
     if (function.isDeclaration) return function
 
@@ -114,9 +124,13 @@ fun <Function : FunctionHandle> findConcreteSuperDeclaration(function: Function)
     }
     result.removeAll(toRemove)
 
-    val concreteRelevantDeclarations = result.filter { !it.isAbstract && !it.isInterfaceDeclaration }
+    val concreteRelevantDeclarations = result.filter { !it.isAbstract && it.mayBeUsedAsSuperImplementation }
     if (concreteRelevantDeclarations.size != 1) {
-        error("Concrete fake override $function should have exactly one concrete super-declaration: $concreteRelevantDeclarations")
+        if (!function.mightBeIncorrectCode) {
+            error("Concrete fake override $function should have exactly one concrete super-declaration: $concreteRelevantDeclarations")
+        } else {
+            return null
+        }
     }
 
     return concreteRelevantDeclarations[0]

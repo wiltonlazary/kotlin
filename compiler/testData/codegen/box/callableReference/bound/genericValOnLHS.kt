@@ -1,5 +1,3 @@
-// IGNORE_BACKEND: NATIVE
-
 class Generic<P : Any>(val p: P)
 
 class Host {
@@ -9,6 +7,6 @@ class Host {
 
 fun box(): String {
     Generic(Host()).p::class
-    (Generic(Host()).p::t)()
-    return (Generic(Host()).p::v)()
+    (Generic(Host()).p::t).let { it() }
+    return (Generic(Host()).p::v).let { it() }
 }

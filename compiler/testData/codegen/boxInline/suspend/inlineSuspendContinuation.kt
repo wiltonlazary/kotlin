@@ -1,7 +1,8 @@
-// FILE: test.kt
-// COMMON_COROUTINES_TEST
-// WITH_RUNTIME
+// WITH_COROUTINES
 // NO_CHECK_LAMBDA_INLINING
+// WITH_STDLIB
+// FILE: test.kt
+// TARGET_BACKEND: JVM
 
 suspend inline fun test1(c: () -> Unit) {
     c()
@@ -34,23 +35,11 @@ suspend inline fun test5(crossinline c: suspend() -> Unit) {
 }
 
 // FILE: box.kt
-// COMMON_COROUTINES_TEST
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
+import helpers.*
+import kotlin.coroutines.jvm.internal.*
 
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
-import COROUTINES_PACKAGE.jvm.internal.*
-
-object EmptyContinuation: Continuation<Unit> {
-    override val context: CoroutineContext
-        get() = EmptyCoroutineContext
-
-    override fun resume(value: Unit) {
-    }
-
-    override fun resumeWithException(exception: Throwable) {
-        throw exception
-    }
-}
 
 fun builder(c: suspend () -> Unit) {
     c.startCoroutine(EmptyContinuation)
@@ -108,6 +97,6 @@ fun box() : String {
             checkContinuation(savedContinuation!!)
         }
     }
-    if (!continuationChanged) return "FAIL 5"
+    if (continuationChanged) return "FAIL 5"
     return "OK"
 }

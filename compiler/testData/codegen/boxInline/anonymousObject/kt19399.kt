@@ -1,4 +1,4 @@
-//WITH_RUNTIME
+// WITH_STDLIB
 // FILE: 1.kt
 class Foo {
     var bar = ""
@@ -26,7 +26,7 @@ class Foo {
                 ifNotBusyPerform {
                     ifNotBusySayHello()
                 }
-            }()
+            }.let { it() }
         }
     }
 }

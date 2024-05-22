@@ -16,12 +16,14 @@
 
 package org.jetbrains.kotlin.load.java.descriptors;
 
+import kotlin.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
 import org.jetbrains.kotlin.descriptors.impl.SimpleFunctionDescriptorImpl;
 import org.jetbrains.kotlin.name.Name;
+import org.jetbrains.kotlin.resolve.DescriptorFactory;
 import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.kotlin.util.OperatorChecks;
 
@@ -34,6 +36,8 @@ public class JavaMethodDescriptor extends SimpleFunctionDescriptorImpl implement
     // instead of type
     public static final UserDataKey<ValueParameterDescriptor> ORIGINAL_VALUE_PARAMETER_FOR_EXTENSION_RECEIVER =
             new UserDataKey<ValueParameterDescriptor>() {};
+
+    public static final UserDataKey<Boolean> HAS_ERASED_VALUE_PARAMETERS = new UserDataKey<Boolean>() {};
 
     private enum ParameterNamesStatus {
         NON_STABLE_DECLARED(false, false),
@@ -58,6 +62,7 @@ public class JavaMethodDescriptor extends SimpleFunctionDescriptorImpl implement
     }
 
     private ParameterNamesStatus parameterNamesStatus = null;
+    private final boolean isForRecordComponent;
 
     protected JavaMethodDescriptor(
             @NotNull DeclarationDescriptor containingDeclaration,
@@ -65,9 +70,11 @@ public class JavaMethodDescriptor extends SimpleFunctionDescriptorImpl implement
             @NotNull Annotations annotations,
             @NotNull Name name,
             @NotNull Kind kind,
-            @NotNull SourceElement source
+            @NotNull SourceElement source,
+            boolean isForRecordComponent
     ) {
         super(containingDeclaration, original, annotations, name, kind, source);
+        this.isForRecordComponent = isForRecordComponent;
     }
 
     @NotNull
@@ -75,26 +82,29 @@ public class JavaMethodDescriptor extends SimpleFunctionDescriptorImpl implement
             @NotNull DeclarationDescriptor containingDeclaration,
             @NotNull Annotations annotations,
             @NotNull Name name,
-            @NotNull SourceElement source
+            @NotNull SourceElement source,
+            boolean isForRecordComponent
     ) {
-        return new JavaMethodDescriptor(containingDeclaration, null, annotations, name, Kind.DECLARATION, source);
+        return new JavaMethodDescriptor(containingDeclaration, null, annotations, name, Kind.DECLARATION, source, isForRecordComponent);
     }
 
     @NotNull
     @Override
     public SimpleFunctionDescriptorImpl initialize(
-            @Nullable KotlinType receiverParameterType,
+            @Nullable ReceiverParameterDescriptor extensionReceiverParameter,
             @Nullable ReceiverParameterDescriptor dispatchReceiverParameter,
+            @NotNull List<ReceiverParameterDescriptor> contextReceiverParameters,
             @NotNull List<? extends TypeParameterDescriptor> typeParameters,
             @NotNull List<ValueParameterDescriptor> unsubstitutedValueParameters,
             @Nullable KotlinType unsubstitutedReturnType,
             @Nullable Modality modality,
-            @NotNull Visibility visibility,
+            @NotNull DescriptorVisibility visibility,
             @Nullable Map<? extends UserDataKey<?>, ?> userData
     ) {
         SimpleFunctionDescriptorImpl descriptor = super.initialize(
-                receiverParameterType, dispatchReceiverParameter, typeParameters, unsubstitutedValueParameters,
-                unsubstitutedReturnType, modality, visibility, userData);
+                extensionReceiverParameter, dispatchReceiverParameter, contextReceiverParameters, typeParameters, unsubstitutedValueParameters,
+                unsubstitutedReturnType, modality, visibility, userData
+        );
         setOperator(OperatorChecks.INSTANCE.check(descriptor).isSuccess());
         return descriptor;
     }
@@ -115,6 +125,10 @@ public class JavaMethodDescriptor extends SimpleFunctionDescriptorImpl implement
         this.parameterNamesStatus = ParameterNamesStatus.get(hasStableParameterNames, hasSynthesizedParameterNames);
     }
 
+    public boolean isForRecordComponent() {
+        return isForRecordComponent;
+    }
+
     @NotNull
     @Override
     protected JavaMethodDescriptor createSubstitutedCopy(
@@ -131,7 +145,8 @@ public class JavaMethodDescriptor extends SimpleFunctionDescriptorImpl implement
                 annotations,
                 newName != null ? newName : getName(),
                 kind,
-                source
+                source,
+                isForRecordComponent
         );
         result.setParameterNamesStatus(hasStableParameterNames(), hasSynthesizedParameterNames());
         return result;
@@ -141,22 +156,33 @@ public class JavaMethodDescriptor extends SimpleFunctionDescriptorImpl implement
     @NotNull
     public JavaMethodDescriptor enhance(
             @Nullable KotlinType enhancedReceiverType,
-            @NotNull List<ValueParameterData> enhancedValueParametersData,
-            @NotNull KotlinType enhancedReturnType
+            @NotNull List<KotlinType> enhancedValueParameterTypes,
+            @NotNull KotlinType enhancedReturnType,
+            @Nullable Pair<UserDataKey<?>, ?> additionalUserData
     ) {
         List<ValueParameterDescriptor> enhancedValueParameters =
-                UtilKt.copyValueParameters(enhancedValueParametersData, getValueParameters(), this);
+                UtilKt.copyValueParameters(enhancedValueParameterTypes, getValueParameters(), this);
+
+        ReceiverParameterDescriptor enhancedReceiver =
+                enhancedReceiverType == null ? null : DescriptorFactory.createExtensionReceiverParameterForCallable(
+                        this, enhancedReceiverType, Annotations.Companion.getEMPTY()
+                );
 
         JavaMethodDescriptor enhancedMethod =
                 (JavaMethodDescriptor) newCopyBuilder()
                         .setValueParameters(enhancedValueParameters)
                         .setReturnType(enhancedReturnType)
-                        .setExtensionReceiverType(enhancedReceiverType)
+                        .setExtensionReceiverParameter(enhancedReceiver)
                         .setDropOriginalInContainingParts()
                         .setPreserveSourceElement()
                         .build();
 
-        assert enhancedMethod != null : "null after substitution while enhancing " + toString();
+        assert enhancedMethod != null : "null after substitution while enhancing " + this;
+
+        if (additionalUserData != null) {
+            enhancedMethod.putInUserDataMap(additionalUserData.getFirst(), additionalUserData.getSecond());
+        }
+
         return enhancedMethod;
     }
 }

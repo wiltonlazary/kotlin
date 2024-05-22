@@ -17,16 +17,24 @@
 package org.jetbrains.kotlin.codegen
 
 import org.jetbrains.kotlin.codegen.JvmCodegenUtil.getDispatchReceiverParameterForConstructorCall
+import org.jetbrains.kotlin.codegen.JvmCodegenUtil.isJvmInterface
 import org.jetbrains.kotlin.codegen.binding.CodegenBinding
 import org.jetbrains.kotlin.codegen.state.GenerationState
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtPureClassOrObject
 import org.jetbrains.kotlin.psi.KtPureElement
+import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
+import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.components.hasDefaultValue
+import org.jetbrains.kotlin.resolve.isInlineClass
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.annotations.findJvmOverloadsAnnotation
-import org.jetbrains.kotlin.resolve.jvm.diagnostics.OtherOriginFromPure
+import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
+import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOriginKind
+import org.jetbrains.kotlin.resolve.jvm.shouldHideConstructorDueToValueClassTypeValueParameters
 import org.jetbrains.org.objectweb.asm.Label
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
@@ -37,9 +45,9 @@ import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
  * parameter values substituted.
  */
 class DefaultParameterValueSubstitutor(val state: GenerationState) {
-    private companion object {
+    companion object {
         // rename -> JvmOverloads
-        private val ANNOTATION_TYPE_DESCRIPTOR_FOR_JVM_OVERLOADS_GENERATED_METHODS: String =
+        val ANNOTATION_TYPE_DESCRIPTOR_FOR_JVM_OVERLOADS_GENERATED_METHODS: String =
             Type.getObjectType("synthetic/kotlin/jvm/GeneratedByJvmOverloads").descriptor
     }
 
@@ -122,34 +130,49 @@ class DefaultParameterValueSubstitutor(val state: GenerationState) {
         substituteCount: Int
     ) {
         val typeMapper = state.typeMapper
-        val isStatic = AsmUtil.isStaticMethod(contextKind, functionDescriptor)
-        val baseMethodFlags = AsmUtil.getCommonCallableFlags(functionDescriptor, state) and Opcodes.ACC_VARARGS.inv()
+        val isStatic = DescriptorAsmUtil.isStaticMethod(contextKind, functionDescriptor)
+        val baseMethodFlags = DescriptorAsmUtil.getCommonCallableFlags(functionDescriptor, state) and Opcodes.ACC_VARARGS.inv()
         val remainingParameters = getRemainingParameters(functionDescriptor.original, substituteCount)
+        val remainingParametersDeclarations =
+            remainingParameters.map { DescriptorToSourceUtils.descriptorToDeclaration(it) as? KtParameter }
+
+        val generateAsFinal =
+            (functionDescriptor.modality == Modality.FINAL ||
+                    state.languageVersionSettings.supportsFeature(LanguageFeature.GenerateJvmOverloadsAsFinal)) &&
+                    !isJvmInterface(functionDescriptor.containingDeclaration)
         val flags =
             baseMethodFlags or
                     (if (isStatic) Opcodes.ACC_STATIC else 0) or
-                    (if (functionDescriptor.modality == Modality.FINAL && functionDescriptor !is ConstructorDescriptor) Opcodes.ACC_FINAL else 0) or
+                    (if (generateAsFinal && functionDescriptor !is ConstructorDescriptor) Opcodes.ACC_FINAL else 0) or
                     (if (remainingParameters.lastOrNull()?.varargElementType != null) Opcodes.ACC_VARARGS else 0)
         val signature = typeMapper.mapSignatureWithCustomParameters(functionDescriptor, contextKind, remainingParameters, false)
         val mv = classBuilder.newMethod(
-            OtherOriginFromPure(methodElement, functionDescriptor), flags,
+            JvmDeclarationOrigin(
+                JvmDeclarationOriginKind.JVM_OVERLOADS, methodElement?.psiOrParent, functionDescriptor,
+                remainingParametersDeclarations
+            ),
+            flags,
             signature.asmMethod.name,
             signature.asmMethod.descriptor,
             signature.genericsSignature,
             FunctionCodegen.getThrownExceptions(functionDescriptor, typeMapper)
         )
+        val skipNullabilityAnnotations = flags and Opcodes.ACC_PRIVATE != 0 || flags and Opcodes.ACC_SYNTHETIC != 0
 
-        AnnotationCodegen.forMethod(mv, memberCodegen, typeMapper).genAnnotations(functionDescriptor, signature.returnType)
+        AnnotationCodegen.forMethod(mv, memberCodegen, state, skipNullabilityAnnotations)
+            .genAnnotations(functionDescriptor, signature.returnType, functionDescriptor.returnType)
 
         if (state.classBuilderMode == ClassBuilderMode.KAPT3) {
             mv.visitAnnotation(ANNOTATION_TYPE_DESCRIPTOR_FOR_JVM_OVERLOADS_GENERATED_METHODS, false)
         }
 
-        FunctionCodegen.generateParameterAnnotations(functionDescriptor, mv, signature, remainingParameters, memberCodegen, state)
+        FunctionCodegen.generateParameterAnnotations(
+            functionDescriptor, mv, signature, remainingParameters, memberCodegen, state, skipNullabilityAnnotations
+        )
 
         if (!state.classBuilderMode.generateBodies) {
             FunctionCodegen.generateLocalVariablesForParameters(
-                mv, signature, null, Label(), Label(), remainingParameters, isStatic, typeMapper
+                mv, signature, functionDescriptor, null, Label(), Label(), remainingParameters, isStatic, state
             )
             mv.visitEnd()
             return
@@ -179,41 +202,36 @@ class DefaultParameterValueSubstitutor(val state: GenerationState) {
             val delegateOwner = delegateFunctionDescriptor.containingDeclaration
             if (delegateOwner is ClassDescriptor && delegateOwner.isCompanionObject) {
                 val singletonValue = StackValue.singleton(delegateOwner, typeMapper)
-                singletonValue.put(singletonValue.type, v)
+                singletonValue.put(singletonValue.type, singletonValue.kotlinType, v)
             }
         }
 
         val receiver = functionDescriptor.extensionReceiverParameter
         if (receiver != null) {
+            val receiverKotlinType = receiver.returnType
             val receiverType = typeMapper.mapType(receiver)
             val receiverIndex = frameMap.enter(receiver, receiverType)
-            StackValue.local(receiverIndex, receiverType).put(receiverType, v)
+            StackValue.local(receiverIndex, receiverType, receiverKotlinType).put(receiverType, receiverKotlinType, v)
         }
         for (parameter in remainingParameters) {
             frameMap.enter(parameter, typeMapper.mapType(parameter))
         }
 
-        var mask = 0
-        val masks = arrayListOf<Int>()
+        val args = DefaultCallArgs(functionDescriptor.valueParameters.size)
         for (parameterDescriptor in functionDescriptor.valueParameters) {
-            val paramType = typeMapper.mapType(parameterDescriptor.type)
+            val paramKotlinType = parameterDescriptor.type
+            val paramType = typeMapper.mapType(paramKotlinType)
             if (parameterDescriptor in remainingParameters) {
                 val index = frameMap.getIndex(parameterDescriptor)
-                StackValue.local(index, paramType).put(paramType, v)
+                StackValue.local(index, paramType, paramKotlinType).put(paramType, paramKotlinType, v)
             } else {
                 AsmUtil.pushDefaultValueOnStack(paramType, v)
-                val i = parameterDescriptor.index
-                if (i != 0 && i % Integer.SIZE == 0) {
-                    masks.add(mask)
-                    mask = 0
-                }
-                mask = mask or (1 shl (i % Integer.SIZE))
+                args.mark(parameterDescriptor.index)
             }
         }
-        masks.add(mask)
 
-        for (m in masks) {
-            v.iconst(m)
+        for (mask in args.toInts()) {
+            v.iconst(mask)
         }
 
         // for default constructors: just marks default constructor (see DEFAULT_CONSTRUCTOR_MARKER)
@@ -221,7 +239,7 @@ class DefaultParameterValueSubstitutor(val state: GenerationState) {
         v.aconst(null)
 
         val defaultMethod = typeMapper.mapDefaultMethod(delegateFunctionDescriptor, contextKind)
-        if (functionDescriptor is ConstructorDescriptor) {
+        if (functionDescriptor is ConstructorDescriptor && !functionDescriptor.containingDeclaration.isInlineClass()) {
             v.invokespecial(methodOwner.internalName, defaultMethod.name, defaultMethod.descriptor, false)
         } else {
             v.invokestatic(methodOwner.internalName, defaultMethod.name, defaultMethod.descriptor, false)
@@ -231,8 +249,10 @@ class DefaultParameterValueSubstitutor(val state: GenerationState) {
         val methodEnd = Label()
         mv.visitLabel(methodEnd)
 
+        val thisType = functionDescriptor.dispatchReceiverParameter?.type?.asmType(typeMapper)
+
         FunctionCodegen.generateLocalVariablesForParameters(
-            mv, signature, null, methodBegin, methodEnd, remainingParameters, isStatic, typeMapper
+            mv, signature, functionDescriptor, thisType, methodBegin, methodEnd, remainingParameters, isStatic, state
         )
 
         FunctionCodegen.endVisit(mv, null, methodElement)
@@ -248,10 +268,13 @@ class DefaultParameterValueSubstitutor(val state: GenerationState) {
         if (classDescriptor.kind != ClassKind.CLASS) return false
 
         if (classOrObject.isLocal) return false
+        if (classDescriptor.isInlineClass()) return false
+        if (shouldHideConstructorDueToValueClassTypeValueParameters(constructorDescriptor)) return false
+        if (DescriptorUtils.isSealedClass(classDescriptor)) return false
 
         if (CodegenBinding.canHaveOuter(state.bindingContext, classDescriptor)) return false
 
-        if (Visibilities.isPrivate(constructorDescriptor.visibility)) return false
+        if (DescriptorVisibilities.isPrivate(constructorDescriptor.visibility)) return false
 
         if (constructorDescriptor.valueParameters.isEmpty()) return false
         if (classOrObject is KtClass && hasSecondaryConstructorsWithNoParameters(classOrObject)) return false

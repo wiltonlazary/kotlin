@@ -1,6 +1,9 @@
-// IGNORE_BACKEND: NATIVE
-// FILE: 1.kt
 // WITH_REFLECT
+// FULL_JDK
+// NO_CHECK_LAMBDA_INLINING
+// LAMBDAS: CLASS
+// TARGET_BACKEND: JVM
+// FILE: 1.kt
 package test
 
 open class Test {
@@ -16,8 +19,6 @@ open class Test {
 
 // FILE: 2.kt
 
-// NO_CHECK_LAMBDA_INLINING
-// FULL_JDK
 
 import test.*
 import java.util.*

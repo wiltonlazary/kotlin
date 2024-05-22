@@ -17,8 +17,7 @@
 package org.jetbrains.kotlin.codegen
 
 import com.intellij.util.ArrayUtil
-import org.jetbrains.kotlin.backend.common.bridges.findImplementationFromInterface
-import org.jetbrains.kotlin.backend.common.bridges.firstSuperMethodFromKotlin
+import org.jetbrains.kotlin.util.findImplementationFromInterface
 import org.jetbrains.kotlin.codegen.context.ClassContext
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.descriptors.*
@@ -28,6 +27,7 @@ import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOriginKind
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
+import org.jetbrains.kotlin.util.firstSuperMethodFromKotlin
 import org.jetbrains.org.objectweb.asm.MethodVisitor
 import org.jetbrains.org.objectweb.asm.Opcodes.*
 
@@ -47,9 +47,9 @@ class InterfaceImplBodyCodegen(
         val codegenFlags = ACC_PUBLIC or ACC_FINAL or ACC_SUPER
         val flags = if (state.classBuilderMode == ClassBuilderMode.LIGHT_CLASSES) codegenFlags or ACC_STATIC else codegenFlags
         v.defineClass(
-                myClass.psiOrParent, state.classFileVersion, flags,
-                defaultImplType.internalName,
-                null, "java/lang/Object", ArrayUtil.EMPTY_STRING_ARRAY
+            myClass.psiOrParent, state.config.classFileVersion, flags,
+            defaultImplType.internalName,
+            null, "java/lang/Object", ArrayUtil.EMPTY_STRING_ARRAY
         )
         v.visitSource(myClass.containingKtFile.name, null)
     }
@@ -64,7 +64,7 @@ class InterfaceImplBodyCodegen(
             if (memberDescriptor !is CallableMemberDescriptor) continue
 
             if (memberDescriptor.kind.isReal) continue
-            if (memberDescriptor.visibility == Visibilities.INVISIBLE_FAKE) continue
+            if (memberDescriptor.visibility == DescriptorVisibilities.INVISIBLE_FAKE) continue
             if (memberDescriptor.modality == Modality.ABSTRACT) continue
 
             val implementation = findImplementationFromInterface(memberDescriptor) ?: continue
@@ -140,7 +140,7 @@ class InterfaceImplBodyCodegen(
     override fun generateKotlinMetadataAnnotation() {
         (v as InterfaceImplClassBuilder).stopCounting()
 
-        writeSyntheticClassMetadata(v, state)
+        writeSyntheticClassMetadata(v, state.config, false)
     }
 
     override fun done() {

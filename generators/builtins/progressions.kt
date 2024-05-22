@@ -35,16 +35,26 @@ class GenerateProgressions(out: PrintWriter) : BuiltInsSourceGenerator(out) {
             LONG -> "0L"
             else -> "0"
         }
-        val checkZero = "if (step == $zero) throw kotlin.IllegalArgumentException(\"Step must be non-zero\")"
+        val checkZero = """if (step == $zero) throw kotlin.IllegalArgumentException("Step must be non-zero.")"""
+
+        val stepMinValue = "$incrementType.MIN_VALUE"
+        val checkMin = """if (step == $stepMinValue) throw kotlin.IllegalArgumentException("Step must be greater than $stepMinValue to avoid overflow on negation.")"""
 
         val hashCode = "=\n" + when (kind) {
             CHAR ->
-                "        if (isEmpty()) -1 else (31 * (31 * first.toInt() + last.toInt()) + step)"
+                "        if (isEmpty()) -1 else (31 * (31 * first.code + last.code) + step)"
             INT ->
                 "        if (isEmpty()) -1 else (31 * (31 * first + last) + step)"
             LONG ->
                 "        if (isEmpty()) -1 else (31 * (31 * ${hashLong("first")} + ${hashLong("last")}) + ${hashLong("step")}).toInt()"
-            else -> throw IllegalArgumentException()
+        }
+        val elementToIncrement = when (kind) {
+            CHAR -> ".code"
+            else -> ""
+        }
+        val incrementToElement = when (kind) {
+            CHAR -> ".toChar()"
+            else -> ""
         }
 
         out.println(
@@ -60,6 +70,7 @@ public open class $progression
     ) : Iterable<$t> {
     init {
         $checkZero
+        $checkMin
     }
 
     /**
@@ -70,7 +81,7 @@ public open class $progression
     /**
      * The last element in the progression.
      */
-    public val last: $t = getProgressionLastElement(start.to$incrementType(), endInclusive.to$incrementType(), step).to$t()
+    public val last: $t = getProgressionLastElement(start$elementToIncrement, endInclusive$elementToIncrement, step)$incrementToElement
 
     /**
      * The step of the progression.
@@ -79,7 +90,12 @@ public open class $progression
 
     override fun iterator(): ${t}Iterator = ${t}ProgressionIterator(first, last, step)
 
-    /** Checks if the progression is empty. */
+    /**
+     * Checks if the progression is empty.
+     *
+     * Progression with a positive step is empty if its first element is greater than the last element.
+     * Progression with a negative step is empty if its first element is less than the last element.
+     */
     public open fun isEmpty(): Boolean = if (step > 0) first > last else first < last
 
     override fun equals(other: Any?): Boolean =
@@ -90,12 +106,14 @@ public open class $progression
 
     override fun toString(): String = ${"if (step > 0) \"\$first..\$last step \$step\" else \"\$first downTo \$last step \${-step}\""}
 
-    companion object {
+    public companion object {
         /**
          * Creates $progression within the specified bounds of a closed range.
-
+         *
          * The progression starts with the [rangeStart] value and goes toward the [rangeEnd] value not excluding it, with the specified [step].
          * In order to go backwards the [step] must be negative.
+         *
+         * [step] must be greater than `$stepMinValue` and not equal to zero.
          */
         public fun fromClosedRange(rangeStart: $t, rangeEnd: $t, step: $incrementType): $progression = $progression(rangeStart, rangeEnd, step)
     }

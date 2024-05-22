@@ -1,7 +1,0 @@
-// WITH_RUNTIME
-
-import javax.swing.SwingUtilities
-
-fun bar() {
-    SwingUtilities.invokeLater { throw UnsupportedOperationException() }
-}

@@ -7,47 +7,80 @@ plugins {
 }
 
 dependencies {
-    testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    testRuntime(intellijDep())
-    testCompileOnly(intellijDep()) { includeJars("idea", "idea_rt", "openapi", "platform-api", "platform-impl") }
-
-    compile(project(":compiler:util"))
-    compile(project(":compiler:cli"))
-    compile(project(":compiler:backend"))
-    compile(project(":compiler:frontend"))
-    compile(project(":compiler:frontend.java"))
-    compile(project(":compiler:plugin-api"))
+    compileOnly(project(":compiler:util"))
+    compileOnly(project(":compiler:cli"))
+    compileOnly(project(":compiler:backend"))
+    compileOnly(project(":compiler:backend.jvm.entrypoint"))
+    compileOnly(project(":compiler:frontend"))
+    compileOnly(project(":compiler:frontend.java"))
+    compileOnly(project(":compiler:plugin-api"))
+    compileOnly(project(":kotlin-annotation-processing-cli"))
+    compileOnly(project(":kotlin-annotation-processing-base"))
     compileOnly(project(":kotlin-annotation-processing-runtime"))
-    compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    compileOnly(intellijDep()) { includeJars("asm-all") }
+    compileOnly(intellijCore())
+    compileOnly(toolsJarApi())
+    compileOnly(commonDependency("org.jetbrains.intellij.deps:asm-all"))
 
-    testCompile(project(":compiler:tests-common"))
-    testCompile(projectTests(":compiler:tests-common"))
-    testCompile(commonDep("junit:junit"))
-    testCompile(project(":kotlin-annotation-processing-runtime"))
+    testImplementation(intellijCore())
+    testRuntimeOnly(intellijResources()) { isTransitive = false }
 
-    embeddedComponents(project(":kotlin-annotation-processing-runtime")) { isTransitive = false }
+    testRuntimeOnly(commonDependency("org.codehaus.woodstox:stax2-api"))
+    testRuntimeOnly(commonDependency("com.fasterxml:aalto-xml"))
+
+    testApi(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testApi(projectTests(":compiler:tests-common-new"))
+    testApi(projectTests(":compiler:test-infrastructure"))
+    testApi(projectTests(":compiler:test-infrastructure-utils"))
+
+    testApi(project(":kotlin-annotation-processing-base"))
+    testApi(projectTests(":kotlin-annotation-processing-base"))
+    testApi(project(":kotlin-annotation-processing-runtime"))
+
+    testCompileOnly(toolsJarApi())
+    testRuntimeOnly(toolsJar())
+
+    embedded(project(":kotlin-annotation-processing-runtime")) { isTransitive = false }
+    embedded(project(":kotlin-annotation-processing-cli")) { isTransitive = false }
+    embedded(project(":kotlin-annotation-processing-base")) { isTransitive = false }
+
+    testApi(project(":tools:kotlinp-jvm"))
+    testApi(project(":kotlin-metadata-jvm"))
 }
+
+optInToExperimentalCompilerApi()
 
 sourceSets {
     "main" { projectDefault() }
-    "test" { projectDefault() }
+    "test" {
+        projectDefault()
+        generatedTestDir()
+    }
 }
 
 testsJar {}
 
-projectTest {
-    workingDir = rootDir
-    dependsOn(":dist")
+kaptTestTask("test", JavaLanguageVersion.of(8))
+kaptTestTask("testJdk11", JavaLanguageVersion.of(11))
+kaptTestTask("testJdk17", JavaLanguageVersion.of(17))
+kaptTestTask("testJdk21", JavaLanguageVersion.of(21))
+
+fun Project.kaptTestTask(name: String, javaLanguageVersion: JavaLanguageVersion) {
+    val service = extensions.getByType<JavaToolchainService>()
+
+    projectTest(taskName = name, parallel = true) {
+        useJUnitPlatform {
+            excludeTags = setOf("IgnoreJDK11")
+        }
+        workingDir = rootDir
+        dependsOn(":dist")
+        javaLauncher.set(service.launcherFor { languageVersion.set(javaLanguageVersion) })
+    }
 }
-
-runtimeJar {
-    fromEmbeddedComponents()
-}
-
-sourcesJar()
-javadocJar()
-
-dist()
 
 publish()
+
+runtimeJar()
+sourcesJar()
+javadocJar()

@@ -1,5 +1,6 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
-// !CHECK_TYPE
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER
+// CHECK_TYPE
 
 class A<T> {
     fun foo(f: (T) -> Unit) {}

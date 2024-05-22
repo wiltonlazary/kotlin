@@ -25,6 +25,8 @@ import java.lang.reflect.WildcardType
 class ContainerConsistencyException(message: String) : Exception(message)
 
 interface ComponentContainer {
+    val containerId: String
+
     fun createResolveContext(requestingDescriptor: ValueDescriptor): ValueResolveContext
 }
 
@@ -38,7 +40,10 @@ object DynamicComponentDescriptor : ValueDescriptor {
     override fun toString(): String = "Dynamic"
 }
 
-class StorageComponentContainer(private val id: String, parent: StorageComponentContainer? = null) : ComponentContainer, ComponentProvider, Closeable {
+class StorageComponentContainer(
+    private val id: String,
+    parent: StorageComponentContainer? = null
+) : ComponentContainer, ComponentProvider, Closeable {
     val unknownContext: ComponentResolveContext by lazy {
         val parentContext = parent?.let { ComponentResolveContext(it, DynamicComponentDescriptor) }
         ComponentResolveContext(this, DynamicComponentDescriptor, parentContext)
@@ -99,13 +104,24 @@ class StorageComponentContainer(private val id: String, parent: StorageComponent
         return this
     }
 
-    override fun <T> create(request: Class<T>): T {
-        val constructorBinding = request.bindToConstructor(unknownContext)
-        val args = constructorBinding.argumentDescriptors.map { it.getValue() }.toTypedArray()
-        return constructorBinding.constructor.newInstance(*args) as T
+    internal fun registerClashResolvers(resolvers: List<PlatformExtensionsClashResolver<*>>): StorageComponentContainer {
+        componentStorage.registerClashResolvers(resolvers)
+        return this
     }
 
-    override fun toString() = "Container $id"
+    override fun <T> create(request: Class<T>): T {
+        val constructorBinding = request.bindToConstructor(containerId, unknownContext)
+        val args = constructorBinding.argumentDescriptors.map { it.getValue() }.toTypedArray()
+        return runWithUnwrappingInvocationException {
+            @Suppress("UNCHECKED_CAST")
+            constructorBinding.constructor.newInstance(*args) as T
+        }
+    }
+
+    override val containerId
+        get() = "Container: $id"
+
+    override fun toString() = containerId
 }
 
 fun StorageComponentContainer.registerSingleton(klass: Class<*>): StorageComponentContainer {

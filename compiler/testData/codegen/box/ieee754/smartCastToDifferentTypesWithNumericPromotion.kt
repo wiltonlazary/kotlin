@@ -1,3 +1,6 @@
+// TARGET_BACKEND: JVM
+// LANGUAGE: -ProperIeee754Comparisons
+
 fun eqDI(x: Any?, y: Any?) = x is Double?   && y is Int?        && x == y
 fun eqDL(x: Any?, y: Any?) = x is Double?   && y is Long?       && x == y
 fun eqID(x: Any?, y: Any?) = x is Int?      && y is Double?     && x == y

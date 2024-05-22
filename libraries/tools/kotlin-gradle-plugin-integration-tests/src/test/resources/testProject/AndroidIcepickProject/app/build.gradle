@@ -3,18 +3,19 @@ apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-kapt'
 
 dependencies {
-    compile "frankiesardo:icepick:3.2.0"
+    implementation "frankiesardo:icepick:3.2.0"
     kapt "frankiesardo:icepick-processor:3.2.0"
 
-    compile 'org.parceler:parceler-api:1.1.5'
+    implementation 'org.parceler:parceler-api:1.1.5'
     kapt 'org.parceler:parceler:1.1.5'
 
-    compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
 }
 
 android {
+    namespace "com.github.frankiesardo.icepick"
+
     compileSdkVersion 23
-    buildToolsVersion "25.0.2"
 
     defaultConfig {
         applicationId "com.example.icepick.kotlin"
@@ -24,19 +25,14 @@ android {
         versionName "1.0"
     }
 
+    kotlin {
+        jvmToolchain(8)
+    }
+
     lintOptions {
         abortOnError false
     }
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
     }
-}
-
-repositories {
-    mavenCentral()
-    maven {
-        url "https://clojars.org/repo/"
-    }
-    mavenLocal()
-    maven { url 'https://maven.google.com' }
 }

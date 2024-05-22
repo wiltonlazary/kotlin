@@ -1,6 +1,5 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1113
-// CHECK_CALLED_IN_SCOPE: function=isType scope=box
+// EXPECTED_REACHABLE_NODES: 1285
+// CHECK_CALLED_IN_SCOPE: function=isType scope=box TARGET_BACKENDS=JS
 package foo
 
 class A : Any()
@@ -16,7 +15,11 @@ fun box(): String {
 
     if (arrayOf(1, 2, 3).asAny() !is Any) return "fail3"
 
-    if (createNakedObject() is Any) return "fail4"
+    if (testUtils.isLegacyBackend()) {
+        if (createNakedObject() is Any) return "fail4"
+    } else {
+        if (createNakedObject() !is Any) return "fail4"
+    }
 
     if (({ }).asAny() !is Any) return "fail5"
 
@@ -27,6 +30,8 @@ fun box(): String {
     if (false.asAny() !is Any) return "fail8"
 
     if ("bar".asAny() !is Any) return "fail9"
+
+    if (null is Any) return "fail10"
 
     return "OK"
 }

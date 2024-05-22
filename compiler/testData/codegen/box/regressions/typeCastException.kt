@@ -1,7 +1,6 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
-// WITH_RUNTIME
+// WITH_STDLIB
 
 import java.util.ArrayList
 
@@ -13,7 +12,7 @@ fun box(): String {
         val a: Any? = null
         a as Array<String>
     }
-    catch (e: TypeCastException) {
+    catch (e: NullPointerException) {
         if (e.message != "null cannot be cast to non-null type kotlin.Array<kotlin.String>") {
             return "Fail 1: $e"
         }
@@ -23,7 +22,7 @@ fun box(): String {
         val x: String? = null
         x as String
     }
-    catch (e: TypeCastException) {
+    catch (e: NullPointerException) {
         if (e.message != "null cannot be cast to non-null type kotlin.String") {
             return "Fail 2: $e"
         }

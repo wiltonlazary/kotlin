@@ -1,4 +1,4 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // CHECK_CASES_COUNT: function=bar1 count=6
 // CHECK_IF_COUNT: function=bar1 count=0
 // CHECK_CASES_COUNT: function=bar2 count=6
@@ -15,10 +15,8 @@ fun bar1(x : BigEnum) : String {
     when (x) {
         BigEnum.ITEM1, BigEnum.ITEM2, BigEnum.ITEM3 -> return "123"
         BigEnum.ITEM4, BigEnum.ITEM5, BigEnum.ITEM6 -> return "456"
+        else -> return "-1";
     }
-
-    return "-1";
-
 }
 
 fun bar2(x : BigEnum) : String {

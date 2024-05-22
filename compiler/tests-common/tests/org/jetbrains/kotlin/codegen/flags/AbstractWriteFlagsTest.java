@@ -21,12 +21,13 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.backend.common.output.OutputFile;
 import org.jetbrains.kotlin.codegen.CodegenTestCase;
+import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
 import org.jetbrains.org.objectweb.asm.*;
 
 import java.io.File;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.List;
+import java.lang.reflect.Modifier;
+import java.util.*;
 
 import static org.jetbrains.kotlin.test.InTextDirectivesUtils.findListWithPrefixes;
 import static org.jetbrains.kotlin.test.InTextDirectivesUtils.findStringWithPrefixes;
@@ -35,7 +36,7 @@ import static org.jetbrains.kotlin.test.InTextDirectivesUtils.findStringWithPref
  * Test correctness of written flags in class file
  *
  *  TESTED_OBJECT_KIND - maybe class, function or property
- *  TESTED_OBJECTS - className, [function/property name]
+ *  TESTED_OBJECTS - className, [function/property name], [function/property signature]
  *  FLAGS - only flags which must be true (could be skipped if ABSENT is TRUE)
  *  ABSENT - true or false, optional (false by default)
  *
@@ -47,14 +48,18 @@ import static org.jetbrains.kotlin.test.InTextDirectivesUtils.findStringWithPref
  * TESTED_OBJECT_KIND: property
  * TESTED_OBJECTS: Test, prop$delegate
  * FLAGS: ACC_STATIC, ACC_FINAL, ACC_PRIVATE
+ *
+ * TESTED_OBJECT_KIND: function
+ * TESTED_OBJECTS: Test, function, (ILjava/lang/String;)[Ljava/lang/Object;
+ * FLAGS: ACC_PUBLIC, ACC_SYNTHETIC
  */
 public abstract class AbstractWriteFlagsTest extends CodegenTestCase {
 
     @Override
-    protected void doMultiFileTest(
-            @NotNull File wholeFile, @NotNull List<TestFile> files, @Nullable File javaFilesDir
-    ) throws Exception {
-        compile(files, null);
+    protected void doMultiFileTest(@NotNull File wholeFile, @NotNull List<? extends TestFile> files) throws Exception {
+        @SuppressWarnings("unchecked")
+        List<TestFile> testFiles = (List<TestFile>) files;
+        compile(testFiles);
 
         String fileText = FileUtil.loadFile(wholeFile, true);
 
@@ -75,11 +80,11 @@ public abstract class AbstractWriteFlagsTest extends CodegenTestCase {
             assertNotNull(outputFile);
 
             ClassReader cr = new ClassReader(outputFile.asByteArray());
-            TestClassVisitor classVisitor = getClassVisitor(testedObject.kind, testedObject.name, false);
+            TestClassVisitor classVisitor = getClassVisitor(testedObject, false);
             cr.accept(classVisitor, ClassReader.SKIP_CODE);
 
             if (!classVisitor.isExists())  {
-                classVisitor = getClassVisitor(testedObject.kind, testedObject.name, true);
+                classVisitor = getClassVisitor(testedObject, true);
                 cr.accept(classVisitor, ClassReader.SKIP_CODE);
             }
 
@@ -87,8 +92,14 @@ public abstract class AbstractWriteFlagsTest extends CodegenTestCase {
             assertEquals("Wrong object existence state: " + testedObject, isObjectExists, classVisitor.isExists());
 
             if (isObjectExists) {
-                assertEquals("Wrong access flag for " + testedObject + " \n" + outputFile.asText(),
-                             getExpectedFlags(testedObject.textData), classVisitor.getAccess());
+                int expected = getExpectedFlags(testedObject.textData);
+                int actual = classVisitor.getAccess();
+                if (expected != actual) {
+                    assertEquals(
+                            "Wrong access flag for " + testedObject + " \n" + outputFile.asText(),
+                            flagsToText(expected), flagsToText(actual)
+                    );
+                }
             }
         }
     }
@@ -103,7 +114,7 @@ public abstract class AbstractWriteFlagsTest extends CodegenTestCase {
             TestedObject testObject = new TestedObject();
             testObject.textData = testData;
             List<String> testedObjects = findListWithPrefixes(testData, "// TESTED_OBJECTS: ");
-            assertTrue("Cannot find TESTED_OBJECTS instruction", !testedObjects.isEmpty());
+            assertFalse("Cannot find TESTED_OBJECTS instruction", testedObjects.isEmpty());
             testObject.containingClass = testedObjects.get(0);
             if (testedObjects.size() == 1) {
                 testObject.name = testedObjects.get(0);
@@ -111,9 +122,13 @@ public abstract class AbstractWriteFlagsTest extends CodegenTestCase {
             else if (testedObjects.size() == 2) {
                 testObject.name = testedObjects.get(1);
             }
+            else if (testedObjects.size() == 3) {
+                testObject.name = testedObjects.get(1);
+                testObject.signature = testedObjects.get(2);
+            }
             else {
                 throw new IllegalArgumentException(
-                        "TESTED_OBJECTS instruction must contain one (for class) or two (for function and property) values");
+                        "TESTED_OBJECTS instruction must contain one (for class), two or three (for function and property) values");
             }
 
             testObject.kind = findStringWithPrefixes(testData, "// TESTED_OBJECT_KIND: ");
@@ -123,7 +138,7 @@ public abstract class AbstractWriteFlagsTest extends CodegenTestCase {
             }
             objects.add(testObject);
         }
-        assertTrue("Test description not present!", !objects.isEmpty());
+        assertFalse("Test description not present!", objects.isEmpty());
         return objects;
     }
 
@@ -133,27 +148,28 @@ public abstract class AbstractWriteFlagsTest extends CodegenTestCase {
         public boolean isFullContainingClassName = true;
         public String kind;
         public String textData;
+        public String signature;
 
         @Override
         public String toString() {
-            return "Class = " + containingClass + ", name = " + name + ", kind = " + kind;
+            return "Class = " + containingClass + ", name = " + name + ", kind = " + kind +
+                   (signature != null ? ", signature = " + signature : "");
         }
     }
 
-    private static TestClassVisitor getClassVisitor(String visitorKind, String testedObjectName, boolean allowSynthetic) {
-        switch (visitorKind) {
+    private static TestClassVisitor getClassVisitor(@NotNull TestedObject object, boolean allowSynthetic) {
+        switch (object.kind) {
             case "class":
                 return new ClassFlagsVisitor();
             case "function":
-                return new FunctionFlagsVisitor(testedObjectName, allowSynthetic);
+                return new FunctionFlagsVisitor(object.name, object.signature, allowSynthetic);
             case "property":
-                return new PropertyFlagsVisitor(testedObjectName);
+                return new PropertyFlagsVisitor(object.name, object.signature);
             case "innerClass":
-                return new InnerClassFlagsVisitor(testedObjectName);
-                default:
+                return new InnerClassFlagsVisitor(object.name);
+            default:
+                throw new IllegalArgumentException("Value of TESTED_OBJECT_KIND is incorrect: " + object.kind);
         }
-
-        throw new IllegalArgumentException("Value of TESTED_OBJECT_KIND is incorrect: " + visitorKind);
     }
 
     protected static abstract class TestClassVisitor extends ClassVisitor {
@@ -161,7 +177,7 @@ public abstract class AbstractWriteFlagsTest extends CodegenTestCase {
         protected boolean isExists;
 
         public TestClassVisitor() {
-            super(Opcodes.ASM5);
+            super(Opcodes.API_VERSION);
         }
 
         abstract public int getAccess();
@@ -171,20 +187,50 @@ public abstract class AbstractWriteFlagsTest extends CodegenTestCase {
         }
     }
 
+    private static String flagsToText(int flags) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(flags).append(" = ").append(String.format("0x%04x", flags)).append("\n");
+        for (int flag = 1; flag > 0; flag <<= 1) {
+            if ((flags & flag) != 0) {
+                String string = FLAG_TO_STRING.get(flag);
+                sb.append(string == null ? "unknown (" + flag + ")" : string).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
     private static int getExpectedFlags(String text) {
         int expectedAccess = 0;
-        Class klass = Opcodes.class;
         List<String> flags = findListWithPrefixes(text, "// FLAGS: ");
         for (String flag : flags) {
             try {
-                Field field = klass.getDeclaredField(flag);
-                expectedAccess |= field.getInt(klass);
+                Field field = Opcodes.class.getDeclaredField(flag);
+                expectedAccess |= field.getInt(null);
             }
             catch (NoSuchFieldException | IllegalAccessException e) {
                 throw new IllegalArgumentException("Cannot find " + flag + " field in Opcodes class", e);
             }
         }
         return expectedAccess;
+    }
+
+    private static final Map<Integer, String> FLAG_TO_STRING;
+
+    static {
+        Map<Integer, String> flagToString = new HashMap<>();
+        try {
+            for (Field field : Opcodes.class.getDeclaredFields()) {
+                String name = field.getName();
+                if (Modifier.isStatic(field.getModifiers()) && name.startsWith("ACC_")) {
+                    int value = field.getInt(null);
+                    String previous = flagToString.get(value);
+                    flagToString.put(value, previous == null ? name : previous + "/" + name);
+                }
+            }
+        } catch (IllegalAccessException e) {
+            throw ExceptionUtilsKt.rethrow(e);
+        }
+        FLAG_TO_STRING = Collections.unmodifiableMap(flagToString);
     }
 
     private static class ClassFlagsVisitor extends TestClassVisitor {
@@ -205,16 +251,18 @@ public abstract class AbstractWriteFlagsTest extends CodegenTestCase {
     private static class FunctionFlagsVisitor extends TestClassVisitor {
         private int access = 0;
         private final String funName;
+        private final String funSignature;
         private final boolean allowSynthetic;
 
-        public FunctionFlagsVisitor(String name, boolean allowSynthetic) {
-            funName = name;
+        public FunctionFlagsVisitor(@NotNull String name, @Nullable String signature, boolean allowSynthetic) {
+            this.funName = name;
+            this.funSignature = signature;
             this.allowSynthetic = allowSynthetic;
         }
 
         @Override
         public MethodVisitor visitMethod(int access, @NotNull String name, @NotNull String desc, String signature, String[] exceptions) {
-            if (name.equals(funName)) {
+            if (name.equals(funName) && (funSignature == null || funSignature.equals(desc))) {
                 if (!allowSynthetic && (access & Opcodes.ACC_SYNTHETIC) != 0) return null;
                 this.access = access;
                 isExists = true;
@@ -231,14 +279,16 @@ public abstract class AbstractWriteFlagsTest extends CodegenTestCase {
     private static class PropertyFlagsVisitor extends TestClassVisitor {
         private int access = 0;
         private final String propertyName;
+        private final String propertySignature;
 
-        public PropertyFlagsVisitor(String name) {
-            propertyName = name;
+        public PropertyFlagsVisitor(@NotNull String name, @Nullable String signature) {
+            this.propertyName = name;
+            this.propertySignature = signature;
         }
 
         @Override
         public FieldVisitor visitField(int access, @NotNull String name, @NotNull String desc, String signature, Object value) {
-            if (name.equals(propertyName)) {
+            if (name.equals(propertyName) && (propertySignature == null || propertySignature.equals(desc))) {
                 this.access = access;
                 isExists = true;
             }

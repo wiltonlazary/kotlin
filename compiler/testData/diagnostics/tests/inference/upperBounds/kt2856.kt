@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 //KT-2856 Fix the getOrElse signature to be able to return any supertype of V
 package d
 
@@ -11,10 +12,10 @@ public inline fun <K,V1, V: V1> Map<K,V>.getOrElse1(key: K, defaultValue: ()-> V
     }
 }
 
-fun main(args: Array<String>) {
+fun main() {
     val map = HashMap<Int, Int>()
     println(map.getOrElse1(2, { null })) // Error
 }
 
 //from standard library
-fun println(<!UNUSED_PARAMETER!>message<!> : Any?) {}
+fun println(message : Any?) {}

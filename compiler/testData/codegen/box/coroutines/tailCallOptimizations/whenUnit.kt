@@ -1,9 +1,13 @@
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// FULL_JDK
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
-// CHECK_BYTECODE_LISTING
+// CHECK_TAIL_CALL_OPTIMIZATION
+// JVM_ABI_K1_K2_DIFF: KT-63864
+
 import helpers.*
-import COROUTINES_PACKAGE.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 sealed class X {
     class A : X()
@@ -12,8 +16,15 @@ sealed class X {
 
 var log = ""
 
-suspend fun process(a: X.A) { log = "${log}from A;" }
-suspend fun process(b: X.B) { log = "${log}from B;" }
+suspend fun process(a: X.A) {
+    log = "${log}from A;"
+    TailCallOptimizationChecker.saveStackTrace()
+}
+
+suspend fun process(b: X.B) {
+    log = "${log}from B;"
+    TailCallOptimizationChecker.saveStackTrace()
+}
 
 suspend fun process(x: X) = when (x) {
     is X.A -> process(x)
@@ -27,7 +38,9 @@ fun builder(c: suspend () -> Unit) {
 fun box(): String {
     builder {
         process(X.A())
+        TailCallOptimizationChecker.checkNoStateMachineIn("process")
         process(X.B())
+        TailCallOptimizationChecker.checkNoStateMachineIn("process")
     }
     if (log != "from A;from B;") return log
     return "OK"

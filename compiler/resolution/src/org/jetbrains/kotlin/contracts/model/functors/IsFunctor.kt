@@ -16,35 +16,33 @@
 
 package org.jetbrains.kotlin.contracts.model.functors
 
-import org.jetbrains.kotlin.contracts.model.structure.ESReturns
 import org.jetbrains.kotlin.contracts.model.*
 import org.jetbrains.kotlin.contracts.model.structure.*
-import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.contracts.model.visitors.Reducer
 
-class IsFunctor(val type: KotlinType, val isNegated: Boolean) : AbstractReducingFunctor() {
-    override fun doInvocation(arguments: List<Computation>): List<ESEffect> {
-        assert(arguments.size == 1, { "Wrong size of arguments list for Unary operator: expected 1, got ${arguments.size}" })
-        return invokeWithArguments(arguments[0])
+class IsFunctor(val type: ESType, val isNegated: Boolean) : AbstractFunctor() {
+    override fun doInvocation(arguments: List<Computation>, typeSubstitution: ESTypeSubstitution, reducer: Reducer): List<ESEffect> {
+        assert(arguments.size == 1) { "Wrong size of arguments list for Unary operator: expected 1, got ${arguments.size}" }
+        return invokeWithArguments(arguments[0], typeSubstitution)
     }
 
-    fun invokeWithArguments(arg: Computation): List<ESEffect> {
+    fun invokeWithArguments(arg: Computation, typeSubstitution: ESTypeSubstitution): List<ESEffect> {
         return if (arg is ESValue)
-            invokeWithValue(arg, null)
+            invokeWithValue(arg, typeSubstitution)
         else
-            arg.effects.flatMap {
-                if (it !is ConditionalEffect || it.simpleEffect !is ESReturns || it.simpleEffect.value == ESConstant.WILDCARD)
-                    listOf(it)
-                else
-                    invokeWithValue(it.simpleEffect.value, it.condition)
-            }
+            emptyList()
     }
 
-    private fun invokeWithValue(value: ESValue, additionalCondition: ESExpression?): List<ConditionalEffect> {
-        val trueIs = ESIs(value, this)
-        val falseIs = ESIs(value, IsFunctor(type, isNegated.not()))
+    private fun invokeWithValue(value: ESValue, typeSubstitution: ESTypeSubstitution): List<ConditionalEffect> {
+        val substitutedKotlinType = typeSubstitution.substitutor.safeSubstitute(type.toKotlinType(typeSubstitution.builtIns).unwrap())
 
-        val trueResult = ConditionalEffect(trueIs.and(additionalCondition), ESReturns(true.lift()))
-        val falseResult = ConditionalEffect(falseIs.and(additionalCondition), ESReturns(false.lift()))
+        val substitutedType = ESKotlinType(substitutedKotlinType)
+
+        val trueIs = ESIs(value, IsFunctor(substitutedType, isNegated))
+        val falseIs = ESIs(value, IsFunctor(substitutedType, isNegated.not()))
+
+        val trueResult = ConditionalEffect(trueIs, ESReturns(ESConstants.trueValue))
+        val falseResult = ConditionalEffect(falseIs, ESReturns(ESConstants.falseValue))
         return listOf(trueResult, falseResult)
     }
 }

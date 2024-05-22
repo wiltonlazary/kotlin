@@ -1,3 +1,5 @@
+// FIR_IDENTICAL
+
 val test1 = 42
 
 var test2 = 42

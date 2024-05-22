@@ -1,3 +1,5 @@
+// STRIP_METADATA
+// TODO: Re-enable metadata generation
 import kotlinx.kapt.*
 
 class Test {
@@ -5,7 +7,7 @@ class Test {
     fun ignoredFun() {}
 
     @KaptIgnored @get:KaptIgnored
-    val ignoredProperty: String = ""
+    const val ignoredProperty: String = ""
 
     fun nonIgnoredFun() {}
 

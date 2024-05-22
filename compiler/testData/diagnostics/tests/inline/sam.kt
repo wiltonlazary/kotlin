@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -NON_LOCAL_RETURN_NOT_ALLOWED
+// FIR_IDENTICAL
+// DIAGNOSTICS: -NON_LOCAL_RETURN_NOT_ALLOWED
 // FILE: Run.java
 public interface Run {
     public int run();
@@ -22,8 +23,8 @@ inline fun inlineFunWithInvoke(s: (p: Int) -> Unit, ext: Int.(p: Int) -> Unit) {
         11.ext(11)
         11 <!INFIX_MODIFIER_REQUIRED!>ext<!> 11
 
-        <!USAGE_IS_NOT_INLINABLE, UNUSED_EXPRESSION!>s<!>
-        <!USAGE_IS_NOT_INLINABLE, UNUSED_EXPRESSION!>ext<!>
+        <!USAGE_IS_NOT_INLINABLE!>s<!>
+        <!USAGE_IS_NOT_INLINABLE!>ext<!>
         11
     }
 }
@@ -37,8 +38,8 @@ inline fun inlineFunWithInvokeNonInline(noinline s: (p: Int) -> Unit, ext: Int.(
         11.ext(11)
         11 <!INFIX_MODIFIER_REQUIRED!>ext<!> 11
 
-        <!UNUSED_EXPRESSION!>s<!>
-        <!USAGE_IS_NOT_INLINABLE, UNUSED_EXPRESSION!>ext<!>
+        s
+        <!USAGE_IS_NOT_INLINABLE!>ext<!>
 
         11
     }
@@ -51,7 +52,7 @@ inline fun inlineFunWithInvokeNonInline(noinline s: (p: Int) -> Unit, ext: Int.(
         this <!INFIX_MODIFIER_REQUIRED!>invoke<!> 11
         this(11)
 
-        <!UNUSED_EXPRESSION!>this<!>
+        this
 
         11
     }

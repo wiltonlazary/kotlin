@@ -1,4 +1,5 @@
-compiler/testData/cli/js/languageVersion.kt:5:17: error: this type is sealed, so it can be inherited by only its own nested classes or objects
-class Derived : Base()
-                ^
+warning: language version 1.5 is deprecated and its support will be removed in a future version of Kotlin
+compiler/testData/cli/js/languageVersion.kt:5:23: error: KSuspendFunctionN interfaces are not allowed as supertypes
+abstract class Some : KSuspendFunction0<Unit>
+                      ^^^^^^^^^^^^^^^^^^^^^^^
 COMPILATION_ERROR

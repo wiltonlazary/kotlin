@@ -1,6 +1,5 @@
-// IGNORE_BACKEND: NATIVE
 // WITH_REFLECT
-
+// IGNORE_BACKEND: ANDROID
 class A
 
 fun box(): String {

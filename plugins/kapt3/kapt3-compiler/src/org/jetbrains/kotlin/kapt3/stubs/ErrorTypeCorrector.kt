@@ -20,25 +20,28 @@ import com.intellij.psi.util.PsiTreeUtil
 import com.sun.tools.javac.code.BoundKind
 import com.sun.tools.javac.tree.JCTree
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
-import org.jetbrains.kotlin.codegen.state.updateArgumentModeFromAnnotations
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.kapt3.javac.kaptError
-import org.jetbrains.kotlin.kapt3.mapJList
-import org.jetbrains.kotlin.kapt3.mapJListIndexed
-import org.jetbrains.kotlin.kapt3.stubs.ErrorTypeCorrector.TypeKind.METHOD_PARAMETER_TYPE
-import org.jetbrains.kotlin.kapt3.stubs.ErrorTypeCorrector.TypeKind.RETURN_TYPE
+import org.jetbrains.kotlin.kapt3.base.javac.kaptError
+import org.jetbrains.kotlin.kapt3.base.mapJList
+import org.jetbrains.kotlin.kapt3.base.mapJListIndexed
+import org.jetbrains.kotlin.kapt3.stubs.ErrorTypeCorrector.TypeKind.*
 import org.jetbrains.kotlin.load.kotlin.TypeMappingMode
+import org.jetbrains.kotlin.load.kotlin.getOptimalModeForReturnType
+import org.jetbrains.kotlin.load.kotlin.getOptimalModeForValueParameter
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.types.checker.SimpleClassicTypeSystemContext
+import org.jetbrains.kotlin.types.error.ErrorUtils
+import org.jetbrains.kotlin.types.error.ErrorTypeKind
 
 private typealias SubstitutionMap = Map<String, Pair<KtTypeParameter, KtTypeProjection>>
 
 class ErrorTypeCorrector(
-        private val converter: ClassFileToSourceStubConverter,
-        private val typeKind: TypeKind,
-        file: KtFile
+    private val converter: ClassFileToSourceStubConverter,
+    private val typeKind: TypeKind,
+    file: KtFile
 ) {
     private val defaultType = converter.treeMaker.FqName(Object::class.java.name)
 
@@ -53,7 +56,7 @@ class ErrorTypeCorrector(
             val importedFqName = importDirective.importedFqName ?: continue
 
             val importedReference = getReferenceExpression(importDirective.importedReference)
-                    ?.let { bindingContext[BindingContext.REFERENCE_TARGET, it] }
+                ?.let { bindingContext[BindingContext.REFERENCE_TARGET, it] }
 
             if (importedReference is CallableDescriptor) continue
 
@@ -62,7 +65,7 @@ class ErrorTypeCorrector(
     }
 
     enum class TypeKind {
-        RETURN_TYPE, METHOD_PARAMETER_TYPE
+        RETURN_TYPE, METHOD_PARAMETER_TYPE, SUPER_TYPE, ANNOTATION
     }
 
     fun convert(type: KtTypeElement, substitutions: SubstitutionMap): JCTree.JCExpression {
@@ -81,7 +84,7 @@ class ErrorTypeCorrector(
 
     private fun convert(type: SimpleType): JCTree.JCExpression {
         // TODO now the raw Java type is returned. In future we need to properly convert all type parameters
-        return treeMaker.Type(converter.kaptContext.generationState.typeMapper.mapType(type))
+        return treeMaker.Type(KaptTypeMapper.mapType(type))
     }
 
     private fun convertUserType(type: KtUserType, substitutions: SubstitutionMap): JCTree.JCExpression {
@@ -89,35 +92,49 @@ class ErrorTypeCorrector(
 
         val baseExpression: JCTree.JCExpression
 
-        if (target is TypeAliasDescriptor) {
-            val typeAlias = target.source.getPsi() as? KtTypeAlias
-            val actualType = typeAlias?.getTypeReference() ?: return convert(target.expandedType)
-            return convert(actualType, typeAlias.getSubstitutions(type))
-        } else if (target is ClassDescriptor) {
-            // We only get here if some type were an error type. In other words, 'type' is either an error type or its argument,
-            // so it's impossible it to be unboxed primitive.
-            val asmType = converter.kaptContext.generationState.typeMapper.mapType(target.defaultType, null, TypeMappingMode.GENERIC_ARGUMENT)
-            baseExpression = converter.treeMaker.Type(asmType)
-        } else {
-            val referencedName = type.referencedName ?: return defaultType
-            val qualifier = type.qualifier
-
-            if (qualifier == null) {
-                if (referencedName in substitutions) {
-                    val (typeParameter, projection) = substitutions.getValue(referencedName)
-                    return convertTypeProjection(projection, typeParameter.variance, emptyMap())
-                }
-
-                aliasedImports[referencedName]?.let { return it }
+        when (target) {
+            is TypeAliasDescriptor -> {
+                val typeAlias = target.source.getPsi() as? KtTypeAlias
+                val actualType = typeAlias?.getTypeReference() ?: return convert(target.expandedType)
+                return convert(actualType, typeAlias.getSubstitutions(type))
             }
 
-            baseExpression = when {
-                qualifier != null -> {
-                    val qualifierType = convertUserType(qualifier, substitutions)
-                    if (qualifierType === defaultType) return defaultType // Do not allow to use 'defaultType' as a qualifier
-                    treeMaker.Select(qualifierType, treeMaker.name(referencedName))
+            is ClassConstructorDescriptor -> {
+                val asmType = KaptTypeMapper.mapType(target.constructedClass.defaultType, TypeMappingMode.GENERIC_ARGUMENT)
+
+                baseExpression = converter.treeMaker.Type(asmType)
+            }
+
+            is ClassDescriptor -> {
+                // We only get here if some type were an error type. In other words, 'type' is either an error type or its argument,
+                // so it's impossible it to be unboxed primitive.
+                val asmType = KaptTypeMapper.mapType(target.defaultType, TypeMappingMode.GENERIC_ARGUMENT)
+
+                baseExpression = converter.treeMaker.Type(asmType)
+            }
+
+            else -> {
+                val referencedName = type.referencedName ?: return defaultType
+                val qualifier = type.qualifier
+
+                if (qualifier == null) {
+                    if (referencedName in substitutions) {
+                        val (typeParameter, projection) = substitutions.getValue(referencedName)
+                        return convertTypeProjection(projection, typeParameter.variance, emptyMap())
+                    }
+
+                    aliasedImports[referencedName]?.let { return it }
                 }
-                else -> treeMaker.SimpleName(referencedName)
+
+                baseExpression = when {
+                    qualifier != null -> {
+                        val qualifierType = convertUserType(qualifier, substitutions)
+                        if (qualifierType === defaultType) return defaultType // Do not allow to use 'defaultType' as a qualifier
+                        treeMaker.Select(qualifierType, treeMaker.name(referencedName))
+                    }
+
+                    else -> treeMaker.SimpleName(referencedName)
+                }
             }
         }
 
@@ -125,13 +142,16 @@ class ErrorTypeCorrector(
         if (arguments.isEmpty()) return baseExpression
 
         val typeReference = PsiTreeUtil.getParentOfType(type, KtTypeReference::class.java, true)
-        val kotlinType = bindingContext[BindingContext.TYPE, typeReference] ?: ErrorUtils.createErrorType("Kapt error type")
+        val kotlinType = bindingContext[BindingContext.TYPE, typeReference] ?: ErrorUtils.createErrorType(ErrorTypeKind.KAPT_ERROR_TYPE)
 
+        val typeSystem = SimpleClassicTypeSystemContext
         val typeMappingMode = when (typeKind) {
             //TODO figure out if the containing method is an annotation method
-            RETURN_TYPE -> TypeMappingMode.getOptimalModeForReturnType(kotlinType, false)
-            METHOD_PARAMETER_TYPE -> TypeMappingMode.getOptimalModeForValueParameter(kotlinType)
-        }.updateArgumentModeFromAnnotations(kotlinType)
+            RETURN_TYPE -> typeSystem.getOptimalModeForReturnType(kotlinType, false)
+            METHOD_PARAMETER_TYPE -> typeSystem.getOptimalModeForValueParameter(kotlinType)
+            SUPER_TYPE -> TypeMappingMode.SUPER_TYPE
+            ANNOTATION -> TypeMappingMode.DEFAULT // see genAnnotation in org/jetbrains/kotlin/codegen/AnnotationCodegen.java
+        }.updateArgumentModeFromAnnotations(kotlinType, typeSystem)
 
         val typeParameters = (target as? ClassifierDescriptor)?.typeConstructor?.parameters
         return treeMaker.TypeApply(baseExpression, mapJListIndexed(arguments) { index, projection ->
@@ -140,8 +160,7 @@ class ErrorTypeCorrector(
 
             val variance = if (typeArgument != null && typeParameter != null) {
                 KotlinTypeMapper.getVarianceForWildcard(typeParameter, typeArgument, typeMappingMode)
-            }
-            else {
+            } else {
                 null
             }
 
@@ -150,9 +169,9 @@ class ErrorTypeCorrector(
     }
 
     private fun convertTypeProjection(
-            projection: KtTypeProjection,
-            variance: Variance?,
-            substitutions: SubstitutionMap
+        projection: KtTypeProjection,
+        variance: Variance?,
+        substitutions: SubstitutionMap
     ): JCTree.JCExpression {
         fun unbounded() = treeMaker.Wildcard(treeMaker.TypeBoundKind(BoundKind.UNBOUND), null)
 
@@ -170,14 +189,12 @@ class ErrorTypeCorrector(
             projectionKind === KtProjectionKind.STAR -> treeMaker.Wildcard(treeMaker.TypeBoundKind(BoundKind.UNBOUND), null)
             projectionKind === KtProjectionKind.IN || variance === Variance.IN_VARIANCE ->
                 treeMaker.Wildcard(treeMaker.TypeBoundKind(BoundKind.SUPER), argumentExpression)
+
             projectionKind === KtProjectionKind.OUT || variance === Variance.OUT_VARIANCE ->
                 treeMaker.Wildcard(treeMaker.TypeBoundKind(BoundKind.EXTENDS), argumentExpression)
+
             else -> argumentExpression // invariant
         }
-    }
-
-    private fun convertTypeProjection() {
-
     }
 
     private fun convertFunctionType(type: KtFunctionType, substitutions: SubstitutionMap): JCTree.JCExpression {
@@ -200,8 +217,8 @@ class ErrorTypeCorrector(
 
         if (typeParameters.size != arguments.size) {
             val kaptContext = converter.kaptContext
-            kaptContext.compiler.log.report(
-                    kaptContext.kaptError("${typeParameters.size} parameters are expected but ${arguments.size} passed"))
+            val error = kaptContext.kaptError("${typeParameters.size} parameters are expected but ${arguments.size} passed")
+            kaptContext.compiler.log.report(error)
             return emptyMap()
         }
 

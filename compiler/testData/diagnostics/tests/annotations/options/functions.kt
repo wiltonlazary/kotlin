@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 @Target(AnnotationTarget.FUNCTION)
 annotation class FunAnn
 
@@ -7,6 +6,7 @@ annotation class FunAnn
 annotation class SourceAnn
 
 @Target(AnnotationTarget.EXPRESSION)
+@Retention(AnnotationRetention.SOURCE)
 annotation class ExprAnn
 
 fun bar(arg: () -> Int) = arg()
@@ -33,7 +33,7 @@ fun foo(arg: Int) {
     val f = @FunAnn fun(): Int { return 42 }
     // But here, f and gav should be annotated instead
     bar(<!WRONG_ANNOTATION_TARGET!>@FunAnn<!> f)
-    bar(<!OI;WRONG_ANNOTATION_TARGET!>@<!NI;DEBUG_INFO_MISSING_UNRESOLVED!>FunAnn<!><!> ::gav)
+    bar(@<!DEBUG_INFO_MISSING_UNRESOLVED!>FunAnn<!> ::gav)
     // Function expression, ok
     fast(f)
 }

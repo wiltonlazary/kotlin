@@ -1,5 +1,4 @@
-// !WITH_NEW_INFERENCE
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// DIAGNOSTICS: -UNUSED_PARAMETER
 // FILE: J.java
 
 import org.jetbrains.annotations.*;
@@ -22,7 +21,7 @@ fun test() {
     // platform type with no annotation
     val platformJ = J.staticJ
 
-    fun foo(p: J = platformNN, p1: J = <!NI;TYPE_MISMATCH, TYPE_MISMATCH!>platformN<!>, p2: J = platformJ) {}
+    fun foo(p: J = platformNN, p1: J = <!TYPE_MISMATCH!>platformN<!>, p2: J = platformJ) {}
 
     fun foo1(p: J? = platformNN, p1: J? = platformN, p2: J? = platformJ) {}
 }

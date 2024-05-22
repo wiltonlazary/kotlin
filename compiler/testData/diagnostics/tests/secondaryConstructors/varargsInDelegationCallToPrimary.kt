@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER
 fun <T> array(vararg x: T): Array<T> = null!!
 
 open class B(vararg y: String) {

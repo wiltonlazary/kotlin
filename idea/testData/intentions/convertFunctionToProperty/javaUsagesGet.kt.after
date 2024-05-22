@@ -1,4 +1,0 @@
-package test
-
-val foo: Boolean
-    get() = true

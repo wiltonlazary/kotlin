@@ -1,15 +1,21 @@
-// FILE: inline.kt
-// KOTLIN_CONFIGURATION_FLAGS: ASSERTIONS_MODE=jvm
-// WITH_RUNTIME
 // NO_CHECK_LAMBDA_INLINING
+// WITH_STDLIB
+// TARGET_BACKEND: JVM
+// ASSERTIONS_MODE: jvm
+// FILE: inline.kt
 
-inline fun call(crossinline c: () -> Unit) {
-    val l = { c() }
-    l()
+package test
+
+object CrossinlineLambdaContainer {
+    inline fun call(crossinline c: () -> Unit) {
+        val l = { c() }
+        l()
+    }
 }
 
 // FILE: inlineSite.kt
-// KOTLIN_CONFIGURATION_FLAGS: ASSERTIONS_MODE=jvm
+
+import test.CrossinlineLambdaContainer.call
 
 interface Checker {
     fun checkTrue(): Boolean

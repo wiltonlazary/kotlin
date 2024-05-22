@@ -48,10 +48,10 @@ public abstract class JsVisitorWithContext {
         doAcceptList(collection);
     }
 
+    @SuppressWarnings("unchecked")
     public final <T extends JsStatement> T acceptStatement(T statement) {
         if (statement == null) return null;
 
-        //noinspection unchecked
         return (T) doAcceptStatement(statement);
     }
 
@@ -90,11 +90,18 @@ public abstract class JsVisitorWithContext {
     public void endVisit(@NotNull JsCatch x, @NotNull JsContext ctx) {
     }
 
+    public void endVisit(@NotNull JsClass x, @NotNull JsContext ctx) {
+        endVisit((JsExpression) x, ctx);
+    }
+
     public void endVisit(@NotNull JsConditional x, @NotNull JsContext ctx) {
         endVisit((JsExpression) x, ctx);
     }
 
     public void endVisit(@NotNull JsContinue x, @NotNull JsContext ctx) {
+    }
+
+    public void endVisit(@NotNull JsYield x, @NotNull JsContext ctx) {
     }
 
     public void endVisit(@NotNull JsDebugger x, @NotNull JsContext ctx) {
@@ -104,6 +111,7 @@ public abstract class JsVisitorWithContext {
     }
 
     public void endVisit(@NotNull JsDoWhile x, @NotNull JsContext ctx) {
+        endVisit((JsLoop) x, ctx);
     }
 
     public void endVisit(@NotNull JsEmpty x, @NotNull JsContext ctx) {
@@ -113,9 +121,11 @@ public abstract class JsVisitorWithContext {
     }
 
     public void endVisit(@NotNull JsFor x, @NotNull JsContext ctx) {
+        endVisit((JsLoop) x, ctx);
     }
 
     public void endVisit(@NotNull JsForIn x, @NotNull JsContext ctx) {
+        endVisit((JsLoop) x, ctx);
     }
 
     public void endVisit(@NotNull JsFunction x, @NotNull JsContext ctx) {
@@ -130,6 +140,9 @@ public abstract class JsVisitorWithContext {
     }
 
     public void endVisit(@NotNull JsLabel x, @NotNull JsContext ctx) {
+    }
+
+    public void endVisit(@NotNull JsLoop x, @NotNull JsContext ctx) {
     }
 
     public void endVisit(@NotNull JsName x, @NotNull JsContext ctx) {
@@ -189,6 +202,9 @@ public abstract class JsVisitorWithContext {
         endVisit((JsExpression) x, ctx);
     }
 
+    public void endVisit(@NotNull JsSuperRef x, @NotNull JsContext ctx) {
+        endVisit((JsExpression) x, ctx);
+    }
     public void endVisit(@NotNull JsThrow x, @NotNull JsContext ctx) {
     }
 
@@ -201,7 +217,20 @@ public abstract class JsVisitorWithContext {
     public void endVisit(@NotNull JsVars x, @NotNull JsContext ctx) {
     }
 
+    public void endVisit(@NotNull JsSingleLineComment x, @NotNull JsContext ctx) {
+    }
+
+    public void endVisit(@NotNull JsMultiLineComment x, @NotNull JsContext ctx) {
+    }
+
+    public void endVisit(@NotNull JsExport x, @NotNull JsContext ctx) {
+    }
+
+    public void endVisit(@NotNull JsImport x, @NotNull JsContext ctx) {
+    }
+
     public void endVisit(@NotNull JsWhile x, @NotNull JsContext ctx) {
+        endVisit((JsLoop) x, ctx);
     }
 
     public boolean visit(@NotNull JsArrayAccess x, @NotNull JsContext ctx) {
@@ -236,11 +265,19 @@ public abstract class JsVisitorWithContext {
         return true;
     }
 
+    public boolean visit(@NotNull JsClass x, @NotNull JsContext ctx) {
+        return true;
+    }
+
     public boolean visit(@NotNull JsConditional x, @NotNull JsContext ctx) {
         return true;
     }
 
     public boolean visit(@NotNull JsContinue x, @NotNull JsContext ctx) {
+        return true;
+    }
+
+    public boolean visit(@NotNull JsYield x, @NotNull JsContext ctx) {
         return true;
     }
 
@@ -253,7 +290,7 @@ public abstract class JsVisitorWithContext {
     }
 
     public boolean visit(@NotNull JsDoWhile x, @NotNull JsContext ctx) {
-        return true;
+        return visit((JsLoop) x, ctx);
     }
 
     public boolean visit(@NotNull JsEmpty x, @NotNull JsContext ctx) {
@@ -265,11 +302,11 @@ public abstract class JsVisitorWithContext {
     }
 
     public boolean visit(@NotNull JsFor x, @NotNull JsContext ctx) {
-        return true;
+        return visit((JsLoop) x, ctx);
     }
 
     public boolean visit(@NotNull JsForIn x, @NotNull JsContext ctx) {
-        return true;
+        return visit((JsLoop) x, ctx);
     }
 
     public boolean visit(@NotNull JsFunction x, @NotNull JsContext ctx) {
@@ -285,6 +322,10 @@ public abstract class JsVisitorWithContext {
     }
 
     public boolean visit(@NotNull JsLabel x, @NotNull JsContext ctx) {
+        return true;
+    }
+
+    public boolean visit(@NotNull JsLoop x, @NotNull JsContext ctx) {
         return true;
     }
 
@@ -352,6 +393,9 @@ public abstract class JsVisitorWithContext {
         return true;
     }
 
+    public boolean visit(@NotNull JsSuperRef x, @NotNull JsContext ctx) {
+        return true;
+    }
     public boolean visit(@NotNull JsThrow x, @NotNull JsContext ctx) {
         return true;
     }
@@ -369,6 +413,22 @@ public abstract class JsVisitorWithContext {
     }
 
     public boolean visit(@NotNull JsWhile x, @NotNull JsContext ctx) {
+        return visit((JsLoop) x, ctx);
+    }
+
+    public boolean visit(@NotNull JsSingleLineComment x, @NotNull JsContext ctx) {
+        return true;
+    }
+
+    public boolean visit(@NotNull JsMultiLineComment x, @NotNull JsContext ctx) {
+        return true;
+    }
+
+    public boolean visit(@NotNull JsExport x, @NotNull JsContext ctx) {
+        return true;
+    }
+
+    public boolean visit(@NotNull JsImport x, @NotNull JsContext ctx) {
         return true;
     }
 

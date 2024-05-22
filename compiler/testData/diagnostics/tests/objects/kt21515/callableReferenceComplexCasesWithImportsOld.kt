@@ -1,4 +1,4 @@
-// !LANGUAGE: -ProhibitVisibilityOfNestedClassifiersFromSupertypesOfCompanion
+// LANGUAGE: -ProhibitVisibilityOfNestedClassifiersFromSupertypesOfCompanion
 
 import A.Base.Companion.FromABaseCompanion
 import B.Base.Companion.FromBBaseCompanion
@@ -53,7 +53,7 @@ object C {
     }
 
     class Derived : Base() {
-        val a = FromCBaseCompanion::<!UNRESOLVED_REFERENCE!>foo<!>
+        val a = <!INCORRECT_CALLABLE_REFERENCE_RESOLUTION_FOR_COMPANION_LHS!>FromCBaseCompanion::foo<!>
     }
 }
 

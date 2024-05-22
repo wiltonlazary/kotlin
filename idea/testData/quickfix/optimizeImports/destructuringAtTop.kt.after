@@ -1,3 +1,0 @@
-// "Optimize imports" "true"
-
-val (a, b, c) = Triple(1, 2, 3)

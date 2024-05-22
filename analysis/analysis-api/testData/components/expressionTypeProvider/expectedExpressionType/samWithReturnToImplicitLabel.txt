@@ -1,0 +1,5 @@
+expression: { return@Runnable }
+expected type: KtUsualClassType:
+  annotationsList: []
+  ownTypeArguments: []
+  type: java/lang/Runnable

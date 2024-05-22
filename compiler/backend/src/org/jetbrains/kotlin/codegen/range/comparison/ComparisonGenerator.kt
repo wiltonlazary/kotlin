@@ -16,10 +16,12 @@
 
 package org.jetbrains.kotlin.codegen.range.comparison
 
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.codegen.ExpressionCodegen
-import org.jetbrains.kotlin.codegen.getRangeOrProgressionElementType
+import org.jetbrains.kotlin.types.getRangeOrProgressionElementType
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
+import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.org.objectweb.asm.Label
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
@@ -33,34 +35,65 @@ interface ComparisonGenerator {
     fun jumpIfLess(v: InstructionAdapter, label: Label)
 }
 
-fun getComparisonGeneratorForPrimitiveType(type: Type): ComparisonGenerator =
+interface SignedIntegerComparisonGenerator : ComparisonGenerator {
+    fun jumpIfLessThanZero(v: InstructionAdapter, label: Label)
+}
+
+fun getComparisonGeneratorForKotlinType(kotlinType: KotlinType): ComparisonGenerator =
     when {
-        type == Type.CHAR_TYPE -> CharComparisonGenerator
-        type.isPrimitiveIntOrCoercible() -> IntComparisonGenerator
-        type == Type.LONG_TYPE -> LongComparisonGenerator
-        type == Type.FLOAT_TYPE -> FloatComparisonGenerator
-        type == Type.DOUBLE_TYPE -> DoubleComparisonGenerator
-        else -> throw UnsupportedOperationException("Unexpected primitive type: " + type)
+        KotlinBuiltIns.isChar(kotlinType) ->
+            CharComparisonGenerator
+        KotlinBuiltIns.isByte(kotlinType) || KotlinBuiltIns.isShort(kotlinType) || KotlinBuiltIns.isInt(kotlinType) ->
+            IntComparisonGenerator
+        KotlinBuiltIns.isLong(kotlinType) ->
+            LongComparisonGenerator
+        KotlinBuiltIns.isFloat(kotlinType) ->
+            FloatComparisonGenerator
+        KotlinBuiltIns.isDouble(kotlinType) ->
+            DoubleComparisonGenerator
+        KotlinBuiltIns.isUInt(kotlinType) ->
+            UIntComparisonGenerator
+        KotlinBuiltIns.isULong(kotlinType) ->
+            ULongComparisonGenerator
+        else ->
+            throw UnsupportedOperationException("Unexpected element type: $kotlinType")
     }
+
+class RangeContainsTypeInfo(
+    val rangeElementType: KotlinType,
+    val valueParameterType: KotlinType
+)
+
+fun getRangeContainsTypeInfo(call: ResolvedCall<out CallableDescriptor>): RangeContainsTypeInfo? {
+    val descriptor = call.resultingDescriptor
+    val receiverType = descriptor.extensionReceiverParameter?.type ?: descriptor.dispatchReceiverParameter?.type ?: return null
+    val elementType = getRangeOrProgressionElementType(receiverType) ?: return null
+    val valueParameterType = descriptor.valueParameters.singleOrNull()?.type ?: return null
+    return RangeContainsTypeInfo(elementType, valueParameterType)
+}
 
 fun getComparisonGeneratorForRangeContainsCall(
     codegen: ExpressionCodegen,
-    call: ResolvedCall<out CallableDescriptor>
+    rangeContainsTypeInfo: RangeContainsTypeInfo
 ): ComparisonGenerator? {
-    val descriptor = call.resultingDescriptor
-
-    val receiverType = descriptor.extensionReceiverParameter?.type ?: descriptor.dispatchReceiverParameter?.type ?: return null
-
-    val elementType = getRangeOrProgressionElementType(receiverType) ?: return null
-
-    val valueParameterType = descriptor.valueParameters.singleOrNull()?.type ?: return null
+    val elementType = rangeContainsTypeInfo.rangeElementType
+    val valueParameterType = rangeContainsTypeInfo.valueParameterType
 
     val asmElementType = codegen.asmType(elementType)
     val asmValueParameterType = codegen.asmType(valueParameterType)
 
     return when {
         asmElementType == asmValueParameterType ->
-            getComparisonGeneratorForPrimitiveType(asmElementType)
+            getComparisonGeneratorForKotlinType(elementType)
+
+        KotlinBuiltIns.isUInt(elementType) ->
+            if (KotlinBuiltIns.isULong(valueParameterType))
+                null
+            else
+                UIntComparisonGenerator
+
+        KotlinBuiltIns.isULong(elementType) ->
+            ULongComparisonGenerator
 
         asmElementType.isPrimitiveIntOrCoercible() && asmValueParameterType.isPrimitiveIntOrCoercible() ->
             IntComparisonGenerator

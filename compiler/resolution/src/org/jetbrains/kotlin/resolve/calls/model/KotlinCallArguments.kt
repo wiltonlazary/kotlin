@@ -1,13 +1,15 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls.model
 
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.TypeAliasDescriptor
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.calls.components.InferenceSession
 import org.jetbrains.kotlin.resolve.scopes.receivers.DetailedReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.QualifierReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValueWithSmartCastInfo
@@ -43,13 +45,25 @@ interface SimpleKotlinCallArgument : KotlinCallArgument, ReceiverKotlinCallArgum
 
 interface ExpressionKotlinCallArgument : SimpleKotlinCallArgument, ResolutionAtom
 
-interface SubKotlinCallArgument : SimpleKotlinCallArgument {
+interface SubKotlinCallArgument : SimpleKotlinCallArgument, ResolutionAtom {
     val callResult: PartialCallResolutionResult
 }
 
 interface LambdaKotlinCallArgument : PostponableKotlinCallArgument {
     override val isSpread: Boolean
         get() = false
+
+    /*
+     * Builder inference is supported only for lambdas (so it's implemented only in `LambdaKotlinCallArgumentImpl`),
+     * anonymous functions aren't supported
+     */
+    var hasBuilderInferenceAnnotation: Boolean
+        get() = false
+        set(_) {}
+
+    var builderInferenceSession: InferenceSession?
+        get() = null
+        set(_) {}
 
     /**
      * parametersTypes == null means, that there is no declared arguments
@@ -64,6 +78,8 @@ interface FunctionExpression : LambdaKotlinCallArgument {
     // null means that there function can not have receiver
     val receiverType: UnwrappedType?
 
+    val contextReceiversTypes: Array<UnwrappedType?>
+
     // null means that return type is not declared, for fun(){ ... } returnType == Unit
     val returnType: UnwrappedType?
 }
@@ -77,12 +93,14 @@ interface FunctionExpression : LambdaKotlinCallArgument {
  * D.E::foo <-> Expression
  */
 sealed class LHSResult {
-    class Type(val qualifier: QualifierReceiver, resolvedType: UnwrappedType) : LHSResult() {
+    class Type(val qualifier: QualifierReceiver?, resolvedType: UnwrappedType) : LHSResult() {
         val unboundDetailedReceiver: ReceiverValueWithSmartCastInfo
 
         init {
-            assert(qualifier.descriptor is ClassDescriptor) {
-                "Should be ClassDescriptor: ${qualifier.descriptor}"
+            if (qualifier != null) {
+                assert(qualifier.descriptor is ClassDescriptor || qualifier.descriptor is TypeAliasDescriptor) {
+                    "Should be ClassDescriptor: ${qualifier.descriptor}"
+                }
             }
 
             val unboundReceiver = TransientReceiver(resolvedType)
@@ -109,20 +127,20 @@ sealed class LHSResult {
     object Error : LHSResult()
 }
 
-interface CallableReferenceKotlinCallArgument : PostponableKotlinCallArgument {
+interface CallableReferenceKotlinCallArgument : PostponableKotlinCallArgument, CallableReferenceResolutionAtom {
     override val isSpread: Boolean
         get() = false
 
-    val lhsResult: LHSResult
+    override val lhsResult: LHSResult
 
-    val rhsName: Name
+    override val call: KotlinCall
 }
 
 interface CollectionLiteralKotlinCallArgument : PostponableKotlinCallArgument
 
 interface TypeArgument
 
-// todo allow '_' in frontend
+// Used as a stub or underscored type argument
 object TypeArgumentPlaceholder : TypeArgument
 
 interface SimpleTypeArgument : TypeArgument {

@@ -20,12 +20,12 @@ import com.intellij.lang.ASTNode;
 import com.intellij.navigation.ItemPresentation;
 import com.intellij.navigation.ItemPresentationProviders;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiModifiableCodeBlock;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.lexer.KtTokens;
+import org.jetbrains.kotlin.psi.psiUtil.KtPsiUtilKt;
 import org.jetbrains.kotlin.psi.stubs.KotlinFunctionStub;
 import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementTypes;
 import org.jetbrains.kotlin.psi.typeRefHelpers.TypeRefHelpersKt;
@@ -33,8 +33,10 @@ import org.jetbrains.kotlin.psi.typeRefHelpers.TypeRefHelpersKt;
 import java.util.Collections;
 import java.util.List;
 
+import static org.jetbrains.kotlin.psi.psiUtil.KtPsiUtilKt.isKtFile;
+
 public class KtNamedFunction extends KtTypeParameterListOwnerStub<KotlinFunctionStub>
-        implements KtFunction, KtDeclarationWithInitializer, PsiModifiableCodeBlock {
+        implements KtFunction, KtDeclarationWithInitializer {
     public KtNamedFunction(@NotNull ASTNode node) {
         super(node);
     }
@@ -121,7 +123,40 @@ public class KtNamedFunction extends KtTypeParameterListOwnerStub<KotlinFunction
     @Override
     @Nullable
     public KtExpression getBodyExpression() {
+        KotlinFunctionStub stub = getStub();
+        if (stub != null) {
+            if (!stub.hasBody()) {
+                return null;
+            }
+            if (getContainingKtFile().isCompiled()) {
+                //don't load ast
+                return null;
+            }
+        }
+
         return findChildByClass(KtExpression.class);
+    }
+
+    @Nullable
+    @Override
+    public KtBlockExpression getBodyBlockExpression() {
+        KotlinFunctionStub stub = getStub();
+        if (stub != null) {
+            if (!(stub.hasBlockBody() && stub.hasBody())) {
+                return null;
+            }
+            if (getContainingKtFile().isCompiled()) {
+                //don't load ast
+                return null;
+            }
+        }
+
+        KtExpression bodyExpression = findChildByClass(KtExpression.class);
+        if (bodyExpression instanceof KtBlockExpression) {
+            return (KtBlockExpression) bodyExpression;
+        }
+
+        return null;
     }
 
     @Override
@@ -172,6 +207,17 @@ public class KtNamedFunction extends KtTypeParameterListOwnerStub<KotlinFunction
         return null;
     }
 
+    @NotNull
+    @Override
+    public List<KtContextReceiver> getContextReceivers() {
+        KtContextReceiverList contextReceiverList = getStubOrPsiChild(KtStubElementTypes.CONTEXT_RECEIVER_LIST);
+        if (contextReceiverList != null) {
+            return contextReceiverList.contextReceivers();
+        } else {
+            return Collections.emptyList();
+        }
+    }
+
     @Override
     @Nullable
     public KtTypeReference getTypeReference() {
@@ -202,7 +248,11 @@ public class KtNamedFunction extends KtTypeParameterListOwnerStub<KotlinFunction
     @Override
     public boolean isLocal() {
         PsiElement parent = getParent();
-        return !(parent instanceof KtFile || parent instanceof KtClassBody);
+        return !(isKtFile(parent) || parent instanceof KtClassBody || parent.getParent() instanceof KtScript);
+    }
+
+    public boolean isAnonymous() {
+        return getName() == null && isLocal();
     }
 
     public boolean isTopLevel() {
@@ -211,12 +261,30 @@ public class KtNamedFunction extends KtTypeParameterListOwnerStub<KotlinFunction
             return stub.isTopLevel();
         }
 
-        return getParent() instanceof KtFile;
+        return isKtFile(getParent());
     }
 
-    @Override
+    @SuppressWarnings({"unused", "MethodMayBeStatic"}) //keep for compatibility with potential plugins
     public boolean shouldChangeModificationCount(PsiElement place) {
         // Suppress Java check for out-of-block
         return false;
+    }
+
+    @Override
+    public KtContractEffectList getContractDescription() {
+        return getStubOrPsiChild(KtStubElementTypes.CONTRACT_EFFECT_LIST);
+    }
+
+    public boolean mayHaveContract() {
+        return mayHaveContract(true);
+    }
+
+    public boolean mayHaveContract(boolean isAllowedOnMembers) {
+        KotlinFunctionStub stub = getStub();
+        if (stub != null) {
+            return stub.mayHaveContract();
+        }
+
+        return KtPsiUtilKt.isContractPresentPsiCheck(this, isAllowedOnMembers);
     }
 }

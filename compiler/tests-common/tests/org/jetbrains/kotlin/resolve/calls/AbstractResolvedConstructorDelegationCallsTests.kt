@@ -22,15 +22,15 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtSecondaryConstructor
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.calls.callUtil.getParentResolvedCall
+import org.jetbrains.kotlin.resolve.calls.util.getParentResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 
 
 abstract class AbstractResolvedConstructorDelegationCallsTests : AbstractResolvedCallsTest() {
     override fun buildCachedCallAtIndex(
-            bindingContext: BindingContext, jetFile: KtFile, index: Int
+        bindingContext: BindingContext, ktFile: KtFile, index: Int
     ): Pair<PsiElement?, ResolvedCall<out CallableDescriptor>?> {
-        val element = jetFile.findElementAt(index)
+        val element = ktFile.findElementAt(index)
         val constructor = element?.getNonStrictParentOfType<KtSecondaryConstructor>()!!
         val delegationCall = constructor.getDelegationCall()
 

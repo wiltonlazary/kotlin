@@ -31,13 +31,13 @@ fun evaluateAdd(expr: StringBuilder, numbers: ArrayList<Int>): Int {
 fun evaluate(expr: StringBuilder, numbers: ArrayList<Int>): Int {
   val lhs = evaluateAdd(expr, numbers)
   if (expr.length > 0) {
-    val <!UNUSED_VARIABLE!>c<!> = expr.get(0)
+    val c = expr.get(0)
     expr.deleteCharAt(0)
   }
   return lhs
 }
 
-fun main(args: Array<String>) {
+fun main() {
   System.out.println("24 game")
   val numbers = ArrayList<Int>(4)
   val rnd = Random();

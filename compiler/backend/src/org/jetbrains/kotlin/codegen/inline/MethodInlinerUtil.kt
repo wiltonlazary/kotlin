@@ -1,108 +1,27 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.inline
 
+import org.jetbrains.kotlin.codegen.optimization.common.FastMethodAnalyzer
 import org.jetbrains.kotlin.codegen.optimization.common.InsnSequence
 import org.jetbrains.kotlin.codegen.optimization.common.isMeaningful
-import org.jetbrains.kotlin.codegen.optimization.fixStack.top
-import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodParameterSignature
-import org.jetbrains.kotlin.utils.SmartSet
+import org.jetbrains.kotlin.codegen.optimization.nullCheck.isCheckParameterIsNotNull
+import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.org.objectweb.asm.Opcodes
-import org.jetbrains.org.objectweb.asm.tree.*
-import org.jetbrains.org.objectweb.asm.tree.analysis.Frame
-import org.jetbrains.org.objectweb.asm.tree.analysis.SourceValue
-
-fun MethodInliner.getLambdaIfExistsAndMarkInstructions(
-        sourceValue: SourceValue,
-        processSwap: Boolean,
-        insnList: InsnList,
-        frames: Array<Frame<SourceValue>?>,
-        toDelete: MutableSet<AbstractInsnNode>
-): LambdaInfo? {
-    val toDeleteInner = SmartSet.create<AbstractInsnNode>()
-
-    val lambdaSet = SmartSet.create<LambdaInfo?>()
-    sourceValue.insns.mapTo(lambdaSet) {
-        getLambdaIfExistsAndMarkInstructions(it, processSwap, insnList, frames, toDeleteInner)
-    }
-
-    return lambdaSet.singleOrNull()?.also {
-        toDelete.addAll(toDeleteInner)
-    }
-}
-
-private fun SourceValue.singleOrNullInsn() = insns.singleOrNull()
-
-private fun MethodInliner.getLambdaIfExistsAndMarkInstructions(
-        insnNode: AbstractInsnNode?,
-        processSwap: Boolean,
-        insnList: InsnList,
-        frames: Array<Frame<SourceValue>?>,
-        toDelete: MutableSet<AbstractInsnNode>
-): LambdaInfo? {
-    if (insnNode == null) return null
-
-    getLambdaIfExists(insnNode)?.let {
-        //delete lambda aload instruction
-        toDelete.add(insnNode)
-        return it
-    }
-
-    if (insnNode is VarInsnNode && insnNode.opcode == Opcodes.ALOAD) {
-        val varIndex = insnNode.`var`
-        val localFrame = frames[insnList.indexOf(insnNode)] ?: return null
-        val storeIns = localFrame.getLocal(varIndex).singleOrNullInsn()
-        if (storeIns is VarInsnNode && storeIns.getOpcode() == Opcodes.ASTORE) {
-            val frame = frames[insnList.indexOf(storeIns)] ?: return null
-            val topOfStack = frame.top()!!
-            getLambdaIfExistsAndMarkInstructions(topOfStack, processSwap, insnList, frames, toDelete)?.let {
-                //remove intermediate lambda astore, aload instruction: see 'complexStack/simple.1.kt' test
-                toDelete.add(storeIns)
-                toDelete.add(insnNode)
-                return it
-            }
-        }
-    }
-    else if (processSwap && insnNode.opcode == Opcodes.SWAP) {
-        val swapFrame = frames[insnList.indexOf(insnNode)] ?: return null
-        val dispatchReceiver = swapFrame.top()!!
-        getLambdaIfExistsAndMarkInstructions(dispatchReceiver, false, insnList, frames, toDelete)?.let {
-            //remove swap instruction (dispatch receiver would be deleted on recursion call): see 'complexStack/simpleExtension.1.kt' test
-            toDelete.add(insnNode)
-            return it
-        }
-    }
-
-    return null
-}
-
-fun parameterOffsets(isStatic: Boolean, valueParameters: List<JvmMethodParameterSignature>): Array<Int> {
-    var nextOffset = if (isStatic) 0 else 1
-    return Array(valueParameters.size) { index ->
-        nextOffset.also {
-            nextOffset += valueParameters[index].asmType.size
-        }
-    }
-}
+import org.jetbrains.org.objectweb.asm.Type
+import org.jetbrains.org.objectweb.asm.tree.AbstractInsnNode
+import org.jetbrains.org.objectweb.asm.tree.FieldInsnNode
+import org.jetbrains.org.objectweb.asm.tree.MethodNode
+import org.jetbrains.org.objectweb.asm.tree.VarInsnNode
+import org.jetbrains.org.objectweb.asm.tree.analysis.*
 
 fun MethodNode.remove(instructions: Sequence<AbstractInsnNode>) =
-        instructions.forEach {
-            this@remove.instructions.remove(it)
-        }
+    instructions.forEach {
+        this@remove.instructions.remove(it)
+    }
 
 fun MethodNode.remove(instructions: Collection<AbstractInsnNode>) {
     instructions.forEach {
@@ -111,19 +30,18 @@ fun MethodNode.remove(instructions: Collection<AbstractInsnNode>) {
 }
 
 fun MethodNode.findCapturedFieldAssignmentInstructions(): Sequence<FieldInsnNode> {
-    return InsnSequence(instructions).filterIsInstance<FieldInsnNode>().
-            filter { fieldNode ->
-                //filter captured field assignment
-                //  aload 0
-                //  aload x
-                //  PUTFIELD $fieldName
+    return InsnSequence(instructions).filterIsInstance<FieldInsnNode>().filter { fieldNode ->
+        //filter captured field assignment
+        //  aload 0
+        //  aload x
+        //  PUTFIELD $fieldName
 
-                val prevPrev = fieldNode.previous?.previous as? VarInsnNode
+        val prevPrev = fieldNode.previous?.previous as? VarInsnNode
 
-                fieldNode.opcode == Opcodes.PUTFIELD &&
+        fieldNode.opcode == Opcodes.PUTFIELD &&
                 isCapturedFieldName(fieldNode.name) &&
                 fieldNode.previous is VarInsnNode && prevPrev != null && prevPrev.`var` == 0
-            }
+    }
 }
 
 fun AbstractInsnNode.getNextMeaningful(): AbstractInsnNode? {
@@ -132,4 +50,85 @@ fun AbstractInsnNode.getNextMeaningful(): AbstractInsnNode? {
         result = result.next
     }
     return result
+}
+
+// Interpreter, that analyzes functional arguments only, to replace SourceInterpreter, since SourceInterpreter's merge has O(N²) complexity
+
+internal class FunctionalArgumentValue(
+    val functionalArgument: FunctionalArgument, basicValue: BasicValue?
+) : BasicValue(basicValue?.type) {
+    override fun toString(): String = "$functionalArgument"
+}
+
+val BasicValue?.functionalArgument
+    get() = (this as? FunctionalArgumentValue)?.functionalArgument
+
+internal class FunctionalArgumentInterpreter(private val inliner: MethodInliner) : BasicInterpreter(API_VERSION) {
+    override fun newParameterValue(isInstanceMethod: Boolean, local: Int, type: Type): BasicValue =
+        inliner.getFunctionalArgumentIfExists(local)?.let { FunctionalArgumentValue(it, newValue(type)) } ?: newValue(type)
+
+    override fun unaryOperation(insn: AbstractInsnNode, value: BasicValue): BasicValue? =
+        wrapArgumentInValueIfNeeded(insn, super.unaryOperation(insn, value))
+
+    override fun newOperation(insn: AbstractInsnNode): BasicValue? =
+        wrapArgumentInValueIfNeeded(insn, super.newOperation(insn))
+
+    private fun wrapArgumentInValueIfNeeded(insn: AbstractInsnNode, basicValue: BasicValue?): BasicValue? =
+        if (insn is FieldInsnNode) // GETFIELD or GETSTATIC
+            inliner.getFunctionalArgumentIfExists(insn)?.let { FunctionalArgumentValue(it, basicValue) } ?: basicValue
+        else
+            basicValue
+
+    override fun merge(v: BasicValue?, w: BasicValue?): BasicValue? =
+        if (v is FunctionalArgumentValue && w is FunctionalArgumentValue && v.functionalArgument == w.functionalArgument) v
+        else super.merge(v, w)
+}
+
+internal fun AbstractInsnNode.isAloadBeforeCheckParameterIsNotNull(): Boolean =
+    opcode == Opcodes.ALOAD && next?.opcode == Opcodes.LDC && next?.next?.isCheckParameterIsNotNull() == true
+
+// Interpreter, that analyzes only ALOAD_0s, which are used as continuation arguments
+
+internal class Aload0BasicValue private constructor(val indices: Set<Int>) : BasicValue(AsmTypes.OBJECT_TYPE) {
+    constructor(i: Int) : this(setOf(i)) {}
+
+    operator fun plus(other: Aload0BasicValue) = Aload0BasicValue(indices + other.indices)
+}
+
+internal class Aload0Interpreter(private val node: MethodNode) : BasicInterpreter(API_VERSION) {
+    override fun copyOperation(insn: AbstractInsnNode, value: BasicValue?): BasicValue? =
+        when {
+            insn.isAload0() -> Aload0BasicValue(node.instructions.indexOf(insn))
+            insn.opcode == ALOAD -> if (value == null) null else BasicValue(value.type)
+            else -> super.copyOperation(insn, value)
+        }
+
+    override fun merge(v: BasicValue?, w: BasicValue?): BasicValue =
+        if (v is Aload0BasicValue && w is Aload0BasicValue) v + w else super.merge(v, w)
+}
+
+internal fun AbstractInsnNode.isAload0() = opcode == Opcodes.ALOAD && (this as VarInsnNode).`var` == 0
+
+internal fun analyzeMethodNodeWithInterpreter(
+    node: MethodNode,
+    interpreter: BasicInterpreter
+): Array<out Frame<BasicValue>?> {
+    class BasicValueFrame(nLocals: Int, nStack: Int) : Frame<BasicValue>(nLocals, nStack) {
+        @Throws(AnalyzerException::class)
+        override fun execute(insn: AbstractInsnNode, interpreter: Interpreter<BasicValue>) {
+            // This can be a void non-local return from a non-void method; Frame#execute would throw and do nothing else.
+            if (insn.opcode == Opcodes.RETURN) return
+            super.execute(insn, interpreter)
+        }
+    }
+
+    val analyzer = FastMethodAnalyzer<BasicValue>(
+        "fake", node, interpreter, pruneExceptionEdges = true
+    ) { nLocals, nStack -> BasicValueFrame(nLocals, nStack) }
+
+    try {
+        return analyzer.analyze()
+    } catch (e: AnalyzerException) {
+        throw RuntimeException(e)
+    }
 }

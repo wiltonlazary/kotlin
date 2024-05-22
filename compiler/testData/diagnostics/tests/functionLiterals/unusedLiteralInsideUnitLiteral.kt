@@ -1,4 +1,6 @@
-fun main(args: Array<String>) {
+// DIAGNOSTICS: +UNUSED_LAMBDA_EXPRESSION
+
+fun main() {
     "".run {
         <!UNUSED_LAMBDA_EXPRESSION!>{}<!>
     }

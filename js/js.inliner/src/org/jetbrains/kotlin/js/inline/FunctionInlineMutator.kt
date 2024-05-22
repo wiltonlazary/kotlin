@@ -35,10 +35,10 @@ private constructor(
     private val invokedFunction: JsFunction
     val namingContext = inliningContext.newNamingContext()
     val body: JsBlock
-    var resultExpr: JsExpression? = null
+    var resultExpr: JsNameRef? = null
     private var resultName: JsName? = null
     var breakLabel: JsLabel? = null
-    private val currentStatement = inliningContext.statementContext.currentNode
+    private val currentStatement = inliningContext.currentStatement
 
     init {
         invokedFunction = uncoverClosure(function.deepCopy())
@@ -46,8 +46,16 @@ private constructor(
     }
 
     private fun process() {
-        val arguments = getArguments()
+        var arguments = getArguments()
         val parameters = getParameters()
+
+        if (arguments.size > parameters.size) {
+            // Due to suspend conversions it is possible to have an extra argument, e.g. `fn($this$)` for `function fn() {...}`
+            // In such cases all missing arguments for default parameters are passed as `void 0` explicitly.
+            // Thus it is safe to drop it.
+            assert(arguments.size == parameters.size + 1) { "arguments.size (${arguments.size}) may only exceed the parameters.size (${parameters.size}) by one and only in case of suspend conversions" }
+            arguments = arguments.subList(0, parameters.size)
+        }
 
         removeDefaultInitializers(arguments, parameters, body)
         aliasArgumentsIfNeeded(namingContext, arguments, parameters, call.source)
@@ -56,7 +64,7 @@ private constructor(
 
         namingContext.applyRenameTo(body)
         resultExpr = resultExpr?.let {
-            namingContext.applyRenameTo(it) as JsExpression
+            namingContext.applyRenameTo(it) as JsNameRef
         }
     }
 
@@ -112,7 +120,7 @@ private constructor(
         val breakName = JsScope.declareTemporaryName(getBreakLabel())
         this.breakLabel = JsLabel(breakName).apply { synthetic = true }
 
-        val visitor = ReturnReplacingVisitor(resultExpr as? JsNameRef, breakName.makeRef(), invokedFunction, call.isSuspend)
+        val visitor = ReturnReplacingVisitor(resultExpr, breakName.makeRef(), invokedFunction, call.isSuspend)
         visitor.accept(body)
     }
 

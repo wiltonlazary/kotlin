@@ -1,14 +1,10 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE -NOTHING_TO_INLINE -UNUSED_PARAMETER
-// COMMON_COROUTINES_TEST
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_VARIABLE -NOTHING_TO_INLINE -UNUSED_PARAMETER
 // SKIP_TXT
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
-
-open class EmptyContinuation(override val context: CoroutineContext = EmptyCoroutineContext) : Continuation<Any?> {
-    companion object : EmptyContinuation()
-    override fun resume(<!PARAMETER_NAME_CHANGED_ON_OVERRIDE!>data<!>: Any?) {}
-    override fun resumeWithException(exception: Throwable) { throw exception }
-}
+// WITH_COROUTINES
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
+import helpers.*
 
 interface SuspendRunnable {
     suspend fun run()

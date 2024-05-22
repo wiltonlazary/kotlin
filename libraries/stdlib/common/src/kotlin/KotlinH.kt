@@ -1,35 +1,44 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin
 
-import kotlin.annotation.AnnotationTarget.FIELD
-import kotlin.annotation.AnnotationTarget.PROPERTY
-
-
-
-expect interface Comparator<T> {
-    fun compare(a: T, b: T): Int
-}
-
-// TODO: Satisfied with SAM-constructor for Comparator interface in JVM
-@Suppress("NO_ACTUAL_FOR_EXPECT")
-expect inline fun <T> Comparator(crossinline comparison: (a: T, b: T) -> Int): Comparator<T>
-
-// From kotlin.kt
-
-
 
 // From numbers.kt
 
-expect fun Double.isNaN(): Boolean
-expect fun Float.isNaN(): Boolean
-expect fun Double.isInfinite(): Boolean
-expect fun Float.isInfinite(): Boolean
-expect fun Double.isFinite(): Boolean
-expect fun Float.isFinite(): Boolean
+/**
+ * Returns `true` if the specified number is a
+ * Not-a-Number (NaN) value, `false` otherwise.
+ */
+public expect fun Double.isNaN(): Boolean
+
+/**
+ * Returns `true` if the specified number is a
+ * Not-a-Number (NaN) value, `false` otherwise.
+ */
+public expect fun Float.isNaN(): Boolean
+
+/**
+ * Returns `true` if this value is infinitely large in magnitude.
+ */
+public expect fun Double.isInfinite(): Boolean
+
+/**
+ * Returns `true` if this value is infinitely large in magnitude.
+ */
+public expect fun Float.isInfinite(): Boolean
+
+/**
+ * Returns `true` if the argument is a finite floating-point value; returns `false` otherwise (for `NaN` and infinity arguments).
+ */
+public expect fun Double.isFinite(): Boolean
+
+/**
+ * Returns `true` if the argument is a finite floating-point value; returns `false` otherwise (for `NaN` and infinity arguments).
+ */
+public expect fun Float.isFinite(): Boolean
 
 /**
  * Returns a bit representation of the specified floating-point value as [Long]
@@ -74,17 +83,6 @@ public expect fun Float.toRawBits(): Int
 public expect fun Float.Companion.fromBits(bits: Int): Float
 
 
-// From concurrent.kt
-
-// TODO: promote to error? Otherwise it gets to JVM part
-//@Deprecated("Use Volatile annotation from kotlin.jvm package", ReplaceWith("kotlin.jvm.Volatile"), level = DeprecationLevel.WARNING)
-//public typealias Volatile = kotlin.jvm.Volatile
-
-public expect inline fun <R> synchronized(lock: Any, block: () -> R): R
-
-
-
-
 // from lazy.kt
 
 public expect fun <T> lazy(initializer: () -> T): Lazy<T>
@@ -100,4 +98,6 @@ public expect fun <T> lazy(mode: LazyThreadSafetyMode, initializer: () -> T): La
  *
  * The [lock] parameter is ignored.
  */
+@Deprecated("Synchronization on Any? object is supported only in Kotlin/JVM.", ReplaceWith("lazy(initializer)"))
+@DeprecatedSinceKotlin(warningSince = "1.9")
 public expect fun <T> lazy(lock: Any?, initializer: () -> T): Lazy<T>

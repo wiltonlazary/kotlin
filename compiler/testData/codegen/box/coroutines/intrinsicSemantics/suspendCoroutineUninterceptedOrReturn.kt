@@ -1,9 +1,8 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 import kotlin.test.assertEquals
 
 suspend fun suspendHere(): String = suspendCoroutineUninterceptedOrReturn { x ->
@@ -25,12 +24,12 @@ fun builder(shouldSuspend: Boolean, c: suspend () -> String): String {
             override val context: CoroutineContext
                 get() =  ContinuationDispatcher { counter++ }
 
-            override fun resumeWithException(exception: Throwable) {
-                fromSuspension = "Exception: " + exception.message!!
-            }
-
-            override fun resume(value: String) {
-                fromSuspension = value
+            override fun resumeWith(value: Result<String>) {
+                fromSuspension = try {
+                    value.getOrThrow()
+                } catch (exception: Throwable) {
+                    "Exception: " + exception.message!!
+                }
             }
         })
     } catch (e: Exception) {
@@ -59,23 +58,23 @@ private class DispatchedContinuation<T>(
 ): Continuation<T> {
     override val context: CoroutineContext = continuation.context
 
-    override fun resume(value: T) {
+    override fun resumeWith(value: Result<T>) {
         dispatcher()
-        continuation.resume(value)
-    }
-
-    override fun resumeWithException(exception: Throwable) {
-        dispatcher()
-        continuation.resumeWithException(exception)
+        continuation.resumeWith(value)
     }
 }
 
 fun box(): String {
     if (builder(false) { "OK" } != "OK") return "fail 4"
     if (builder(true) { suspendHere() } != "OK") return "fail 5"
+    if (builder(true) { suspend{}(); suspendHere() } != "OK") return "fail 51"
 
     if (builder(false) { throw RuntimeException("OK") } != "Exception: OK") return "fail 6"
     if (builder(true) { suspendWithException() } != "Exception: OK") return "fail 7"
+    if (builder(true) { suspend{}(); suspendWithException() } != "Exception: OK") return "fail 71"
+
+    if (builder(true, ::suspendHere) != "OK") return "fail 8"
+    if (builder(true, ::suspendWithException) != "Exception: OK") return "fail 9"
 
     return "OK"
 }

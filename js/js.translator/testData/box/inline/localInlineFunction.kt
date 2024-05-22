@@ -1,8 +1,7 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1114
+// EXPECTED_REACHABLE_NODES: 1284
 package foo
 
-// CHECK_CONTAINS_NO_CALLS: localWithCapture
+// CHECK_CONTAINS_NO_CALLS: localWithCapture except=Unit_getInstance
 // CHECK_CONTAINS_NO_CALLS: localWithoutCapture
 
 internal inline fun repeatAction(times: Int, action: () -> Unit) {
@@ -11,6 +10,8 @@ internal inline fun repeatAction(times: Int, action: () -> Unit) {
     }
 }
 
+// CHECK_BREAKS_COUNT: function=localWithoutCapture count=0 TARGET_BACKENDS=JS_IR
+// CHECK_LABELS_COUNT: function=localWithoutCapture name=$l$block count=0 TARGET_BACKENDS=JS_IR
 internal fun localWithoutCapture(a: Int, b: Int): Int {
     var sum = 0
 
@@ -25,6 +26,8 @@ internal fun localWithoutCapture(a: Int, b: Int): Int {
     return sum
 }
 
+// CHECK_BREAKS_COUNT: function=localWithCapture count=0 TARGET_BACKENDS=JS_IR
+// CHECK_LABELS_COUNT: function=localWithCapture name=$l$block count=0 TARGET_BACKENDS=JS_IR
 internal fun localWithCapture(a: Int, b: Int): Int {
     var sum = 0
 

@@ -16,29 +16,118 @@
 
 package org.jetbrains.kotlin.cli.common
 
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
-import org.jetbrains.kotlin.cli.common.messages.MessageCollector
-import org.jetbrains.kotlin.cli.common.messages.MessageUtil
-import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
+import org.jetbrains.kotlin.KtSourceElement
+import org.jetbrains.kotlin.KtSourceFileLinesMapping
+import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
+import org.jetbrains.kotlin.cli.common.messages.*
+import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.IncrementalCompilation
+import org.jetbrains.kotlin.config.messageCollector
+import org.jetbrains.kotlin.fir.declarations.FirFile
+import org.jetbrains.kotlin.fir.packageFqName
 import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.name.isSubpackageOf
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.text
+import org.jetbrains.kotlin.util.Logger
+import java.io.File
+import org.jetbrains.kotlin.cli.common.messages.toLogger as toLoggerNew
 
-fun checkKotlinPackageUsage(environment: KotlinCoreEnvironment, files: Collection<KtFile>): Boolean {
-    if (environment.configuration.getBoolean(CLIConfigurationKeys.ALLOW_KOTLIN_PACKAGE)) {
+fun incrementalCompilationIsEnabled(arguments: CommonCompilerArguments): Boolean {
+    return arguments.incrementalCompilation ?: IncrementalCompilation.isEnabledForJvm()
+}
+
+fun incrementalCompilationIsEnabledForJs(arguments: CommonCompilerArguments): Boolean {
+    return arguments.incrementalCompilation ?: IncrementalCompilation.isEnabledForJs()
+}
+
+fun <F> checkKotlinPackageUsage(
+    configuration: CompilerConfiguration,
+    files: Collection<F>,
+    messageCollector: MessageCollector,
+    getPackage: (F) -> FqName,
+    getMessageLocation: (F) -> CompilerMessageSourceLocation?,
+): Boolean {
+    if (configuration.getBoolean(CLIConfigurationKeys.ALLOW_KOTLIN_PACKAGE)) {
         return true
     }
-    val messageCollector = environment.configuration.get(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)
-    val kotlinPackage = FqName.topLevel(Name.identifier("kotlin"))
-    files.forEach {
-        if (it.packageFqName.isSubpackageOf(kotlinPackage)) {
-            messageCollector.report(CompilerMessageSeverity.ERROR,
-                                    "Only the Kotlin standard library is allowed to use the 'kotlin' package",
-                                    MessageUtil.psiElementToMessageLocation(it.packageDirective!!))
+    val kotlinPackage = FqName("kotlin")
+    for (file in files) {
+        if (getPackage(file).isSubpackageOf(kotlinPackage)) {
+            messageCollector.report(
+                CompilerMessageSeverity.ERROR,
+                "Only the Kotlin standard library is allowed to use the 'kotlin' package",
+                getMessageLocation(file),
+            )
             return false
         }
     }
     return true
 }
 
+fun checkKotlinPackageUsageForPsi(
+    configuration: CompilerConfiguration,
+    files: Collection<KtFile>,
+    messageCollector: MessageCollector = configuration.messageCollector,
+) =
+    checkKotlinPackageUsage(
+        configuration, files, messageCollector,
+        getPackage = { it.packageFqName },
+        getMessageLocation = { MessageUtil.psiElementToMessageLocation(it.packageDirective!!) },
+    )
+
+fun checkKotlinPackageUsageForLightTree(
+    configuration: CompilerConfiguration,
+    files: Collection<FirFile>,
+    messageCollector: MessageCollector = configuration.messageCollector,
+) =
+    checkKotlinPackageUsage(
+        configuration, files, messageCollector,
+        getPackage = { it.packageFqName },
+        getMessageLocation = { it.packageDirective.source?.getLocationWithin(it) },
+    )
+
+private fun KtSourceElement.getLocationWithin(file: FirFile): CompilerMessageLocationWithRange? {
+    val sourceFile = file.sourceFile ?: return null
+    val (startLine, startColumn) = file.getLineAndColumnStartingWithOnesAt(startOffset) ?: return null
+    val (endLine, endColumn) = file.getLineAndColumnStartingWithOnesAt(endOffset) ?: return null
+    return CompilerMessageLocationWithRange.create(sourceFile.path, startLine, startColumn, endLine, endColumn, text?.toString())
+}
+
+private fun FirFile.getLineAndColumnStartingWithOnesAt(offset: Int?): Pair<Int, Int>? {
+    return offset?.let { sourceFileLinesMapping?.getLineAndColumnByOffsetStartingWithOnes(it) }
+}
+
+private fun KtSourceFileLinesMapping.getLineAndColumnByOffsetStartingWithOnes(startOffset: Int): Pair<Int, Int> {
+    val (line, column) = getLineAndColumnByOffset(startOffset)
+    return line + 1 to column + 1
+}
+
+fun <PathProvider : Any> getLibraryFromHome(
+    paths: PathProvider?,
+    getLibrary: (PathProvider) -> File,
+    libraryName: String,
+    messageCollector: MessageCollector,
+    noLibraryArgument: String
+): File? {
+    if (paths != null) {
+        val stdlibJar = getLibrary(paths)
+        if (stdlibJar.exists()) {
+            return stdlibJar
+        }
+    }
+
+    messageCollector.report(
+        CompilerMessageSeverity.STRONG_WARNING, "Unable to find " + libraryName + " in the Kotlin home directory. " +
+                "Pass either " + noLibraryArgument + " to prevent adding it to the classpath, " +
+                "or the correct '-kotlin-home'", null
+    )
+    return null
+}
+
+@Deprecated(
+    "Use org.jetbrains.kotlin.cli.common.messages.toLogger() instead",
+    ReplaceWith("toLogger()", "org.jetbrains.kotlin.cli.common.messages.toLogger"),
+    DeprecationLevel.ERROR
+)
+fun MessageCollector.toLogger(): Logger = toLoggerNew()

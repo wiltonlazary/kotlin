@@ -1,6 +1,4 @@
-// IGNORE_BACKEND: JS, NATIVE
-
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_REFLECT
 
 import kotlin.test.assertEquals

@@ -1,6 +1,5 @@
-// !WITH_NEW_INFERENCE
-// !CHECK_TYPE
-// !DIAGNOSTICS: -UNUSED_VALUE -VARIABLE_WITH_REDUNDANT_INITIALIZER -TOPLEVEL_TYPEALIASES_ONLY
+// CHECK_TYPE
+// DIAGNOSTICS: -UNUSED_VALUE -VARIABLE_WITH_REDUNDANT_INITIALIZER -TOPLEVEL_TYPEALIASES_ONLY
 
 class A<R1, R2, R3, R4>
 
@@ -45,7 +44,7 @@ fun test() {
     x().foo().a() checkType { _<A<String, Double, Short, Long>>() }
     x().bar() checkType { _<A<String, Double, Short, Char>>() }
 
-    x = <!NI;TYPE_MISMATCH, NI;TYPE_MISMATCH, NI;TYPE_MISMATCH, TYPE_MISMATCH!>foobar<Int>()<!>
+    x = <!TYPE_MISMATCH, TYPE_MISMATCH, TYPE_MISMATCH!>foobar<Int>()<!>
 
     var y = noParameters()
     y = noParameters()

@@ -1,5 +1,4 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1114
+// EXPECTED_REACHABLE_NODES: 1284
 package foo
 
 // CHECK_CONTAINS_NO_CALLS: identity
@@ -9,10 +8,14 @@ internal inline fun sum(a: Int, b: Int = 0): Int {
     return a + b
 }
 
+// CHECK_BREAKS_COUNT: function=identity count=0 TARGET_BACKENDS=JS_IR
+// CHECK_LABELS_COUNT: function=identity name=$l$block count=0 TARGET_BACKENDS=JS_IR
 internal fun identity(a: Int): Int {
     return sum(a)
 }
 
+// CHECK_BREAKS_COUNT: function=sumNoInline count=0 TARGET_BACKENDS=JS_IR
+// CHECK_LABELS_COUNT: function=sumNoInline name=$l$block count=0 TARGET_BACKENDS=JS_IR
 internal fun sumNoInline(a: Int, b: Int): Int {
     return sum(a, b)
 }

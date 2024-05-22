@@ -36,7 +36,7 @@ import org.jetbrains.kotlin.psi.KtBinaryExpression;
 import org.jetbrains.kotlin.psi.KtExpression;
 import org.jetbrains.kotlin.psi.KtPsiUtil;
 import org.jetbrains.kotlin.resolve.bindingContextUtil.BindingContextUtilsKt;
-import org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt;
+import org.jetbrains.kotlin.resolve.calls.util.CallUtilKt;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
 import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.kotlin.types.TypeUtils;
@@ -151,6 +151,7 @@ public final class BinaryOperationTranslator extends AbstractTranslator {
         else {
             result = new JsNullLiteral();
             JsExpression testExpression = TranslationUtils.isNullCheck(leftExpression);
+            rightBlock.getStatements().add(rightExpression.makeStmt());
             ifStatement = JsAstUtils.newJsIf(testExpression, rightBlock);
         }
         ifStatement.setSource(expression);

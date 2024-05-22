@@ -1,4 +1,5 @@
-// !CHECK_TYPE
+// FIR_IDENTICAL
+// CHECK_TYPE
 
 import kotlin.reflect.KFunction0
 

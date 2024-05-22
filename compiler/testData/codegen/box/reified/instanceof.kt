@@ -1,16 +1,13 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS
-
-// WITH_RUNTIME
+// WITH_STDLIB
 
 inline fun<reified T> isinstance(x: Any?): Boolean {
     return x is T
 }
 
 fun box(): String {
-    assert(isinstance<String>("abc"))
-    assert(isinstance<Int>(1))
-    assert(!isinstance<Int>("abc"))
+    require(isinstance<String>("abc"))
+    require(isinstance<Int>(1))
+    require(!isinstance<Int>("abc"))
 
     return "OK"
 }

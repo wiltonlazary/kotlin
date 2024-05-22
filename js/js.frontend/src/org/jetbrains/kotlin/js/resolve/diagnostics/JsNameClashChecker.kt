@@ -16,22 +16,51 @@
 
 package org.jetbrains.kotlin.js.resolve.diagnostics
 
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.diagnostics.DiagnosticSink
 import org.jetbrains.kotlin.diagnostics.Errors
+import org.jetbrains.kotlin.js.naming.JsNameSuggestion
 import org.jetbrains.kotlin.js.naming.NameSuggestion
 import org.jetbrains.kotlin.js.naming.SuggestedName
+import org.jetbrains.kotlin.js.naming.WasmNameSuggestion
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.DescriptorEquivalenceForOverrides
 import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.checkers.DeclarationCheckerContext
 import org.jetbrains.kotlin.resolve.checkers.DeclarationChecker
+import org.jetbrains.kotlin.resolve.checkers.DeclarationCheckerContext
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExtension
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExtensionProperty
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
 
-class JsNameClashChecker(private val nameSuggestion: NameSuggestion) : DeclarationChecker {
+class JsNameClashChecker(
+    nameSuggestion: JsNameSuggestion,
+    languageVersionSettings: LanguageVersionSettings,
+    kotlinTypeRefiner: KotlinTypeRefiner,
+) : AbstractNameClashChecker(
+    nameSuggestion,
+    languageVersionSettings,
+    kotlinTypeRefiner,
+)
+
+class WasmNameClashChecker(
+    nameSuggestion: WasmNameSuggestion,
+    languageVersionSettings: LanguageVersionSettings,
+    kotlinTypeRefiner: KotlinTypeRefiner,
+) : AbstractNameClashChecker(
+    nameSuggestion,
+    languageVersionSettings,
+    kotlinTypeRefiner,
+)
+
+abstract class AbstractNameClashChecker(
+    private val nameSuggestion: NameSuggestion,
+    private val languageVersionSettings: LanguageVersionSettings,
+    private val kotlinTypeRefiner: KotlinTypeRefiner,
+) : DeclarationChecker {
     companion object {
         private val COMMON_DIAGNOSTICS = setOf(
                 Errors.REDECLARATION,
@@ -57,9 +86,9 @@ class JsNameClashChecker(private val nameSuggestion: NameSuggestion) : Declarati
     ) {
         if (descriptor is ConstructorDescriptor && descriptor.isPrimary) return
 
-        for (suggested in nameSuggestion.suggestAllPossibleNames(descriptor)) {
+        for (suggested in nameSuggestion.suggestAllPossibleNames(descriptor, bindingContext)) {
             if (suggested.stable && suggested.scope is ClassOrPackageFragmentDescriptor && presentsInGeneratedCode(suggested.descriptor)) {
-                val scope = getScope(suggested.scope)
+                val scope = getScope(suggested.scope, bindingContext)
                 val name = suggested.names.last()
                 val existing = scope[name]
                 if (existing != null &&
@@ -83,11 +112,16 @@ class JsNameClashChecker(private val nameSuggestion: NameSuggestion) : Declarati
                     .mapNotNull { it as? CallableMemberDescriptor }
                     .filter { it.kind == CallableMemberDescriptor.Kind.FAKE_OVERRIDE }
             for (override in fakeOverrides) {
-                val overrideFqn = nameSuggestion.suggest(override)!!
-                val scope = getScope(overrideFqn.scope)
+                val overrideFqn = nameSuggestion.suggest(override, bindingContext)!!
+                val scope = getScope(overrideFqn.scope, bindingContext)
                 val name = overrideFqn.names.last()
                 val existing = scope[name] as? CallableMemberDescriptor
-                if (existing != null && existing != overrideFqn.descriptor && !isFakeOverridingNative(existing)) {
+                val overrideDescriptor = overrideFqn.descriptor as? CallableMemberDescriptor
+                if (existing != null &&
+                    overrideDescriptor != null &&
+                    !areDescriptorsEquivalent(existing, overrideDescriptor) &&
+                    !isFakeOverridingNative(existing)
+                ) {
                     diagnosticHolder.report(ErrorsJs.JS_FAKE_NAME_CLASH.on(declaration, name, override, existing))
                     break
                 }
@@ -102,12 +136,28 @@ class JsNameClashChecker(private val nameSuggestion: NameSuggestion) : Declarati
         }
     }
 
-    private fun NameSuggestion.suggestAllPossibleNames(descriptor: DeclarationDescriptor): Collection<SuggestedName> =
+    private fun areDescriptorsEquivalent(
+        existing: CallableMemberDescriptor,
+        overrideDescriptor: CallableMemberDescriptor
+    ): Boolean {
+        return if (kotlinTypeRefiner === KotlinTypeRefiner.Default) {
+            // Fast-path
+            existing == overrideDescriptor
+        } else {
+            // If refinement is enabled, we can get duplicate descriptors for one and the same members (as refinement re-creates
+            // descriptors), so, in this case, we have to compare descriptors structurally
+            DescriptorEquivalenceForOverrides.areCallableDescriptorsEquivalent(
+                existing, overrideDescriptor, allowCopiesFromTheSameDeclaration = true, kotlinTypeRefiner = kotlinTypeRefiner
+            )
+        }
+    }
+
+    private fun NameSuggestion.suggestAllPossibleNames(descriptor: DeclarationDescriptor, bindingContext: BindingContext): Collection<SuggestedName> =
             if (descriptor is CallableMemberDescriptor) {
-                val primary = suggest(descriptor)
+                val primary = suggest(descriptor, bindingContext)
                 if (primary != null) {
                     val overriddenNames = descriptor.overriddenDescriptors.flatMap {
-                        suggestAllPossibleNames(it).map { overridden ->
+                        suggestAllPossibleNames(it, bindingContext).map { overridden ->
                             SuggestedName(overridden.names, overridden.stable, primary.descriptor, primary.scope)
                         }
                     }
@@ -118,7 +168,7 @@ class JsNameClashChecker(private val nameSuggestion: NameSuggestion) : Declarati
                 }
             }
             else {
-                listOfNotNull(suggest(descriptor))
+                listOfNotNull(suggest(descriptor, bindingContext))
             }
 
     private fun BindingContext.isCommonDiagnosticReported(declaration: KtDeclaration): Boolean {
@@ -136,46 +186,46 @@ class JsNameClashChecker(private val nameSuggestion: NameSuggestion) : Declarati
                 descriptor.overriddenDescriptors.all { !presentsInGeneratedCode(it) }
     }
 
-    private fun getScope(descriptor: DeclarationDescriptor) = scopes.getOrPut(descriptor) {
+    private fun getScope(descriptor: DeclarationDescriptor, bindingContext: BindingContext) = scopes.getOrPut(descriptor) {
         val scope = mutableMapOf<String, DeclarationDescriptor>()
         when (descriptor) {
             is PackageFragmentDescriptor -> {
-                collect(descriptor.getMemberScope(), scope)
+                collect(descriptor.getMemberScope(), scope, bindingContext)
                 val module = DescriptorUtils.getContainingModule(descriptor)
                 module.getSubPackagesOf(descriptor.fqName) { true }
                         .flatMap { module.getPackage(it).fragments }
-                        .forEach { collect(it, scope)  }
+                        .forEach { collect(it, scope, bindingContext)  }
             }
-            is ClassDescriptor -> collect(descriptor.defaultType.memberScope, scope)
+            is ClassDescriptor -> collect(descriptor.defaultType.memberScope, scope, bindingContext)
         }
         scope
     }
 
-    private fun collect(scope: MemberScope, target: MutableMap<String, DeclarationDescriptor>) {
+    private fun collect(scope: MemberScope, target: MutableMap<String, DeclarationDescriptor>, bindingContext: BindingContext) {
         for (descriptor in scope.getContributedDescriptors()) {
-            collect(descriptor, target)
+            collect(descriptor, target, bindingContext)
         }
     }
 
-    private fun collect(descriptor: DeclarationDescriptor, target: MutableMap<String, DeclarationDescriptor>) {
+    private fun collect(descriptor: DeclarationDescriptor, target: MutableMap<String, DeclarationDescriptor>, bindingContext: BindingContext) {
         if (descriptor is PropertyDescriptor) {
             if (descriptor.isExtension || AnnotationsUtils.hasJsNameInAccessors(descriptor)) {
-                descriptor.accessors.forEach { collect(it, target) }
+                descriptor.accessors.forEach { collect(it, target, bindingContext) }
                 return
             }
         }
 
-        for (fqn in nameSuggestion.suggestAllPossibleNames(descriptor)) {
+        for (fqn in nameSuggestion.suggestAllPossibleNames(descriptor, bindingContext)) {
             if (fqn.stable && presentsInGeneratedCode(fqn.descriptor)) {
                 target[fqn.names.last()] = fqn.descriptor
-                (fqn.descriptor as? CallableMemberDescriptor)?.let { checkOverrideClashes(it, target) }
+                (fqn.descriptor as? CallableMemberDescriptor)?.let { checkOverrideClashes(it, target, bindingContext) }
             }
         }
     }
 
-    private fun checkOverrideClashes(descriptor: CallableMemberDescriptor, target: MutableMap<String, DeclarationDescriptor>) {
+    private fun checkOverrideClashes(descriptor: CallableMemberDescriptor, target: MutableMap<String, DeclarationDescriptor>, bindingContext: BindingContext) {
         for (overriddenDescriptor in DescriptorUtils.getAllOverriddenDeclarations(descriptor)) {
-            val overriddenFqn = nameSuggestion.suggest(overriddenDescriptor)!!
+            val overriddenFqn = nameSuggestion.suggest(overriddenDescriptor, bindingContext)!!
             if (overriddenFqn.stable) {
                 val existing = target[overriddenFqn.names.last()]
                 if (existing != null) {

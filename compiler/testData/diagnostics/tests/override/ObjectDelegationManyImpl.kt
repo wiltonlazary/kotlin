@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 interface D {
     fun foo()
 }
@@ -10,4 +11,4 @@ object Impl : D, E {
     override fun foo() {}
 }
 
-val obj: D = <!MANY_IMPL_MEMBER_NOT_IMPLEMENTED, DELEGATED_MEMBER_HIDES_SUPERTYPE_OVERRIDE!>object<!> : D by Impl, E by Impl {}
+val obj: D = <!DELEGATED_MEMBER_HIDES_SUPERTYPE_OVERRIDE, MANY_IMPL_MEMBER_NOT_IMPLEMENTED!>object<!> : D by Impl, E by Impl {}

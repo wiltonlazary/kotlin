@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNNECESSARY_NOT_NULL_ASSERTION
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNNECESSARY_NOT_NULL_ASSERTION
 // See KT-9126: Variable change does not affect data flow info for its fields
 
 class My(val x: Int?)

@@ -1,7 +1,8 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
+
 /*
  * Based on GWT AbstractList
  * Copyright 2007 Google Inc.
@@ -9,14 +10,12 @@
 
 package kotlin.collections
 
-import kotlin.*
-
 /**
  * Provides a skeletal implementation of the read-only [List] interface.
  *
  * This class is intended to help implementing read-only lists so it doesn't support concurrent modification tracking.
  *
- * @param E the type of elements contained in the list. The list is covariant on its element type.
+ * @param E the type of elements contained in the list. The list is covariant in its element type.
  */
 @SinceKotlin("1.1")
 public abstract class AbstractList<out E> protected constructor() : AbstractCollection<E>(), List<E> {
@@ -53,9 +52,14 @@ public abstract class AbstractList<out E> protected constructor() : AbstractColl
     }
 
     /**
-     * Compares this list with other list instance with the ordered structural equality.
+     * Checks if the two specified lists are *structurally* equal to one another.
      *
-     * @return true, if [other] instance is a [List] of the same size, which contains the same elements in the same order.
+     * Two lists are considered structurally equal if they have the same size, and elements at corresponding indices are equal.
+     * Elements are compared for equality using the [equals][Any.equals] function.
+     * For floating point numbers, this means `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
+     *
+     * @param other the list to compare with this list.
+     * @return `true` if [other] is a [List] that is structurally equal to this list, `false` otherwise.
      */
     override fun equals(other: Any?): Boolean {
         if (other === this) return true
@@ -123,6 +127,28 @@ public abstract class AbstractList<out E> protected constructor() : AbstractColl
             if (fromIndex > toIndex) {
                 throw IllegalArgumentException("fromIndex: $fromIndex > toIndex: $toIndex")
             }
+        }
+
+        internal fun checkBoundsIndexes(startIndex: Int, endIndex: Int, size: Int) {
+            if (startIndex < 0 || endIndex > size) {
+                throw IndexOutOfBoundsException("startIndex: $startIndex, endIndex: $endIndex, size: $size")
+            }
+            if (startIndex > endIndex) {
+                throw IllegalArgumentException("startIndex: $startIndex > endIndex: $endIndex")
+            }
+        }
+
+        private const val maxArraySize = Int.MAX_VALUE - 8
+
+        /** [oldCapacity] and [minCapacity] must be non-negative. */
+        internal fun newCapacity(oldCapacity: Int, minCapacity: Int): Int {
+            // overflow-conscious
+            var newCapacity = oldCapacity + (oldCapacity shr 1)
+            if (newCapacity - minCapacity < 0)
+                newCapacity = minCapacity
+            if (newCapacity - maxArraySize > 0)
+                newCapacity = if (minCapacity > maxArraySize) Int.MAX_VALUE else maxArraySize
+            return newCapacity
         }
 
         internal fun orderedHashCode(c: Collection<*>): Int {

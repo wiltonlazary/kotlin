@@ -1,10 +1,12 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1122
+// DONT_TARGET_EXACT_BACKEND: WASM
+// WASM_MUTE_REASON: CLASS_EXPORT
+// EXPECTED_REACHABLE_NODES: 1294
 package foo
 
 var global = ""
 
 open class A {
+    @JsName("foo")
     open fun foo(x: Int = 23) {
         global += "A.foo($x);"
     }

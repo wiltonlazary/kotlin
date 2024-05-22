@@ -1,3 +1,5 @@
+// FIR_IDENTICAL
+// WITH_EXTENDED_CHECKERS
 // KT-716 Type inference failed
 
 class TypeInfo<T>
@@ -11,6 +13,6 @@ fun <T> TypeInfo<T>.getJavaClass() : java.lang.Class<T> {
 
 fun <T> getJavaClass() = typeinfo<T>().getJavaClass()
 
-fun main(args : Array<String>) {
+fun main() {
     System.out.println(getJavaClass<String>())
 }

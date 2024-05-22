@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // FILE: Derived.java
 import kotlin.jvm.functions.Function0;
 import org.jetbrains.annotations.NotNull;
@@ -12,6 +13,6 @@ interface Base {
     fun <V: Any> foo(compute: () -> V?)
 }
 
-fun main(args: Array<String>) {
+fun main() {
     Derived().foo<String> { "" }
 }

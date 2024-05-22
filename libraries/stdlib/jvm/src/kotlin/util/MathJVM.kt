@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2022 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:JvmMultifileClass
@@ -8,21 +8,35 @@
 
 package kotlin.math
 
-import kotlin.*
 import kotlin.internal.InlineOnly
+import kotlin.math.Constants.LN2
+import kotlin.math.Constants.taylor_2_bound
+import kotlin.math.Constants.taylor_n_bound
+import kotlin.math.Constants.upper_taylor_2_bound
+import kotlin.math.Constants.upper_taylor_n_bound
+
 import java.lang.Math as nativeMath
 
+private object Constants {
 // constants
-/** Natural logarithm of 2.0, used to compute [log2] function */
-private val LN2: Double = ln(2.0)
+    /** Natural logarithm of 2.0, used to compute [log2] function */
+    @JvmField
+    internal val LN2: Double = ln(2.0)
 
-private val epsilon: Double = nativeMath.ulp(1.0)
-private val taylor_2_bound = nativeMath.sqrt(epsilon)
-private val taylor_n_bound = nativeMath.sqrt(taylor_2_bound)
-private val upper_taylor_2_bound = 1 / taylor_2_bound
-private val upper_taylor_n_bound = 1 / taylor_n_bound
+    @JvmField
+    internal val epsilon: Double = nativeMath.ulp(1.0)
+    @JvmField
+    internal val taylor_2_bound = nativeMath.sqrt(epsilon)
+    @JvmField
+    internal val taylor_n_bound = nativeMath.sqrt(taylor_2_bound)
+    @JvmField
+    internal val upper_taylor_2_bound = 1 / taylor_2_bound
+    @JvmField
+    internal val upper_taylor_n_bound = 1 / taylor_n_bound
 
-// ================ Double Math ========================================
+}
+
+// region ================ Double Math ========================================
 
 /** Computes the sine of the angle [x] given in radians.
  *
@@ -357,7 +371,7 @@ public actual inline fun ln1p(x: Double): Double = nativeMath.log1p(x)
 /**
  * Rounds the given value [x] to an integer towards positive infinity.
 
- * @return the smallest double value that is greater than the given value [x] and is a mathematical integer.
+ * @return the smallest double value that is greater than or equal to the given value [x] and is a mathematical integer.
  *
  * Special cases:
  *   - `ceil(x)` is `x` where `x` is `NaN` or `+Inf` or `-Inf` or already a mathematical integer.
@@ -369,7 +383,7 @@ public actual inline fun ceil(x: Double): Double = nativeMath.ceil(x)
 /**
  * Rounds the given value [x] to an integer towards negative infinity.
 
- * @return the largest double value that is smaller than the given value [x] and is a mathematical integer.
+ * @return the largest double value that is smaller than or equal to the given value [x] and is a mathematical integer.
  *
  * Special cases:
  *   - `floor(x)` is `x` where `x` is `NaN` or `+Inf` or `-Inf` or already a mathematical integer.
@@ -449,6 +463,23 @@ public actual inline fun min(a: Double, b: Double): Double = nativeMath.min(a, b
 @InlineOnly
 public actual inline fun max(a: Double, b: Double): Double = nativeMath.max(a, b)
 
+
+/**
+ * Returns the cube root of [x]. For any `x`, `cbrt(-x) == -cbrt(x)`;
+ * that is, the cube root of a negative value is the negative of the cube root
+ * of that value's magnitude. Special cases:
+ *
+ * Special cases:
+ *   - If the argument is `NaN`, then the result is `NaN`.
+ *   - If the argument is infinite, then the result is an infinity with the same sign as the argument.
+ *   - If the argument is zero, then the result is a zero with the same sign as the argument.
+ */
+@SinceKotlin("1.8")
+@WasExperimental(ExperimentalStdlibApi::class)
+@InlineOnly
+public actual inline fun cbrt(x: Double): Double = nativeMath.cbrt(x)
+
+
 // extensions
 
 
@@ -483,8 +514,8 @@ public actual inline fun Double.pow(n: Int): Double = nativeMath.pow(this, n.toD
  * `q = round(this / other)`.
  *
  * Special cases:
- *    - `x.IEEErem(y)` is `NaN`, when `x` is `NaN` or `y` is `NaN` or `x` is `+Inf|-Inf` or `y` is zero.
- *    - `x.IEEErem(y) == x` when `x` is finite and `y` is infinite.
+ *   - `x.IEEErem(y)` is `NaN`, when `x` is `NaN` or `y` is `NaN` or `x` is `+Inf|-Inf` or `y` is zero.
+ *   - `x.IEEErem(y) == x` when `x` is finite and `y` is infinite.
  *
  * @see round
  */
@@ -605,8 +636,11 @@ public actual fun Double.roundToInt(): Int = when {
 public actual fun Double.roundToLong(): Long =
     if (isNaN()) throw IllegalArgumentException("Cannot round NaN value.") else nativeMath.round(this)
 
+// endregion
 
-// ================ Float Math ========================================
+
+
+// region ================ Float Math ========================================
 
 /** Computes the sine of the angle [x] given in radians.
  *
@@ -864,7 +898,7 @@ public actual inline fun log10(x: Float): Float = nativeMath.log10(x.toDouble())
 public actual fun log2(x: Float): Float = (nativeMath.log(x.toDouble()) / LN2).toFloat()
 
 /**
- * Computes `ln(a + 1)`.
+ * Computes `ln(x + 1)`.
  *
  * This function can be implemented to produce more precise result for [x] near zero.
  *
@@ -884,7 +918,7 @@ public actual inline fun ln1p(x: Float): Float = nativeMath.log1p(x.toDouble()).
 /**
  * Rounds the given value [x] to an integer towards positive infinity.
 
- * @return the smallest Float value that is greater than the given value [x] and is a mathematical integer.
+ * @return the smallest Float value that is greater than or equal to the given value [x] and is a mathematical integer.
  *
  * Special cases:
  *   - `ceil(x)` is `x` where `x` is `NaN` or `+Inf` or `-Inf` or already a mathematical integer.
@@ -896,7 +930,7 @@ public actual inline fun ceil(x: Float): Float = nativeMath.ceil(x.toDouble()).t
 /**
  * Rounds the given value [x] to an integer towards negative infinity.
 
- * @return the largest Float value that is smaller than the given value [x] and is a mathematical integer.
+ * @return the largest Float value that is smaller than or equal to the given value [x] and is a mathematical integer.
  *
  * Special cases:
  *   - `floor(x)` is `x` where `x` is `NaN` or `+Inf` or `-Inf` or already a mathematical integer.
@@ -976,8 +1010,24 @@ public actual inline fun min(a: Float, b: Float): Float = nativeMath.min(a, b)
 @InlineOnly
 public actual inline fun max(a: Float, b: Float): Float = nativeMath.max(a, b)
 
-// extensions
 
+/**
+ * Returns the cube root of [x]. For any `x`, `cbrt(-x) == -cbrt(x)`;
+ * that is, the cube root of a negative value is the negative of the cube root
+ * of that value's magnitude. Special cases:
+ *
+ * Special cases:
+ *   - If the argument is `NaN`, then the result is `NaN`.
+ *   - If the argument is infinite, then the result is an infinity with the same sign as the argument.
+ *   - If the argument is zero, then the result is a zero with the same sign as the argument.
+ */
+@SinceKotlin("1.8")
+@WasExperimental(ExperimentalStdlibApi::class)
+@InlineOnly
+public actual inline fun cbrt(x: Float): Float = nativeMath.cbrt(x.toDouble()).toFloat()
+
+
+// extensions
 
 /**
  * Raises this value to the power [x].
@@ -1010,8 +1060,8 @@ public actual inline fun Float.pow(n: Int): Float = nativeMath.pow(this.toDouble
  * `q = round(this / other)`.
  *
  * Special cases:
- *    - `x.IEEErem(y)` is `NaN`, when `x` is `NaN` or `y` is `NaN` or `x` is `+Inf|-Inf` or `y` is zero.
- *    - `x.IEEErem(y) == x` when `x` is finite and `y` is infinite.
+ *   - `x.IEEErem(y)` is `NaN`, when `x` is `NaN` or `y` is `NaN` or `x` is `+Inf|-Inf` or `y` is zero.
+ *   - `x.IEEErem(y) == x` when `x` is finite and `y` is infinite.
  *
  * @see round
  */
@@ -1068,7 +1118,7 @@ public actual inline fun Float.withSign(sign: Int): Float = nativeMath.copySign(
  * Special Cases:
  *   - `NaN.ulp` is `NaN`
  *   - `x.ulp` is `+Inf` when `x` is `+Inf` or `-Inf`
- *   - `0.0.ulp` is `Float.NIN_VALUE`
+ *   - `0.0.ulp` is `Float.MIN_VALUE`
  */
 @SinceKotlin("1.2")
 @InlineOnly
@@ -1128,8 +1178,10 @@ public actual fun Float.roundToInt(): Int =
 public actual fun Float.roundToLong(): Long = toDouble().roundToLong()
 
 
+// endregion
 
-// ================== Integer math functions =====================================
+// region ================ Integer Math ========================================
+
 
 /**
  * Returns the absolute value of the given value [n].
@@ -1176,11 +1228,7 @@ public actual inline val Int.absoluteValue: Int get() = nativeMath.abs(this)
  *   - `1` if the value is positive
  */
 @SinceKotlin("1.2")
-public actual val Int.sign: Int get() = when {
-    this < 0 -> -1
-    this > 0 -> 1
-    else -> 0
-}
+public actual val Int.sign: Int get() = Integer.signum(this)
 
 
 
@@ -1229,9 +1277,7 @@ public actual inline val Long.absoluteValue: Long get() = nativeMath.abs(this)
  *   - `1` if the value is positive
  */
 @SinceKotlin("1.2")
-public actual val Long.sign: Int get() = when {
-    this < 0 -> -1
-    this > 0 -> 1
-    else -> 0
-}
+public actual val Long.sign: Int get() = java.lang.Long.signum(this)
 
+
+// endregion

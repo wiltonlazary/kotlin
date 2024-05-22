@@ -1,3 +1,5 @@
+// WITH_COROUTINES
+// WITH_STDLIB
 // MODULE: lib
 // FILE: lib.kt
 inline fun foo(x: String = "OK"): String {
@@ -5,24 +7,17 @@ inline fun foo(x: String = "OK"): String {
 }
 
 // MODULE: main(lib, support)
-// FILE: main.kt
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
+// FILE: main.kt
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 var result = ""
 
 fun builder(c: suspend () -> Unit) {
-    c.startCoroutine(object : Continuation<Unit> {
-        override val context = EmptyCoroutineContext
-        override fun resume(value: Unit) {
-        }
-        override fun resumeWithException(exception: Throwable) {
-        }
-    })
+    c.startCoroutine(EmptyContinuation)
 }
 
 fun box(): String {

@@ -18,16 +18,20 @@ package org.jetbrains.kotlin.codegen
 
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.psi.KtDeclarationWithBody
+import org.jetbrains.kotlin.psi.KtFunctionLiteral
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
 
 class ClosureGenerationStrategy(
         state: GenerationState,
-        declaration: KtDeclarationWithBody
+        val declaration: KtDeclarationWithBody
 ) : FunctionGenerationStrategy.FunctionDefault(state, declaration) {
 
     override fun doGenerateBody(codegen: ExpressionCodegen, signature: JvmMethodSignature) {
-        initializeVariablesForDestructuredLambdaParameters(codegen, codegen.context.functionDescriptor.valueParameters)
-
+        initializeVariablesForDestructuredLambdaParameters(
+            codegen, codegen.context.functionDescriptor.valueParameters, codegen.context.methodEndLabel)
+        if (declaration is KtFunctionLiteral) {
+            recordCallLabelForLambdaArgument(declaration, state.bindingTrace)
+        }
         super.doGenerateBody(codegen, signature)
     }
 }

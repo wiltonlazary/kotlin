@@ -1,4 +1,4 @@
-// !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_VARIABLE
+// DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_VARIABLE
 
 inline fun foo(bar1: (String.() -> Int) -> Int, bar2: (()->Int) -> Int) {
     bar1 label@ {
@@ -24,17 +24,17 @@ inline fun foo(bar1: (String.() -> Int) -> Int, bar2: (()->Int) -> Int) {
 }
 
 inline fun foo2(bar1: (String.() -> Int) -> Int) {
-    l1@ <!USAGE_IS_NOT_INLINABLE!>bar1<!>
+    <!REDUNDANT_LABEL_WARNING!>l1@<!> <!USAGE_IS_NOT_INLINABLE!>bar1<!>
 
-    l2@ bar1 {
+    <!REDUNDANT_LABEL_WARNING!>l2@<!> bar1 {
         11
     }
 
-    (l3@ bar1) {
+    (<!REDUNDANT_LABEL_WARNING!>l3@<!> bar1) {
         11
     }
 
-    (l5@ (l4@ bar1)) {
+    (<!REDUNDANT_LABEL_WARNING!>l5@<!> (<!REDUNDANT_LABEL_WARNING!>l4@<!> bar1)) {
         11
     }
 }

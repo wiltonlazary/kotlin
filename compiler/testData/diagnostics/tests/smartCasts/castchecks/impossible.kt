@@ -1,4 +1,5 @@
-// !LANGUAGE: +SafeCastCheckBoundSmartCasts
+// FIR_IDENTICAL
+// LANGUAGE: +SafeCastCheckBoundSmartCasts
 // See KT-20752
 
 class Unstable {

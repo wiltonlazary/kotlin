@@ -1,4 +1,5 @@
-// !CHECK_TYPE
+// FIR_IDENTICAL
+// CHECK_TYPE
 
 fun test() {
     val array = arrayOf(arrayOf(1))

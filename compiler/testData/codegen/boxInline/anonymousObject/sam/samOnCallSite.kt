@@ -1,5 +1,7 @@
-// FILE: 1.kt
 // FULL_JDK
+// NO_CHECK_LAMBDA_INLINING
+// TARGET_BACKEND: JVM
+// FILE: 1.kt
 
 package test
 
@@ -9,7 +11,6 @@ inline fun doWork(job: ()-> Unit) {
 
 // FILE: 2.kt
 
-//NO_CHECK_LAMBDA_INLINING
 import test.*
 import java.util.concurrent.Executors
 

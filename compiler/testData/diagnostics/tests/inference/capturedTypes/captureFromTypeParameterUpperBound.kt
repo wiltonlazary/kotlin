@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 interface Inv<T>
 
 fun <Y: X, X : Inv<out String>> foo(x: X, y: Y) {
@@ -8,4 +9,4 @@ fun <Y: X, X : Inv<out String>> foo(x: X, y: Y) {
     rY.length
 }
 
-fun <Y> bar(<!UNUSED_PARAMETER!>l<!>: Inv<Y>): Y = TODO()
+fun <Y> bar(l: Inv<Y>): Y = TODO()

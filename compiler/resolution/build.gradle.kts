@@ -1,15 +1,14 @@
-
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 dependencies {
-    compile(project(":compiler:util"))
-    compile(project(":core:descriptors"))
-    compileOnly(intellijDep()) { includeJars("trove4j") }
+    api(project(":compiler:util"))
+    api(project(":core:descriptors"))
+    api(project(":compiler:resolution.common"))
+    compileOnly(intellijCore())
+    compileOnly(commonDependency("org.jetbrains.intellij.deps.fastutil:intellij-deps-fastutil"))
 }
 
 sourceSets {

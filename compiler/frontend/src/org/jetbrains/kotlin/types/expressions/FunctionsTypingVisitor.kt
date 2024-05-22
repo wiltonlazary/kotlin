@@ -1,12 +1,11 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.types.expressions
 
 import com.google.common.collect.Lists
-import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.builtins.*
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
@@ -18,7 +17,6 @@ import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.diagnostics.Errors.*
 import org.jetbrains.kotlin.diagnostics.PsiDiagnosticUtils
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.checkReservedPrefixWord
 import org.jetbrains.kotlin.psi.psiUtil.checkReservedYieldBeforeLambda
 import org.jetbrains.kotlin.psi.psiUtil.getAnnotationEntries
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -27,6 +25,9 @@ import org.jetbrains.kotlin.resolve.BindingContextUtils
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.FunctionDescriptorUtil
 import org.jetbrains.kotlin.resolve.calls.context.ContextDependency
+import org.jetbrains.kotlin.resolve.calls.inference.BuilderInferenceSession
+import org.jetbrains.kotlin.resolve.calls.inference.model.TypeVariableTypeConstructor
+import org.jetbrains.kotlin.resolve.checkers.TrailingCommaChecker
 import org.jetbrains.kotlin.resolve.checkers.UnderscoreChecker
 import org.jetbrains.kotlin.resolve.lazy.ForceResolveUtil
 import org.jetbrains.kotlin.resolve.scopes.LexicalWritableScope
@@ -38,9 +39,9 @@ import org.jetbrains.kotlin.types.TypeUtils.*
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
 import org.jetbrains.kotlin.types.expressions.CoercionStrategy.COERCION_TO_UNIT
 import org.jetbrains.kotlin.types.expressions.typeInfoFactory.createTypeInfo
+import org.jetbrains.kotlin.types.typeUtil.contains
 import org.jetbrains.kotlin.types.typeUtil.isUnit
 import org.jetbrains.kotlin.utils.addIfNotNull
-import java.util.*
 
 internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : ExpressionTypingVisitor(facade) {
 
@@ -77,7 +78,7 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
         val functionDescriptor: SimpleFunctionDescriptor
         if (isDeclaration) {
             functionDescriptor = components.functionDescriptorResolver.resolveFunctionDescriptor(
-                context.scope.ownerDescriptor, context.scope, function, context.trace, context.dataFlowInfo
+                context.scope.ownerDescriptor, context.scope, function, context.trace, context.dataFlowInfo, context.inferenceSession
             )
             assert(statementScope != null) {
                 "statementScope must be not null for function: " + function.name + " at location " + PsiDiagnosticUtils.atLocation(
@@ -88,7 +89,7 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
         } else {
             functionDescriptor = components.functionDescriptorResolver.resolveFunctionExpressionDescriptor(
                 context.scope.ownerDescriptor, context.scope, function,
-                context.trace, context.dataFlowInfo, context.expectedType
+                context.trace, context.dataFlowInfo, context.expectedType, context.inferenceSession
             )
         }
         // Necessary for local functions
@@ -100,12 +101,13 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
             ForceResolveUtil.forceResolveAllContents(functionDescriptor.returnType)
         } else {
             components.expressionTypingServices.checkFunctionReturnType(
-                functionInnerScope, function, functionDescriptor, context.dataFlowInfo, null, context.trace
+                functionInnerScope, function, functionDescriptor, context.dataFlowInfo, null, context.trace, context
             )
         }
 
         components.valueParameterResolver.resolveValueParameters(
-            function.valueParameters, functionDescriptor.valueParameters, functionInnerScope, context.dataFlowInfo, context.trace
+            function.valueParameters, functionDescriptor.valueParameters, functionInnerScope,
+            context.dataFlowInfo, context.trace, context.inferenceSession
         )
 
         components.modifiersChecker.withTrace(context.trace).checkModifiersForLocalDeclaration(function, functionDescriptor)
@@ -115,34 +117,42 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
         return if (isDeclaration) {
             createTypeInfo(components.dataFlowAnalyzer.checkStatementType(function, context), context)
         } else {
-            val expectedType = context.expectedType
+            val newInferenceEnabled = components.languageVersionSettings.supportsFeature(LanguageFeature.NewInference)
 
-            val functionalTypeExpected = expectedType.isBuiltinFunctionalType()
-            val suspendFunctionTypeExpected = expectedType.isSuspendFunctionType()
+            // We forbid anonymous function expressions to suspend type coercion for now, until `suspend fun` syntax is supported
+            val resultType = functionDescriptor.createFunctionType(
+                components.builtIns,
+                suspendFunction = false
+            )
 
-            val resultType = functionDescriptor.createFunctionType(suspendFunctionTypeExpected)
-
-            if (components.languageVersionSettings.supportsFeature(LanguageFeature.NewInference) && functionalTypeExpected)
+            if (newInferenceEnabled) {
+                // We should avoid type checking for types containing `NO_EXPECTED_TYPE`, the error will be report later if needed
+                if (!context.expectedType.contains { it === NO_EXPECTED_TYPE }) {
+                    /*
+                     * We do type checking without converted vararg type as the new inference create expected type with raw vararg type (see KotlinResolutionCallbacksImpl.kt)
+                     * Example:
+                     *      fun foo(x: Any?) {}
+                     *      val x = foo(fun(vararg p: Int) {})
+                     *      In NI, context.expectedType = `Function1<Int, Unit>`
+                     */
+                    val typeToTypeCheck = functionDescriptor.createFunctionType(
+                        components.builtIns,
+                        suspendFunction = false,
+                        shouldUseVarargType = true
+                    )
+                    components.dataFlowAnalyzer.checkType(typeToTypeCheck, function, context)
+                }
                 createTypeInfo(resultType, context)
-            else
+            } else {
                 components.dataFlowAnalyzer.createCheckedTypeInfo(resultType, context, function)
+            }
         }
     }
 
-    private fun SimpleFunctionDescriptor.createFunctionType(suspendFunction: Boolean = false): KotlinType? {
-        return createFunctionType(
-            components.builtIns,
-            Annotations.EMPTY,
-            extensionReceiverParameter?.type,
-            valueParameters.map { it.type },
-            null,
-            returnType ?: return null,
-            suspendFunction = suspendFunction
-        )
-    }
-
     override fun visitLambdaExpression(expression: KtLambdaExpression, context: ExpressionTypingContext): KotlinTypeInfo? {
-        checkReservedYieldBeforeLambda(expression, context.trace)
+        if (!components.languageVersionSettings.supportsFeature(LanguageFeature.YieldIsNoMoreReserved)) {
+            checkReservedYieldBeforeLambda(expression, context.trace)
+        }
         if (!expression.functionLiteral.hasBody()) return null
 
         val expectedType = context.expectedType
@@ -154,25 +164,35 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
             components.identifierChecker.checkDeclaration(it, context.trace)
             UnderscoreChecker.checkNamed(it, context.trace, components.languageVersionSettings, allowSingleUnderscore = true)
         }
+
+        val valueParameterList = expression.functionLiteral.valueParameterList
+        if (valueParameterList?.stub == null) {
+            TrailingCommaChecker.check(
+                valueParameterList?.trailingComma,
+                context.trace,
+                context.languageVersionSettings
+            )
+        }
+
         val safeReturnType = computeReturnType(expression, context, functionDescriptor, functionTypeExpected)
         functionDescriptor.setReturnType(safeReturnType)
 
-        val resultType = functionDescriptor.createFunctionType(suspendFunctionTypeExpected)!!
+        val resultType = components.typeResolutionInterceptor.interceptType(
+            expression,
+            context,
+            functionDescriptor.createFunctionType(components.builtIns, suspendFunctionTypeExpected)!!
+        )
+
+        if (context.inferenceSession is BuilderInferenceSession) {
+            context.inferenceSession.addExpression(expression)
+        }
+
         if (functionTypeExpected) {
             // all checks were done before
             return createTypeInfo(resultType, context)
         }
 
         return components.dataFlowAnalyzer.createCheckedTypeInfo(resultType, context, expression)
-    }
-
-    private fun checkReservedYield(context: ExpressionTypingContext, expression: PsiElement) {
-        checkReservedPrefixWord(
-            context.trace,
-            expression,
-            "yield",
-            "yield block/lambda. Use 'yield() { ... }' or 'yield(fun...)'"
-        )
     }
 
     private fun createFunctionLiteralDescriptor(
@@ -185,10 +205,12 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
             components.annotationResolver.resolveAnnotationsWithArguments(context.scope, expression.getAnnotationEntries(), context.trace),
             CallableMemberDescriptor.Kind.DECLARATION, functionLiteral.toSourceElement(),
             context.expectedType.isSuspendFunctionType()
-        )
+        ).let {
+            facade.components.typeResolutionInterceptor.interceptFunctionLiteralDescriptor(expression, context, it)
+        }
         components.functionDescriptorResolver.initializeFunctionDescriptorAndExplicitReturnType(
             context.scope.ownerDescriptor, context.scope, functionLiteral,
-            functionDescriptor, context.trace, context.expectedType, context.dataFlowInfo
+            functionDescriptor, context.trace, context.expectedType, context.dataFlowInfo, context.inferenceSession
         )
         for (parameterDescriptor in functionDescriptor.valueParameters) {
             ForceResolveUtil.forceResolveAllContents(parameterDescriptor.annotations)
@@ -217,7 +239,7 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
                 return components.builtIns.unitType
             }
         }
-        return returnType ?: CANT_INFER_FUNCTION_PARAM_TYPE
+        return returnType ?: CANNOT_INFER_FUNCTION_PARAM_TYPE
     }
 
     private fun computeUnsafeReturnType(
@@ -250,7 +272,6 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
 
         newInferenceLambdaInfo?.let {
             it.lastExpressionInfo.dataFlowInfoAfter = blockReturnedType.dataFlowInfo
-            return null
         }
 
         return computeReturnTypeBasedOnReturnExpressions(functionLiteral, context, typeOfBodyExpression)
@@ -290,6 +311,7 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
         returnedExpressionTypes.addIfNotNull(typeOfBodyExpression)
 
         if (returnedExpressionTypes.isEmpty()) return null
+        if (returnedExpressionTypes.any { it.contains { it.constructor is TypeVariableTypeConstructor }}) return null
         return CommonSupertypes.commonSupertype(returnedExpressionTypes)
     }
 
@@ -362,4 +384,21 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
 
         return returns
     }
+}
+
+fun SimpleFunctionDescriptor.createFunctionType(
+    builtIns: KotlinBuiltIns,
+    suspendFunction: Boolean = false,
+    shouldUseVarargType: Boolean = false
+): KotlinType? {
+    return createFunctionType(
+        builtIns,
+        Annotations.EMPTY,
+        extensionReceiverParameter?.type,
+        contextReceiverParameters.map { it.type },
+        if (shouldUseVarargType) valueParameters.map { it.varargElementType ?: it.type } else valueParameters.map { it.type },
+        null,
+        returnType ?: return null,
+        suspendFunction = suspendFunction
+    )
 }

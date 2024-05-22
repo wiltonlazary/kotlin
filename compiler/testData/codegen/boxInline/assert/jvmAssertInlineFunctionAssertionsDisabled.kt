@@ -1,15 +1,20 @@
+// FULL_JDK
+// WITH_STDLIB
+// ASSERTIONS_MODE: jvm
 // FILE: inline.kt
-// KOTLIN_CONFIGURATION_FLAGS: ASSERTIONS_MODE=jvm
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+
+package test
 
 inline fun inlineMe() {
     assert(false) { "FROM INLINED" }
 }
 
 // FILE: inlineSite.kt
-// KOTLIN_CONFIGURATION_FLAGS: ASSERTIONS_MODE=jvm
 
-class Checker {
+import test.*
+
+class CheckerJvmAssertInlineFunctionAssertionsDisabled {
     fun check() {
         inlineMe()
         assert(false) { "FROM INLINESITE" }
@@ -18,16 +23,16 @@ class Checker {
 
 class Dummy
 
-fun disableAssertions(): Checker {
+fun disableAssertions(): CheckerJvmAssertInlineFunctionAssertionsDisabled {
     val loader = Dummy::class.java.classLoader
-    loader.setDefaultAssertionStatus(false)
-    val c = loader.loadClass("Checker")
-    return c.newInstance() as Checker
+    loader.setClassAssertionStatus("CheckerJvmAssertInlineFunctionAssertionsDisabled", false)
+    loader.setClassAssertionStatus("InlineKt", false)
+    val c = loader.loadClass("CheckerJvmAssertInlineFunctionAssertionsDisabled")
+    return c.newInstance() as CheckerJvmAssertInlineFunctionAssertionsDisabled
 }
 
 fun box(): String {
     var c = disableAssertions()
     c.check()
-
     return "OK"
 }

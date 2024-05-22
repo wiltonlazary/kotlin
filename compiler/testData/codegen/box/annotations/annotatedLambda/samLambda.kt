@@ -1,7 +1,7 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
-
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// SAM_CONVERSIONS: CLASS
+//   ^ test checks reflection for synthetic classes
+// WITH_STDLIB
 // FILE: Test.java
 
 class Test {
@@ -10,9 +10,10 @@ class Test {
     }
 }
 
-// FILE: test.kt
+// FILE: samLambda.kt
 
 import java.lang.reflect.Method
+
 import kotlin.test.assertEquals
 
 @Target(AnnotationTarget.FUNCTION)

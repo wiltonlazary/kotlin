@@ -1,6 +1,6 @@
 // FILE: KotlinFile.kt
 fun foo(javaClass: JavaClass) {
-    javaClass.<!INVISIBLE_MEMBER!>doSomething<!> <!TYPE_MISMATCH!>{ }<!>
+    javaClass.<!INVISIBLE_MEMBER!>doSomething<!> { }
 }
 
 // FILE: JavaClass.java

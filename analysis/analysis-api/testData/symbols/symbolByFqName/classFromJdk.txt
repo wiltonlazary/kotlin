@@ -1,0 +1,45 @@
+KtNamedClassOrObjectSymbol:
+  annotationsList: []
+  classIdIfNonLocal: java/lang/String
+  classKind: CLASS
+  companionObject: null
+  contextReceivers: []
+  isActual: false
+  isData: false
+  isExpect: false
+  isExternal: false
+  isFun: false
+  isInline: false
+  isInner: false
+  modality: FINAL
+  name: String
+  origin: JAVA
+  superTypes: [
+    KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: kotlin/Any
+    KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: java/io/Serializable
+    KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: [
+        KtFlexibleType:
+          annotationsList: []
+          type: kotlin/String!
+      ]
+      type: kotlin/Comparable<kotlin/String!>
+    KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: kotlin/CharSequence
+  ]
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  visibility: Public
+  getContainingFileSymbol: null
+  getContainingModule: KtSdkModule "SDK jdk"
+  annotationApplicableTargets: null
+  deprecationStatus: null

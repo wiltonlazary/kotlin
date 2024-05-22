@@ -1,24 +1,24 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.jvm.internal.markers
 
-interface KMappedMarker
+public interface KMappedMarker
 
-interface KMutableIterable : KMappedMarker
+public interface KMutableIterable : KMappedMarker
 
-interface KMutableCollection : KMutableIterable
+public interface KMutableCollection : KMutableIterable
 
-interface KMutableList : KMutableCollection
+public interface KMutableList : KMutableCollection
 
-interface KMutableIterator : KMappedMarker
+public interface KMutableIterator : KMappedMarker
 
-interface KMutableListIterator : KMutableIterator
+public interface KMutableListIterator : KMutableIterator
 
-interface KMutableMap : KMappedMarker {
-    interface Entry : KMappedMarker
+public interface KMutableMap : KMappedMarker {
+    public interface Entry : KMappedMarker
 }
 
-interface KMutableSet : KMutableCollection
+public interface KMutableSet : KMutableCollection

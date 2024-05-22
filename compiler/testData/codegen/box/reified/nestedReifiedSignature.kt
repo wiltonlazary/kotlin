@@ -1,7 +1,8 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
-// WITH_RUNTIME
+// WITH_STDLIB
+
+package test
 
 import kotlin.test.assertEquals
 
@@ -27,7 +28,7 @@ fun box(): String {
             Triple("java.lang.Integer", "java.lang.Double", "java.lang.Integer"),
             Triple("java.lang.Boolean", "java.lang.Double", "java.lang.Integer"),
             Triple("java.lang.Double", "java.lang.Boolean", "java.lang.Integer")
-    ).map { "A<${it.first}, ${it.second}, ${it.third}>" }
+    ).map { "test.A<${it.first}, ${it.second}, ${it.third}>" }
 
     for (i in expected.indices) {
         assertEquals(expected[i], result[i].javaClass.getGenericSuperclass()?.toString(), "$i-th element")

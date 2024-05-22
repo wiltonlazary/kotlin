@@ -1,6 +1,3 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
-
 class Identifier<T>(t : T?, myHasDollar : Boolean) {
     private val myT : T?
 
@@ -18,7 +15,6 @@ class Identifier<T>(t : T?, myHasDollar : Boolean) {
 }
 
 fun box() : String {
-    var i3 : Identifier<String?>? = Identifier.init<String?>("name")
-    System.out?.println(i3?.getName())
-    return "OK"
+    var i3 : Identifier<String?>? = Identifier.init<String?>("OK")
+    return i3?.getName() ?: "FAIL"
 }

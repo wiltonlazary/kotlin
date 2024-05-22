@@ -20,8 +20,11 @@ import com.intellij.openapi.util.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.codegen.context.EnclosedValueDescriptor;
+import org.jetbrains.kotlin.config.LanguageVersionSettings;
+import org.jetbrains.kotlin.descriptors.CallableDescriptor;
 import org.jetbrains.kotlin.descriptors.ClassDescriptor;
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
+import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.org.objectweb.asm.Type;
 
@@ -33,10 +36,13 @@ public interface CalculatedClosure {
     ClassDescriptor getClosureClass();
 
     @Nullable
-    ClassDescriptor getCaptureThis();
+    ClassDescriptor getCapturedOuterClassDescriptor();
 
     @Nullable
-    KotlinType getCaptureReceiverType();
+    KotlinType getCapturedReceiverFromOuterContext();
+
+    @NotNull
+    String getCapturedReceiverFieldName(BindingContext bindingContext, LanguageVersionSettings languageVersionSettings);
 
     @NotNull
     Map<DeclarationDescriptor, EnclosedValueDescriptor> getCaptureVariables();
@@ -47,4 +53,7 @@ public interface CalculatedClosure {
     boolean isSuspend();
 
     boolean isSuspendLambda();
+
+    @Nullable
+    CallableDescriptor getEnclosingCallableDescriptorWithReceiver();
 }

@@ -1,6 +1,7 @@
-// !LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect +UseReturnsEffect
+// LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect +UseReturnsEffect
+// OPT_IN: kotlin.contracts.ExperimentalContracts
 
-import kotlin.internal.contracts.*
+import kotlin.contracts.*
 
 fun callsAndInverts(b: Boolean, block: () -> Unit): Boolean {
     contract {

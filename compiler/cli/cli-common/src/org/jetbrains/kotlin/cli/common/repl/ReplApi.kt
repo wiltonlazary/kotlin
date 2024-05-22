@@ -21,9 +21,10 @@ import java.io.File
 import java.io.Serializable
 import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.jvm.internal.TypeIntrinsics
 import kotlin.reflect.KClass
 
-const val REPL_CODE_LINE_FIRST_NO = 1
+const val REPL_CODE_LINE_FIRST_NO = 0
 const val REPL_CODE_LINE_FIRST_GEN = 1
 
 data class ReplCodeLine(val no: Int, val generation: Int, val code: String) : Serializable {
@@ -89,11 +90,13 @@ sealed class ReplCompileResult : Serializable {
                           val classes: List<CompiledClassData>,
                           val hasResult: Boolean,
                           val classpathAddendum: List<File>,
-                          val type: String?) : ReplCompileResult() {
+                          val type: String?,
+                          val data: Any? // TODO: temporary; migration to new scripting infrastructure
+    ) : ReplCompileResult() {
         companion object { private val serialVersionUID: Long = 2L }
     }
 
-    class Incomplete : ReplCompileResult() {
+    class Incomplete(val message: String) : ReplCompileResult() {
         companion object { private val serialVersionUID: Long = 1L }
     }
 
@@ -107,7 +110,9 @@ sealed class ReplCompileResult : Serializable {
     }
 }
 
-interface ReplCompiler : ReplCompileAction, ReplCheckAction, CreateReplStageStateAction
+interface ReplCompilerWithoutCheck : ReplCompileAction, CreateReplStageStateAction
+
+interface ReplCompiler : ReplCompilerWithoutCheck, ReplCheckAction
 
 // --- eval
 
@@ -121,8 +126,12 @@ interface ReplEvalAction {
 }
 
 sealed class ReplEvalResult : Serializable {
-    class ValueResult(val value: Any?, val type: String?) : ReplEvalResult() {
-        override fun toString(): String = "$value : $type"
+    class ValueResult(val name: String, val value: Any?, val type: String?, val snippetInstance: Any? = null) : ReplEvalResult() {
+        override fun toString(): String {
+            val v = if (value is Function<*>) "<function${TypeIntrinsics.getFunctionArity(value)}>" else value
+            return "$name: $type = $v"
+        }
+
         companion object { private val serialVersionUID: Long = 1L }
     }
 
@@ -130,7 +139,7 @@ sealed class ReplEvalResult : Serializable {
         companion object { private val serialVersionUID: Long = 1L }
     }
 
-    class Incomplete : ReplEvalResult() {
+    class Incomplete(val message: String) : ReplEvalResult() {
         companion object { private val serialVersionUID: Long = 1L }
     }
 
@@ -139,7 +148,7 @@ sealed class ReplEvalResult : Serializable {
     }
 
     sealed class Error(val message: String) : ReplEvalResult() {
-        class Runtime(message: String, val cause: Exception? = null) : Error(message) {
+        class Runtime(message: String, val cause: Throwable? = null) : Error(message) {
             companion object { private val serialVersionUID: Long = 1L }
         }
 
@@ -168,7 +177,7 @@ interface ReplAtomicEvalAction {
                        invokeWrapper: InvokeWrapper? = null): ReplEvalResult
 }
 
-interface ReplAtomicEvaluator : ReplAtomicEvalAction, ReplCheckAction
+interface ReplAtomicEvaluator : ReplAtomicEvalAction
 
 interface ReplDelayedEvalAction {
     fun compileToEvaluable(state: IReplStageState<*>,

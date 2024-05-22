@@ -18,7 +18,8 @@ package org.jetbrains.kotlin.resolve.calls.checkers
 
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.ConstructorDescriptor
-import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilityUtils
 import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.psi.KtConstructorCalleeExpression
@@ -35,9 +36,9 @@ object ProtectedConstructorCallChecker : CallChecker {
 
         val actualConstructor = (descriptor as? TypeAliasConstructorDescriptor)?.underlyingConstructorDescriptor ?: descriptor
 
-        if (actualConstructor.visibility.normalize() != Visibilities.PROTECTED) return
+        if (actualConstructor.visibility.normalize() != DescriptorVisibilities.PROTECTED) return
         // Error already reported
-        if (!Visibilities.isVisibleWithAnyReceiver(descriptor, scopeOwner)) return
+        if (!DescriptorVisibilityUtils.isVisibleWithAnyReceiver(descriptor, scopeOwner, context.languageVersionSettings)) return
 
         val calleeExpression = resolvedCall.call.calleeExpression
 
@@ -55,7 +56,13 @@ object ProtectedConstructorCallChecker : CallChecker {
         // And without ProtectedConstructorCallChecker such calls would be allowed only because they are performed within subclass
         // of constructor owner
         @Suppress("DEPRECATION")
-        if (Visibilities.findInvisibleMember(Visibilities.FALSE_IF_PROTECTED, descriptor, scopeOwner) == actualConstructor) {
+        if (DescriptorVisibilityUtils.findInvisibleMember(
+                DescriptorVisibilities.FALSE_IF_PROTECTED,
+                descriptor,
+                scopeOwner,
+                context.languageVersionSettings
+            ) == actualConstructor.original
+        ) {
             context.trace.report(Errors.PROTECTED_CONSTRUCTOR_NOT_IN_SUPER_CALL.on(reportOn, descriptor))
         }
     }

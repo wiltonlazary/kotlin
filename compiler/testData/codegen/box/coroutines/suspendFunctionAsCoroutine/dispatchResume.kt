@@ -1,47 +1,45 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
+// FULL_JDK
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 class Controller {
     var log = ""
     var resumeIndex = 0
 
-    suspend fun <T> suspendWithValue(value: T): T = suspendCoroutineOrReturn { continuation ->
+    var callback: (() -> Unit)? = null
+
+    suspend fun <T> suspendWithValue(value: T): T = suspendCoroutine { continuation ->
         log += "suspend($value);"
-        continuation.resume(value)
-        COROUTINE_SUSPENDED
+        callback = {
+            continuation.resume(value)
+        }
     }
 
-    suspend fun suspendWithException(value: String): Unit = suspendCoroutineOrReturn { continuation ->
+    suspend fun suspendWithException(value: String): Unit = suspendCoroutine { continuation ->
         log += "error($value);"
-        continuation.resumeWithException(RuntimeException(value))
-        COROUTINE_SUSPENDED
+        callback = {
+            continuation.resumeWithException(RuntimeException(value))
+        }
     }
 }
 
 abstract class ContinuationDispatcher : AbstractCoroutineContextElement(ContinuationInterceptor), ContinuationInterceptor {
-    abstract fun <T> dispatchResume(value: T, continuation: Continuation<T>): Boolean
-    abstract fun dispatchResumeWithException(exception: Throwable, continuation: Continuation<*>): Boolean
+    abstract fun <T> dispatchResumeWith(value: Result<T>, continuation: Continuation<T>): Boolean
     override fun <T> interceptContinuation(continuation: Continuation<T>): Continuation<T> = DispatchedContinuation(this, continuation)
 }
 
 private class DispatchedContinuation<T>(
-        val dispatcher: ContinuationDispatcher,
-        val continuation: Continuation<T>
+    val dispatcher: ContinuationDispatcher,
+    val continuation: Continuation<T>
 ): Continuation<T> {
     override val context: CoroutineContext = continuation.context
 
-    override fun resume(value: T) {
-        if (!dispatcher.dispatchResume(value, continuation))
-            continuation.resume(value)
-    }
-
-    override fun resumeWithException(exception: Throwable) {
-        if (!dispatcher.dispatchResumeWithException(exception, continuation))
-            continuation.resumeWithException(exception)
+    override fun resumeWith(value: Result<T>) {
+        if (!dispatcher.dispatchResumeWith(value, continuation))
+            continuation.resumeWith(value)
     }
 }
 
@@ -55,20 +53,20 @@ fun test(c: suspend Controller.() -> Unit): String {
             controller.log += "after $id;"
         }
 
-        override fun <P> dispatchResume(data: P, continuation: Continuation<P>): Boolean {
+        override fun <P> dispatchResumeWith(data: Result<P>, continuation: Continuation<P>): Boolean {
             dispatchResume {
-                continuation.resume(data)
-            }
-            return true
-        }
-
-        override fun dispatchResumeWithException(exception: Throwable, continuation: Continuation<*>): Boolean {
-            dispatchResume {
-                continuation.resumeWithException(exception)
+                continuation.resumeWith(data)
             }
             return true
         }
     }))
+
+    while (controller.callback != null) {
+        val c = controller.callback!!
+        controller.callback = null
+        c()
+    }
+
     return controller.log
 }
 
@@ -96,12 +94,12 @@ fun box(): String {
     var result = test {
         test1()
     }
-    if (result != "before 0;suspend();before 1;suspend(O);before 2;suspend(K);before 3;OK;after 3;after 2;after 1;after 0;") return "fail1: $result"
+    if (result != "before 0;suspend();after 0;before 1;suspend(O);after 1;before 2;suspend(K);after 2;before 3;OK;after 3;") return "fail1: $result"
 
     result = test {
         test2()
     }
-    if (result != "before 0;suspend();before 1;suspend(O);before 2;error(OK);before 3;OK;after 3;after 2;after 1;after 0;") return "fail2: $result"
+    if (result != "before 0;suspend();after 0;before 1;suspend(O);after 1;before 2;error(OK);after 2;before 3;OK;after 3;") return "fail2: $result"
 
     return "OK"
 }

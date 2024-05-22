@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.script.examples.jvm.simple.test
@@ -28,9 +28,9 @@ class SimpleTest {
         val res = evalFile(File("testData/error.simplescript.kts"))
 
         Assert.assertTrue(
-            "test failed - expecting a failure with the message \"Unresolved reference: abracadabra\" but received " +
+            "test failed - expecting a failure with the message \"Unresolved reference 'abracadabra'.\" but received " +
                     (if (res is ResultWithDiagnostics.Failure) "failure" else "success") +
                     ":\n  ${res.reports.joinToString("\n  ") { it.message + if (it.exception == null) "" else ": ${it.exception}" }}",
-            res is ResultWithDiagnostics.Failure && res.reports.any { it.message.contains("Unresolved reference: abracadabra") })
+            res is ResultWithDiagnostics.Failure && res.reports.any { it.message.contains("Unresolved reference 'abracadabra'.") })
     }
 }

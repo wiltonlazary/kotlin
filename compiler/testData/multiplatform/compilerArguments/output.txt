@@ -1,3 +1,0 @@
--- Common --
-Exit code: OK
-Output:

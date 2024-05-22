@@ -16,56 +16,57 @@
 
 package org.jetbrains.kotlin.psi2ir.generators
 
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.ir.IrStatement
-import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
-import org.jetbrains.kotlin.ir.expressions.impl.IrBlockImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrFunctionReferenceImpl
+import org.jetbrains.kotlin.ir.expressions.impl.IrFunctionExpressionImpl
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
+import org.jetbrains.kotlin.resolve.bindingContextUtil.isInlineableFunctionLiteral
 
-class LocalFunctionGenerator(statementGenerator: StatementGenerator) : StatementGeneratorExtension(statementGenerator) {
+internal class LocalFunctionGenerator(statementGenerator: StatementGenerator) : StatementGeneratorExtension(statementGenerator) {
+
     fun generateLambda(ktLambda: KtLambdaExpression): IrStatement {
         val ktFun = ktLambda.functionLiteral
-        val lambdaExpressionType = getInferredTypeWithImplicitCastsOrFail(ktLambda)
-        val irLambdaFunction = FunctionGenerator(context).generateLambdaFunctionDeclaration(ktFun)
-
-        val irBlock = IrBlockImpl(ktLambda.startOffset, ktLambda.endOffset, lambdaExpressionType, IrStatementOrigin.LAMBDA)
-        irBlock.statements.add(irLambdaFunction)
-        irBlock.statements.add(
-            IrFunctionReferenceImpl(
-                ktLambda.startOffset, ktLambda.endOffset, lambdaExpressionType,
-                irLambdaFunction.symbol, irLambdaFunction.symbol.descriptor,
-                null, IrStatementOrigin.LAMBDA
-            )
+        val lambdaExpressionType = getTypeInferredByFrontendOrFail(ktLambda).toIrType()
+        val loopResolver = if (context.languageVersionSettings.supportsFeature(LanguageFeature.BreakContinueInInlineLambdas)
+            && isInlineableFunctionLiteral(ktLambda, context.bindingContext)
         )
-        return irBlock
+            statementGenerator.bodyGenerator
+        else null
+        val irLambdaFunction = FunctionGenerator(context).generateLambdaFunctionDeclaration(ktFun, loopResolver)
+
+        return IrFunctionExpressionImpl(
+            ktLambda.startOffset, ktLambda.endOffset,
+            lambdaExpressionType,
+            irLambdaFunction,
+            IrStatementOrigin.LAMBDA
+        )
     }
 
-    fun generateFunction(ktFun: KtNamedFunction): IrStatement =
-        if (ktFun.name != null) {
-            generateFunctionDeclaration(ktFun)
-        } else {
-            // anonymous function expression
-            val funExpressionType = getInferredTypeWithImplicitCastsOrFail(ktFun)
-            val irBlock = IrBlockImpl(ktFun.startOffset, ktFun.endOffset, funExpressionType, IrStatementOrigin.ANONYMOUS_FUNCTION)
+    fun generateFunction(ktFun: KtNamedFunction): IrStatement {
+        val irFun = generateFunctionDeclaration(ktFun)
+        if (ktFun.name != null) return irFun
 
-            val irFun = generateFunctionDeclaration(ktFun)
-            irBlock.statements.add(irFun)
+        val funExpressionType = getTypeInferredByFrontendOrFail(ktFun).toIrType()
+        return IrFunctionExpressionImpl(
+            ktFun.startOffset, ktFun.endOffset,
+            funExpressionType,
+            irFun,
+            IrStatementOrigin.ANONYMOUS_FUNCTION
+        )
+    }
 
-            irBlock.statements.add(
-                IrFunctionReferenceImpl(
-                    ktFun.startOffset, ktFun.endOffset, funExpressionType,
-                    irFun.symbol, irFun.symbol.descriptor,
-                    null, IrStatementOrigin.ANONYMOUS_FUNCTION
-                )
-            )
-
-            irBlock
-        }
-
-    private fun generateFunctionDeclaration(ktFun: KtNamedFunction): IrFunction =
-        FunctionGenerator(context).generateFunctionDeclaration(ktFun)
+    private fun generateFunctionDeclaration(ktFun: KtNamedFunction) =
+        FunctionGenerator(context).generateFunctionDeclaration(
+            ktFun,
+            if (context.languageVersionSettings.supportsFeature(LanguageFeature.BreakContinueInInlineLambdas)
+                && isInlineableFunctionLiteral(ktFun, context.bindingContext)
+            ) statementGenerator.bodyGenerator
+            else null,
+            IrDeclarationOrigin.LOCAL_FUNCTION
+        )
 }

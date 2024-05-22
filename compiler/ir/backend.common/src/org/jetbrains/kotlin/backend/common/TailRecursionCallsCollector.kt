@@ -16,14 +16,19 @@
 
 package org.jetbrains.kotlin.backend.common
 
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.types.classOrNull
+import org.jetbrains.kotlin.ir.types.isClassWithFqName
+import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.ir.util.usesDefaultArguments
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
-import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.types.typeUtil.isUnit
+
+data class TailCalls(val ir: Set<IrCall>, val fromManyFunctions: Boolean)
 
 /**
  * Collects calls to be treated as tail recursion.
@@ -34,127 +39,124 @@ import org.jetbrains.kotlin.types.typeUtil.isUnit
  * It is also not guaranteed that each returned call is detected as tail recursion by the frontend.
  * However any returned call can be correctly optimized as tail recursion.
  */
-fun collectTailRecursionCalls(irFunction: IrFunction): Set<IrCall> {
-    if (!irFunction.descriptor.isTailrec) {
-        return emptySet()
+fun collectTailRecursionCalls(irFunction: IrFunction, followFunctionReference: (IrFunctionReference) -> Boolean): TailCalls {
+    if ((irFunction as? IrSimpleFunction)?.isTailrec != true) {
+        return TailCalls(emptySet(), false)
     }
 
+    class VisitorState(val isTailExpression: Boolean, val inOtherFunction: Boolean)
+
+    val isUnitReturn = irFunction.returnType.isUnit()
     val result = mutableSetOf<IrCall>()
-
-    val visitor = object : IrElementVisitor<Unit, ElementKind> {
-
-        override fun visitElement(element: IrElement, data: ElementKind) {
-            val childKind = ElementKind.NOT_SURE // Not sure by default.
-            element.acceptChildren(this, childKind)
+    var someCallsAreInOtherFunctions = false
+    val visitor = object : IrElementVisitor<Unit, VisitorState> {
+        override fun visitElement(element: IrElement, data: VisitorState) {
+            element.acceptChildren(this, VisitorState(isTailExpression = false, data.inOtherFunction))
         }
 
-        override fun visitFunction(declaration: IrFunction, data: ElementKind) {
+        override fun visitFunction(declaration: IrFunction, data: VisitorState) {
             // Ignore local functions.
         }
 
-        override fun visitClass(declaration: IrClass, data: ElementKind) {
+        override fun visitClass(declaration: IrClass, data: VisitorState) {
             // Ignore local classes.
         }
 
-        override fun visitTry(aTry: IrTry, data: ElementKind) {
+        override fun visitTry(aTry: IrTry, data: VisitorState) {
             // We do not support tail calls in try-catch-finally, for simplicity of the mental model
             // very few cases there would be real tail-calls, and it's often not so easy for the user to see why
         }
 
-        override fun visitReturn(expression: IrReturn, data: ElementKind) {
-            val valueKind = if (expression.returnTarget == irFunction.descriptor) {
-                ElementKind.TAIL_STATEMENT
-            } else {
-                ElementKind.NOT_SURE
-            }
-            expression.value.accept(this, valueKind)
+        override fun visitReturn(expression: IrReturn, data: VisitorState) {
+            expression.value.accept(this, VisitorState(expression.returnTargetSymbol == irFunction.symbol, data.inOtherFunction))
         }
 
-        override fun visitContainerExpression(expression: IrContainerExpression, data: ElementKind) {
+        override fun visitExpressionBody(body: IrExpressionBody, data: VisitorState) =
+            body.acceptChildren(this, data)
+
+        override fun visitBlockBody(body: IrBlockBody, data: VisitorState) =
+            visitStatementContainer(body, data)
+
+        override fun visitContainerExpression(expression: IrContainerExpression, data: VisitorState) =
+            visitStatementContainer(expression, data)
+
+        private fun visitStatementContainer(expression: IrStatementContainer, data: VisitorState) {
             expression.statements.forEachIndexed { index, irStatement ->
-                val statementKind = if (index == expression.statements.lastIndex) {
+                val isTailStatement = if (index == expression.statements.lastIndex) {
                     // The last statement defines the result of the container expression, so it has the same kind.
-                    data
+                    data.isTailExpression
                 } else {
-                    ElementKind.NOT_SURE
+                    // In a Unit-returning function, any statement directly followed by a `return` is a tail statement.
+                    isUnitReturn && expression.statements[index + 1].let {
+                        it is IrReturn && it.returnTargetSymbol == irFunction.symbol && it.value.isUnitRead()
+                    }
                 }
-                irStatement.accept(this, statementKind)
+                irStatement.accept(this, VisitorState(isTailStatement, data.inOtherFunction))
             }
         }
 
-        override fun visitWhen(expression: IrWhen, data: ElementKind) {
+        private fun IrExpression.isUnitRead(): Boolean =
+            this is IrGetObjectValue && symbol.isClassWithFqName(StandardNames.FqNames.unit)
+
+        override fun visitWhen(expression: IrWhen, data: VisitorState) {
             expression.branches.forEach {
-                it.condition.accept(this, ElementKind.NOT_SURE)
+                it.condition.accept(this, VisitorState(isTailExpression = false, data.inOtherFunction))
                 it.result.accept(this, data)
             }
         }
 
-        override fun visitCall(expression: IrCall, data: ElementKind) {
-            expression.acceptChildren(this, ElementKind.NOT_SURE)
+        override fun visitCall(expression: IrCall, data: VisitorState) {
+            expression.acceptChildren(this, VisitorState(isTailExpression = false, data.inOtherFunction))
 
-            // Is it a tail call?
-            if (data != ElementKind.TAIL_STATEMENT) {
-                return
-            }
-
-            // Is it a recursive call?
-            if (expression.descriptor.original != irFunction.descriptor) {
+            // TODO: the frontend generates diagnostics on calls that are not optimized. This may or may not
+            //   match what the backend does here. It'd be great to validate that the two are in agreement.
+            if (!data.isTailExpression || expression.symbol != irFunction.symbol) {
                 return
             }
             // TODO: check type arguments
 
-            if (DescriptorUtils.isOverride(irFunction.descriptor) && expression.usesDefaultArguments()) {
+            if (irFunction.overriddenSymbols.isNotEmpty() && expression.usesDefaultArguments()) {
                 // Overridden functions using default arguments at tail call are not included: KT-4285
                 return
             }
 
-            expression.dispatchReceiver?.let {
-                if (it !is IrGetValue || it.descriptor != irFunction.descriptor.dispatchReceiverParameter) {
-                    // A tail call is not allowed to change dispatch receiver
-                    //   class C {
-                    //       fun foo(other: C) {
-                    //           other.foo(this) // not a tail call
-                    //       }
-                    //   }
-                    return
-                }
+            val hasSameDispatchReceiver =
+                irFunction.dispatchReceiverParameter?.type?.classOrNull?.owner?.kind?.isSingleton == true ||
+                        expression.dispatchReceiver?.let { it is IrGetValue && it.symbol.owner == irFunction.dispatchReceiverParameter } != false
+            if (!hasSameDispatchReceiver) {
+                // A tail call is not allowed to change dispatch receiver
+                //   class C {
+                //       fun foo(other: C) {
+                //           other.foo(this) // not a tail call
+                //       }
+                //   }
+                // TODO: KT-15341 - if the tailrec function is neither `override` nor `open`, this is fine actually?
+                //   Probably requires editing the frontend too.
+                return
             }
 
+            if (data.inOtherFunction) {
+                someCallsAreInOtherFunctions = true
+            }
             result.add(expression)
-
         }
 
-    }
-
-    val body = irFunction.body
-    if (body !is IrBlockBody) {
-        return emptySet() // TODO: should an assert be here instead?
-    }
-
-    body.statements.forEachIndexed { index, irStatement ->
-        val kind = if (index == body.statements.lastIndex && irFunction.descriptor.returnType?.isUnit() == true) {
-            ElementKind.TAIL_STATEMENT
-        } else {
-            ElementKind.NOT_SURE
+        override fun visitFunctionReference(expression: IrFunctionReference, data: VisitorState) {
+            expression.acceptChildren(this, VisitorState(isTailExpression = false, data.inOtherFunction))
+            // This should match inline lambdas:
+            //   tailrec fun foo() {
+            //     run { return foo() } // non-local return from `foo`, so this *is* a tail call
+            //   }
+            // Whether crossinline lambdas are matched is unimportant, as they can't contain any returns
+            // from `foo` anyway.
+            if (followFunctionReference(expression)) {
+                // If control reaches end of lambda, it will *not* end the current function by default,
+                // so the lambda's body itself is not a tail statement.
+                expression.symbol.owner.body?.accept(this, VisitorState(isTailExpression = false, inOtherFunction = true))
+            }
         }
-        irStatement.accept(visitor, kind)
     }
 
-    return result
-}
-
-/**
- * The kind of IR element used to detect tail calls.
- */
-private enum class ElementKind {
-    /**
-     * This element is the last statement to be executed before the return from the function.
-     * If the return type is not `Unit`, the result of this statement defines the result of the entire function.
-     */
-    TAIL_STATEMENT,
-
-    /**
-     * Not sure if the element meets the requirements to be [TAIL_STATEMENT].
-     */
-    NOT_SURE
+    irFunction.body?.accept(visitor, VisitorState(isTailExpression = true, inOtherFunction = false))
+    return TailCalls(result, someCallsAreInOtherFunctions)
 }

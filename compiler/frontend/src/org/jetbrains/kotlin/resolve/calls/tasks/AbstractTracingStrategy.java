@@ -16,13 +16,14 @@
 
 package org.jetbrains.kotlin.resolve.calls.tasks;
 
-import com.google.common.collect.Sets;
 import com.intellij.lang.ASTNode;
 import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.diagnostics.Diagnostic;
+import org.jetbrains.kotlin.diagnostics.DiagnosticFactory0;
 import org.jetbrains.kotlin.diagnostics.DiagnosticUtilsKt;
 import org.jetbrains.kotlin.lexer.KtToken;
 import org.jetbrains.kotlin.lexer.KtTokens;
@@ -31,7 +32,7 @@ import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.resolve.BindingTrace;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
-import org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt;
+import org.jetbrains.kotlin.resolve.calls.util.CallUtilKt;
 import org.jetbrains.kotlin.resolve.calls.context.ResolutionContext;
 import org.jetbrains.kotlin.resolve.calls.inference.ConstraintSystem;
 import org.jetbrains.kotlin.resolve.calls.inference.ConstraintSystemStatus;
@@ -45,6 +46,7 @@ import org.jetbrains.kotlin.types.Variance;
 import org.jetbrains.kotlin.types.expressions.OperatorConventions;
 
 import java.util.Collection;
+import java.util.HashSet;
 
 import static org.jetbrains.kotlin.diagnostics.Errors.*;
 import static org.jetbrains.kotlin.resolve.BindingContext.AMBIGUOUS_REFERENCE_TARGET;
@@ -64,7 +66,7 @@ public abstract class AbstractTracingStrategy implements TracingStrategy {
 
     @Override
     public <D extends CallableDescriptor> void recordAmbiguity(@NotNull BindingTrace trace, @NotNull Collection<? extends ResolvedCall<D>> candidates) {
-        Collection<D> descriptors = Sets.newHashSet();
+        Collection<D> descriptors = new HashSet<>();
         for (ResolvedCall<D> candidate : candidates) {
             descriptors.add(candidate.getCandidateDescriptor());
         }
@@ -115,8 +117,8 @@ public abstract class AbstractTracingStrategy implements TracingStrategy {
     }
 
     @Override
-    public <D extends CallableDescriptor> void ambiguity(@NotNull BindingTrace trace, @NotNull Collection<? extends ResolvedCall<D>> descriptors) {
-        trace.report(OVERLOAD_RESOLUTION_AMBIGUITY.on(reference, descriptors));
+    public <D extends CallableDescriptor> void ambiguity(@NotNull BindingTrace trace, @NotNull Collection<? extends ResolvedCall<D>> resolvedCalls) {
+        trace.report(OVERLOAD_RESOLUTION_AMBIGUITY.on(reference, resolvedCalls));
     }
 
     @Override
@@ -138,8 +140,24 @@ public abstract class AbstractTracingStrategy implements TracingStrategy {
     }
 
     @Override
+    public void recursiveType(@NotNull BindingTrace trace, @NotNull LanguageVersionSettings languageVersionSettings, boolean insideAugmentedAssignment) {
+        KtExpression expression = call.getCalleeExpression();
+        if (expression == null) return;
+        if (insideAugmentedAssignment) {
+            trace.report(TYPECHECKER_HAS_RUN_INTO_RECURSIVE_PROBLEM_IN_AUGMENTED_ASSIGNMENT.on(languageVersionSettings, expression));
+        } else {
+            trace.report(TYPECHECKER_HAS_RUN_INTO_RECURSIVE_PROBLEM.on(languageVersionSettings, expression));
+        }
+    }
+
+    @Override
     public void abstractSuperCall(@NotNull BindingTrace trace) {
         trace.report(ABSTRACT_SUPER_CALL.on(reference));
+    }
+
+    @Override
+    public void abstractSuperCallWarning(@NotNull BindingTrace trace) {
+        trace.report(ABSTRACT_SUPER_CALL_WARNING.on(reference));
     }
 
     @Override
@@ -271,7 +289,7 @@ public abstract class AbstractTracingStrategy implements TracingStrategy {
         }
         else if (status.hasTypeParameterWithUnsatisfiedOnlyInputTypesError()) {
             //todo
-            return TYPE_INFERENCE_ONLY_INPUT_TYPES.on(reference, data.descriptor.getTypeParameters().get(0));
+            return TYPE_INFERENCE_ONLY_INPUT_TYPES.getErrorFactory().on(reference, data.descriptor.getTypeParameters().get(0));
         }
         else {
             assert status.hasUnknownParameters();

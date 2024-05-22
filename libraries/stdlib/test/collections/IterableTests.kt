@@ -1,11 +1,12 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package test.collections
 
 import test.*
+import test.collections.js.linkedStringSetOf
 import kotlin.test.*
 
 fun <T> iterableOf(vararg items: T): Iterable<T> = Iterable { items.iterator() }
@@ -14,6 +15,7 @@ fun <T> Iterable<T>.toIterable(): Iterable<T> = Iterable { this.iterator() }
 class IterableTest : OrderedIterableTests<Iterable<String>>({ iterableOf(*it) }, iterableOf<String>())
 class SetTest : IterableTests<Set<String>>({ setOf(*it) }, setOf())
 class LinkedSetTest : OrderedIterableTests<LinkedHashSet<String>>({ linkedSetOf(*it) }, linkedSetOf())
+class LinkedStringSetTest : OrderedIterableTests<LinkedHashSet<String>>({ linkedStringSetOf(*it) }, linkedStringSetOf())
 class ListTest : OrderedIterableTests<List<String>>({ listOf(*it) }, listOf<String>())
 class ArrayListTest : OrderedIterableTests<ArrayList<String>>({ arrayListOf(*it) }, arrayListOf<String>())
 
@@ -140,6 +142,11 @@ abstract class OrderedIterableTests<T : Iterable<String>>(createFrom: (Array<out
         data.toList().let { expectedSingleChunk ->
             assertEquals(expectedSingleChunk, data.chunked(size).single())
             assertEquals(expectedSingleChunk, data.chunked(size + 3).single())
+            assertEquals(expectedSingleChunk, data.chunked(Int.MAX_VALUE).single())
+        }
+
+        createFrom("a", "b").let { iterable ->
+            assertEquals(iterable.toList(), iterable.chunked(Int.MAX_VALUE).single())
         }
 
         assertTrue(empty.chunked(3).isEmpty())
@@ -193,6 +200,24 @@ abstract class OrderedIterableTests<T : Iterable<String>>(createFrom: (Array<out
         for (illegalValue in listOf(Int.MIN_VALUE, -1, 0)) {
             assertFailsWith<IllegalArgumentException>("size $illegalValue") { data.windowed(illegalValue, 1) }
             assertFailsWith<IllegalArgumentException>("step $illegalValue") { data.windowed(1, illegalValue) }
+        }
+
+        // index overflow tests
+        for (partialWindows in listOf(true, false)) {
+
+            val windowed1 = data.windowed(5, Int.MAX_VALUE, partialWindows)
+            assertEquals(data.take(5), windowed1.single())
+            val windowed2 = data.windowed(Int.MAX_VALUE, 5, partialWindows)
+            assertEquals(if (partialWindows) listOf(data.toList(), listOf("5", "6")) else listOf(), windowed2)
+            val windowed3 = data.windowed(Int.MAX_VALUE, Int.MAX_VALUE, partialWindows)
+            assertEquals(if (partialWindows) listOf(data.toList()) else listOf(), windowed3)
+
+            val windowedTransform1 = data.windowed(5, Int.MAX_VALUE, partialWindows) { it.joinToString("") }
+            assertEquals("01234", windowedTransform1.single())
+            val windowedTransform2 = data.windowed(Int.MAX_VALUE, 5, partialWindows) { it.joinToString("") }
+            assertEquals(if (partialWindows) listOf("0123456", "56") else listOf(), windowedTransform2)
+            val windowedTransform3 = data.windowed(Int.MAX_VALUE, Int.MAX_VALUE, partialWindows) { it.joinToString("") }
+            assertEquals(if (partialWindows) listOf("0123456") else listOf(), windowedTransform3)
         }
     }
 
@@ -291,6 +316,17 @@ abstract class IterableTests<T : Iterable<String>>(val createFrom: (Array<out St
     }
 
     @Test
+    fun onEachIndexed() {
+        var count = 0
+        val newData = data.onEachIndexed { i, e -> count += i + e.length }
+        assertEquals(7, count)
+        assertSame(data, newData)
+
+        // static types test
+        assertStaticTypeIs<ArrayList<Int>>(arrayListOf(1, 2, 3).onEachIndexed { _, _ -> })
+    }
+
+    @Test
     fun contains() {
         assertTrue(data.contains("foo"))
         assertTrue("bar" in data)
@@ -360,15 +396,15 @@ abstract class IterableTests<T : Iterable<String>>(val createFrom: (Array<out St
     }
 
     @Test
-    fun max() {
-        expect("foo") { data.max() }
-        expect("bar") { data.maxBy { it.last() } }
+    fun maxOrNull() {
+        expect("foo") { data.maxOrNull() }
+        expect("bar") { data.maxByOrNull { it.last() } }
     }
 
     @Test
-    fun min() {
-        expect("bar") { data.min() }
-        expect("foo") { data.minBy { it.last() } }
+    fun minOrNull() {
+        expect("bar") { data.minOrNull() }
+        expect("foo") { data.minByOrNull { it.last() } }
     }
 
     @Test
@@ -383,6 +419,7 @@ abstract class IterableTests<T : Iterable<String>>(val createFrom: (Array<out St
         expect(0) { empty.count { it.startsWith("x") } }
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun sumBy() {
         expect(6) { data.sumBy { it.length } }
@@ -416,8 +453,42 @@ abstract class IterableTests<T : Iterable<String>>(val createFrom: (Array<out St
     }
 
     @Test
+    fun scan() {
+        val accumulators = data.scan("baz") { acc, e -> acc + e }
+        assertEquals(3, accumulators.size)
+        assertEquals("baz", accumulators.first())
+        assertTrue(accumulators.elementAt(1) in listOf("bazfoo", "bazbar"))
+        assertTrue(accumulators.last() in listOf("bazfoobar", "bazbarfoo"))
+    }
+
+    @Test
+    fun scanIndexed() {
+        val accumulators = data.scanIndexed("baz") { i, acc, e -> acc + i + e }
+        assertEquals(3, accumulators.size)
+        assertEquals("baz", accumulators.first())
+        assertTrue(accumulators.elementAt(1) in listOf("baz0foo", "baz0bar"))
+        assertTrue(accumulators.last() in listOf("baz0foo1bar", "baz0bar1foo"))
+    }
+
+    @Test
+    fun runningReduce() {
+        val accumulators = data.runningReduce { acc, e -> acc + e }
+        assertEquals(2, accumulators.size)
+        assertTrue(accumulators.first() in listOf("foo", "bar"))
+        assertTrue(accumulators.last() in listOf("foobar", "barfoo"))
+    }
+
+    @Test
+    fun runningReduceIndexed() {
+        val accumulators = data.runningReduceIndexed { i, acc, e -> acc + i + e }
+        assertEquals(2, accumulators.size)
+        assertTrue(accumulators.first() in listOf("foo", "bar"))
+        assertTrue(accumulators.last() in listOf("foo1bar", "bar1foo"))
+    }
+
+    @Test
     fun mapAndJoinToString() {
-        val result = data.joinToString(separator = "-") { it.toUpperCase() }
+        val result = data.joinToString(separator = "-") { it.uppercase() }
         assertEquals("FOO-BAR", result)
     }
 
@@ -472,6 +543,7 @@ abstract class IterableTests<T : Iterable<String>>(val createFrom: (Array<out St
     }
 
     @Test
+    @Suppress("USELESS_CAST") // remove suppress and casts when tests are finally compiled only with K2
     fun minusAssign() {
         // lets use a mutable variable
         var result: Iterable<String> = data
@@ -508,3 +580,17 @@ fun <T> Iterator<T>.assertSorted(isInOrder: (T, T) -> Boolean) {
     return
 }
 
+data class Sortable<K : Comparable<K>>(val key: K, val index: Int) : Comparable<Sortable<K>> {
+    override fun compareTo(other: Sortable<K>): Int = this.key compareTo other.key
+}
+
+
+fun <K : Comparable<K>> Iterator<Sortable<K>>.assertStableSorted(descending: Boolean = false) {
+    assertSorted { a, b ->
+        val relation = a.key compareTo b.key
+        (if (descending) relation > 0 else relation < 0) || relation == 0 && a.index < b.index
+    }
+}
+
+fun <K : Comparable<K>> Iterable<Sortable<K>>.assertStableSorted(descending: Boolean = false) =
+    iterator().assertStableSorted(descending = descending)

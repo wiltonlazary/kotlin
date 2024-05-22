@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package templates
@@ -33,8 +33,8 @@ fun parseTypeParameter(typeString: String): TypeParameter =
 
 fun parseTypeRef(typeRef: String): TypeRef =
     typeRef.trim().run {
-        if (contains('<') && endsWith('>')) {
-            val name = substringBefore('<')
+        if (contains('<') && (endsWith('>') || endsWith(">?"))) {
+            val name = substringBefore('<') + if (endsWith(">?")) "?" else ""
             val params = substringAfter('<').substringBeforeLast('>')
             TypeRef(name, parseArguments(params))
         }

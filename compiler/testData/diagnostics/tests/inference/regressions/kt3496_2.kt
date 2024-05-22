@@ -1,5 +1,6 @@
-// !CHECK_TYPE
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// FIR_IDENTICAL
+// CHECK_TYPE
+// DIAGNOSTICS: -UNUSED_VARIABLE
 
 import java.util.ArrayList
 
@@ -8,4 +9,4 @@ class F<T> {
         val z: ArrayList<T> = y["", w]
     }
 }
-operator fun <V, T> Any.get(<!UNUSED_PARAMETER!>s<!>: String, <!UNUSED_PARAMETER!>w<!>: ArrayList<V>): ArrayList<T> = throw Exception()
+operator fun <V, T> Any.get(s: String, w: ArrayList<V>): ArrayList<T> = throw Exception()

@@ -17,12 +17,13 @@
 package org.jetbrains.kotlin.integration;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.cli.common.CompilerSystemProperties;
 import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime;
 
 import java.io.File;
 
 public abstract class AbstractAntTaskTest extends KotlinIntegrationTestBase {
-    protected void doTest(String testFile) throws Exception {
+    protected void doTest(String testFile) {
         String testDataDir = new File(testFile).getAbsolutePath();
 
         String antClasspath = System.getProperty("kotlin.ant.classpath");
@@ -38,14 +39,10 @@ public abstract class AbstractAntTaskTest extends KotlinIntegrationTestBase {
         runJava(
                 testDataDir,
                 "build.log",
-                "-Xmx192m",
+                "-Xmx256m",
                 "-Dkotlin.lib=" + KotlinIntegrationTestBase.getCompilerLib(),
                 "-Dkotlin.runtime.jar=" + ForTestCompileRuntime.runtimeJarForTests().getAbsolutePath(),
                 "-Dkotlin.reflect.jar=" + ForTestCompileRuntime.reflectJarForTests().getAbsolutePath(),
-                "-Dkotlin.stdlib.jre7.jar=" + new File("dist/kotlinc/lib/kotlin-stdlib-jre7.jar").getAbsolutePath(),
-                "-Dkotlin.stdlib.jre8.jar=" + new File("dist/kotlinc/lib/kotlin-stdlib-jre8.jar").getAbsolutePath(),
-                "-Dkotlin.stdlib.jdk7.jar=" + new File("dist/kotlinc/lib/kotlin-stdlib-jdk7.jar").getAbsolutePath(),
-                "-Dkotlin.stdlib.jdk8.jar=" + new File("dist/kotlinc/lib/kotlin-stdlib-jdk8.jar").getAbsolutePath(),
                 "-Dtest.data=" + testDataDir,
                 "-Dtemp=" + tmpdir,
                 "-cp", antClasspath,

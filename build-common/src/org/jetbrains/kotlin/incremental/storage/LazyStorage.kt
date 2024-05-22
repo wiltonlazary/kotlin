@@ -16,107 +16,166 @@
 
 package org.jetbrains.kotlin.incremental.storage
 
+import com.intellij.util.CommonProcessors
+import com.intellij.util.io.AppendablePersistentMap
 import com.intellij.util.io.DataExternalizer
-import com.intellij.util.io.IOUtil
 import com.intellij.util.io.KeyDescriptor
 import com.intellij.util.io.PersistentHashMap
+import org.jetbrains.kotlin.incremental.IncrementalCompilationContext
+import org.jetbrains.kotlin.utils.ThreadSafe
+import java.io.DataInput
+import java.io.DataInputStream
 import java.io.DataOutput
 import java.io.File
-import java.io.IOException
-
 
 /**
- * It's lazy in a sense that PersistentHashMap is created only on write
+ * [PersistentStorage] which delegates operations to a [PersistentHashMap]. Note that the [PersistentHashMap] is created lazily (only when
+ * required).
  */
-class LazyStorage<K, V>(
-        private val storageFile: File,
-        private val keyDescriptor: KeyDescriptor<K>,
-        private val valueExternalizer: DataExternalizer<V>
-) {
-    @Volatile
-    private var storage: PersistentHashMap<K, V>? = null
+@ThreadSafe
+open class LazyStorage<KEY, VALUE>(
+    override val storageFile: File,
+    private val keyDescriptor: KeyDescriptor<KEY>,
+    private val valueExternalizer: DataExternalizer<VALUE>,
+) : PersistentStorage<KEY, VALUE> {
 
-    @Synchronized
-    private fun getStorageIfExists(): PersistentHashMap<K, V>? {
-        if (storage != null) return storage
+    private var storage: PersistentHashMap<KEY, VALUE>? = null
 
-        if (storageFile.exists()) {
-            storage = createMap()
-            return storage
-        }
-
-        return null
+    // Use this property to minimize I/O
+    private val isStorageFileExist: Boolean by lazy {
+        storageFile.exists()
     }
 
-    @Synchronized
-    private fun getStorageOrCreateNew(): PersistentHashMap<K, V> {
-        if (storage == null) {
-            storage = createMap()
+    private fun getStorageIfExists(): PersistentHashMap<KEY, VALUE>? {
+        return storage ?: when {
+            isStorageFileExist -> createMap().also { storage = it }
+            else -> null
         }
-
-        return storage!!
     }
 
-    val keys: Collection<K>
-        get() = getStorageIfExists()?.allKeysWithExistingMapping ?: listOf()
+    protected fun getStorageOrCreateNew(): PersistentHashMap<KEY, VALUE> {
+        return storage ?: createMap().also { storage = it }
+    }
 
-    operator fun contains(key: K): Boolean =
-            getStorageIfExists()?.containsMapping(key) ?: false
+    private fun createMap() = PersistentHashMap(storageFile, keyDescriptor, valueExternalizer)
 
-    operator fun get(key: K): V? =
-            getStorageIfExists()?.get(key)
+    @get:Synchronized
+    override val keys: Set<KEY>
+        get() = buildSet {
+            getStorageIfExists()?.processKeysWithExistingMapping(CommonProcessors.CollectProcessor(this))
+        }
 
-    operator fun set(key: K, value: V) {
+    @Synchronized
+    override fun contains(key: KEY): Boolean =
+        getStorageIfExists()?.containsMapping(key) ?: false
+
+    @Synchronized
+    override fun get(key: KEY): VALUE? =
+        getStorageIfExists()?.get(key)
+
+    @Synchronized
+    override fun set(key: KEY, value: VALUE) {
         getStorageOrCreateNew().put(key, value)
     }
 
-    fun remove(key: K) {
+    @Synchronized
+    override fun remove(key: KEY) {
         getStorageIfExists()?.remove(key)
     }
 
-    fun append(key: K, value: String) {
-        append(key) { out -> IOUtil.writeUTF(out, value) }
-    }
-
-    fun append(key: K, value: Int) {
-        append(key) { out -> out.writeInt(value) }
+    @Synchronized
+    override fun flush() {
+        storage?.force()
     }
 
     @Synchronized
-    fun clean() {
-        try {
-            storage?.close()
-        }
-        catch (ignored: Throwable) {
-        }
-
-        PersistentHashMap.deleteFilesStartingWith(storageFile)
-        storage = null
-    }
-
-    @Synchronized
-    fun flush(memoryCachesOnly: Boolean) {
-        val existingStorage = storage ?: return
-
-        if (memoryCachesOnly) {
-            if (existingStorage.isDirty) {
-                existingStorage.dropMemoryCaches()
-            }
-        }
-        else {
-            existingStorage.force()
-        }
-    }
-
-    @Synchronized
-    fun close() {
+    override fun close() {
         storage?.close()
     }
 
-    private fun createMap(): PersistentHashMap<K, V> =
-            PersistentHashMap(storageFile, keyDescriptor, valueExternalizer)
+}
 
-    private fun append(key: K, append: (DataOutput)->Unit) {
-        getStorageOrCreateNew().appendData(key, append)
+/** [LazyStorage] where a map entry's value is a [Collection] of elements of type [E]. */
+@ThreadSafe
+class AppendableLazyStorage<KEY, E>(
+    storageFile: File,
+    keyDescriptor: KeyDescriptor<KEY>,
+    elementExternalizer: DataExternalizer<E>,
+) : LazyStorage<KEY, Collection<E>>(storageFile, keyDescriptor, AppendableCollectionExternalizer(elementExternalizer)),
+    AppendablePersistentStorage<KEY, E> {
+
+    private val appendableCollectionExternalizer = AppendableCollectionExternalizer(elementExternalizer)
+
+    @Synchronized
+    override fun append(key: KEY, elements: Collection<E>) {
+        getStorageOrCreateNew().appendData(
+            key,
+            AppendablePersistentMap.ValueDataAppender { appendableCollectionExternalizer.append(it, elements) }
+        )
+    }
+}
+
+/**
+ * [DataExternalizer] for a [Collection] of elements of type [E].
+ *
+ * IMPORTANT: It is a *private* class because it is meant to be used only with a [PersistentHashMap] (e.g., the [read] method reads until
+ * the stream ends, [append] can be called multiple times and its implementation is identical to [save] -- these only work with a
+ * [PersistentHashMap]).
+ */
+private class AppendableCollectionExternalizer<E>(
+    private val elementExternalizer: DataExternalizer<E>,
+) : DataExternalizer<Collection<E>> {
+
+    fun append(output: DataOutput, elements: Collection<E>) {
+        save(output, elements)
+    }
+
+    override fun save(output: DataOutput, value: Collection<E>) {
+        value.forEach { elementExternalizer.save(output, it) }
+    }
+
+    override fun read(input: DataInput): Collection<E> {
+        val result = ArrayList<E>()
+        val stream = input as DataInputStream
+
+        while (stream.available() > 0) {
+            result.add(elementExternalizer.read(stream))
+        }
+
+        return result
+    }
+}
+
+fun <KEY, VALUE> createPersistentStorage(
+    storageFile: File,
+    keyDescriptor: KeyDescriptor<KEY>,
+    valueExternalizer: DataExternalizer<VALUE>,
+    icContext: IncrementalCompilationContext,
+): PersistentStorage<KEY, VALUE> {
+    return LazyStorage(storageFile, keyDescriptor, valueExternalizer).let { storage ->
+        if (icContext.icFeatures.keepIncrementalCompilationCachesInMemory) {
+            InMemoryStorage(storage).also {
+                icContext.transaction.registerInMemoryStorageWrapper(it)
+            }
+        } else {
+            storage
+        }
+    }
+}
+
+fun <KEY, E> createAppendablePersistentStorage(
+    storageFile: File,
+    keyDescriptor: KeyDescriptor<KEY>,
+    elementExternalizer: DataExternalizer<E>,
+    icContext: IncrementalCompilationContext,
+): AppendablePersistentStorage<KEY, E> {
+    return AppendableLazyStorage(storageFile, keyDescriptor, elementExternalizer).let { storage ->
+        if (icContext.icFeatures.keepIncrementalCompilationCachesInMemory) {
+            AppendableInMemoryStorage(storage).also {
+                icContext.transaction.registerInMemoryStorageWrapper(it)
+            }
+        } else {
+            storage
+        }
     }
 }

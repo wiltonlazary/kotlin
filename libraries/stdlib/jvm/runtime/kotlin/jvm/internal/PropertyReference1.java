@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.jvm.internal;
@@ -9,13 +9,20 @@ import kotlin.SinceKotlin;
 import kotlin.reflect.KCallable;
 import kotlin.reflect.KProperty1;
 
+@SuppressWarnings({"unchecked", "rawtypes", "unused", "NullableProblems"})
 public abstract class PropertyReference1 extends PropertyReference implements KProperty1 {
     public PropertyReference1() {
+        super();
     }
 
     @SinceKotlin(version = "1.1")
     public PropertyReference1(Object receiver) {
         super(receiver);
+    }
+
+    @SinceKotlin(version = "1.4")
+    public PropertyReference1(Object receiver, Class owner, String name, String signature, int flags) {
+        super(receiver, owner, name, signature, flags);
     }
 
     @Override

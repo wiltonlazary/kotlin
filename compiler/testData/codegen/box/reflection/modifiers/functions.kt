@@ -1,5 +1,4 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
 // WITH_REFLECT
 
@@ -10,8 +9,7 @@ inline fun inline() {}
 class External { external fun external() }
 operator fun Unit.invoke() {}
 infix fun Unit.infix(unit: Unit) {}
-// TODO: support or prohibit references to suspend functions
-// class Suspend { suspend fun suspend(c: Continuation<Unit>) {} }
+class Suspend { suspend fun suspend() {} }
 
 val externalGetter = Unit
     external get
@@ -45,11 +43,11 @@ fun box(): String {
     assertTrue(Unit::infix.isInfix)
     assertFalse(Unit::infix.isSuspend)
 
-//    assertFalse(Suspend::suspend.isInline)
-//    assertFalse(Suspend::suspend.isExternal)
-//    assertFalse(Suspend::suspend.isOperator)
-//    assertFalse(Suspend::suspend.isInfix)
-//    assertTrue(Suspend::suspend.isSuspend)
+    assertFalse(Suspend::suspend.isInline)
+    assertFalse(Suspend::suspend.isExternal)
+    assertFalse(Suspend::suspend.isOperator)
+    assertFalse(Suspend::suspend.isInfix)
+    assertTrue(Suspend::suspend.isSuspend)
 
     assertTrue(::externalGetter.getter.isExternal)
     assertFalse(::externalGetter.getter.isInline)
@@ -57,6 +55,7 @@ fun box(): String {
     assertFalse(::inlineProperty.getter.isExternal)
     assertTrue(::inlineProperty.getter.isInline)
     assertTrue(::inlineProperty.setter.isInline)
+    assertFalse(::inlineProperty.isSuspend)
 
     return "OK"
 }

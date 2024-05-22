@@ -1,43 +1,40 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.coroutines
 
 import org.jetbrains.kotlin.backend.common.CodegenUtil
-import org.jetbrains.kotlin.codegen.ClassBuilder
-import org.jetbrains.kotlin.codegen.ExpressionCodegen
-import org.jetbrains.kotlin.codegen.FunctionGenerationStrategy
-import org.jetbrains.kotlin.codegen.TransformationMethodVisitor
+import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.binding.CodegenBinding
 import org.jetbrains.kotlin.codegen.inline.addFakeContinuationConstructorCallMarker
+import org.jetbrains.kotlin.codegen.inline.coroutines.FOR_INLINE_SUFFIX
+import org.jetbrains.kotlin.codegen.inline.preprocessSuspendMarkers
 import org.jetbrains.kotlin.codegen.state.GenerationState
-import org.jetbrains.kotlin.config.JVMConstructorCallNormalizationMode
-import org.jetbrains.kotlin.config.LanguageVersionSettings
-import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.psiUtil.getElementTextWithContext
+import org.jetbrains.kotlin.resolve.inline.isEffectivelyInlineOnly
+import org.jetbrains.kotlin.resolve.isInlineClass
+import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.OtherOrigin
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
+import org.jetbrains.kotlin.types.typeUtil.isUnit
 import org.jetbrains.org.objectweb.asm.MethodVisitor
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.MethodNode
 
 class SuspendFunctionGenerationStrategy(
-        state: GenerationState,
-        private val originalSuspendDescriptor: FunctionDescriptor,
-        private val declaration: KtFunction,
-        private val containingClassInternalName: String,
-        private val constructorCallNormalizationMode: JVMConstructorCallNormalizationMode
+    state: GenerationState,
+    private val originalSuspendDescriptor: FunctionDescriptor,
+    private val declaration: KtFunction,
+    private val containingClassInternalName: String,
+    private val functionCodegen: FunctionCodegen
 ) : FunctionGenerationStrategy.CodegenBased(state) {
-
     private lateinit var codegen: ExpressionCodegen
-    private val languageVersionSettings: LanguageVersionSettings = state.configuration.languageVersionSettings
 
     private val classBuilderForCoroutineState by lazy {
         state.factory.newVisitor(
@@ -46,7 +43,7 @@ class SuspendFunctionGenerationStrategy(
             declaration.containingFile
         ).also {
             val coroutineCodegen =
-                    CoroutineCodegenForNamedFunction.create(it, codegen, originalSuspendDescriptor, declaration)
+                CoroutineCodegenForNamedFunction.create(it, codegen, originalSuspendDescriptor, declaration)
             coroutineCodegen.generate()
         }
     }
@@ -54,28 +51,65 @@ class SuspendFunctionGenerationStrategy(
     override fun wrapMethodVisitor(mv: MethodVisitor, access: Int, name: String, desc: String): MethodVisitor {
         if (access and Opcodes.ACC_ABSTRACT != 0) return mv
 
-        if (state.bindingContext[CodegenBinding.CAPTURES_CROSSINLINE_SUSPEND_LAMBDA, originalSuspendDescriptor] == true) {
+        if (originalSuspendDescriptor.isEffectivelyInlineOnly()) {
+            return SuspendForInlineOnlyMethodVisitor(mv, access, name, desc)
+        }
+        val stateMachineBuilder = createStateMachineBuilder(mv, access, name, desc)
+        if (originalSuspendDescriptor.isInline) {
+            return SuspendForInlineCopyingMethodVisitor(
+                stateMachineBuilder, access, name, desc, functionCodegen::newMethod, keepAccess = false
+            )
+        }
+        if (state.bindingContext[CodegenBinding.CAPTURES_CROSSINLINE_LAMBDA, originalSuspendDescriptor] == true) {
             return AddConstructorCallForCoroutineRegeneration(
-                mv, access, name, desc, null, null, this::classBuilderForCoroutineState,
+                SuspendForInlineCopyingMethodVisitor(stateMachineBuilder, access, name, desc, functionCodegen::newMethod),
+                access, name, desc, null, null, this::classBuilderForCoroutineState,
                 containingClassInternalName,
                 originalSuspendDescriptor.dispatchReceiverParameter != null,
                 containingClassInternalNameOrNull(),
-                languageVersionSettings
             )
         }
+        return stateMachineBuilder
+    }
+
+    private fun createStateMachineBuilder(
+        mv: MethodVisitor,
+        access: Int,
+        name: String,
+        desc: String
+    ): CoroutineTransformerMethodVisitor {
         return CoroutineTransformerMethodVisitor(
             mv, access, name, desc, null, null, containingClassInternalName, this::classBuilderForCoroutineState,
             isForNamedFunction = true,
+            disableTailCallOptimizationForFunctionReturningUnit = originalSuspendDescriptor.returnType?.isUnit() == true &&
+                    originalSuspendDescriptor.overriddenDescriptors.isNotEmpty() &&
+                    !originalSuspendDescriptor.allOverriddenFunctionsReturnUnit(),
+            reportSuspensionPointInsideMonitor = { reportSuspensionPointInsideMonitor(declaration, state, it) },
             lineNumber = CodegenUtil.getLineNumberForElement(declaration, false) ?: 0,
-            shouldPreserveClassInitialization = constructorCallNormalizationMode.shouldPreserveClassInitialization,
+            sourceFile = declaration.containingKtFile.name,
             needDispatchReceiver = originalSuspendDescriptor.dispatchReceiverParameter != null,
-            internalNameForDispatchReceiver = containingClassInternalNameOrNull(),
-            languageVersionSettings = languageVersionSettings
+            internalNameForDispatchReceiver = (originalSuspendDescriptor.containingDeclaration as? ClassDescriptor)?.let {
+                if (it.isInlineClass()) state.typeMapper.mapType(it).internalName else null
+            } ?: containingClassInternalNameOrNull(),
         )
     }
 
-    private fun containingClassInternalNameOrNull() =
-            originalSuspendDescriptor.containingDeclaration.safeAs<ClassDescriptor>()?.let(state.typeMapper::mapClass)?.internalName
+    private fun FunctionDescriptor.allOverriddenFunctionsReturnUnit(): Boolean {
+        val visited = mutableSetOf<FunctionDescriptor>()
+
+        fun bfs(descriptor: FunctionDescriptor): Boolean {
+            if (!visited.add(descriptor)) return true
+            if (descriptor.original.returnType?.isUnit() != true) return false
+            for (parent in descriptor.overriddenDescriptors) {
+                if (!bfs(parent)) return false
+            }
+            return true
+        }
+        return bfs(this)
+    }
+
+    private fun containingClassInternalNameOrNull(): String? =
+        (originalSuspendDescriptor.containingDeclaration as? ClassDescriptor)?.let(state.typeMapper::mapClass)?.internalName
 
     override fun doGenerateBody(codegen: ExpressionCodegen, signature: JvmMethodSignature) {
         this.codegen = codegen
@@ -98,7 +132,6 @@ class SuspendFunctionGenerationStrategy(
         private val containingClassInternalName: String,
         private val needDispatchReceiver: Boolean,
         private val internalNameForDispatchReceiver: String?,
-        private val languageVersionSettings: LanguageVersionSettings
     ) : TransformationMethodVisitor(delegate, access, name, desc, signature, exceptions) {
         private val classBuilderForCoroutineState: ClassBuilder by lazy(obtainClassBuilderForCoroutineState)
         override fun performTransformations(methodNode: MethodNode) {
@@ -111,11 +144,43 @@ class SuspendFunctionGenerationStrategy(
                     needDispatchReceiver,
                     internalNameForDispatchReceiver,
                     containingClassInternalName,
-                    classBuilderForCoroutineState,
-                    languageVersionSettings
+                    classBuilderForCoroutineState
                 )
                 addFakeContinuationConstructorCallMarker(this, false)
+                pop() // Otherwise stack-transformation breaks
             })
         }
+    }
+}
+
+private class SuspendForInlineOnlyMethodVisitor(delegate: MethodVisitor, access: Int, name: String, desc: String) :
+    TransformationMethodVisitor(delegate, access, name, desc, null, null) {
+    override fun performTransformations(methodNode: MethodNode) {
+        methodNode.preprocessSuspendMarkers(forInline = true, keepFakeContinuation = false)
+    }
+}
+
+// For named suspend function we generate two methods:
+// 1) to use as noinline function, which have state machine
+// 2) to use from inliner: private one without state machine
+class SuspendForInlineCopyingMethodVisitor(
+    delegate: MethodVisitor, access: Int, name: String, desc: String,
+    private val newMethod: (JvmDeclarationOrigin, Int, String, String, String?, Array<String>?) -> MethodVisitor,
+    private val keepAccess: Boolean = true
+) : TransformationMethodVisitor(delegate, access, name, desc, null, null) {
+    override fun performTransformations(methodNode: MethodNode) {
+        val newMethodNode = with(methodNode) {
+            val newAccess = if (keepAccess) access else
+                access or Opcodes.ACC_PRIVATE and Opcodes.ACC_PUBLIC.inv() and Opcodes.ACC_PROTECTED.inv()
+            MethodNode(newAccess, name + FOR_INLINE_SUFFIX, desc, signature, exceptions.toTypedArray())
+        }
+        val newMethodVisitor = with(newMethodNode) {
+            newMethod(JvmDeclarationOrigin.NO_ORIGIN, access, name, desc, signature, exceptions.toTypedArray())
+        }
+        methodNode.instructions.resetLabels()
+        methodNode.accept(newMethodNode)
+        methodNode.preprocessSuspendMarkers(forInline = false, keepFakeContinuation = false)
+        newMethodNode.preprocessSuspendMarkers(forInline = true, keepFakeContinuation = true)
+        newMethodNode.accept(newMethodVisitor)
     }
 }

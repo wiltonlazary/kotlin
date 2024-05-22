@@ -1,4 +1,5 @@
-// !CHECK_TYPE
+// FIR_IDENTICAL
+// CHECK_TYPE
 
 public abstract class A<E> {
     fun bar(): String = ""

@@ -1,7 +1,8 @@
-// !LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect
-// !DIAGNOSTICS: -INVISIBLE_REFERENCE -INVISIBLE_MEMBER
+// LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect
+// OPT_IN: kotlin.contracts.ExperimentalContracts
+// DIAGNOSTICS: -INVISIBLE_REFERENCE -INVISIBLE_MEMBER
 
-import kotlin.internal.contracts.*
+import kotlin.contracts.*
 
 inline fun <T> myRun(block: () -> T): T {
     contract {
@@ -35,7 +36,7 @@ fun test() {
                 myRun { <!VAL_REASSIGNMENT!>x<!> = 42 }
                 break
             }
-            // x is I?D here because loop could've been execited
+            // x is ID? here because loop could've been execited
             // VAL_REASSIGNMENT isn't reported because of repeating diagnostic
             x = 42
             // x is ID now

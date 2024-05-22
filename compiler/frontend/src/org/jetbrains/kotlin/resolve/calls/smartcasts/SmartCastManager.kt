@@ -17,24 +17,29 @@
 package org.jetbrains.kotlin.resolve.calls.smartcasts
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
+import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.diagnostics.Errors.SMARTCAST_IMPOSSIBLE
 import org.jetbrains.kotlin.psi.Call
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.BindingContext.IMPLICIT_RECEIVER_SMARTCAST
-import org.jetbrains.kotlin.resolve.BindingContext.SMARTCAST
+import org.jetbrains.kotlin.resolve.BindingContext.*
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.calls.ArgumentTypeResolver
 import org.jetbrains.kotlin.resolve.calls.context.ResolutionContext
+import org.jetbrains.kotlin.resolve.calls.inference.BuilderInferenceSession
 import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeUtils
-import java.util.*
+import org.jetbrains.kotlin.types.checker.intersectWrappedTypes
+import org.jetbrains.kotlin.types.typeUtil.expandIntersectionTypeIfNecessary
+import org.jetbrains.kotlin.util.slicedMap.WritableSlice
+import org.jetbrains.kotlin.utils.addIfNotNull
 
-class SmartCastManager {
+class SmartCastManager(private val argumentTypeResolver: ArgumentTypeResolver) {
 
     fun getSmartCastVariants(
         receiverToCast: ReceiverValue,
@@ -107,14 +112,101 @@ class SmartCastManager {
         context: ResolutionContext<*>
     ): ReceiverSmartCastResult? =
         when {
-            ArgumentTypeResolver.isSubtypeOfForArgumentType(receiverArgument.type, receiverParameterType) ->
+            argumentTypeResolver.isSubtypeOfForArgumentType(receiverArgument.type, receiverParameterType) ->
                 ReceiverSmartCastResult.OK
             getSmartCastVariantsExcludingReceiver(context, receiverArgument).any {
-                ArgumentTypeResolver.isSubtypeOfForArgumentType(it, receiverParameterType)
+                argumentTypeResolver.isSubtypeOfForArgumentType(it, receiverParameterType)
             } ->
                 ReceiverSmartCastResult.SMARTCAST_NEEDED_OR_NOT_NULL_EXPECTED
             else -> null
         }
+
+    fun checkAndRecordPossibleCast(
+        dataFlowValue: DataFlowValue,
+        expectedType: KotlinType,
+        expression: KtExpression?,
+        c: ResolutionContext<*>,
+        call: Call?,
+        recordExpressionType: Boolean,
+        additionalPredicate: ((KotlinType) -> Boolean)? = null
+    ): SmartCastResult? {
+        val calleeExpression = call?.calleeExpression
+        val expectedTypes = if (c.languageVersionSettings.supportsFeature(LanguageFeature.NewInference))
+            expectedType.expandIntersectionTypeIfNecessary()
+        else
+            listOf(expectedType)
+
+        val builderInferenceSubstitutor = (c.inferenceSession as? BuilderInferenceSession)?.getNotFixedToInferredTypesSubstitutor()
+        val collectedTypes = c.dataFlowInfo.getCollectedTypes(dataFlowValue, c.languageVersionSettings).let { types ->
+            if (builderInferenceSubstitutor != null) types.map { builderInferenceSubstitutor.safeSubstitute(it.unwrap()) } else types
+        }.toMutableList()
+
+        if (collectedTypes.isNotEmpty() && c.languageVersionSettings.supportsFeature(LanguageFeature.NewInference)) {
+            // Sometime expected type may be inferred to be an intersection of all of the smart-cast types
+            val typeToIntersect = collectedTypes + dataFlowValue.type
+            collectedTypes.addIfNotNull(intersectWrappedTypes(typeToIntersect))
+        }
+
+        for (possibleType in collectedTypes) {
+            if (expectedTypes.any { argumentTypeResolver.isSubtypeOfForArgumentType(possibleType, it) } &&
+                (additionalPredicate == null || additionalPredicate(possibleType))
+            ) {
+                if (expression != null) {
+                    recordCastOrError(expression, possibleType, c.trace, dataFlowValue, call, recordExpressionType)
+                } else if (calleeExpression != null && dataFlowValue.isStable) {
+                    val receiver = (dataFlowValue.identifierInfo as? IdentifierInfo.Receiver)?.value
+                    if (receiver is ImplicitReceiver) {
+                        val oldSmartCasts = c.trace[IMPLICIT_RECEIVER_SMARTCAST, calleeExpression]
+                        val newSmartCasts = ImplicitSmartCasts(receiver, possibleType)
+                        if (oldSmartCasts != null) {
+                            val oldType = oldSmartCasts.receiverTypes[receiver]
+                            if (oldType != null && oldType != possibleType) {
+                                throw AssertionError(
+                                    "Rewriting key $receiver for implicit smart cast on ${calleeExpression.text}: " +
+                                            "was $oldType, now $possibleType"
+                                )
+                            }
+                        }
+                        c.trace.record(IMPLICIT_RECEIVER_SMARTCAST, calleeExpression,
+                                       oldSmartCasts?.let { it + newSmartCasts } ?: newSmartCasts)
+
+                    }
+                }
+                return SmartCastResult(possibleType, dataFlowValue.isStable)
+            }
+        }
+
+        if (!c.dataFlowInfo.getCollectedNullability(dataFlowValue).canBeNull() && !expectedType.isMarkedNullable) {
+            // Handling cases like:
+            // fun bar(x: Any) {}
+            // fun <T : Any?> foo(x: T) {
+            //      if (x != null) {
+            //          bar(x) // Should be allowed with smart cast
+            //      }
+            // }
+            //
+            // It doesn't handled by lower code with getPossibleTypes because smart cast of T after `x != null` is still has same type T.
+            // But at the same time we're sure that `x` can't be null and just check for such cases manually
+
+            // E.g. in case x!! when x has type of T where T is type parameter with nullable upper bounds
+            // x!! is immanently not null (see DataFlowValueFactory.createDataFlowValue for expression)
+            val immanentlyNotNull = !dataFlowValue.immanentNullability.canBeNull()
+            val nullableExpectedType = TypeUtils.makeNullable(expectedType)
+
+            if (argumentTypeResolver.isSubtypeOfForArgumentType(dataFlowValue.type, nullableExpectedType) &&
+                (additionalPredicate == null || additionalPredicate(dataFlowValue.type))
+            ) {
+                if (!immanentlyNotNull && expression != null) {
+                    recordCastOrError(expression, dataFlowValue.type, c.trace, dataFlowValue, call, recordExpressionType)
+                }
+
+                return SmartCastResult(dataFlowValue.type, immanentlyNotNull || dataFlowValue.isStable)
+            }
+            return checkAndRecordPossibleCast(dataFlowValue, nullableExpectedType, expression, c, call, recordExpressionType)
+        }
+
+        return null
+    }
 
     enum class ReceiverSmartCastResult {
         OK,
@@ -122,7 +214,7 @@ class SmartCastManager {
     }
 
     companion object {
-
+        // REVIEW: make it non-static too?
         private fun recordCastOrError(
             expression: KtExpression,
             type: KotlinType,
@@ -133,105 +225,42 @@ class SmartCastManager {
         ) {
             if (KotlinBuiltIns.isNullableNothing(type)) return
             if (dataFlowValue.isStable) {
-                val oldSmartCasts = trace[SMARTCAST, expression]
-                val newSmartCast = SingleSmartCast(call, type)
-                if (oldSmartCasts != null) {
-                    val oldType = oldSmartCasts.type(call)
-                    if (oldType != null && oldType != type) {
-                        throw AssertionError("Rewriting key $call for smart cast on ${expression.text}")
-                    }
+                if (dataFlowValue.kind == DataFlowValue.Kind.LEGACY_ALIEN_BASE_PROPERTY ||
+                    dataFlowValue.kind == DataFlowValue.Kind.LEGACY_ALIEN_BASE_PROPERTY_INHERITED_IN_INVISIBLE_CLASS ||
+                    dataFlowValue.kind == DataFlowValue.Kind.LEGACY_STABLE_LOCAL_DELEGATED_PROPERTY
+                ) {
+                    trace.report(Errors.DEPRECATED_SMARTCAST.on(expression, type, expression.text, dataFlowValue.kind.description))
                 }
-                trace.record(SMARTCAST, expression, oldSmartCasts?.let { it + newSmartCast } ?: newSmartCast)
+
+                updateSmartCast(trace, expression, call, type, SMARTCAST)
                 if (recordExpressionType) {
                     //TODO
                     //Why the expression type is rewritten for receivers and is not rewritten for arguments? Is it necessary?
                     trace.recordType(expression, type)
                 }
             } else {
+                updateSmartCast(trace, expression, call, type, UNSTABLE_SMARTCAST)
                 trace.report(SMARTCAST_IMPOSSIBLE.on(expression, type, expression.text, dataFlowValue.kind.description))
             }
         }
 
-        fun checkAndRecordPossibleCast(
-            dataFlowValue: DataFlowValue,
-            expectedType: KotlinType,
-            expression: KtExpression?,
-            c: ResolutionContext<*>,
+        private fun updateSmartCast(
+            trace: BindingTrace,
+            expression: KtExpression,
             call: Call?,
-            recordExpressionType: Boolean
-        ): SmartCastResult? {
-            return checkAndRecordPossibleCast(dataFlowValue, expectedType, null, expression, c, call, recordExpressionType)
-        }
-
-        fun checkAndRecordPossibleCast(
-            dataFlowValue: DataFlowValue,
-            expectedType: KotlinType,
-            additionalPredicate: ((KotlinType) -> Boolean)?,
-            expression: KtExpression?,
-            c: ResolutionContext<*>,
-            call: Call?,
-            recordExpressionType: Boolean
-        ): SmartCastResult? {
-            val calleeExpression = call?.calleeExpression
-            for (possibleType in c.dataFlowInfo.getCollectedTypes(dataFlowValue, c.languageVersionSettings)) {
-                if (ArgumentTypeResolver.isSubtypeOfForArgumentType(possibleType, expectedType) &&
-                    (additionalPredicate == null || additionalPredicate(possibleType))
-                ) {
-                    if (expression != null) {
-                        recordCastOrError(expression, possibleType, c.trace, dataFlowValue, call, recordExpressionType)
-                    } else if (calleeExpression != null && dataFlowValue.isStable) {
-                        val receiver = (dataFlowValue.identifierInfo as? IdentifierInfo.Receiver)?.value
-                        if (receiver is ImplicitReceiver) {
-                            val oldSmartCasts = c.trace[IMPLICIT_RECEIVER_SMARTCAST, calleeExpression]
-                            val newSmartCasts = ImplicitSmartCasts(receiver, possibleType)
-                            if (oldSmartCasts != null) {
-                                val oldType = oldSmartCasts.receiverTypes[receiver]
-                                if (oldType != null && oldType != possibleType) {
-                                    throw AssertionError(
-                                        "Rewriting key $receiver for implicit smart cast on ${calleeExpression.text}: " +
-                                                "was $oldType, now $possibleType"
-                                    )
-                                }
-                            }
-                            c.trace.record(IMPLICIT_RECEIVER_SMARTCAST, calleeExpression,
-                                           oldSmartCasts?.let { it + newSmartCasts } ?: newSmartCasts)
-
-                        }
-                    }
-                    return SmartCastResult(possibleType, dataFlowValue.isStable)
+            type: KotlinType,
+            key: WritableSlice<KtExpression, ExplicitSmartCasts>?
+        ) {
+            val oldSmartCasts = trace[key, expression]
+            val newSmartCast = SingleSmartCast(call, type)
+            if (oldSmartCasts != null) {
+                val oldType = oldSmartCasts.type(call)
+                if (oldType != null && oldType != type) {
+                    throw AssertionError("Rewriting key $call for smart cast on ${expression.text}")
                 }
             }
-
-            if (!c.dataFlowInfo.getCollectedNullability(dataFlowValue).canBeNull() && !expectedType.isMarkedNullable) {
-                // Handling cases like:
-                // fun bar(x: Any) {}
-                // fun <T : Any?> foo(x: T) {
-                //      if (x != null) {
-                //          bar(x) // Should be allowed with smart cast
-                //      }
-                // }
-                //
-                // It doesn't handled by lower code with getPossibleTypes because smart cast of T after `x != null` is still has same type T.
-                // But at the same time we're sure that `x` can't be null and just check for such cases manually
-
-                // E.g. in case x!! when x has type of T where T is type parameter with nullable upper bounds
-                // x!! is immanently not null (see DataFlowValueFactory.createDataFlowValue for expression)
-                val immanentlyNotNull = !dataFlowValue.immanentNullability.canBeNull()
-                val nullableExpectedType = TypeUtils.makeNullable(expectedType)
-
-                if (ArgumentTypeResolver.isSubtypeOfForArgumentType(dataFlowValue.type, nullableExpectedType) &&
-                    (additionalPredicate == null || additionalPredicate(dataFlowValue.type))
-                ) {
-                    if (!immanentlyNotNull && expression != null) {
-                        recordCastOrError(expression, dataFlowValue.type, c.trace, dataFlowValue, call, recordExpressionType)
-                    }
-
-                    return SmartCastResult(dataFlowValue.type, immanentlyNotNull || dataFlowValue.isStable)
-                }
-                return checkAndRecordPossibleCast(dataFlowValue, nullableExpectedType, expression, c, call, recordExpressionType)
-            }
-
-            return null
+            val updatedSmartCasts = oldSmartCasts?.let { it + newSmartCast } ?: newSmartCast
+            trace.record(key, expression, updatedSmartCasts)
         }
     }
 }

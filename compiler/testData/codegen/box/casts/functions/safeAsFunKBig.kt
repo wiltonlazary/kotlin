@@ -1,7 +1,9 @@
+// IGNORE_BACKEND: JS_IR
+// IGNORE_BACKEND: JS_IR_ES6
 // TODO: muted automatically, investigate should it be ran for JS or not
 // IGNORE_BACKEND: JS
 
-// WITH_RUNTIME
+// WITH_STDLIB
 // This is a big, ugly, semi-auto generated test.
 // Use corresponding 'Small' test for debug.
 
@@ -36,7 +38,7 @@ val fns = arrayOf<Any>(::fn0, ::fn1, ::fn2, ::fn3, ::fn4, ::fn5, ::fn6, ::fn7, :
 inline fun safeAsReturnsNull(operation: String, cast: () -> Any?) {
     try {
         val x = cast()
-        assert(x == null) { "$operation: should return null, got $x" }
+        require(x == null) { "$operation: should return null, got $x" }
     }
     catch (e: Throwable) {
         throw AssertionError("$operation: should not throw exceptions, got $e")
@@ -46,7 +48,7 @@ inline fun safeAsReturnsNull(operation: String, cast: () -> Any?) {
 inline fun safeAsReturnsNonNull(operation: String, cast: () -> Any?) {
     try {
         val x = cast()
-        assert(x != null) { "$operation: should return non-null" }
+        require(x != null) { "$operation: should return non-null" }
     }
     catch (e: Throwable) {
         throw AssertionError("$operation: should not throw exceptions, got $e")

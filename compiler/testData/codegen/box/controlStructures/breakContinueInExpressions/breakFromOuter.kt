@@ -1,3 +1,4 @@
+
 fun box(): String {
     OUTER@while (true) {
         var x = ""

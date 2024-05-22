@@ -1,7 +1,6 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
-
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// WITH_STDLIB
+// JVM_ABI_K1_K2_DIFF: KT-63984
 
 import kotlin.test.assertEquals
 
@@ -23,7 +22,7 @@ object Delegate {
 fun box(): String {
     assertEquals(
             listOf("getIsFries", "getIsUpdateable", "setIsFries", "setIsUpdateable"),
-            TestIt::class.java.declaredMethods.map { it.name }.sorted()
+            TestIt::class.java.declaredMethods.map { it.name }.sorted() - "getIsUpdateable\$delegate"
     )
 
     return "OK"

@@ -16,44 +16,34 @@
 
 package org.jetbrains.kotlin.ir.expressions.impl
 
-import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
+import org.jetbrains.kotlin.ir.declarations.IrAttributeContainer
+import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrPropertyReference
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
-import org.jetbrains.kotlin.ir.expressions.copyTypeArgumentsFrom
-import org.jetbrains.kotlin.ir.expressions.typeArgumentsCount
 import org.jetbrains.kotlin.ir.symbols.IrFieldSymbol
-import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
-import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
-import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.ir.symbols.IrPropertySymbol
+import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.util.initializeParameterArguments
+import org.jetbrains.kotlin.ir.util.initializeTypeArguments
 
 class IrPropertyReferenceImpl(
-    startOffset: Int,
-    endOffset: Int,
-    type: KotlinType,
-    override val descriptor: PropertyDescriptor,
+    override val startOffset: Int,
+    override val endOffset: Int,
+    override var type: IrType,
+    override var symbol: IrPropertySymbol,
     typeArgumentsCount: Int,
-    override val field: IrFieldSymbol?,
-    override val getter: IrFunctionSymbol?,
-    override val setter: IrFunctionSymbol?,
-    origin: IrStatementOrigin? = null
-) : IrNoArgumentsCallableReferenceBase(startOffset, endOffset, type, typeArgumentsCount, origin),
-    IrPropertyReference {
+    override var field: IrFieldSymbol?,
+    override var getter: IrSimpleFunctionSymbol?,
+    override var setter: IrSimpleFunctionSymbol?,
+    override var origin: IrStatementOrigin? = null,
+) : IrPropertyReference() {
+    override val typeArguments: Array<IrType?> = initializeTypeArguments(typeArgumentsCount)
 
-    constructor(
-        startOffset: Int,
-        endOffset: Int,
-        type: KotlinType,
-        descriptor: PropertyDescriptor,
-        field: IrFieldSymbol?,
-        getter: IrFunctionSymbol?,
-        setter: IrFunctionSymbol?,
-        typeArguments: Map<TypeParameterDescriptor, KotlinType>?,
-        origin: IrStatementOrigin? = null
-    ) : this(startOffset, endOffset, type, descriptor, descriptor.typeArgumentsCount, field, getter, setter, origin) {
-        copyTypeArgumentsFrom(typeArguments)
-    }
+    override var dispatchReceiver: IrExpression? = null
+    override var extensionReceiver: IrExpression? = null
+    override val valueArguments: Array<IrExpression?> = initializeParameterArguments(0)
 
-    override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R =
-        visitor.visitPropertyReference(this, data)
+    override var attributeOwnerId: IrAttributeContainer = this
+    override var originalBeforeInline: IrAttributeContainer? = null
 }

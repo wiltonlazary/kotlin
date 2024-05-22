@@ -1,5 +1,6 @@
-// WITH_RUNTIME
-// IGNORE_BACKEND: JS
+// LANGUAGE: -NativeJsProhibitLateinitIsInitializedIntrinsicWithoutPrivateAccess
+// WITH_STDLIB
+// IGNORE_BACKEND: JS, JS_IR_ES6
 
 package test
 

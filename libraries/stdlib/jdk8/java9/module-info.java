@@ -1,7 +1,9 @@
+/**
+ * @deprecated This module is empty and therefore deprecated, please use <code>kotlin.stdlib</code> instead.
+ */
+@SuppressWarnings("module") // suppress warning about terminal digit
+@Deprecated
 module kotlin.stdlib.jdk8 {
     requires transitive kotlin.stdlib;
-
-    exports kotlin.collections.jdk8;
-    exports kotlin.streams.jdk8;
-    exports kotlin.text.jdk8;
+    requires kotlin.stdlib.jdk7;
 }

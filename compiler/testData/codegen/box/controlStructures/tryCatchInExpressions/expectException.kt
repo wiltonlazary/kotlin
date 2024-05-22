@@ -1,3 +1,4 @@
+
 public inline fun fails(block: () -> Unit): Throwable? {
     var thrown: Throwable? = null
     try {

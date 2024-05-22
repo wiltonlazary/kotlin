@@ -1,3 +1,13 @@
+/*
+ * KOTLIN DIAGNOSTICS SPEC TEST (POSITIVE)
+ *
+ * SPEC VERSION: 0.1-313
+ * PRIMARY LINKS: expressions, when-expression -> paragraph 5 -> sentence 1
+ * expressions, when-expression -> paragraph 9 -> sentence 1
+ * expressions, when-expression -> paragraph 2 -> sentence 4
+ * expressions, when-expression -> paragraph 2 -> sentence 5
+ */
+
 package test
 
 const val four = 4
@@ -31,6 +41,7 @@ fun third(arg: Any?): Int {
         is Double -> return 1
         is <!DUPLICATE_LABEL_IN_WHEN!>Double<!> -> return 2
         <!DUPLICATE_LABEL_IN_WHEN!>null<!> -> return 3
+        !is String -> return 4
         else -> return 5
     }
 }
@@ -48,4 +59,12 @@ fun fifth(arg: Any?) = when (arg) {
     is Any -> "Any"
     <!ELSE_MISPLACED_IN_WHEN!>else<!> -> ""
     <!UNREACHABLE_CODE!>else -> null<!>
+}
+
+object Foo
+
+fun sixth(arg: Any?) = when (arg) {
+    Foo -> ""
+    Foo -> ""
+    else -> null
 }

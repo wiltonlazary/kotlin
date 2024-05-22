@@ -1,6 +1,8 @@
-// IGNORE_BACKEND: JS
-// KOTLIN_CONFIGURATION_FLAGS: ASSERTIONS_MODE=jvm
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// ASSERTIONS_MODE: jvm
+// WITH_STDLIB
+
+package nonLocalReturn
 
 interface Checker {
     fun checkTrueWithMessage(): Boolean
@@ -58,8 +60,8 @@ class ShouldBeEnabled : Checker {
 
 fun setDesiredAssertionStatus(v: Boolean): Checker {
     val loader = Checker::class.java.classLoader
-    loader.setDefaultAssertionStatus(v)
-    val c = loader.loadClass(if (v) "ShouldBeEnabled" else "ShouldBeDisabled")
+    loader.setPackageAssertionStatus("nonLocalReturn", v)
+    val c = loader.loadClass(if (v) "nonLocalReturn.ShouldBeEnabled" else "nonLocalReturn.ShouldBeDisabled")
     return c.newInstance() as Checker
 }
 

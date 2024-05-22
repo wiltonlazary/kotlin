@@ -1,20 +1,18 @@
-// IGNORE_BACKEND: NATIVE
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
 // WITH_REFLECT
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 class Controller {
-    suspend fun runInstanceOf(): Boolean = suspendCoroutineOrReturn { x ->
+    suspend fun runInstanceOf(): Boolean = suspendCoroutineUninterceptedOrReturn { x ->
         val y: Any = x
         x.resume(x is Continuation<*>)
         COROUTINE_SUSPENDED
     }
 
-    suspend fun runCast(): Boolean = suspendCoroutineOrReturn { x ->
+    suspend fun runCast(): Boolean = suspendCoroutineUninterceptedOrReturn { x ->
         val y: Any = x
         x.resume(Continuation::class.isInstance(y as Continuation<*>))
         COROUTINE_SUSPENDED

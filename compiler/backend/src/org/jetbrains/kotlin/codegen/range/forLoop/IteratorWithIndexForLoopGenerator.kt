@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.range.forLoop
@@ -34,8 +34,7 @@ class IteratorWithIndexForLoopGenerator(
         indexVar = indexLoopComponent?.parameterVar ?: createLoopTempVariable(Type.INT_TYPE)
         indexType = indexLoopComponent?.parameterType ?: Type.INT_TYPE
 
-        StackValue.local(indexVar, indexType)
-            .store(StackValue.constant(0, Type.INT_TYPE), v)
+        StackValue.local(indexVar, indexType).store(StackValue.constant(0), v)
 
         iteratorVar = createLoopTempVariable(asmTypeForIterator)
         codegen.generateCallReceiver(rangeCall).put(iteratorOwnerType, v)

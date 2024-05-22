@@ -1,5 +1,4 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS
+// JVM_ABI_K1_K2_DIFF: KT-62714
 
 enum class IssueState {
 
@@ -8,7 +7,7 @@ enum class IssueState {
 
         fun s()  = "OK"
 
-        class D {
+        inner class D {
             val k = s()
         }
     };

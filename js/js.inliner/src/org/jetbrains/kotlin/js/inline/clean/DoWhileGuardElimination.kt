@@ -74,9 +74,9 @@ internal class DoWhileGuardElimination(private val root: JsStatement) {
                     else -> null
                 }
 
-                if (guard != null) {
+                if (guard != null && guard.statement !is JsLoop) {
 
-                    // When do..while loop has no label and we encounter break guard from nested loop, we can't
+                    // When do..while loop has no label and we encounter `break guard` from nested loop, we can't
                     // replace this break with continue. Example:
                     //
                     // do {
@@ -123,17 +123,9 @@ internal class DoWhileGuardElimination(private val root: JsStatement) {
 
             private fun isInLoop() = loopLevel > 0
 
-            override fun visitDoWhile(x: JsDoWhile) = enterLoop { super.visitDoWhile(x) }
-
-            override fun visitWhile(x: JsWhile) = enterLoop { super.visitWhile(x) }
-
-            override fun visitFor(x: JsFor) = enterLoop { super.visitFor(x) }
-
-            override fun visitForIn(x: JsForIn) = enterLoop { super.visitForIn(x) }
-
-            private inline fun enterLoop(action: () -> Unit) {
+            override fun visitLoop(x: JsLoop) {
                 loopLevel++
-                action()
+                super.visitLoop(x)
                 loopLevel--
             }
 

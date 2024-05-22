@@ -1,19 +1,27 @@
 package a.b.c;
 
-import java.lang.System;
-
+/**
+ * package {
+ *
+ *   // signature: foo()V
+ *   public final fun foo(): kotlin/Unit
+ *
+ *   // field: bar:I
+ *   public final const val bar: kotlin/Int (* = ... *)
+ *     public final get
+ *
+ *   // module name: main
+ * }
+ */
 @kotlin.Metadata()
+@kotlin.jvm.JvmName(name = "FacadeName")
 public final class FacadeName {
 
     public FacadeName() {
         super();
     }
-    private static final int bar = 3;
+    public static final int bar = 3;
 
     public static final void foo() {
-    }
-
-    public static final int getBar() {
-        return 0;
     }
 }

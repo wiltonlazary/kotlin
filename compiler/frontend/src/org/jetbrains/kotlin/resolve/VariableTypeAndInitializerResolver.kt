@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve
@@ -14,11 +14,14 @@ import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtVariableDeclaration
 import org.jetbrains.kotlin.resolve.DescriptorResolver.transformAnonymousTypeIfNeeded
+import org.jetbrains.kotlin.resolve.calls.components.InferenceSession
 import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowInfo
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.types.error.ErrorUtils
+import org.jetbrains.kotlin.types.error.ErrorTypeKind
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingServices
 import org.jetbrains.kotlin.types.expressions.PreliminaryDeclarationVisitor
 
@@ -31,11 +34,13 @@ class VariableTypeAndInitializerResolver(
     private val wrappedTypeFactory: WrappedTypeFactory,
     private val typeApproximator: TypeApproximator,
     private val declarationReturnTypeSanitizer: DeclarationReturnTypeSanitizer,
-    private val languageVersionSettings: LanguageVersionSettings
+    private val languageVersionSettings: LanguageVersionSettings,
+    private val anonymousTypeTransformers: Iterable<DeclarationSignatureAnonymousTypeTransformer>
 ) {
     companion object {
-        @JvmField
-        val STUB_FOR_PROPERTY_WITHOUT_TYPE = ErrorUtils.createErrorType("No type, no body")
+        @JvmStatic
+        fun getTypeForPropertyWithoutReturnType(property: String): SimpleType =
+            ErrorUtils.createErrorType(ErrorTypeKind.RETURN_TYPE_FOR_PROPERTY, property)
     }
 
     fun resolveType(
@@ -43,16 +48,19 @@ class VariableTypeAndInitializerResolver(
         scopeForInitializer: LexicalScope,
         variable: KtVariableDeclaration,
         dataFlowInfo: DataFlowInfo,
+        inferenceSession: InferenceSession,
         trace: BindingTrace,
         local: Boolean
     ): KotlinType {
-        resolveTypeNullable(variableDescriptor, scopeForInitializer, variable, dataFlowInfo, trace, local)?.let { return it }
+        resolveTypeNullable(
+            variableDescriptor, scopeForInitializer, variable, dataFlowInfo, inferenceSession, trace, local
+        )?.let { return it }
 
         if (local) {
             trace.report(VARIABLE_WITH_NO_TYPE_NO_INITIALIZER.on(variable))
         }
 
-        return STUB_FOR_PROPERTY_WITHOUT_TYPE
+        return getTypeForPropertyWithoutReturnType(variableDescriptor.name.asString())
     }
 
     fun resolveTypeNullable(
@@ -60,6 +68,7 @@ class VariableTypeAndInitializerResolver(
         scopeForInitializer: LexicalScope,
         variable: KtVariableDeclaration,
         dataFlowInfo: DataFlowInfo,
+        inferenceSession: InferenceSession,
         trace: BindingTrace,
         local: Boolean
     ): KotlinType? {
@@ -69,7 +78,9 @@ class VariableTypeAndInitializerResolver(
 
             !variable.hasInitializer() && variable is KtProperty && variableDescriptor is VariableDescriptorWithAccessors &&
                     variable.hasDelegateExpression() ->
-                resolveDelegatedPropertyType(variable, variableDescriptor, scopeForInitializer, dataFlowInfo, trace, local)
+                resolveDelegatedPropertyType(
+                    variable, variableDescriptor, scopeForInitializer, dataFlowInfo, inferenceSession, trace, local
+                )
 
             variable.hasInitializer() -> when {
                 !local ->
@@ -80,12 +91,15 @@ class VariableTypeAndInitializerResolver(
                             variable, trace,
                             expressionTypingServices.languageVersionSettings
                         )
-                        val initializerType =
-                            resolveInitializerType(scopeForInitializer, variable.initializer!!, dataFlowInfo, trace, local)
-                        transformAnonymousTypeIfNeeded(variableDescriptor, variable, initializerType, trace)
+                        val initializerType = resolveInitializerType(
+                            scopeForInitializer, variable.initializer!!, dataFlowInfo, inferenceSession, trace, local
+                        )
+                        transformAnonymousTypeIfNeeded(
+                            variableDescriptor, variable, initializerType, trace, anonymousTypeTransformers, languageVersionSettings
+                        )
                     }
 
-                else -> resolveInitializerType(scopeForInitializer, variable.initializer!!, dataFlowInfo, trace, local)
+                else -> resolveInitializerType(scopeForInitializer, variable.initializer!!, dataFlowInfo, inferenceSession, trace, local)
             }
 
             else -> null
@@ -98,21 +112,23 @@ class VariableTypeAndInitializerResolver(
         variable: KtVariableDeclaration,
         dataFlowInfo: DataFlowInfo,
         variableType: KotlinType,
+        inferenceSession: InferenceSession,
         trace: BindingTrace
     ) {
         if (!variable.hasInitializer() || variable.isVar) return
-        variableDescriptor.setCompileTimeInitializer(
+        variableDescriptor.setCompileTimeInitializerFactory {
             storageManager.createRecursionTolerantNullableLazyValue(
-                computeInitializer@ {
+                computeInitializer@{
                     if (!DescriptorUtils.shouldRecordInitializerForProperty(
                             variableDescriptor,
                             variableType
                         )) return@computeInitializer null
 
                     val initializer = variable.initializer
-                    val initializerType = expressionTypingServices.safeGetType(scope, initializer!!, variableType, dataFlowInfo, trace)
+                    val initializerType =
+                        expressionTypingServices.safeGetType(scope, initializer!!, variableType, dataFlowInfo, inferenceSession, trace)
                     val constant = constantExpressionEvaluator.evaluateExpression(initializer, trace, initializerType)
-                            ?: return@computeInitializer null
+                        ?: return@computeInitializer null
 
                     if (constant.usesNonConstValAsConstant && variableDescriptor.isConst) {
                         trace.report(Errors.NON_CONST_VAL_USED_IN_CONSTANT_EXPRESSION.on(initializer))
@@ -122,7 +138,7 @@ class VariableTypeAndInitializerResolver(
                 },
                 null
             )
-        )
+        }
     }
 
     private fun resolveDelegatedPropertyType(
@@ -130,33 +146,42 @@ class VariableTypeAndInitializerResolver(
         variableDescriptor: VariableDescriptorWithAccessors,
         scopeForInitializer: LexicalScope,
         dataFlowInfo: DataFlowInfo,
+        inferenceSession: InferenceSession,
         trace: BindingTrace,
         local: Boolean
     ) = wrappedTypeFactory.createRecursionIntolerantDeferredType(trace) {
         val delegateExpression = property.delegateExpression!!
         val type = delegatedPropertyResolver.resolveDelegateExpression(
-            delegateExpression, property, variableDescriptor, scopeForInitializer, trace, dataFlowInfo
+            delegateExpression, property, variableDescriptor, scopeForInitializer, trace, dataFlowInfo, inferenceSession
         )
 
         val getterReturnType = delegatedPropertyResolver.getGetValueMethodReturnType(
-            variableDescriptor, delegateExpression, type, trace, scopeForInitializer, dataFlowInfo
+            variableDescriptor, delegateExpression, type, trace, scopeForInitializer, dataFlowInfo, inferenceSession
         )
 
-        getterReturnType?.let { approximateType(it, local) } ?: ErrorUtils.createErrorType("Type from delegate")
+        val delegatedType = getterReturnType?.let { approximateType(it, local) }
+            ?: ErrorUtils.createErrorType(ErrorTypeKind.TYPE_FOR_DELEGATION, delegateExpression.text)
+
+        transformAnonymousTypeIfNeeded(
+            variableDescriptor, property, delegatedType, trace, anonymousTypeTransformers, languageVersionSettings
+        )
     }
 
     private fun resolveInitializerType(
         scope: LexicalScope,
         initializer: KtExpression,
         dataFlowInfo: DataFlowInfo,
+        inferenceSession: InferenceSession,
         trace: BindingTrace,
         local: Boolean
     ): KotlinType {
-        val inferredType = expressionTypingServices.safeGetType(scope, initializer, TypeUtils.NO_EXPECTED_TYPE, dataFlowInfo, trace)
+        val inferredType = expressionTypingServices.safeGetType(
+            scope, initializer, TypeUtils.NO_EXPECTED_TYPE, dataFlowInfo, inferenceSession, trace
+        )
         val approximatedType = approximateType(inferredType, local)
         return declarationReturnTypeSanitizer.sanitizeReturnType(approximatedType, wrappedTypeFactory, trace, languageVersionSettings)
     }
 
     private fun approximateType(type: KotlinType, local: Boolean): UnwrappedType =
-        typeApproximator.approximateDeclarationType(type, local, expressionTypingServices.languageVersionSettings)
+        typeApproximator.approximateDeclarationType(type, local)
 }

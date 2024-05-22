@@ -1,6 +1,8 @@
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 // FULL_JDK
-// WITH_RUNTIME
+// WITH_STDLIB
+
+// JVM_ABI_K1_K2_DIFF: KT-63864
 
 val xs = arrayListOf("a", "b", "c", "d")
 

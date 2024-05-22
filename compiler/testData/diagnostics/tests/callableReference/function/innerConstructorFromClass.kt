@@ -1,6 +1,7 @@
-// !CHECK_TYPE
-// !DIAGNOSTICS: -UNUSED_EXPRESSION
-// !LANGUAGE: +CallableReferencesToClassMembersWithEmptyLHS
+// FIR_IDENTICAL
+// CHECK_TYPE
+// DIAGNOSTICS: -UNUSED_EXPRESSION
+// LANGUAGE: +CallableReferencesToClassMembersWithEmptyLHS
 
 import kotlin.reflect.KFunction1
 

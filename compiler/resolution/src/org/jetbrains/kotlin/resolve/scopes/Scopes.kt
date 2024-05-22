@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.incremental.components.LookupLocation
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.utils.Printer
+import org.jetbrains.kotlin.utils.addToStdlib.ifNotEmpty
 
 // see utils/ScopeUtils.kt
 
@@ -36,6 +37,7 @@ interface LexicalScope : HierarchicalScope {
     val isOwnerDescriptorAccessibleByLabel: Boolean
 
     val implicitReceiver: ReceiverParameterDescriptor?
+    val contextReceiversGroup: List<ReceiverParameterDescriptor>
 
     val kind: LexicalScopeKind
 
@@ -51,6 +53,8 @@ interface LexicalScope : HierarchicalScope {
 
         override val implicitReceiver: ReceiverParameterDescriptor?
             get() = null
+        override val contextReceiversGroup: List<ReceiverParameterDescriptor>
+            get() = emptyList()
 
         override val kind: LexicalScopeKind
             get() = LexicalScopeKind.EMPTY
@@ -168,4 +172,52 @@ abstract class BaseImportingScope(parent: ImportingScope?) : BaseHierarchicalSco
         nameFilter: (Name) -> Boolean,
         changeNamesForAliased: Boolean
     ): Collection<DeclarationDescriptor> = emptyList()
+}
+
+class CompositePrioritizedImportingScope(
+    private val primaryScope: ImportingScope,
+    private val secondaryScope: ImportingScope,
+) : ImportingScope {
+    override val parent: ImportingScope?
+        get() = primaryScope.parent ?: secondaryScope.parent
+
+    override fun getContributedPackage(name: Name): PackageViewDescriptor? {
+        return primaryScope.getContributedPackage(name) ?: secondaryScope.getContributedPackage(name)
+    }
+
+    override fun getContributedDescriptors(
+        kindFilter: DescriptorKindFilter,
+        nameFilter: (Name) -> Boolean,
+        changeNamesForAliased: Boolean
+    ): Collection<DeclarationDescriptor> {
+        return primaryScope.getContributedDescriptors(kindFilter, nameFilter, changeNamesForAliased).union(
+            secondaryScope.getContributedDescriptors(kindFilter, nameFilter, changeNamesForAliased)
+        )
+    }
+
+    override fun computeImportedNames(): Set<Name>? {
+        val primaryNames = primaryScope.computeImportedNames()
+        val secondaryNames = secondaryScope.computeImportedNames()
+        return primaryNames?.union(secondaryNames.orEmpty()) ?: secondaryNames
+    }
+
+    override fun printStructure(p: Printer) {
+        p.println(primaryScope::class.java.simpleName)
+    }
+
+    override fun getContributedClassifier(name: Name, location: LookupLocation): ClassifierDescriptor? {
+        return primaryScope.getContributedClassifier(name, location) ?: secondaryScope.getContributedClassifier(name, location)
+    }
+
+    override fun getContributedVariables(name: Name, location: LookupLocation): Collection<VariableDescriptor> {
+        return primaryScope.getContributedVariables(name, location).union(
+            secondaryScope.getContributedVariables(name, location)
+        )
+    }
+
+    override fun getContributedFunctions(name: Name, location: LookupLocation): Collection<FunctionDescriptor> {
+        return primaryScope.getContributedFunctions(name, location).union(
+            secondaryScope.getContributedFunctions(name, location)
+        )
+    }
 }

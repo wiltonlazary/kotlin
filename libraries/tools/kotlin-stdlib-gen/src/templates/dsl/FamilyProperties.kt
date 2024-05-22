@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package templates
@@ -15,7 +15,7 @@ val Family.DocExtension.element: String
 
 val Family.CodeExtension.size: String
     get() = when (family) {
-        Iterables, Collections, Lists, Sets, Maps, InvariantArraysOfObjects, ArraysOfObjects, ArraysOfPrimitives -> "size"
+        Iterables, Collections, Lists, Sets, Maps, InvariantArraysOfObjects, ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned -> "size"
         CharSequences, Strings -> "length"
         else -> error("size property isn't supported for $family")
     }
@@ -32,8 +32,10 @@ object DocExtensions {
     val Family.collection: String
         get() = when (this) {
             CharSequences -> "char sequence"
-            ArraysOfObjects, ArraysOfPrimitives, InvariantArraysOfObjects -> "array"
-            Strings, Sequences, Maps, Lists, Sets, Ranges -> name.singularize().decapitalize()
+            ArraysOfObjects, ArraysOfPrimitives, InvariantArraysOfObjects, ArraysOfUnsigned -> "array"
+            Ranges, RangesOfPrimitives, OpenRanges -> "range"
+            ProgressionsOfPrimitives -> "progression"
+            Strings, Sequences, Maps, Lists, Sets -> name.singularize().decapitalize()
             else -> "collection"
         }
 

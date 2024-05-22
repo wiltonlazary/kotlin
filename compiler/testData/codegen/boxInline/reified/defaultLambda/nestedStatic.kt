@@ -1,15 +1,15 @@
-// FILE: 1.kt
-// LANGUAGE_VERSION: 1.2
 // SKIP_INLINE_CHECK_IN: inlineFun$default
-//WITH_RUNTIME
+// WITH_STDLIB
+// NO_CHECK_LAMBDA_INLINING
+// TARGET_BACKEND: JVM
+// FILE: 1.kt
 package test
 
-inline fun <reified T> inlineFun(lambda: () -> String = { { T::class.java.simpleName } () }): String {
+inline fun <reified T> inlineFun(lambda: () -> String = { { T::class.java.simpleName }.let { it() } }): String {
     return lambda()
 }
 
 // FILE: 2.kt
-//NO_CHECK_LAMBDA_INLINING
 import test.*
 
 class OK

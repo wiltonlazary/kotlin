@@ -16,10 +16,10 @@
 
 package org.jetbrains.kotlin.js.translate.reference;
 
-import org.jetbrains.kotlin.js.backend.ast.JsExpression;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.descriptors.ClassDescriptor;
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
+import org.jetbrains.kotlin.js.backend.ast.JsExpression;
 import org.jetbrains.kotlin.js.translate.context.TranslationContext;
 import org.jetbrains.kotlin.js.translate.general.AbstractTranslator;
 import org.jetbrains.kotlin.js.translate.intrinsic.objects.ObjectIntrinsic;
@@ -35,7 +35,7 @@ public class CompanionObjectIntrinsicAccessTranslator extends AbstractTranslator
             @NotNull TranslationContext context
     ) {
         DeclarationDescriptor referenceDescriptor = getDescriptorForReferenceExpression(context.bindingContext(), expression);
-        assert referenceDescriptor != null : "JetSimpleName expression must reference a descriptor " + expression.getText();
+        assert referenceDescriptor != null : "KtSimpleName expression must reference a descriptor " + expression.getText();
         return new CompanionObjectIntrinsicAccessTranslator(referenceDescriptor, context);
     }
 

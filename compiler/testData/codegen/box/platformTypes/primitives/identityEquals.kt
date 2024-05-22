@@ -1,5 +1,7 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
+
+// l[0] === 1000 is true on Android
+// IGNORE_BACKEND: ANDROID
 
 fun box(): String {
     val l = java.util.ArrayList<Int>()

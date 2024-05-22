@@ -17,64 +17,60 @@
 package org.jetbrains.kotlin.build
 
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
-import org.jetbrains.kotlin.config.KotlinCompilerVersion
-import org.jetbrains.kotlin.config.LanguageVersion
-import org.jetbrains.kotlin.config.isPreRelease
-import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmBytecodeBinaryVersion
+import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmMetadataVersion
 
-/**
- * If you want to add a new field, check its type is supported by [serializeToPlainText], [deserializeFromPlainText]
- */
-data class JvmBuildMetaInfo(
-        val isEAP: Boolean,
-        val compilerBuildVersion: String,
-        val languageVersionString: String,
-        val apiVersionString: String,
-        val coroutinesEnable: Boolean,
-        val coroutinesWarn: Boolean,
-        val coroutinesError: Boolean,
-        val multiplatformEnable: Boolean,
-        val metadataVersionMajor: Int,
-        val metadataVersionMinor: Int,
-        val metadataVersionPatch: Int,
-        val bytecodeVersionMajor: Int,
-        val bytecodeVersionMinor: Int,
-        val bytecodeVersionPatch: Int,
-        val ownVersion: Int = JvmBuildMetaInfo.OWN_VERSION,
-        val coroutinesVersion: Int = JvmBuildMetaInfo.COROUTINES_VERSION,
-        val multiplatformVersion: Int = JvmBuildMetaInfo.MULTIPLATFORM_VERSION
-) {
-    companion object {
-        const val OWN_VERSION: Int = 0
-        const val COROUTINES_VERSION: Int = 0
-        const val MULTIPLATFORM_VERSION: Int = 0
+class JvmBuildMetaInfo : BuildMetaInfo() {
+    override fun checkIfPlatformSpecificCompilerArgumentWasChanged(key: String, currentValue: String, previousValue: String): Boolean? {
+        when (key) {
+            CustomKeys.METADATA_VERSION_STRING.name -> {
+                val currentVersionIntArray = BinaryVersion.parseVersionArray(currentValue)
+                if (currentVersionIntArray?.size != 3) return null
+                val currentVersion = JvmMetadataVersion(currentVersionIntArray[0], currentVersionIntArray[1], currentVersionIntArray[2])
 
-        fun serializeToString(info: JvmBuildMetaInfo): String =
-                serializeToPlainText(info)
-
-        fun deserializeFromString(str: String): JvmBuildMetaInfo? =
-                deserializeFromPlainText(str)
+                val previousVersionIntArray = BinaryVersion.parseVersionArray(previousValue)
+                if (previousVersionIntArray?.size != 3) return null
+                val previousVersion = JvmMetadataVersion(previousVersionIntArray[0], previousVersionIntArray[1], previousVersionIntArray[2])
+                return currentVersion != previousVersion
+            }
+        }
+        return null
     }
-}
 
-fun JvmBuildMetaInfo(args: CommonCompilerArguments): JvmBuildMetaInfo {
-    val languageVersion = args.languageVersion?.let((LanguageVersion)::fromVersionString) ?: LanguageVersion.LATEST_STABLE
+    override fun createPropertiesMapFromCompilerArguments(args: CommonCompilerArguments): Map<String, String> {
+        val resultMap = mutableMapOf<String, String>()
+        val metadataVersionArray = args.metadataVersion?.let { BinaryVersion.parseVersionArray(it) }
+        val metadataVersion = metadataVersionArray?.let(::JvmMetadataVersion) ?: JvmMetadataVersion.INSTANCE
+        val metadataVersionString = metadataVersion.toString()
+        resultMap[CustomKeys.METADATA_VERSION_STRING.name] = metadataVersionString
 
-    return JvmBuildMetaInfo(
-            isEAP = languageVersion.isPreRelease(),
-            compilerBuildVersion = KotlinCompilerVersion.VERSION,
-            languageVersionString = languageVersion.versionString,
-            apiVersionString = args.apiVersion ?: languageVersion.versionString,
-            coroutinesEnable = args.coroutinesState == CommonCompilerArguments.ENABLE,
-            coroutinesWarn = args.coroutinesState == CommonCompilerArguments.WARN,
-            coroutinesError = args.coroutinesState == CommonCompilerArguments.ERROR,
-            multiplatformEnable = args.multiPlatform,
-            metadataVersionMajor = JvmMetadataVersion.INSTANCE.major,
-            metadataVersionMinor = JvmMetadataVersion.INSTANCE.minor,
-            metadataVersionPatch = JvmMetadataVersion.INSTANCE.patch,
-            bytecodeVersionMajor = JvmBytecodeBinaryVersion.INSTANCE.major,
-            bytecodeVersionMinor = JvmBytecodeBinaryVersion.INSTANCE.minor,
-            bytecodeVersionPatch = JvmBytecodeBinaryVersion.INSTANCE.patch
-    )
+        return super.createPropertiesMapFromCompilerArguments(args) + resultMap
+    }
+
+    override val excludedProperties: List<String>
+        get() = super.excludedProperties + listOf(
+            "excludedProperties",
+            "backendThreads",
+            "buildFile",
+            "classpath",
+            "declarationsOutputPath",
+            "defaultScriptExtension",
+            "enableDebugMode",
+            "expression",
+            "internalArguments",
+            "profileCompilerCommand",
+            "repeatCompileModules",
+            "scriptResolverEnvironment",
+            "scriptTemplates",
+            "suppressDeprecatedJvmTargetWarning",
+            "useFastJarFileSystem",
+        )
+
+    override val argumentsListForSpecialCheck: List<String>
+        get() = super.argumentsListForSpecialCheck + listOf(
+            "allowNoSourceFiles",
+            "allowUnstableDependencies",
+            "enableJvmPreview",
+            "suppressMissingBuiltinsError",
+        )
 }

@@ -17,68 +17,102 @@
 package org.jetbrains.kotlin.cli.metadata
 
 import com.intellij.openapi.Disposable
-import org.jetbrains.kotlin.cli.common.CLICompiler
-import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
-import org.jetbrains.kotlin.cli.common.CommonCompilerPerformanceManager
-import org.jetbrains.kotlin.cli.common.ExitCode
+import org.jetbrains.kotlin.cli.common.*
 import org.jetbrains.kotlin.cli.common.arguments.K2MetadataCompilerArguments
+import org.jetbrains.kotlin.cli.common.config.addKotlinSourceRoot
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.*
 import org.jetbrains.kotlin.cli.common.messages.MessageUtil
 import org.jetbrains.kotlin.cli.common.messages.OutputMessageUtil
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
+import org.jetbrains.kotlin.cli.jvm.config.K2MetadataConfigurationKeys
 import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoots
-import org.jetbrains.kotlin.cli.jvm.plugins.PluginCliParser
 import org.jetbrains.kotlin.codegen.CompilationException
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.Services
-import org.jetbrains.kotlin.config.addKotlinSourceRoot
-import org.jetbrains.kotlin.load.java.JvmAbi
+import org.jetbrains.kotlin.metadata.builtins.BuiltInsBinaryVersion
+import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion
+import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil
 import org.jetbrains.kotlin.utils.KotlinPaths
 import java.io.File
 
+/**
+ * This class is the entry-point for compiling Kotlin code into a metadata KLib.
+ *
+ * **Note: `2` in the name stands for Kotlin `TO` metadata compiler.
+ * This entry-point used by both K1 and K2.**
+ *
+ * Please see `/docs/fir/k2_kmp.md` for more info on the K2/FIR implementation.
+ */
 class K2MetadataCompiler : CLICompiler<K2MetadataCompilerArguments>() {
-    private val performanceManager: K2MetadataCompilerPerformanceManager = K2MetadataCompilerPerformanceManager()
+
+    override val defaultPerformanceManager: CommonCompilerPerformanceManager = K2MetadataCompilerPerformanceManager()
 
     override fun createArguments() = K2MetadataCompilerArguments()
 
     override fun setupPlatformSpecificArgumentsAndServices(
-            configuration: CompilerConfiguration, arguments: K2MetadataCompilerArguments, services: Services
+        configuration: CompilerConfiguration, arguments: K2MetadataCompilerArguments, services: Services
     ) {
         // No specific arguments yet
     }
 
-    override fun doExecute(
-            arguments: K2MetadataCompilerArguments,
-            configuration: CompilerConfiguration,
-            rootDisposable: Disposable,
-            paths: KotlinPaths?
-    ): ExitCode {
-        val collector = configuration.getNotNull(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY)
+    override fun MutableList<String>.addPlatformOptions(arguments: K2MetadataCompilerArguments) {}
 
-        val pluginLoadResult = PluginCliParser.loadPluginsSafe(arguments.pluginClasspaths, arguments.pluginOptions, configuration)
+    override fun doExecute(
+        arguments: K2MetadataCompilerArguments,
+        configuration: CompilerConfiguration,
+        rootDisposable: Disposable,
+        paths: KotlinPaths?
+    ): ExitCode {
+        val collector = configuration.getNotNull(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY)
+        val performanceManager = configuration.getNotNull(CLIConfigurationKeys.PERF_MANAGER)
+
+        val pluginLoadResult = loadPlugins(paths, arguments, configuration)
         if (pluginLoadResult != ExitCode.OK) return pluginLoadResult
 
+        val commonSources = arguments.commonSources?.toSet() ?: emptySet()
+        val hmppCliModuleStructure = configuration.get(CommonConfigurationKeys.HMPP_MODULE_STRUCTURE)
+        if (hmppCliModuleStructure != null) {
+            collector.report(ERROR, "HMPP module structure should not be passed during metadata compilation. Please remove `-Xfragments` and related flags")
+            return ExitCode.COMPILATION_ERROR
+        }
         for (arg in arguments.freeArgs) {
-            configuration.addKotlinSourceRoot(arg)
+            configuration.addKotlinSourceRoot(arg, isCommon = arg in commonSources, hmppModuleName = null)
         }
         if (arguments.classpath != null) {
             configuration.addJvmClasspathRoots(arguments.classpath!!.split(File.pathSeparatorChar).map(::File))
         }
 
-        configuration.put(CommonConfigurationKeys.MODULE_NAME, arguments.moduleName ?: JvmAbi.DEFAULT_MODULE_NAME)
+        val moduleName = arguments.moduleName ?: JvmProtoBufUtil.DEFAULT_MODULE_NAME
+        configuration.put(CommonConfigurationKeys.MODULE_NAME, moduleName)
+
+        configuration.put(CLIConfigurationKeys.ALLOW_KOTLIN_PACKAGE, arguments.allowKotlinPackage)
+        configuration.put(CLIConfigurationKeys.RENDER_DIAGNOSTIC_INTERNAL_NAME, arguments.renderInternalDiagnosticNames)
+
+        configuration.putIfNotNull(K2MetadataConfigurationKeys.FRIEND_PATHS, arguments.friendPaths?.toList())
+        configuration.putIfNotNull(K2MetadataConfigurationKeys.REFINES_PATHS, arguments.refinesPaths?.toList())
+
 
         val destination = arguments.destination
         if (destination != null) {
             if (destination.endsWith(".jar")) {
                 // TODO: support .jar destination
-                collector.report(STRONG_WARNING, ".jar destination is not yet supported, results will be written to the directory with the given name")
+                collector.report(
+                    STRONG_WARNING,
+                    ".jar destination is not yet supported, results will be written to the directory with the given name"
+                )
             }
             configuration.put(CLIConfigurationKeys.METADATA_DESTINATION_DIRECTORY, File(destination))
         }
 
-        val environment = KotlinCoreEnvironment.createForProduction(rootDisposable, configuration, EnvironmentConfigFiles.METADATA_CONFIG_FILES)
+        val environment =
+            KotlinCoreEnvironment.createForProduction(rootDisposable, configuration, EnvironmentConfigFiles.METADATA_CONFIG_FILES)
+
+        val mode = if (arguments.metadataKlib) "KLib" else "metadata"
+
+        val sourceFiles = environment.getSourceFiles()
+        performanceManager.notifyCompilerInitialized(sourceFiles.size, environment.countLinesOfCode(sourceFiles), "$mode mode for $moduleName module")
 
         if (environment.getSourceFiles().isEmpty()) {
             if (arguments.version) {
@@ -88,10 +122,17 @@ class K2MetadataCompiler : CLICompiler<K2MetadataCompilerArguments>() {
             return ExitCode.COMPILATION_ERROR
         }
 
+        checkKotlinPackageUsageForPsi(environment.configuration, environment.getSourceFiles())
+
         try {
-            MetadataSerializer(true).serialize(environment)
-        }
-        catch (e: CompilationException) {
+            val useFir = configuration.getBoolean(CommonConfigurationKeys.USE_FIR)
+            val metadataSerializer = when {
+                useFir -> FirMetadataSerializer(configuration, environment)
+                arguments.metadataKlib -> K2MetadataKlibSerializer(configuration, environment)
+                else -> MetadataSerializer(configuration, environment, dependOnOldBuiltIns = true)
+            }
+            metadataSerializer.analyzeAndSerialize()
+        } catch (e: CompilationException) {
             collector.report(EXCEPTION, OutputMessageUtil.renderException(e), MessageUtil.psiElementToMessageLocation(e.element))
             return ExitCode.INTERNAL_ERROR
         }
@@ -102,7 +143,7 @@ class K2MetadataCompiler : CLICompiler<K2MetadataCompilerArguments>() {
     // TODO: update this once a launcher script for K2MetadataCompiler is available
     override fun executableScriptFileName(): String = "kotlinc"
 
-    override fun getPerformanceManager(): CommonCompilerPerformanceManager = performanceManager
+    override fun createMetadataVersion(versionArray: IntArray): BinaryVersion = BuiltInsBinaryVersion(*versionArray)
 
     companion object {
         @JvmStatic
@@ -111,5 +152,5 @@ class K2MetadataCompiler : CLICompiler<K2MetadataCompilerArguments>() {
         }
     }
 
-    private class K2MetadataCompilerPerformanceManager : CommonCompilerPerformanceManager("Kotlin to Metadata compiler")
+    protected class K2MetadataCompilerPerformanceManager : CommonCompilerPerformanceManager("Kotlin to Metadata compiler")
 }

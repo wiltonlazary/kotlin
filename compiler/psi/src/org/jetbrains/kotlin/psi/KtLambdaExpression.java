@@ -19,17 +19,16 @@ package org.jetbrains.kotlin.psi;
 import com.intellij.lang.ASTNode;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
-import com.intellij.psi.PsiFile;
-import com.intellij.psi.PsiModifiableCodeBlock;
 import com.intellij.psi.impl.source.tree.LazyParseablePsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.KtNodeTypes;
 import org.jetbrains.kotlin.lexer.KtTokens;
+import org.jetbrains.kotlin.psi.psiUtil.PsiUtilsKt;
 
 import java.util.List;
 
-public class KtLambdaExpression extends LazyParseablePsiElement implements KtExpression, PsiModifiableCodeBlock {
+public class KtLambdaExpression extends LazyParseablePsiElement implements KtExpression {
     public KtLambdaExpression(CharSequence text) {
         super(KtNodeTypes.LAMBDA_EXPRESSION, text);
     }
@@ -76,13 +75,7 @@ public class KtLambdaExpression extends LazyParseablePsiElement implements KtExp
     @NotNull
     @Override
     public KtFile getContainingKtFile() {
-        PsiFile file = getContainingFile();
-        if(!(file instanceof KtFile))  {
-            String fileString = (file != null && file.isValid()) ? file.getText() : "";
-            throw new IllegalStateException("KtElement not inside KtFile: " + file + fileString +
-                                            "for element " + this + " of type " + this.getClass() + " node = " + getNode());
-        }
-        return (KtFile) file;
+        return PsiUtilsKt.getContainingKtFile(this);
     }
 
     @Override
@@ -91,6 +84,7 @@ public class KtLambdaExpression extends LazyParseablePsiElement implements KtExp
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public final void accept(@NotNull PsiElementVisitor visitor) {
         if (visitor instanceof KtVisitor) {
             accept((KtVisitor) visitor, null);
@@ -111,7 +105,7 @@ public class KtLambdaExpression extends LazyParseablePsiElement implements KtExp
         return this;
     }
 
-    @Override
+    @SuppressWarnings({"unused", "MethodMayBeStatic"}) //keep for compatibility with potential plugins
     public boolean shouldChangeModificationCount(PsiElement place) {
         return false;
     }

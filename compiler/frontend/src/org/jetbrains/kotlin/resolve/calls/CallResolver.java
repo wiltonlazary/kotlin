@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls;
@@ -12,22 +12,23 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.FunctionTypesKt;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
-import org.jetbrains.kotlin.config.AnalysisFlag;
+import org.jetbrains.kotlin.config.AnalysisFlags;
 import org.jetbrains.kotlin.config.LanguageFeature;
 import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
+import org.jetbrains.kotlin.diagnostics.DiagnosticFactory0;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.resolve.*;
 import org.jetbrains.kotlin.resolve.bindingContextUtil.BindingContextUtilsKt;
-import org.jetbrains.kotlin.resolve.calls.callResolverUtil.CallResolverUtilKt;
-import org.jetbrains.kotlin.resolve.calls.callResolverUtil.ResolveArgumentsMode;
-import org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt;
+import org.jetbrains.kotlin.resolve.calls.util.CallResolverUtilKt;
+import org.jetbrains.kotlin.resolve.calls.util.ResolveArgumentsMode;
+import org.jetbrains.kotlin.resolve.calls.util.CallUtilKt;
 import org.jetbrains.kotlin.resolve.calls.components.InferenceSession;
 import org.jetbrains.kotlin.resolve.calls.context.*;
-import org.jetbrains.kotlin.resolve.calls.inference.CoroutineInferenceUtilKt;
+import org.jetbrains.kotlin.resolve.calls.inference.BuilderInferenceUtilKt;
 import org.jetbrains.kotlin.resolve.calls.model.MutableDataFlowInfoForArguments;
 import org.jetbrains.kotlin.resolve.calls.results.OverloadResolutionResults;
 import org.jetbrains.kotlin.resolve.calls.results.OverloadResolutionResultsImpl;
@@ -185,8 +186,10 @@ public class CallResolver {
                 NewResolutionOldInference.ResolutionKind.Invoke.INSTANCE);
     }
 
+    // this declaration is used by compiler plugins
+    @SuppressWarnings("WeakerAccess")
     @NotNull
-    private <D extends CallableDescriptor> OverloadResolutionResults<D> computeTasksAndResolveCall(
+    public <D extends CallableDescriptor> OverloadResolutionResults<D> computeTasksAndResolveCall(
             @NotNull BasicCallResolutionContext context,
             @NotNull Name name,
             @NotNull KtReferenceExpression referenceExpression,
@@ -196,8 +199,10 @@ public class CallResolver {
         return computeTasksAndResolveCall(context, name, tracing, kind);
     }
 
+    // this declaration is used by compiler plugins
+    @SuppressWarnings("WeakerAccess")
     @NotNull
-    private <D extends CallableDescriptor> OverloadResolutionResults<D> computeTasksAndResolveCall(
+    public <D extends CallableDescriptor> OverloadResolutionResults<D> computeTasksAndResolveCall(
             @NotNull BasicCallResolutionContext context,
             @NotNull Name name,
             @NotNull TracingStrategy tracing,
@@ -213,7 +218,7 @@ public class CallResolver {
     private <D extends FunctionDescriptor> OverloadResolutionResults<D> computeTasksFromCandidatesAndResolvedCall(
             @NotNull BasicCallResolutionContext context,
             @NotNull KtReferenceExpression referenceExpression,
-            @NotNull Collection<ResolutionCandidate<D>> candidates
+            @NotNull Collection<OldResolutionCandidate<D>> candidates
     ) {
         return computeTasksFromCandidatesAndResolvedCall(context, candidates,
                                                          TracingStrategyImpl.create(referenceExpression, context.call));
@@ -222,7 +227,7 @@ public class CallResolver {
     @NotNull
     private <D extends FunctionDescriptor> OverloadResolutionResults<D> computeTasksFromCandidatesAndResolvedCall(
             @NotNull BasicCallResolutionContext context,
-            @NotNull Collection<ResolutionCandidate<D>> candidates,
+            @NotNull Collection<OldResolutionCandidate<D>> candidates,
             @NotNull TracingStrategy tracing
     ) {
         return callResolvePerfCounter.<OverloadResolutionResults<D>>time(() -> {
@@ -256,8 +261,8 @@ public class CallResolver {
             @NotNull Collection<FunctionDescriptor> functionDescriptors
     ) {
         BasicCallResolutionContext callResolutionContext = BasicCallResolutionContext.create(context, call, CheckArgumentTypesMode.CHECK_VALUE_ARGUMENTS);
-        List<ResolutionCandidate<FunctionDescriptor>> candidates = CollectionsKt.map(functionDescriptors, descriptor ->
-                ResolutionCandidate.create(
+        List<OldResolutionCandidate<FunctionDescriptor>> candidates = CollectionsKt.map(functionDescriptors, descriptor ->
+                OldResolutionCandidate.create(
                         call,
                         descriptor,
                         null,
@@ -277,8 +282,8 @@ public class CallResolver {
             @NotNull Collection<FunctionDescriptor> functionDescriptors
     ) {
         BasicCallResolutionContext callResolutionContext = BasicCallResolutionContext.create(context, call, CheckArgumentTypesMode.CHECK_VALUE_ARGUMENTS);
-        List<ResolutionCandidate<FunctionDescriptor>> resolutionCandidates = CollectionsKt.map(functionDescriptors, descriptor ->
-                ResolutionCandidate.create(
+        List<OldResolutionCandidate<FunctionDescriptor>> resolutionCandidates = CollectionsKt.map(functionDescriptors, descriptor ->
+                OldResolutionCandidate.create(
                         call, descriptor, receiver, ExplicitReceiverKind.DISPATCH_RECEIVER, null));
 
         return computeTasksFromCandidatesAndResolvedCall(
@@ -292,17 +297,20 @@ public class CallResolver {
             @NotNull Call call,
             @NotNull KotlinType expectedType,
             @NotNull DataFlowInfo dataFlowInfo,
-            boolean isAnnotationContext
+            boolean isAnnotationContext,
+            @Nullable InferenceSession inferenceSession
     ) {
         return resolveFunctionCall(
                 BasicCallResolutionContext.create(
                         trace, scope, call, expectedType, dataFlowInfo, ContextDependency.INDEPENDENT, CheckArgumentTypesMode.CHECK_VALUE_ARGUMENTS,
-                        isAnnotationContext, languageVersionSettings, dataFlowValueFactory, InferenceSession.Companion.getDefault()
+                        isAnnotationContext, languageVersionSettings, dataFlowValueFactory,
+                        inferenceSession != null ? inferenceSession : InferenceSession.Companion.getDefault()
                 )
         );
     }
 
     @NotNull
+    @SuppressWarnings("unchecked")
     public OverloadResolutionResults<FunctionDescriptor> resolveFunctionCall(@NotNull BasicCallResolutionContext context) {
         ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
 
@@ -328,9 +336,13 @@ public class CallResolver {
         else if (calleeExpression instanceof KtConstructorDelegationReferenceExpression) {
             KtConstructorDelegationCall delegationCall = (KtConstructorDelegationCall) context.call.getCallElement();
             DeclarationDescriptor container = context.scope.getOwnerDescriptor();
-            assert container instanceof ConstructorDescriptor : "Trying to resolve JetConstructorDelegationCall not in constructor. scope.ownerDescriptor = " + container;
-            return (OverloadResolutionResults) resolveConstructorDelegationCall(context, delegationCall, (KtConstructorDelegationReferenceExpression) calleeExpression,
-                                                    (ClassConstructorDescriptor) container);
+            assert container instanceof ConstructorDescriptor : "Trying to resolve KtConstructorDelegationCall not in constructor. scope.ownerDescriptor = " + container;
+            return (OverloadResolutionResults) resolveConstructorDelegationCall(
+                    context,
+                    delegationCall,
+                    (KtConstructorDelegationReferenceExpression) calleeExpression,
+                    (ClassDescriptor) container.getContainingDeclaration()
+            );
         }
         else if (calleeExpression == null) {
             return checkArgumentTypesAndFail(context);
@@ -345,11 +357,11 @@ public class CallResolver {
                 parameterTypes.add(NO_EXPECTED_TYPE);
             }
             expectedType = FunctionTypesKt.createFunctionType(
-                    builtIns, Annotations.Companion.getEMPTY(), null, parameterTypes, null, context.expectedType
+                    builtIns, Annotations.Companion.getEMPTY(), null, Collections.emptyList(), parameterTypes, null, context.expectedType
             );
         }
         KotlinType calleeType = expressionTypingServices.safeGetType(
-                context.scope, calleeExpression, expectedType, context.dataFlowInfo, context.trace);
+                context.scope, calleeExpression, expectedType, context.dataFlowInfo, context.inferenceSession, context.trace);
         ExpressionReceiver expressionReceiver = ExpressionReceiver.Companion.create(calleeExpression, calleeType, context.trace.getBindingContext());
 
         Call call = new CallTransformer.CallForImplicitInvoke(context.call.getExplicitReceiver(), expressionReceiver, context.call,
@@ -370,6 +382,7 @@ public class CallResolver {
         KtReferenceExpression functionReference = expression.getConstructorReferenceExpression();
         KtTypeReference typeReference = expression.getTypeReference();
         if (functionReference == null || typeReference == null) {
+            CallResolverUtilKt.checkForConstructorCallOnFunctionalType(typeReference, context);
             return checkArgumentTypesAndFail(context); // No type there
         }
         KotlinType constructedType = typeResolver.resolveType(context.scope, typeReference, context.trace, true);
@@ -400,10 +413,10 @@ public class CallResolver {
             @NotNull KtReferenceExpression functionReference,
             @NotNull KotlinType constructedType
     ) {
-        Pair<Collection<ResolutionCandidate<ConstructorDescriptor>>, BasicCallResolutionContext> candidatesAndContext =
+        Pair<Collection<OldResolutionCandidate<ConstructorDescriptor>>, BasicCallResolutionContext> candidatesAndContext =
                 prepareCandidatesAndContextForConstructorCall(constructedType, context, syntheticScopes);
 
-        Collection<ResolutionCandidate<ConstructorDescriptor>> candidates = candidatesAndContext.getFirst();
+        Collection<OldResolutionCandidate<ConstructorDescriptor>> candidates = candidatesAndContext.getFirst();
         context = candidatesAndContext.getSecond();
 
         return computeTasksFromCandidatesAndResolvedCall(context, functionReference, candidates);
@@ -413,7 +426,8 @@ public class CallResolver {
     public OverloadResolutionResults<ConstructorDescriptor> resolveConstructorDelegationCall(
             @NotNull BindingTrace trace, @NotNull LexicalScope scope, @NotNull DataFlowInfo dataFlowInfo,
             @NotNull ClassConstructorDescriptor constructorDescriptor,
-            @NotNull KtConstructorDelegationCall call
+            @NotNull KtConstructorDelegationCall call,
+            @Nullable InferenceSession inferenceSession
     ) {
         // Method returns `null` when there is nothing to resolve in trivial cases like `null` call expression or
         // when super call should be conventional enum constructor and super call should be empty
@@ -426,20 +440,30 @@ public class CallResolver {
                 false,
                 languageVersionSettings,
                 dataFlowValueFactory,
-                InferenceSession.Companion.getDefault());
+                inferenceSession != null ? inferenceSession : InferenceSession.Companion.getDefault());
 
-        if (call.getCalleeExpression() == null) return checkArgumentTypesAndFail(context);
+        KtConstructorDelegationReferenceExpression calleeExpression = call.getCalleeExpression();
+
+        if (calleeExpression == null) return checkArgumentTypesAndFail(context);
+
+        ClassDescriptor currentClassDescriptor = constructorDescriptor.getContainingDeclaration();
 
         if (constructorDescriptor.getConstructedClass().getKind() == ClassKind.ENUM_CLASS && call.isImplicit()) {
+            if (currentClassDescriptor.getUnsubstitutedPrimaryConstructor() != null) {
+                DiagnosticFactory0<PsiElement> warningOrError;
+
+                if (languageVersionSettings.supportsFeature(LanguageFeature.RequiredPrimaryConstructorDelegationCallInEnums)) {
+                    warningOrError = PRIMARY_CONSTRUCTOR_DELEGATION_CALL_EXPECTED; // error
+                } else {
+                    warningOrError = PRIMARY_CONSTRUCTOR_DELEGATION_CALL_EXPECTED_IN_ENUM; // warning
+                }
+                PsiElement reportOn = calcReportOn(calleeExpression);
+                context.trace.report(warningOrError.on(reportOn));
+            }
             return null;
         }
 
-        return resolveConstructorDelegationCall(
-                context,
-                call,
-                call.getCalleeExpression(),
-                constructorDescriptor
-        );
+        return resolveConstructorDelegationCall(context, call, call.getCalleeExpression(), currentClassDescriptor);
     }
 
     @NotNull
@@ -447,11 +471,9 @@ public class CallResolver {
             @NotNull BasicCallResolutionContext context,
             @NotNull KtConstructorDelegationCall call,
             @NotNull KtConstructorDelegationReferenceExpression calleeExpression,
-            @NotNull ClassConstructorDescriptor calleeConstructor
+            @NotNull ClassDescriptor currentClassDescriptor
     ) {
         context.trace.record(BindingContext.LEXICAL_SCOPE, call, context.scope);
-
-        ClassDescriptor currentClassDescriptor = calleeConstructor.getContainingDeclaration();
 
         boolean isThisCall = calleeExpression.isThis();
         if (currentClassDescriptor.getKind() == ClassKind.ENUM_CLASS && !isThisCall) {
@@ -466,9 +488,8 @@ public class CallResolver {
         if (!isThisCall && currentClassDescriptor.getUnsubstitutedPrimaryConstructor() != null) {
             if (DescriptorUtils.canHaveDeclaredConstructors(currentClassDescriptor)) {
                 // Diagnostic is meaningless when reporting on interfaces and object
-                context.trace.report(PRIMARY_CONSTRUCTOR_DELEGATION_CALL_EXPECTED.on(
-                        (KtConstructorDelegationCall) calleeExpression.getParent()
-                ));
+                PsiElement reportOn = calcReportOn(calleeExpression);
+                context.trace.report(PRIMARY_CONSTRUCTOR_DELEGATION_CALL_EXPECTED.on(reportOn));
             }
             if (call.isImplicit()) return OverloadResolutionResultsImpl.nameNotFound();
         }
@@ -479,13 +500,12 @@ public class CallResolver {
         }
 
 
-        KotlinType superType = isThisCall ?
-                                  calleeConstructor.getContainingDeclaration().getDefaultType() :
-                                  DescriptorUtils.getSuperClassType(currentClassDescriptor);
+        KotlinType superType =
+                isThisCall ? currentClassDescriptor.getDefaultType() : DescriptorUtils.getSuperClassType(currentClassDescriptor);
 
-        Pair<Collection<ResolutionCandidate<ConstructorDescriptor>>, BasicCallResolutionContext> candidatesAndContext =
+        Pair<Collection<OldResolutionCandidate<ConstructorDescriptor>>, BasicCallResolutionContext> candidatesAndContext =
                 prepareCandidatesAndContextForConstructorCall(superType, context, syntheticScopes);
-        Collection<ResolutionCandidate<ConstructorDescriptor>> candidates = candidatesAndContext.getFirst();
+        Collection<OldResolutionCandidate<ConstructorDescriptor>> candidates = candidatesAndContext.getFirst();
         context = candidatesAndContext.getSecond();
 
         TracingStrategy tracing = call.isImplicit() ?
@@ -503,14 +523,20 @@ public class CallResolver {
         return computeTasksFromCandidatesAndResolvedCall(context, candidates, tracing);
     }
 
+    @Nullable
+    private PsiElement calcReportOn(@NotNull KtConstructorDelegationReferenceExpression calleeExpression) {
+        PsiElement delegationCall = calleeExpression.getParent();
+        return CallResolverUtilKt.reportOnElement(delegationCall);
+    }
+
     @NotNull
-    private static Pair<Collection<ResolutionCandidate<ConstructorDescriptor>>, BasicCallResolutionContext> prepareCandidatesAndContextForConstructorCall(
+    private static Pair<Collection<OldResolutionCandidate<ConstructorDescriptor>>, BasicCallResolutionContext> prepareCandidatesAndContextForConstructorCall(
             @NotNull KotlinType superType,
             @NotNull BasicCallResolutionContext context,
             @NotNull SyntheticScopes syntheticScopes
     ) {
         if (!(superType.getConstructor().getDeclarationDescriptor() instanceof ClassDescriptor)) {
-            return new Pair<>(Collections.<ResolutionCandidate<ConstructorDescriptor>>emptyList(), context);
+            return new Pair<>(Collections.<OldResolutionCandidate<ConstructorDescriptor>>emptyList(), context);
         }
 
         // If any constructor has type parameter (currently it only can be true for ones from Java), try to infer arguments for them
@@ -522,7 +548,7 @@ public class CallResolver {
             context = context.replaceExpectedType(superType);
         }
 
-        List<ResolutionCandidate<ConstructorDescriptor>> candidates =
+        List<OldResolutionCandidate<ConstructorDescriptor>> candidates =
                 CallResolverUtilKt.createResolutionCandidatesForConstructors(
                         context.scope, context.call, superType, !anyConstructorHasDeclaredTypeParameters, syntheticScopes
                 );
@@ -543,14 +569,14 @@ public class CallResolver {
             @NotNull Call call,
             @NotNull TracingStrategy tracing,
             @NotNull ResolutionContext<?> context,
-            @NotNull ResolutionCandidate<FunctionDescriptor> candidate,
+            @NotNull OldResolutionCandidate<FunctionDescriptor> candidate,
             @Nullable MutableDataFlowInfoForArguments dataFlowInfoForArguments
     ) {
         return callResolvePerfCounter.<OverloadResolutionResults<FunctionDescriptor>>time(() -> {
             BasicCallResolutionContext basicCallResolutionContext =
                     BasicCallResolutionContext.create(context, call, CheckArgumentTypesMode.CHECK_VALUE_ARGUMENTS, dataFlowInfoForArguments);
 
-            Set<ResolutionCandidate<FunctionDescriptor>> candidates = Collections.singleton(candidate);
+            Set<OldResolutionCandidate<FunctionDescriptor>> candidates = Collections.singleton(candidate);
 
             ResolutionTask<FunctionDescriptor> resolutionTask = new ResolutionTask<>(
                     new NewResolutionOldInference.ResolutionKind.GivenCandidates(), null, candidates
@@ -572,11 +598,13 @@ public class CallResolver {
         NewResolutionOldInference.ResolutionKind resolutionKind = resolutionTask.resolutionKind;
         if (newInferenceEnabled && PSICallResolver.getDefaultResolutionKinds().contains(resolutionKind)) {
             assert resolutionTask.name != null;
+            BindingContextUtilsKt.recordScope(context.trace, context.scope, context.call.getCalleeExpression());
             return PSICallResolver.runResolutionAndInference(context, resolutionTask.name, resolutionKind, tracing);
         }
 
         if (newInferenceEnabled && resolutionKind instanceof NewResolutionOldInference.ResolutionKind.GivenCandidates) {
             assert resolutionTask.givenCandidates != null;
+            BindingContextUtilsKt.recordScope(context.trace, context.scope, context.call.getCalleeExpression());
             return PSICallResolver.runResolutionAndInferenceForGivenCandidates(context, resolutionTask.givenCandidates, tracing);
         }
 
@@ -589,12 +617,12 @@ public class CallResolver {
         OverloadResolutionResultsImpl<D> results = doResolveCall(newContext, resolutionTask, tracing);
 
         // this is necessary because we already run CallCompleter for such calls
-        if (CoroutineInferenceUtilKt.isResultWithCoroutineInference(results)) {
+        if (BuilderInferenceUtilKt.isResultWithBuilderInference(results)) {
             traceToResolveCall.commit();
             return results;
         }
 
-        DelegatingBindingTrace deltasTraceForTypeInference = ((OverloadResolutionResultsImpl) results).getTrace();
+        DelegatingBindingTrace deltasTraceForTypeInference = results.getTrace();
         if (deltasTraceForTypeInference != null) {
             deltasTraceForTypeInference.addOwnDataTo(traceToResolveCall);
         }
@@ -690,7 +718,7 @@ public class CallResolver {
         //   a.length
         // we should ignore data flow info from assert argument, since assertions can be disabled and
         // thus it will lead to NPE in runtime otherwise
-        if (languageVersionSettings.getFlag(AnalysisFlag.getIgnoreDataFlowInAssert()) && result.isSingleResult()) {
+        if (languageVersionSettings.getFlag(AnalysisFlags.getIgnoreDataFlowInAssert()) && result.isSingleResult()) {
             D descriptor = result.getResultingDescriptor();
             if (descriptor.getName().equals(Name.identifier("assert"))) {
                 DeclarationDescriptor declaration = descriptor.getContainingDeclaration();
@@ -710,7 +738,7 @@ public class CallResolver {
         final Name name;
 
         @Nullable
-        final Collection<ResolutionCandidate<D>> givenCandidates;
+        final Collection<OldResolutionCandidate<D>> givenCandidates;
 
         @NotNull
         final NewResolutionOldInference.ResolutionKind resolutionKind;
@@ -718,7 +746,7 @@ public class CallResolver {
         private ResolutionTask(
                 @NotNull NewResolutionOldInference.ResolutionKind kind,
                 @Nullable Name name,
-                @Nullable Collection<ResolutionCandidate<D>> candidates
+                @Nullable Collection<OldResolutionCandidate<D>> candidates
         ) {
             this.name = name;
             givenCandidates = candidates;

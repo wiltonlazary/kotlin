@@ -1,0 +1,173 @@
+KtFunctionSymbol:
+  annotationsList: []
+  callableIdIfNonLocal: kotlin/collections/listOf
+  contextReceivers: []
+  contractEffects: []
+  hasStableParameterNames: true
+  isActual: false
+  isBuiltinFunctionInvoke: false
+  isExpect: false
+  isExtension: false
+  isExternal: false
+  isInfix: false
+  isInline: false
+  isOperator: false
+  isOverride: false
+  isStatic: false
+  isSuspend: false
+  isTailRec: false
+  modality: FINAL
+  name: listOf
+  origin: LIBRARY
+  receiverParameter: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: [
+      KtTypeParameterType:
+        annotationsList: []
+        type: T
+    ]
+    type: kotlin/collections/List<T>
+  symbolKind: TOP_LEVEL
+  typeParameters: [
+    KtTypeParameterSymbol(T)
+  ]
+  valueParameters: [
+    KtValueParameterSymbol:
+      annotationsList: []
+      callableIdIfNonLocal: null
+      contextReceivers: []
+      generatedPrimaryConstructorProperty: null
+      hasDefaultValue: false
+      isCrossinline: false
+      isExtension: false
+      isImplicitLambdaParameter: false
+      isNoinline: false
+      isVararg: false
+      name: element
+      origin: LIBRARY
+      receiverParameter: null
+      returnType: KtTypeParameterType:
+        annotationsList: []
+        type: T
+      symbolKind: LOCAL
+      typeParameters: []
+      getContainingFileSymbol: null
+      getContainingJvmClassName: kotlin.collections.CollectionsKt
+      getContainingModule: KtLibraryModule "Library kotlin-stdlib"
+      deprecationStatus: null
+  ]
+  visibility: Public
+  getContainingFileSymbol: null
+  getContainingJvmClassName: kotlin.collections.CollectionsKt
+  getContainingModule: KtLibraryModule "Library kotlin-stdlib"
+  deprecationStatus: null
+
+KtFunctionSymbol:
+  annotationsList: [
+    kotlin/internal/InlineOnly()
+      psi: null
+  ]
+  callableIdIfNonLocal: kotlin/collections/listOf
+  contextReceivers: []
+  contractEffects: []
+  hasStableParameterNames: true
+  isActual: false
+  isBuiltinFunctionInvoke: false
+  isExpect: false
+  isExtension: false
+  isExternal: false
+  isInfix: false
+  isInline: true
+  isOperator: false
+  isOverride: false
+  isStatic: false
+  isSuspend: false
+  isTailRec: false
+  modality: FINAL
+  name: listOf
+  origin: LIBRARY
+  receiverParameter: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: [
+      KtTypeParameterType:
+        annotationsList: []
+        type: T
+    ]
+    type: kotlin/collections/List<T>
+  symbolKind: TOP_LEVEL
+  typeParameters: [
+    KtTypeParameterSymbol(T)
+  ]
+  valueParameters: []
+  visibility: Public
+  getContainingFileSymbol: null
+  getContainingJvmClassName: kotlin.collections.CollectionsKt
+  getContainingModule: KtLibraryModule "Library kotlin-stdlib"
+  deprecationStatus: null
+
+KtFunctionSymbol:
+  annotationsList: []
+  callableIdIfNonLocal: kotlin/collections/listOf
+  contextReceivers: []
+  contractEffects: []
+  hasStableParameterNames: true
+  isActual: false
+  isBuiltinFunctionInvoke: false
+  isExpect: false
+  isExtension: false
+  isExternal: false
+  isInfix: false
+  isInline: false
+  isOperator: false
+  isOverride: false
+  isStatic: false
+  isSuspend: false
+  isTailRec: false
+  modality: FINAL
+  name: listOf
+  origin: LIBRARY
+  receiverParameter: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: [
+      KtTypeParameterType:
+        annotationsList: []
+        type: T
+    ]
+    type: kotlin/collections/List<T>
+  symbolKind: TOP_LEVEL
+  typeParameters: [
+    KtTypeParameterSymbol(T)
+  ]
+  valueParameters: [
+    KtValueParameterSymbol:
+      annotationsList: []
+      callableIdIfNonLocal: null
+      contextReceivers: []
+      generatedPrimaryConstructorProperty: null
+      hasDefaultValue: false
+      isCrossinline: false
+      isExtension: false
+      isImplicitLambdaParameter: false
+      isNoinline: false
+      isVararg: true
+      name: elements
+      origin: LIBRARY
+      receiverParameter: null
+      returnType: KtTypeParameterType:
+        annotationsList: []
+        type: T
+      symbolKind: LOCAL
+      typeParameters: []
+      getContainingFileSymbol: null
+      getContainingJvmClassName: kotlin.collections.CollectionsKt
+      getContainingModule: KtLibraryModule "Library kotlin-stdlib"
+      deprecationStatus: null
+  ]
+  visibility: Public
+  getContainingFileSymbol: null
+  getContainingJvmClassName: kotlin.collections.CollectionsKt
+  getContainingModule: KtLibraryModule "Library kotlin-stdlib"
+  deprecationStatus: null

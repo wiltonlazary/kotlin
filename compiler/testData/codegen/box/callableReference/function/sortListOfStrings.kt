@@ -1,4 +1,5 @@
-// WITH_RUNTIME
+// WITH_STDLIB
+// SKIP_DCE_DRIVEN
 
 fun sort(list: MutableList<String>, comparator: (String, String) -> Int) {
     list.sortWith(Comparator(comparator))

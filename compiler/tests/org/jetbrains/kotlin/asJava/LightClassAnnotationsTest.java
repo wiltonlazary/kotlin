@@ -25,13 +25,14 @@ import org.jetbrains.kotlin.asJava.classes.KtLightClass;
 import org.jetbrains.kotlin.cli.jvm.config.JvmContentRootsKt;
 import org.jetbrains.kotlin.config.CompilerConfiguration;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.util.KtTestUtil;
 
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
 
 public class LightClassAnnotationsTest extends KotlinAsJavaTestBase {
-    private final File testDir = new File("compiler/testData/asJava/annotations");
+    private final File testDir = new File("compiler/testData/asJava/lightClasses/annotations");
 
     @Override
     protected List<File> getKotlinSourceRoots() {
@@ -40,7 +41,7 @@ public class LightClassAnnotationsTest extends KotlinAsJavaTestBase {
 
     @Override
     protected void extraConfiguration(@NotNull CompilerConfiguration configuration) {
-        JvmContentRootsKt.addJvmClasspathRoot(configuration, KotlinTestUtils.getAnnotationsJar());
+        JvmContentRootsKt.addJvmClasspathRoot(configuration, KtTestUtil.getAnnotationsJar());
     }
 
     public void testExtraAnnotations() throws Exception {

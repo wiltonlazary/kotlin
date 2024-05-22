@@ -1,66 +1,56 @@
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-
 description = "Kotlin compiler client embeddable"
 
 plugins {
-    maven
     kotlin("jvm")
 }
 
-val jarContents by configurations.creating
-val testRuntimeCompilerJar by configurations.creating
-val testStdlibJar by configurations.creating
-val testScriptRuntimeJar by configurations.creating
-val archives by configurations
+val testCompilerClasspath by configurations.creating {
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.JAVA_RUNTIME))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+    }
+}
+
+val testCompilationClasspath by configurations.creating
 
 dependencies {
-    jarContents(project(":compiler:cli-common")) { isTransitive = false }
-    jarContents(project(":compiler:daemon-common")) { isTransitive = false }
-    jarContents(projectRuntimeJar(":kotlin-daemon-client"))
-    testCompile(project(":compiler:cli-common"))
-    testCompile(project(":compiler:daemon-common"))
-    testCompile(projectRuntimeJar(":kotlin-daemon-client"))
-    testCompile(commonDep("junit:junit"))
-    testCompile(projectDist(":kotlin-test:kotlin-test-jvm"))
-    testCompile(projectDist(":kotlin-test:kotlin-test-junit"))
-    testRuntimeCompilerJar(projectDist(":kotlin-compiler"))
-    testStdlibJar(projectDist(":kotlin-stdlib"))
-    testScriptRuntimeJar(projectDist(":kotlin-script-runtime"))
+    embedded(project(":compiler:cli-common")) { isTransitive = false }
+    embedded(project(":daemon-common")) { isTransitive = false }
+    embedded(project(":kotlin-daemon-client")) { isTransitive = false }
+    
+    testApi(project(":compiler:cli-common"))
+    testApi(project(":daemon-common"))
+    testApi(project(":kotlin-daemon-client"))
+    testImplementation(libs.junit4)
+    testApi(kotlinTest("junit"))
+    testCompilerClasspath(project(":kotlin-compiler"))
+    testCompilerClasspath(commonDependency("org.jetbrains.intellij.deps", "trove4j"))
+    testCompilerClasspath(project(":kotlin-scripting-compiler"))
+    testCompilerClasspath(project(":kotlin-daemon"))
+    testCompilationClasspath(kotlinStdlib())
+    testCompilationClasspath(project(":kotlin-script-runtime"))
 }
 
 sourceSets {
     "main" {}
-    "test" {
-        // TODO: move closer
-        java.srcDir("../../libraries/tools/kotlin-compiler-client-embeddable-test/src")
-    }
+    "test" { projectDefault() }
 }
 
 projectTest {
-    dependsOn(":kotlin-compiler:dist",
-              ":kotlin-stdlib:dist",
-              ":kotlin-script-runtime:dist")
-    workingDir = File(rootDir, "libraries/tools/kotlin-compiler-client-embeddable-test/src")
+    dependsOn(":kotlin-compiler:jar")
+    systemProperty("kotlin.test.script.classpath", testSourceSet.output.classesDirs.joinToString(File.pathSeparator))
+    val testCompilerClasspathProvider = project.provider { testCompilerClasspath.asPath }
+    val testCompilationClasspathProvider = project.provider { testCompilationClasspath.asPath }
     doFirst {
-        systemProperty("kotlin.test.script.classpath", the<JavaPluginConvention>().sourceSets.getByName("test").output.classesDirs.joinToString(File.pathSeparator))
-        systemProperty("compilerJar", testRuntimeCompilerJar.singleFile.canonicalPath)
-        systemProperty("stdlibJar", testStdlibJar.singleFile.canonicalPath)
-        systemProperty("scriptRuntimeJar", testScriptRuntimeJar.singleFile.canonicalPath)
+        systemProperty("compilerClasspath", testCompilerClasspathProvider.get())
+        systemProperty("compilationClasspath", testCompilationClasspathProvider.get())
     }
 }
-
-archives.artifacts.let { artifacts ->
-    artifacts.forEach {
-        if (it.type == "jar") {
-            artifacts.remove(it)
-        }
-    }
-}
-
-runtimeJar(task<ShadowJar>("shadowJar")) {
-    from(jarContents)
-}
-sourcesJar()
-javadocJar()
 
 publish()
+
+runtimeJar()
+
+sourcesJar()
+
+javadocJar()

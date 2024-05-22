@@ -5,11 +5,9 @@ plugins {
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 dependencies {
-    compile(projectDist(":kotlin-stdlib"))
-    compileOnly(commonDep("com.google.android", "android"))
+    api(kotlinStdlib())
+    compileOnly(commonDependency("com.google.android", "android"))
 }
 
 sourceSets {
@@ -17,10 +15,8 @@ sourceSets {
     "test" {}
 }
 
+publish()
+
 runtimeJar()
 sourcesJar()
 javadocJar()
-
-dist(targetName = "android-extensions-runtime.jar")
-
-publish()

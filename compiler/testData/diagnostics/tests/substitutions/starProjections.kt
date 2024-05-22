@@ -1,5 +1,5 @@
-// !WITH_NEW_INFERENCE
-// !CHECK_TYPE
+// ISSUE: KT-63072
+// CHECK_TYPE
 
 interface A<R, T: A<R, T>> {
     fun r(): R
@@ -17,9 +17,8 @@ interface B<R, T: B<List<R>, <!UPPER_BOUND_VIOLATED!>T<!>>> {
 }
 
 fun testB(b: B<*, *>) {
-    <!OI;TYPE_MISMATCH!>b<!>.r().checkType { _<Any?>() }
-    <!OI;TYPE_MISMATCH!>b<!>.t().checkType { <!NI;DEBUG_INFO_UNRESOLVED_WITH_TARGET, NI;UNRESOLVED_REFERENCE_WRONG_RECEIVER!>_<!><B<List<*>, *>>() }
+    b.<!UNRESOLVED_REFERENCE_WRONG_RECEIVER!>r<!>().<!DEBUG_INFO_MISSING_UNRESOLVED!>checkType<!> { <!UNRESOLVED_REFERENCE!>_<!><Any?>() }
+    b.<!UNRESOLVED_REFERENCE_WRONG_RECEIVER!>t<!>().<!DEBUG_INFO_MISSING_UNRESOLVED!>checkType<!> { <!UNRESOLVED_REFERENCE!>_<!><B<List<*>, *>>() }
 
-    <!OI;TYPE_MISMATCH!><!OI;TYPE_MISMATCH!>b<!>.t()<!>.r().size
+    b.<!UNRESOLVED_REFERENCE_WRONG_RECEIVER!>t<!>().<!DEBUG_INFO_MISSING_UNRESOLVED!>r<!>().<!DEBUG_INFO_MISSING_UNRESOLVED!>size<!>
 }
-

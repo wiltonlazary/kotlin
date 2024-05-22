@@ -1,39 +1,63 @@
+import TaskUtils.useAndroidEmulator
 
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 dependencies {
-    compile(project(":compiler:util"))
-    compile(project(":compiler:cli"))
-    compile(project(":compiler:frontend"))
-    compile(project(":compiler:backend"))
-    compile(projectTests(":compiler:tests-common"))
-    compile(commonDep("junit:junit"))
-    compileOnly(intellijDep()) { includeJars("openapi") }
+    testApi(project(":core:descriptors"))
+    testApi(project(":core:descriptors.jvm"))
+    testApi(project(":compiler:util"))
+    testApi(project(":compiler:cli"))
+    testApi(project(":compiler:frontend"))
+    testApi(project(":compiler:backend"))
+    testApi(project(":compiler:incremental-compilation-impl"))
+    testApi(project(":compiler:frontend.java"))
 
-    testCompile(project(":compiler:incremental-compilation-impl"))
-    testCompile(project(":core:descriptors"))
-    testCompile(project(":core:descriptors.jvm"))
-    testCompile(project(":compiler:frontend.java"))
-    testCompile(projectTests(":jps-plugin"))
-    testCompile(commonDep("junit:junit"))
-    testCompile(intellijDep()) { includeJars("openapi", "idea", "idea_rt", "groovy-all", "jps-builders", rootProject = rootProject) }
-    testCompile(intellijDep("jps-standalone")) { includeJars("jps-model") }
-    testCompile(intellijDep("jps-build-test"))
+    testApi(kotlinStdlib())
+    testApi(projectTests(":compiler:tests-common"))
+    testImplementation(libs.junit4)
+    testApi(projectTests(":compiler:test-infrastructure"))
+    testApi(projectTests(":compiler:test-infrastructure-utils"))
+    testApi(projectTests(":compiler:tests-compiler-utils"))
+    testApi(projectTests(":compiler:tests-common-new"))
+
+    testApi(jpsModel())
+    testApi(jpsBuildTest())
+
+    testRuntimeOnly(intellijCore())
+    testRuntimeOnly(commonDependency("org.jetbrains.intellij.deps.jna:jna"))
+
+    testImplementation(libs.junit.platform.launcher)
 }
 
 sourceSets {
-    "main" { projectDefault() }
+    "main" { }
     "test" { projectDefault() }
 }
 
 projectTest {
+    dependsOn(":dist")
+    val jdkHome = project.getToolchainJdkHomeFor(JdkMajorVersion.JDK_1_8)
     doFirst {
         environment("kotlin.tests.android.timeout", "45")
+        environment("JAVA_HOME", jdkHome.get())
     }
+
+    if (project.hasProperty("teamcity") || project.hasProperty("kotlin.test.android.teamcity")) {
+        systemProperty("kotlin.test.android.teamcity", true)
+    }
+
+    project.findProperty("kotlin.test.android.path.filter")?.let {
+        systemProperty("kotlin.test.android.path.filter", it.toString())
+    }
+
     workingDir = rootDir
+    useAndroidEmulator(this)
+}
+
+val generateAndroidTests by generator("org.jetbrains.kotlin.android.tests.CodegenTestsOnAndroidGenerator") {
+    workingDir = rootDir
+    dependsOn(rootProject.tasks.named("dist"))
 }

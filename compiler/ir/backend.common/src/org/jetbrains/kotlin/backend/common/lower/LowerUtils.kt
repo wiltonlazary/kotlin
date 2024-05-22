@@ -1,26 +1,14 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.common.lower
 
 import org.jetbrains.kotlin.backend.common.BackendContext
-import org.jetbrains.kotlin.backend.common.atMostOne
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.ValueParameterDescriptorImpl
-import org.jetbrains.kotlin.incremental.components.LookupLocation
+import org.jetbrains.kotlin.ir.IrBuiltIns
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
@@ -28,53 +16,62 @@ import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
-import org.jetbrains.kotlin.ir.symbols.IrFieldSymbol
+import org.jetbrains.kotlin.ir.linkage.partial.isPartialLinkageRuntimeError
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
+import org.jetbrains.kotlin.ir.symbols.IrValueParameterSymbol
+import org.jetbrains.kotlin.ir.types.IrSimpleType
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.classifierOrFail
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.NonReportingOverrideStrategy
-import org.jetbrains.kotlin.resolve.OverridingUtil
-import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassOrAny
-import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
-import org.jetbrains.kotlin.resolve.scopes.MemberScopeImpl
-import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.utils.Printer
-
-class IrLoweringContext(backendContext: BackendContext) : IrGeneratorContext(backendContext.irBuiltIns)
 
 class DeclarationIrBuilder(
-    backendContext: BackendContext,
+    generatorContext: IrGeneratorContext,
     symbol: IrSymbol,
     startOffset: Int = UNDEFINED_OFFSET, endOffset: Int = UNDEFINED_OFFSET
 ) : IrBuilderWithScope(
-    IrLoweringContext(backendContext),
+    generatorContext,
     Scope(symbol),
     startOffset,
     endOffset
 )
 
 abstract class AbstractVariableRemapper : IrElementTransformerVoid() {
-    protected abstract fun remapVariable(value: ValueDescriptor): IrValueParameter?
+    protected abstract fun remapVariable(value: IrValueDeclaration): IrValueDeclaration?
 
     override fun visitGetValue(expression: IrGetValue): IrExpression =
-        remapVariable(expression.descriptor)?.let {
-            IrGetValueImpl(expression.startOffset, expression.endOffset, it.symbol, expression.origin)
+        remapVariable(expression.symbol.owner)?.let {
+            IrGetValueImpl(expression.startOffset, expression.endOffset, it.type, it.symbol, expression.origin)
         } ?: expression
+
+    override fun visitSetValue(expression: IrSetValue): IrExpression {
+        expression.transformChildrenVoid()
+        return remapVariable(expression.symbol.owner)?.let {
+            IrSetValueImpl(expression.startOffset, expression.endOffset, expression.type, it.symbol, expression.value, expression.origin)
+        } ?: expression
+    }
 }
 
-class VariableRemapper(val mapping: Map<ValueDescriptor, IrValueParameter>) : AbstractVariableRemapper() {
-    override fun remapVariable(value: ValueDescriptor): IrValueParameter? =
+open class VariableRemapper(val mapping: Map<IrValueParameter, IrValueDeclaration>) : AbstractVariableRemapper() {
+    override fun remapVariable(value: IrValueDeclaration): IrValueDeclaration? =
         mapping[value]
 }
+
+fun IrBuiltIns.createIrBuilder(
+    symbol: IrSymbol,
+    startOffset: Int = UNDEFINED_OFFSET,
+    endOffset: Int = UNDEFINED_OFFSET
+) =
+    DeclarationIrBuilder(IrGeneratorContextBase(this), symbol, startOffset, endOffset)
 
 fun BackendContext.createIrBuilder(
     symbol: IrSymbol,
     startOffset: Int = UNDEFINED_OFFSET,
     endOffset: Int = UNDEFINED_OFFSET
 ) =
-    DeclarationIrBuilder(this, symbol, startOffset, endOffset)
+    irBuiltIns.createIrBuilder(symbol, startOffset, endOffset)
 
 
 fun <T : IrBuilder> T.at(element: IrElement) = this.at(element.startOffset, element.endOffset)
@@ -84,43 +81,41 @@ fun <T : IrBuilder> T.at(element: IrElement) = this.at(element.startOffset, elem
  */
 inline fun IrGeneratorWithScope.irBlock(
     expression: IrExpression, origin: IrStatementOrigin? = null,
-    resultType: KotlinType? = expression.type,
+    resultType: IrType? = expression.type,
     body: IrBlockBuilder.() -> Unit
 ) =
     this.irBlock(expression.startOffset, expression.endOffset, origin, resultType, body)
+
+inline fun IrGeneratorWithScope.irComposite(
+    expression: IrExpression, origin: IrStatementOrigin? = null,
+    resultType: IrType? = expression.type,
+    body: IrBlockBuilder.() -> Unit
+) =
+    this.irComposite(expression.startOffset, expression.endOffset, origin, resultType, body)
 
 inline fun IrGeneratorWithScope.irBlockBody(irElement: IrElement, body: IrBlockBodyBuilder.() -> Unit) =
     this.irBlockBody(irElement.startOffset, irElement.endOffset, body)
 
 fun IrBuilderWithScope.irIfThen(condition: IrExpression, thenPart: IrExpression) =
-    IrIfThenElseImpl(startOffset, endOffset, context.builtIns.unitType, condition, thenPart, null)
+    IrIfThenElseImpl(startOffset, endOffset, context.irBuiltIns.unitType).apply {
+        branches += IrBranchImpl(condition, thenPart)
+    }
 
 fun IrBuilderWithScope.irNot(arg: IrExpression) =
-    primitiveOp1(startOffset, endOffset, context.irBuiltIns.booleanNotSymbol, IrStatementOrigin.EXCL, arg)
+    primitiveOp1(startOffset, endOffset, context.irBuiltIns.booleanNotSymbol, context.irBuiltIns.booleanType, IrStatementOrigin.EXCL, arg)
 
 fun IrBuilderWithScope.irThrow(arg: IrExpression) =
-    IrThrowImpl(startOffset, endOffset, context.builtIns.nothingType, arg)
+    IrThrowImpl(startOffset, endOffset, context.irBuiltIns.nothingType, arg)
 
-fun IrBuilderWithScope.irCatch(catchParameter: IrVariable) =
-    IrCatchImpl(
-        startOffset, endOffset,
-        catchParameter
-    )
-
-fun IrBuilderWithScope.irCast(arg: IrExpression, type: KotlinType, typeOperand: KotlinType) =
-    IrTypeOperatorCallImpl(startOffset, endOffset, type, IrTypeOperator.CAST, typeOperand, arg)
+fun IrBuilderWithScope.irCatch(catchParameter: IrVariable, result: IrExpression): IrCatch =
+    IrCatchImpl(startOffset, endOffset, catchParameter, result)
 
 fun IrBuilderWithScope.irImplicitCoercionToUnit(arg: IrExpression) =
     IrTypeOperatorCallImpl(
-        startOffset, endOffset, context.builtIns.unitType,
-        IrTypeOperator.IMPLICIT_COERCION_TO_UNIT, context.builtIns.unitType, arg
+        startOffset, endOffset, context.irBuiltIns.unitType,
+        IrTypeOperator.IMPLICIT_COERCION_TO_UNIT, context.irBuiltIns.unitType,
+        arg
     )
-
-fun IrBuilderWithScope.irGetField(receiver: IrExpression, symbol: IrFieldSymbol) =
-    IrGetFieldImpl(startOffset, endOffset, symbol, receiver)
-
-fun IrBuilderWithScope.irSetField(receiver: IrExpression, symbol: IrFieldSymbol, value: IrExpression) =
-    IrSetFieldImpl(startOffset, endOffset, symbol, receiver, value)
 
 open class IrBuildingTransformer(private val context: BackendContext) : IrElementTransformerVoid() {
     private var currentBuilder: IrBuilderWithScope? = null
@@ -156,66 +151,40 @@ open class IrBuildingTransformer(private val context: BackendContext) : IrElemen
             return super.visitAnonymousInitializer(declaration)
         }
     }
-}
 
-fun computeOverrides(current: ClassDescriptor, functionsFromCurrent: List<CallableMemberDescriptor>): List<DeclarationDescriptor> {
-
-    val result = mutableListOf<DeclarationDescriptor>()
-
-    val allSuperDescriptors = current.typeConstructor.supertypes
-        .flatMap { it.memberScope.getContributedDescriptors() }
-        .filterIsInstance<CallableMemberDescriptor>()
-
-    for ((name, group) in allSuperDescriptors.groupBy { it.name }) {
-        OverridingUtil.generateOverridesInFunctionGroup(
-            name,
-            /* membersFromSupertypes = */ group,
-            /* membersFromCurrent = */ functionsFromCurrent.filter { it.name == name },
-            current,
-            object : NonReportingOverrideStrategy() {
-                override fun addFakeOverride(fakeOverride: CallableMemberDescriptor) {
-                    result.add(fakeOverride)
-                }
-
-                override fun conflict(fromSuper: CallableMemberDescriptor, fromCurrent: CallableMemberDescriptor) {
-                    error("Conflict in scope of $current: $fromSuper vs $fromCurrent")
-                }
-            }
-        )
+    override fun visitEnumEntry(declaration: IrEnumEntry): IrStatement {
+        withBuilder(declaration.symbol) {
+            return super.visitEnumEntry(declaration)
+        }
     }
 
-    return result
+    override fun visitScript(declaration: IrScript): IrStatement {
+        withBuilder(declaration.symbol) {
+            return super.visitScript(declaration)
+        }
+    }
 }
 
-class SimpleMemberScope(val members: List<DeclarationDescriptor>) : MemberScopeImpl() {
+enum class ConstructorDelegationKind {
+    /** Calls another constructor of the same class. */
+    CALLS_THIS,
 
-    override fun getContributedClassifier(name: Name, location: LookupLocation): ClassifierDescriptor? =
-        members.filterIsInstance<ClassifierDescriptor>()
-            .atMostOne { it.name == name }
+    /** Calls the constructor of the super class. */
+    CALLS_SUPER,
 
-    override fun getContributedVariables(name: Name, location: LookupLocation): Collection<PropertyDescriptor> =
-        members.filterIsInstance<PropertyDescriptor>()
-            .filter { it.name == name }
-
-    override fun getContributedFunctions(name: Name, location: LookupLocation): Collection<SimpleFunctionDescriptor> =
-        members.filterIsInstance<SimpleFunctionDescriptor>()
-            .filter { it.name == name }
-
-    override fun getContributedDescriptors(
-        kindFilter: DescriptorKindFilter,
-        nameFilter: (Name) -> Boolean
-    ): Collection<DeclarationDescriptor> =
-        members.filter { kindFilter.accepts(it) && nameFilter(it.name) }
-
-    override fun printScopeStructure(p: Printer) = TODO("not implemented")
-
+    /** The actual delegation is not known. The constructor call was replaced by a partial linkage error. */
+    PARTIAL_LINKAGE_ERROR
 }
 
-fun IrConstructor.callsSuper(): Boolean {
-    val constructedClass = descriptor.constructedClass
-    val superClass = constructedClass.getSuperClassOrAny()
+fun IrConstructor.delegationKind(irBuiltIns: IrBuiltIns): ConstructorDelegationKind {
+    val constructedClass = parent as IrClass
+    val superClass = constructedClass.superTypes
+        .mapNotNull { it as? IrSimpleType }
+        .firstOrNull { (it.classifier.owner as IrClass).run { kind == ClassKind.CLASS || kind == ClassKind.ANNOTATION_CLASS || kind == ClassKind.ENUM_CLASS } }
+        ?: irBuiltIns.anyType
     var callsSuper = false
-    var numberOfCalls = 0
+    var numberOfDelegatingCalls = 0
+    var hasPartialLinkageError = false
     acceptChildrenVoid(object : IrElementVisitorVoid {
         override fun visitElement(element: IrElement) {
             element.acceptChildrenVoid(this)
@@ -226,21 +195,44 @@ fun IrConstructor.callsSuper(): Boolean {
         }
 
         override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall) {
-            assert(++numberOfCalls == 1, { "More than one delegating constructor call: $descriptor" })
-            if (expression.descriptor.constructedClass == superClass)
+            numberOfDelegatingCalls++
+            val delegatingClass = expression.symbol.owner.parent as IrClass
+            // TODO: figure out why Lazy IR multiplies Declarations for descriptors and fix it
+            // It happens because of IrBuiltIns whose IrDeclarations are different for runtime and test
+            if (delegatingClass.symbol == superClass.classifierOrFail)
                 callsSuper = true
-            else if (expression.descriptor.constructedClass != constructedClass)
+            else if (delegatingClass.symbol != constructedClass.symbol)
                 throw AssertionError(
                     "Expected either call to another constructor of the class being constructed or" +
-                            " call to super class constructor. But was: ${expression.descriptor.constructedClass}"
+                            " call to super class constructor. But was: $delegatingClass with '${delegatingClass.name}' name"
                 )
         }
+
+        override fun visitExpression(expression: IrExpression) {
+            hasPartialLinkageError = hasPartialLinkageError || expression.isPartialLinkageRuntimeError()
+            super.visitExpression(expression)
+        }
     })
-    assert(numberOfCalls == 1, { "Expected exactly one delegating constructor call but none encountered: $descriptor" })
-    return callsSuper
+
+    val delegationKind: ConstructorDelegationKind? = when (numberOfDelegatingCalls) {
+        0 -> if (hasPartialLinkageError) ConstructorDelegationKind.PARTIAL_LINKAGE_ERROR else null
+        1 -> if (callsSuper) ConstructorDelegationKind.CALLS_SUPER else ConstructorDelegationKind.CALLS_THIS
+        else -> null
+    }
+
+    if (delegationKind != null)
+        return delegationKind
+    else
+        throw AssertionError("Expected exactly one delegating constructor call but $numberOfDelegatingCalls encountered: ${symbol.owner}")
 }
 
-fun ParameterDescriptor.copyAsValueParameter(newOwner: CallableDescriptor, index: Int) = when (this) {
+@Deprecated(
+    "Replaced by delegationKind() that is aware of the possible partial linkage side effects",
+    ReplaceWith("delegationKind(irBuiltIns)")
+)
+fun IrConstructor.callsSuper(irBuiltIns: IrBuiltIns): Boolean = delegationKind(irBuiltIns) == ConstructorDelegationKind.CALLS_SUPER
+
+fun ParameterDescriptor.copyAsValueParameter(newOwner: CallableDescriptor, index: Int, name: Name = this.name) = when (this) {
     is ValueParameterDescriptor -> this.copy(newOwner, name, index)
     is ReceiverParameterDescriptor -> ValueParameterDescriptorImpl(
         containingDeclaration = newOwner,

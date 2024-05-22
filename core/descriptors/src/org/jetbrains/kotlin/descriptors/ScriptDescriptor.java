@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.descriptors;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -31,5 +32,22 @@ public interface ScriptDescriptor extends ClassDescriptor {
     List<ClassDescriptor> getImplicitReceivers();
 
     @NotNull
-    List<PropertyDescriptor> getScriptEnvironmentProperties();
+    List<PropertyDescriptor> getScriptProvidedProperties();
+
+    @Nullable
+    PropertyDescriptor getResultValue();
+
+    @Nullable
+    ValueParameterDescriptor getEarlierScriptsConstructorParameter();
+
+    @NotNull
+    List<ValueParameterDescriptor> getExplicitConstructorParameters();
+
+    @NotNull
+    List<ValueParameterDescriptor> getImplicitReceiversParameters();
+
+    @NotNull
+    List<ValueParameterDescriptor> getScriptProvidedPropertiesParameters();
+
+    boolean isReplScript();
 }

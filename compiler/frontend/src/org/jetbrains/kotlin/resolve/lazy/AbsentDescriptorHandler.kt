@@ -1,16 +1,16 @@
 /*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2017 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.lazy
 
+import org.jetbrains.kotlin.container.PlatformSpecificExtension
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.psi.KtDeclaration
-import org.jetbrains.kotlin.psi.psiUtil.getElementTextWithContext
 import org.jetbrains.kotlin.utils.KotlinExceptionWithAttachments
 
-interface AbsentDescriptorHandler {
+interface AbsentDescriptorHandler : PlatformSpecificExtension<AbsentDescriptorHandler> {
     fun diagnoseDescriptorNotFound(declaration: KtDeclaration): DeclarationDescriptor
 }
 
@@ -24,6 +24,6 @@ class NoDescriptorForDeclarationException @JvmOverloads constructor(declaration:
                 + (additionalDetails?.let { "\n---------------------------------------------------\n$it" } ?: "")
     ) {
     init {
-        withAttachment("declaration.kt", declaration.getElementTextWithContext())
+        withPsiAttachment("declaration.kt", declaration)
     }
 }

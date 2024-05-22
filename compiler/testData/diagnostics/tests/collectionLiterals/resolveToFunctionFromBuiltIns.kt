@@ -1,5 +1,5 @@
-// !LANGUAGE: +ArrayLiteralsInAnnotations
-// !DIAGNOSTICS: -UNUSED_VARIABLE, -UNSUPPORTED
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_VARIABLE, -UNSUPPORTED
 
 annotation class Anno(val a: Array<String> = [""], val b: IntArray = [])
 

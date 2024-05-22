@@ -17,10 +17,17 @@
 package org.jetbrains.kotlin.resolve;
 
 import com.intellij.psi.util.PsiTreeUtil;
+import kotlin.Pair;
+import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.config.LanguageFeature;
+import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.descriptors.*;
-import org.jetbrains.kotlin.descriptors.annotations.*;
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor;
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationWithTarget;
+import org.jetbrains.kotlin.descriptors.annotations.Annotations;
+import org.jetbrains.kotlin.descriptors.annotations.TargetedAnnotations;
 import org.jetbrains.kotlin.diagnostics.Errors;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.resolve.calls.CallResolver;
@@ -35,7 +42,8 @@ import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyAnnotationDescriptor;
 import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyAnnotationsContextImpl;
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope;
 import org.jetbrains.kotlin.storage.StorageManager;
-import org.jetbrains.kotlin.types.ErrorUtils;
+import org.jetbrains.kotlin.types.error.ErrorTypeKind;
+import org.jetbrains.kotlin.types.error.ErrorUtils;
 import org.jetbrains.kotlin.types.KotlinType;
 
 import javax.inject.Inject;
@@ -79,12 +87,16 @@ public class AnnotationResolverImpl extends AnnotationResolver {
             boolean shouldResolveArguments
     ) {
         if (annotationEntryElements.isEmpty()) return Annotations.Companion.getEMPTY();
-        List<AnnotationWithTarget> result = new ArrayList<>(0);
+
+        List<AnnotationDescriptor> standard = new ArrayList<>();
+        List<AnnotationWithTarget> targeted = new ArrayList<>();
 
         for (KtAnnotationEntry entryElement : annotationEntryElements) {
             AnnotationDescriptor descriptor = trace.get(BindingContext.ANNOTATION, entryElement);
             if (descriptor == null) {
-                descriptor = new LazyAnnotationDescriptor(new LazyAnnotationsContextImpl(this, storageManager, trace, scope), entryElement);
+                LazyAnnotationDescriptor lazyAnnotationDescriptor =
+                        new LazyAnnotationDescriptor(new LazyAnnotationsContextImpl(this, storageManager, trace, scope), entryElement);
+                descriptor = lazyAnnotationDescriptor;
             }
             if (shouldResolveArguments) {
                 ForceResolveUtil.forceResolveAllContents(descriptor);
@@ -92,13 +104,13 @@ public class AnnotationResolverImpl extends AnnotationResolver {
 
             KtAnnotationUseSiteTarget target = entryElement.getUseSiteTarget();
             if (target != null) {
-                result.add(new AnnotationWithTarget(descriptor, target.getAnnotationUseSiteTarget()));
+                targeted.add(new AnnotationWithTarget(descriptor, target.getAnnotationUseSiteTarget()));
             }
             else {
-                result.add(new AnnotationWithTarget(descriptor, null));
+                standard.add(descriptor);
             }
         }
-        return AnnotationsImpl.create(result);
+        return new TargetedAnnotations(CollectionsKt.toList(standard), CollectionsKt.toList(targeted));
     }
 
     @Override
@@ -110,12 +122,12 @@ public class AnnotationResolverImpl extends AnnotationResolver {
     ) {
         KtTypeReference typeReference = entryElement.getTypeReference();
         if (typeReference == null) {
-            return ErrorUtils.createErrorType("No type reference: " + entryElement.getText());
+            return ErrorUtils.createErrorType(ErrorTypeKind.UNRESOLVED_TYPE, entryElement.getText());
         }
 
         KotlinType type = typeResolver.resolveType(scope, typeReference, trace, true);
         if (!(type.getConstructor().getDeclarationDescriptor() instanceof ClassDescriptor)) {
-            return ErrorUtils.createErrorType("Not an annotation: " + type);
+            return ErrorUtils.createErrorType(ErrorTypeKind.NOT_ANNOTATION_TYPE_IN_ANNOTATION_CONTEXT, type.toString());
         }
         return type;
     }
@@ -157,16 +169,23 @@ public class AnnotationResolverImpl extends AnnotationResolver {
                 CallMaker.makeCall(null, null, annotationEntry),
                 NO_EXPECTED_TYPE,
                 DataFlowInfoFactory.EMPTY,
-                true
+                true,
+                null // specific calls in terms of inference, can't be inside annotation calls
         );
     }
 
-    public static void reportUnsupportedAnnotationForTypeParameter(@NotNull KtTypeParameter jetTypeParameter, @NotNull BindingTrace trace) {
-        KtModifierList modifierList = jetTypeParameter.getModifierList();
+    public static void reportUnsupportedAnnotationForTypeParameter(
+            @NotNull KtTypeParameter ktTypeParameter,
+            @NotNull BindingTrace trace,
+            @NotNull LanguageVersionSettings languageVersionSettings
+    ) {
+        KtModifierList modifierList = ktTypeParameter.getModifierList();
         if (modifierList == null) return;
 
         for (KtAnnotationEntry annotationEntry : modifierList.getAnnotationEntries()) {
-            trace.report(Errors.UNSUPPORTED.on(annotationEntry, "Annotations for type parameters are not supported yet"));
+            trace.report(Errors.UNSUPPORTED_FEATURE.on(
+                    annotationEntry, new Pair<>(LanguageFeature.ClassTypeParameterAnnotations, languageVersionSettings)
+            ));
         }
     }
 

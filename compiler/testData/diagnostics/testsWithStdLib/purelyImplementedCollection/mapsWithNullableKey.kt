@@ -1,4 +1,6 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// DIAGNOSTICS: -UNUSED_VARIABLE
+// FULL_JDK
+
 import java.util.*
 
 fun bar(): String? = null
@@ -13,8 +15,9 @@ fun hashMapTest() {
 
     x[null] = 1
     x[bar()] = 1
-    <!TYPE_INFERENCE_CONFLICTING_SUBSTITUTIONS!>x[""]<!> = nullableInt
+    x[""] = <!TYPE_MISMATCH!>nullableInt<!>
     x[""] = 1
+    x[""] = <!NULL_FOR_NONNULL_TYPE!>null<!>
 
     val b1: MutableMap<String?, Int?> = <!TYPE_MISMATCH!>x<!>
     val b2: MutableMap<String?, Int> = x
@@ -38,7 +41,7 @@ fun treeMapTest() {
 
     x[null] = 1
     x[bar()] = 1
-    <!TYPE_INFERENCE_CONFLICTING_SUBSTITUTIONS!>x[""]<!> = nullableInt
+    x[""] = <!TYPE_MISMATCH!>nullableInt<!>
     x[""] = 1
 
     val b1: MutableMap<String?, Int?> = <!TYPE_MISMATCH!>x<!>

@@ -1,7 +1,8 @@
-// !WITH_NEW_INFERENCE
-// !CHECK_TYPE
+// CHECK_TYPE
 
 package a
+
+import checkSubtype
 
 fun <T> emptyList(): List<T> = throw Exception()
 
@@ -11,5 +12,5 @@ fun test() {
     val q = foo(fun Int.() {}, emptyList()) //type inference no information for parameter error
     checkSubtype<Int>(q)
 
-    <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>foo<!>({}, <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>emptyList<!>())
+    <!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>foo<!>({}, <!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>emptyList<!>())
 }

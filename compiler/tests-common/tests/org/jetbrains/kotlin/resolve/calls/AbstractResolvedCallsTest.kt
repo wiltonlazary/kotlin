@@ -30,7 +30,7 @@ import org.jetbrains.kotlin.psi.ValueArgument
 import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.calls.callUtil.getParentResolvedCall
+import org.jetbrains.kotlin.resolve.calls.util.getParentResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ArgumentMapping
 import org.jetbrains.kotlin.resolve.calls.model.ArgumentMatch
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
@@ -43,13 +43,14 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.Receiver
 import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.KotlinTestWithEnvironment
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import java.io.File
 
 abstract class AbstractResolvedCallsTest : KotlinTestWithEnvironment() {
     override fun createEnvironment(): KotlinCoreEnvironment = createEnvironmentWithMockJdk(ConfigurationKind.ALL)
 
     fun doTest(filePath: String) {
-        val originalText = KotlinTestUtils.doLoadFile(File(filePath))!!
+        val originalText = KtTestUtil.doLoadFile(File(filePath))!!
         val (text, carets) = extractCarets(originalText)
 
         setupLanguageVersionSettingsForCompilerTests(originalText, environment)
@@ -96,9 +97,9 @@ abstract class AbstractResolvedCallsTest : KotlinTestWithEnvironment() {
     }
 
     protected open fun buildCachedCallAtIndex(
-            bindingContext: BindingContext, jetFile: KtFile, index: Int
+        bindingContext: BindingContext, ktFile: KtFile, index: Int
     ): Pair<PsiElement?, ResolvedCall<out CallableDescriptor>?> {
-        val element = jetFile.findElementAt(index)!!
+        val element = ktFile.findElementAt(index)!!
         val expression = element.getStrictParentOfType<KtExpression>()
 
         val cachedCall = expression?.getParentResolvedCall(bindingContext, strict = false)
@@ -131,30 +132,30 @@ internal fun DeclarationDescriptor.getText(): String = when (this) {
 
 internal fun ResolvedCall<*>.renderToText(): String {
     return buildString {
-        appendln("Resolved call:")
-        appendln()
+        appendLine("Resolved call:")
+        appendLine()
 
         if (candidateDescriptor != resultingDescriptor) {
-            appendln("Candidate descriptor: ${candidateDescriptor!!.getText()}")
+            appendLine("Candidate descriptor: ${candidateDescriptor!!.getText()}")
         }
-        appendln("Resulting descriptor: ${resultingDescriptor!!.getText()}")
-        appendln()
+        appendLine("Resulting descriptor: ${resultingDescriptor!!.getText()}")
+        appendLine()
 
-        appendln("Explicit receiver kind = ${explicitReceiverKind}")
-        appendln("Dispatch receiver = ${dispatchReceiver.getText()}")
-        appendln("Extension receiver = ${extensionReceiver.getText()}")
+        appendLine("Explicit receiver kind = ${explicitReceiverKind}")
+        appendLine("Dispatch receiver = ${dispatchReceiver.getText()}")
+        appendLine("Extension receiver = ${extensionReceiver.getText()}")
 
         val valueArguments = call.valueArguments
         if (!valueArguments.isEmpty()) {
-            appendln()
-            appendln("Value arguments mapping:")
-            appendln()
+            appendLine()
+            appendLine("Value arguments mapping:")
+            appendLine()
 
             for (valueArgument in valueArguments) {
                 val argumentText = valueArgument!!.getText()
                 val argumentMappingText = getArgumentMapping(valueArgument).getText()
 
-                appendln("$argumentMappingText $argumentText")
+                appendLine("$argumentMappingText $argumentText")
             }
         }
     }

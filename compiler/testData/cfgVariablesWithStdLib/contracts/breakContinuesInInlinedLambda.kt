@@ -1,6 +1,7 @@
-// !LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect
+// LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect
+// OPT_IN: kotlin.internal.ContractsDsl
 
-import kotlin.internal.contracts.*
+import kotlin.contracts.*
 
 inline fun <T> myRun(block: () -> T): T {
     contract {

@@ -1,19 +1,19 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.psi
 
 import com.intellij.lang.ASTNode
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.KtNodeType
+import com.intellij.psi.tree.IElementType
 
 abstract class KtExpressionImpl(node: ASTNode) : KtElementImpl(node), KtExpression {
 
     override fun <R, D> accept(visitor: KtVisitor<R, D>, data: D) = visitor.visitExpression(this, data)
 
-    protected fun findExpressionUnder(type: KtNodeType): KtExpression? {
+    protected fun findExpressionUnder(type: IElementType): KtExpression? {
         val containerNode = findChildByType<KtContainerNode>(type) ?: return null
         return containerNode.findChildByClass<KtExpression>(KtExpression::class.java)
     }
@@ -34,16 +34,16 @@ abstract class KtExpressionImpl(node: ASTNode) : KtElementImpl(node), KtExpressi
             if (newElement is KtExpression) {
                 when (parent) {
                     is KtExpression, is KtValueArgument -> {
+                        @Suppress("USELESS_CAST") // K2 warning suppression, TODO: KT-62472
                         if (KtPsiUtil.areParenthesesNecessary(newElement, expression, parent as KtElement)) {
-                            return rawReplaceHandler(
-                                KtPsiFactory(expression).createExpressionByPattern("($0)", newElement, reformat = reformat)
-                            )
+                            val factory = KtPsiFactory(expression.project)
+                            return rawReplaceHandler(factory.createExpressionByPattern("($0)", newElement, reformat = reformat))
                         }
                     }
                     is KtSimpleNameStringTemplateEntry -> {
                         if (newElement !is KtSimpleNameExpression && !newElement.isThisWithoutLabel()) {
-                            val newEntry =
-                                parent.replace(KtPsiFactory(expression).createBlockStringTemplateEntry(newElement)) as KtBlockStringTemplateEntry
+                            val factory = KtPsiFactory(expression.project)
+                            val newEntry = parent.replace(factory.createBlockStringTemplateEntry(newElement)) as KtBlockStringTemplateEntry
                             return newEntry.expression!!
                         }
                     }

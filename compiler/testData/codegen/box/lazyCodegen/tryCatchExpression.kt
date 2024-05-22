@@ -1,3 +1,4 @@
+
 class A {
     val p : Int = try{
         1

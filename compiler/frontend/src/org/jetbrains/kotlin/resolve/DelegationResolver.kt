@@ -26,10 +26,14 @@ import org.jetbrains.kotlin.psi.KtDelegatedSuperTypeEntry
 import org.jetbrains.kotlin.psi.KtPureClassOrObject
 import org.jetbrains.kotlin.psi.KtTypeReference
 import org.jetbrains.kotlin.resolve.OverridingUtil.OverrideCompatibilityInfo.Result.OVERRIDABLE
+import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyExternal
+import org.jetbrains.kotlin.resolve.descriptorUtil.isTypeRefinementEnabled
+import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.lazy.DelegationFilter
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.isDynamic
 import org.jetbrains.kotlin.types.isError
+import org.jetbrains.kotlin.types.typeUtil.isNothing
 import org.jetbrains.kotlin.utils.keysToMapExceptNulls
 
 class DelegationResolver<T : CallableMemberDescriptor> private constructor(
@@ -74,7 +78,7 @@ class DelegationResolver<T : CallableMemberDescriptor> private constructor(
                 .setOwner(ownerDescriptor)
                 .setDispatchReceiverParameter(ownerDescriptor.thisAsReceiverParameter)
                 .setModality(newModality)
-                .setVisibility(Visibilities.INHERITED)
+                .setVisibility(DescriptorVisibilities.INHERITED)
                 .setKind(DELEGATION)
                 .setCopyOverrides(false)
                 .build() as T
@@ -147,7 +151,11 @@ class DelegationResolver<T : CallableMemberDescriptor> private constructor(
         //   descriptor = Foo
         //   toInterface = Bar
         //   delegateExpressionType = typeof(baz)
-        // return Map<member of Foo, corresponding member of typeOf(baz)>
+        //
+        // This method returns a map where keys are members of Foo, and values are members of typeof(baz).
+        //
+        // In case delegation is to an error type, which is useful for KAPT stub generation mode, typeof(baz) has no members, so we return
+        // a map from each element to it (so keys = values in the returned map).
         fun getDelegates(
             descriptor: ClassDescriptor,
             toInterface: ClassDescriptor,
@@ -161,18 +169,32 @@ class DelegationResolver<T : CallableMemberDescriptor> private constructor(
                 .asIterable()
                 .sortedWith(MemberComparator.INSTANCE)
 
+            // If delegate type is Nothing interface declarations could be missed so
+            // to make it work propagate nothing type into delegating interface type
+            val scopeType = delegateExpressionType?.takeUnless { it.isNothing() } ?: toInterface.defaultType
+            val scope = scopeType.memberScope
+
             return delegatedMembers
                 .keysToMapExceptNulls { delegatingMember ->
                     val actualDelegates = DescriptorUtils.getAllOverriddenDescriptors(delegatingMember)
                         .filter { it.containingDeclaration == toInterface }
                         .map { overriddenDescriptor ->
-                            val scope = (delegateExpressionType ?: toInterface.defaultType).memberScope
-                            val name = overriddenDescriptor.name
-
-                            // this is the actual member of delegateExpressionType that we are delegating to
-                            (scope.getContributedFunctions(name, NoLookupLocation.WHEN_CHECK_OVERRIDES) +
-                                    scope.getContributedVariables(name, NoLookupLocation.WHEN_CHECK_OVERRIDES))
-                                .firstOrNull { it == overriddenDescriptor || OverridingUtil.overrides(it, overriddenDescriptor) }
+                            if (scopeType.isError) {
+                                overriddenDescriptor
+                            } else {
+                                val name = overriddenDescriptor.name
+                                // This is the actual member of delegateExpressionType that we are delegating to.
+                                (scope.getContributedFunctions(name, NoLookupLocation.WHEN_CHECK_OVERRIDES) +
+                                        scope.getContributedVariables(name, NoLookupLocation.WHEN_CHECK_OVERRIDES))
+                                    .firstOrNull {
+                                        it == overriddenDescriptor || OverridingUtil.overrides(
+                                            it,
+                                            overriddenDescriptor,
+                                            it.module.isTypeRefinementEnabled(),
+                                            true
+                                        )
+                                    }
+                            }
                         }
 
                     actualDelegates.firstOrNull()

@@ -16,8 +16,11 @@
 
 package org.jetbrains.kotlin.resolve.calls.tower
 
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.calls.components.candidate.ResolutionCandidate
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
+import org.jetbrains.kotlin.resolve.calls.util.FakeCallableDescriptorForObject
 import org.jetbrains.kotlin.resolve.scopes.receivers.DetailedReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.QualifierReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValueWithSmartCastInfo
@@ -43,6 +46,52 @@ class PrioritizedCompositeScopeTowerProcessor<out C>(
 
 }
 
+class VariableAndObjectScopeTowerProcessor<out C : Candidate>(
+    private val variableProcessor: ScopeTowerProcessor<C>,
+    private val objectProcessor: ScopeTowerProcessor<C>
+) : ScopeTowerProcessor<C> {
+    override fun process(data: TowerData): List<Collection<C>> {
+        val variablesResult = variableProcessor.process(data)
+        val objectResult = objectProcessor.process(data)
+        if (objectResult.isEmpty()) return variablesResult
+        if (objectResult.none { level ->
+                level.any {
+                    it.isEnumEntryCandidate()
+                }
+            }
+        ) return variablesResult + objectResult
+        val result = mutableListOf<List<C>>()
+        result.addAll(variablesResult.map { it.toMutableList() })
+        for ((index, objectLevel) in objectResult.withIndex()) {
+            val enumEntryLevel = objectLevel.filter { it.isEnumEntryCandidate() }
+            if (enumEntryLevel.isEmpty()) continue
+            if (index < variablesResult.size) {
+                // It's guaranteed this element is a mutable list
+                (result[index] as MutableList).addAll(enumEntryLevel)
+            } else {
+                result.add(enumEntryLevel)
+            }
+        }
+        for (objectLevel in objectResult) {
+            val nonEnumEntryLevel = objectLevel.filter { !it.isEnumEntryCandidate() }
+            if (nonEnumEntryLevel.isEmpty()) continue
+            result.add(nonEnumEntryLevel)
+        }
+        return result
+    }
+
+    private fun Candidate.isEnumEntryCandidate(): Boolean {
+        if (this !is ResolutionCandidate) return false
+        val callableDescriptor = resolvedCall.candidateDescriptor as? FakeCallableDescriptorForObject ?: return false
+        return callableDescriptor.classDescriptor.kind == ClassKind.ENUM_ENTRY
+    }
+
+    override fun recordLookups(skippedData: Collection<TowerData>, name: Name) {
+        variableProcessor.recordLookups(skippedData, name)
+        objectProcessor.recordLookups(skippedData, name)
+    }
+}
+
 // use this if all processors has same priority
 class SamePriorityCompositeScopeTowerProcessor<out C>(
     private vararg val processors: SimpleScopeTowerProcessor<C>
@@ -54,9 +103,35 @@ class SamePriorityCompositeScopeTowerProcessor<out C>(
 
 }
 
+interface SimpleScopeTowerProcessor<out C> : ScopeTowerProcessor<C> {
+    fun simpleProcess(data: TowerData): Collection<C>
+
+    override fun process(data: TowerData): List<Collection<C>> = listOfNotNull(simpleProcess(data).takeIf { it.isNotEmpty() })
+}
+
 internal abstract class AbstractSimpleScopeTowerProcessor<C : Candidate>(
     val candidateFactory: CandidateFactory<C>
-) : SimpleScopeTowerProcessor<C>
+) : SimpleScopeTowerProcessor<C> {
+    fun createCandidates(
+        collector: Collection<CandidateWithBoundDispatchReceiver>,
+        kind: ExplicitReceiverKind,
+        receiver: ReceiverValueWithSmartCastInfo?
+    ) : Collection<C> {
+        val result = mutableListOf<C>()
+        for (candidate in collector) {
+            if (candidate.requiresExtensionReceiver == (receiver != null)) {
+                result.add(
+                    candidateFactory.createCandidate(
+                        candidate,
+                        kind,
+                        extensionReceiver = receiver
+                    )
+                )
+            }
+        }
+        return result
+    }
+}
 
 private typealias CandidatesCollector =
         ScopeTowerLevel.(extensionReceiver: ReceiverValueWithSmartCastInfo?) -> Collection<CandidateWithBoundDispatchReceiver>
@@ -69,42 +144,18 @@ internal class ExplicitReceiverScopeTowerProcessor<C : Candidate>(
 ) : AbstractSimpleScopeTowerProcessor<C>(context) {
     override fun simpleProcess(data: TowerData): Collection<C> {
         return when (data) {
-            TowerData.Empty -> resolveAsMember()
-            is TowerData.TowerLevel -> resolveAsExtension(data.level)
+            TowerData.Empty -> createCandidates(
+                MemberScopeTowerLevel(scopeTower, explicitReceiver).collectCandidates(null),
+                ExplicitReceiverKind.DISPATCH_RECEIVER,
+                null
+            )
+            is TowerData.TowerLevel -> createCandidates(
+                data.level.collectCandidates(explicitReceiver),
+                ExplicitReceiverKind.EXTENSION_RECEIVER,
+                explicitReceiver
+            )
             else -> emptyList()
         }
-    }
-
-    private fun resolveAsMember(): Collection<C> {
-        val members = mutableListOf<C>()
-        for (memberCandidate in MemberScopeTowerLevel(scopeTower, explicitReceiver).collectCandidates(null)) {
-            if (!memberCandidate.requiresExtensionReceiver) {
-                members.add(
-                    candidateFactory.createCandidate(
-                        memberCandidate,
-                        ExplicitReceiverKind.DISPATCH_RECEIVER,
-                        extensionReceiver = null
-                    )
-                )
-            }
-        }
-        return members
-    }
-
-    private fun resolveAsExtension(level: ScopeTowerLevel): Collection<C> {
-        val extensions = mutableListOf<C>()
-        for (extensionCandidate in level.collectCandidates(explicitReceiver)) {
-            if (extensionCandidate.requiresExtensionReceiver) {
-                extensions.add(
-                    candidateFactory.createCandidate(
-                        extensionCandidate,
-                        ExplicitReceiverKind.EXTENSION_RECEIVER,
-                        extensionReceiver = explicitReceiver
-                    )
-                )
-            }
-        }
-        return extensions
     }
 
     override fun recordLookups(skippedData: Collection<TowerData>, name: Name) {
@@ -125,19 +176,11 @@ private class QualifierScopeTowerProcessor<C : Candidate>(
     override fun simpleProcess(data: TowerData): Collection<C> {
         if (data != TowerData.Empty) return emptyList()
 
-        val staticMembers = mutableListOf<C>()
-        for (towerCandidate in QualifierScopeTowerLevel(scopeTower, qualifier).collectCandidates(null)) {
-            if (!towerCandidate.requiresExtensionReceiver) {
-                staticMembers.add(
-                    candidateFactory.createCandidate(
-                        towerCandidate,
-                        ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
-                        extensionReceiver = null
-                    )
-                )
-            }
-        }
-        return staticMembers
+        return createCandidates(
+            QualifierScopeTowerLevel(scopeTower, qualifier).collectCandidates(null),
+            ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
+            null
+        )
     }
 
     // QualifierScopeTowerProcessor works only with TowerData.Empty that should not be ignored
@@ -149,35 +192,35 @@ private class NoExplicitReceiverScopeTowerProcessor<C : Candidate>(
     val collectCandidates: CandidatesCollector
 ) : AbstractSimpleScopeTowerProcessor<C>(context) {
     override fun simpleProcess(data: TowerData): Collection<C> = when (data) {
-        is TowerData.TowerLevel -> {
-            val result = mutableListOf<C>()
-            for (towerCandidate in data.level.collectCandidates(null)) {
-                if (!towerCandidate.requiresExtensionReceiver) {
-                    result.add(
-                        candidateFactory.createCandidate(
-                            towerCandidate,
-                            ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
-                            extensionReceiver = null
-                        )
-                    )
-                }
+        is TowerData.TowerLevel -> createCandidates(
+            data.level.collectCandidates(null),
+            ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
+            null
+        )
+        is TowerData.BothTowerLevelAndImplicitReceiver -> createCandidates(
+            data.level.collectCandidates(data.implicitReceiver),
+            ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
+            data.implicitReceiver
+        )
+        is TowerData.BothTowerLevelAndContextReceiversGroup -> {
+            val groupsOfDuplicateCandidates = data.contextReceiversGroup.flatMap { receiver ->
+                data.level.collectCandidates(receiver).map { it to receiver }
+            }.filter { (candidate, _) ->
+                candidate.requiresExtensionReceiver
+            }.groupBy { it.first.descriptor }.values
+
+            val candidateToReceivers = groupsOfDuplicateCandidates.map { l ->
+                val candidate = l.first().first
+                val receivers = l.map { it.second }
+                candidate to receivers
             }
-            result
-        }
-        is TowerData.BothTowerLevelAndImplicitReceiver -> {
-            val result = mutableListOf<C>()
-            for (towerCandidate in data.level.collectCandidates(data.implicitReceiver)) {
-                if (towerCandidate.requiresExtensionReceiver) {
-                    result.add(
-                        candidateFactory.createCandidate(
-                            towerCandidate,
-                            ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
-                            extensionReceiver = data.implicitReceiver
-                        )
-                    )
-                }
+            candidateToReceivers.map {
+                candidateFactory.createCandidate(
+                    it.first,
+                    ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
+                    it.second
+                )
             }
-            result
         }
         else -> emptyList()
     }
@@ -187,7 +230,9 @@ private class NoExplicitReceiverScopeTowerProcessor<C : Candidate>(
             when (data) {
                 is TowerData.TowerLevel -> data.level.recordLookup(name)
                 is TowerData.BothTowerLevelAndImplicitReceiver -> data.level.recordLookup(name)
+                is TowerData.BothTowerLevelAndContextReceiversGroup -> data.level.recordLookup(name)
                 is TowerData.ForLookupForNoExplicitReceiver -> data.level.recordLookup(name)
+                else -> {}
             }
         }
     }
@@ -248,7 +293,7 @@ fun <C : Candidate> createVariableProcessor(
 fun <C : Candidate> createVariableAndObjectProcessor(
     scopeTower: ImplicitScopeTower, name: Name,
     context: CandidateFactory<C>, explicitReceiver: DetailedReceiver?, classValueReceiver: Boolean = true
-) = PrioritizedCompositeScopeTowerProcessor(
+) = VariableAndObjectScopeTowerProcessor(
     createVariableProcessor(scopeTower, name, context, explicitReceiver),
     createSimpleProcessor(scopeTower, context, explicitReceiver, classValueReceiver) { getObjects(name, it) }
 )
@@ -259,13 +304,13 @@ fun <C : Candidate> createSimpleFunctionProcessor(
 ) = createSimpleProcessor(scopeTower, context, explicitReceiver, classValueReceiver) { getFunctions(name, it) }
 
 
-fun <С : Candidate> createFunctionProcessor(
+fun <C : Candidate> createFunctionProcessor(
     scopeTower: ImplicitScopeTower,
     name: Name,
-    simpleContext: CandidateFactory<С>,
-    factoryProviderForInvoke: CandidateFactoryProviderForInvoke<С>,
+    simpleContext: CandidateFactory<C>,
+    factoryProviderForInvoke: CandidateFactoryProviderForInvoke<C>,
     explicitReceiver: DetailedReceiver?
-): PrioritizedCompositeScopeTowerProcessor<С> {
+): PrioritizedCompositeScopeTowerProcessor<C> {
 
     // a.foo() -- simple function call
     val simpleFunction = createSimpleFunctionProcessor(scopeTower, name, simpleContext, explicitReceiver)

@@ -1,7 +1,7 @@
-// FILE: 1.kt
-// LANGUAGE_VERSION: 1.2
 // SKIP_INLINE_CHECK_IN: inlineFun$default
-//WITH_RUNTIME
+// WITH_STDLIB
+// TARGET_BACKEND: JVM
+// FILE: 1.kt
 package test
 
 class OK
@@ -18,8 +18,6 @@ inline fun <reified T> inlineFun2(): String {
 // FILE: 2.kt
 
 import test.*
-
-
 
 fun box(): String {
     return inlineFun2<FAIL>()

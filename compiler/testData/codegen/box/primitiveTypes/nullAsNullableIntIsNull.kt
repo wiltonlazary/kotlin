@@ -1,3 +1,4 @@
+
 fun box(): String {
     try {
         if ((null as Int?)!! == 10) return "Fail #1"

@@ -7,10 +7,8 @@ public final class NonExistentClass {
 
 package test;
 
-import java.lang.System;
-
-@kotlin.Metadata()
 @java.lang.annotation.Retention(value = java.lang.annotation.RetentionPolicy.RUNTIME)
+@kotlin.Metadata()
 public abstract @interface MyAnnotation {
 }
 
@@ -18,18 +16,33 @@ public abstract @interface MyAnnotation {
 
 package test;
 
-import java.lang.System;
-
 @kotlin.Metadata()
 public final class Simple {
+    @org.jetbrains.annotations.NotNull()
     public static final test.Simple.Companion Companion = null;
+
+    public Simple() {
+        super();
+    }
 
     @MyAnnotation()
     public final void myMethod() {
     }
 
-    public Simple() {
-        super();
+    @kotlin.Metadata()
+    public static final class Companion {
+
+        private Companion() {
+            super();
+        }
+    }
+
+    @kotlin.Metadata()
+    public final class InnerClass {
+
+        public InnerClass() {
+            super();
+        }
     }
 
     @kotlin.Metadata()
@@ -45,22 +58,6 @@ public final class Simple {
             public NestedNestedClass() {
                 super();
             }
-        }
-    }
-
-    @kotlin.Metadata()
-    public final class InnerClass {
-
-        public InnerClass() {
-            super();
-        }
-    }
-
-    @kotlin.Metadata()
-    public static final class Companion {
-
-        private Companion() {
-            super();
         }
     }
 }

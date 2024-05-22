@@ -2,14 +2,25 @@ description = "Simple Annotation Processor for testing kapt"
 
 plugins {
     kotlin("jvm")
-    maven // only used for installing to mavenLocal()
+    `maven-publish` // only used for installing to mavenLocal()
 }
 
 dependencies {
-    compile(projectDist(":kotlin-stdlib"))
+    api(kotlinStdlib())
 }
 
 sourceSets {
     "test" {}
 }
 
+publishing {
+    publications {
+        create<MavenPublication>("main") {
+            from(components["java"])
+        }
+    }
+}
+
+tasks.register("install") {
+    dependsOn(tasks.named("publishToMavenLocal"))
+}

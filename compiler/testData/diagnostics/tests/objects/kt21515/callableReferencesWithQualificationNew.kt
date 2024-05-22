@@ -1,4 +1,5 @@
-// !LANGUAGE: +ProhibitVisibilityOfNestedClassifiersFromSupertypesOfCompanion
+// FIR_IDENTICAL
+// LANGUAGE: +ProhibitVisibilityOfNestedClassifiersFromSupertypesOfCompanion
 // See KT-21515 for a class diagram and details
 
 // class is to prevent accidental short-name import

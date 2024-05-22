@@ -1,53 +1,54 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.asJava
 
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.psi.PsiClass
-import com.intellij.psi.impl.compiled.ClsElementImpl
 import junit.framework.TestCase
 import org.jetbrains.kotlin.asJava.classes.KtLightClass
-import org.jetbrains.kotlin.test.KotlinTestUtils
 import java.io.File
 import java.util.regex.Pattern
 
 object LightClassTestCommon {
     private val SUBJECT_FQ_NAME_PATTERN = Pattern.compile("^//\\s*(.*)$", Pattern.MULTILINE)
-    private const val NOT_GENERATED_DIRECTIVE = "// NOT_GENERATED"
+    const val NOT_GENERATED_DIRECTIVE = "// NOT_GENERATED"
 
-    fun testLightClass(
-        expectedFile: File,
+    fun fqNameInTestDataFile(
         testDataFile: File,
-        findLightClass: (String) -> PsiClass?,
-        normalizeText: (String) -> String
-    ) {
+    ): String {
         val text = FileUtil.loadFile(testDataFile, true)
         val matcher = SUBJECT_FQ_NAME_PATTERN.matcher(text)
         TestCase.assertTrue("No FqName specified. First line of the form '// f.q.Name' expected", matcher.find())
-        val fqName = matcher.group(1)
+        return matcher.group(1)
+    }
+
+    fun getActualLightClassText(
+        testDataFile: File,
+        findLightClass: (String) -> PsiClass?,
+        normalizeText: (String) -> String,
+        membersFilter: PsiClassRenderer.MembersFilter = PsiClassRenderer.MembersFilter.DEFAULT
+    ): String {
+        val fqName = fqNameInTestDataFile(testDataFile)
 
         val lightClass = findLightClass(fqName)
 
-        val actual = actualText(fqName, lightClass, normalizeText)
-        KotlinTestUtils.assertEqualsToFile(expectedFile, actual)
+        return actualText(fqName, lightClass, normalizeText, membersFilter)
     }
 
-    private fun actualText(fqName: String?, lightClass: PsiClass?, normalizeText: (String) -> String): String {
+    private fun actualText(
+        fqName: String?,
+        lightClass: PsiClass?,
+        normalizeText: (String) -> String,
+        membersFilter: PsiClassRenderer.MembersFilter
+    ): String {
         if (lightClass == null) {
             return NOT_GENERATED_DIRECTIVE
         }
         TestCase.assertTrue("Not a light class: $lightClass ($fqName)", lightClass is KtLightClass)
-
-        val delegate = (lightClass as KtLightClass).clsDelegate
-        TestCase.assertTrue("Not a CLS element: $delegate", delegate is ClsElementImpl)
-
-        val buffer = StringBuilder()
-        (delegate as ClsElementImpl).appendMirrorText(0, buffer)
-
-        return normalizeText(buffer.toString())
+        return normalizeText(PsiClassRenderer.renderClass(lightClass, renderInner = true, membersFilter = membersFilter))
     }
 
     // Actual text for light class is generated with ClsElementImpl.appendMirrorText() that can find empty DefaultImpl inner class in stubs

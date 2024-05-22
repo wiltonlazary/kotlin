@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.jvm.internal;
@@ -10,9 +10,8 @@ import kotlin.SinceKotlin;
 import kotlin.UninitializedPropertyAccessException;
 
 import java.util.Arrays;
-import java.util.List;
 
-@SuppressWarnings("unused")
+@SuppressWarnings({"unused", "WeakerAccess"})
 public class Intrinsics {
     private Intrinsics() {
     }
@@ -23,13 +22,13 @@ public class Intrinsics {
 
     public static void checkNotNull(Object object) {
         if (object == null) {
-            throwNpe();
+            throwJavaNpe();
         }
     }
 
     public static void checkNotNull(Object object, String message) {
         if (object == null) {
-            throwNpe(message);
+            throwJavaNpe(message);
         }
     }
 
@@ -39,6 +38,16 @@ public class Intrinsics {
 
     public static void throwNpe(String message) {
         throw sanitizeStackTrace(new KotlinNullPointerException(message));
+    }
+
+    @SinceKotlin(version = "1.4")
+    public static void throwJavaNpe() {
+        throw sanitizeStackTrace(new NullPointerException());
+    }
+
+    @SinceKotlin(version = "1.4")
+    public static void throwJavaNpe(String message) {
+        throw sanitizeStackTrace(new NullPointerException(message));
     }
 
     public static void throwUninitializedProperty(String message) {
@@ -79,9 +88,9 @@ public class Intrinsics {
         }
     }
 
-    public static void checkNotNullExpressionValue(Object value, String message) {
+    public static void checkNotNullExpressionValue(Object value, String expression) {
         if (value == null) {
-            throw sanitizeStackTrace(new IllegalStateException(message));
+            throw sanitizeStackTrace(new NullPointerException(expression + " must not be null"));
         }
     }
 
@@ -113,32 +122,39 @@ public class Intrinsics {
 
     public static void checkParameterIsNotNull(Object value, String paramName) {
         if (value == null) {
-            throwParameterIsNullException(paramName);
+            throwParameterIsNullIAE(paramName);
         }
     }
 
-    public static void checkNotNullParameter(Object value, String message) {
+    public static void checkNotNullParameter(Object value, String paramName) {
         if (value == null) {
-            throw sanitizeStackTrace(new IllegalArgumentException(message));
+            throwParameterIsNullNPE(paramName);
         }
     }
 
-    private static void throwParameterIsNullException(String paramName) {
+    private static void throwParameterIsNullIAE(String paramName) {
+        throw sanitizeStackTrace(new IllegalArgumentException(createParameterIsNullExceptionMessage(paramName)));
+    }
+
+    private static void throwParameterIsNullNPE(String paramName) {
+        throw sanitizeStackTrace(new NullPointerException(createParameterIsNullExceptionMessage(paramName)));
+    }
+
+    private static String createParameterIsNullExceptionMessage(String paramName) {
         StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
 
-        // #0 Thread.getStackTrace()
-        // #1 Intrinsics.throwParameterIsNullException
-        // #2 Intrinsics.checkParameterIsNotNull
-        // #3 our caller
-        StackTraceElement caller = stackTraceElements[3];
+        String thisClassName = Intrinsics.class.getName();
+        int i = 0;
+        // Skip platform frames such as Thread.getStackTrace.
+        while (!stackTraceElements[i].getClassName().equals(thisClassName)) i++;
+        // Skip all frames of this class such as createParameterIsNullExceptionMessage, throwParameterIsNullNPE, checkNotNullParameter.
+        while (stackTraceElements[i].getClassName().equals(thisClassName)) i++;
+        // This frame is our caller.
+        StackTraceElement caller = stackTraceElements[i];
         String className = caller.getClassName();
         String methodName = caller.getMethodName();
 
-        IllegalArgumentException exception =
-                new IllegalArgumentException("Parameter specified as non-null is null: " +
-                                             "method " + className + "." + methodName +
-                                             ", parameter " + paramName);
-        throw sanitizeStackTrace(exception);
+        return "Parameter specified as non-null is null: method " + className + "." + methodName + ", parameter " + paramName;
     }
 
     public static int compare(long thisVal, long anotherVal) {
@@ -248,8 +264,15 @@ public class Intrinsics {
             }
         }
 
-        List<StackTraceElement> list = Arrays.asList(stackTrace).subList(lastIntrinsic + 1, size);
-        throwable.setStackTrace(list.toArray(new StackTraceElement[list.size()]));
+        StackTraceElement[] newStackTrace = Arrays.copyOfRange(stackTrace, lastIntrinsic + 1, size);
+        throwable.setStackTrace(newStackTrace);
         return throwable;
+    }
+
+    // Stub class which is used as an owner of callable references for built-ins declared in package "kotlin".
+    @SinceKotlin(version = "1.4")
+    public static class Kotlin {
+        private Kotlin() {
+        }
     }
 }

@@ -1,10 +1,13 @@
-// !LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect +ReadDeserializedContracts
+// NO_CHECK_LAMBDA_INLINING
+// OPT_IN: kotlin.contracts.ExperimentalContracts
+// JVM_ABI_K1_K2_DIFF: KT-62464
+
 // FILE: 1.kt
+
 package test
 
-import kotlin.internal.contracts.*
+import kotlin.contracts.*
 
-@Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
 public inline fun <R> myrun(block: () -> R): R {
     contract {
         callsInPlace(block, InvocationKind.EXACTLY_ONCE)
@@ -12,9 +15,8 @@ public inline fun <R> myrun(block: () -> R): R {
     return block()
 }
 
-
 // FILE: 2.kt
-// NO_CHECK_LAMBDA_INLINING
+
 import test.*
 
 fun box(): String {
@@ -23,7 +25,7 @@ fun box(): String {
         x = 42
         {
             x
-        }()
+        }.let { it() }
     }
     return if (res == 42 && x.inc() == 43) "OK" else "Fail: ${x.inc()}"
 }

@@ -39,6 +39,8 @@ open class FakeCallableDescriptorForObject(
 
     fun getReferencedObject(): ClassDescriptor = classDescriptor.getClassObjectReferenceTarget()
 
+    override fun getContextReceiverParameters(): List<ReceiverParameterDescriptor> = emptyList()
+
     override fun getExtensionReceiverParameter(): ReceiverParameterDescriptor? = null
 
     override fun getDispatchReceiverParameter(): ReceiverParameterDescriptor? = null
@@ -63,6 +65,8 @@ open class FakeCallableDescriptorForObject(
 
     override fun getCompileTimeInitializer() = null
 
+    override fun cleanCompileTimeInitializerCache() {}
+
     override fun getSource(): SourceElement = classDescriptor.source
 
     override fun isConst(): Boolean = false
@@ -76,4 +80,6 @@ open class FakeCallableDescriptorForObject(
     override fun getContainingDeclaration() = classDescriptor.getClassObjectReferenceTarget().containingDeclaration
 
     override fun substitute(substitutor: TypeSubstitutor) = this
+
+    override fun <V> getUserData(key: CallableDescriptor.UserDataKey<V>?): V? = null
 }

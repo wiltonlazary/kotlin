@@ -1,3 +1,4 @@
+
 fun box(): String =
         "O" +
         try {

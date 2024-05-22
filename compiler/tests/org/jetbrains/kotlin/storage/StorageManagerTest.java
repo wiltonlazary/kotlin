@@ -34,7 +34,7 @@ public class StorageManagerTest extends TestCase {
     @Override
     public void setUp() throws Exception {
         super.setUp();
-        m = new LockBasedStorageManager();
+        m = new LockBasedStorageManager("StorageManagerTest");
     }
 
     public static <T> void doTestComputesOnce(Function0<T> v, T expected, Counter counter) throws Exception {
@@ -163,7 +163,8 @@ public class StorageManagerTest extends TestCase {
             fail();
         }
         catch (AssertionError e) {
-            assertTrue(e.getMessage().startsWith("Recursion detected on input: !!!"));
+            String message = e.getMessage();
+            assertTrue("Expected message starting with \"Recursion detected\", got: " + message, message.startsWith("Recursion detected on input: !!!"));
         }
     }
 
@@ -213,7 +214,7 @@ public class StorageManagerTest extends TestCase {
             new C().rec.invoke();
             fail();
         }
-        catch (IllegalStateException e) {
+        catch (AssertionError e) {
             // OK
         }
     }
@@ -232,7 +233,7 @@ public class StorageManagerTest extends TestCase {
             new C().rec.invoke();
             fail();
         }
-        catch (IllegalStateException e) {
+        catch (AssertionError e) {
             // OK
         }
     }
@@ -284,7 +285,7 @@ public class StorageManagerTest extends TestCase {
             new C().rec.invoke();
             fail();
         }
-        catch (IllegalStateException e) {
+        catch (AssertionError e) {
             // OK
         }
     }
@@ -416,7 +417,7 @@ public class StorageManagerTest extends TestCase {
     public void testExceptionHandlingStrategyForLazyValues() throws Exception {
         class RethrownException extends RuntimeException {}
 
-        LockBasedStorageManager m = LockBasedStorageManager.createWithExceptionHandling(throwable -> {
+        LockBasedStorageManager m = LockBasedStorageManager.createWithExceptionHandling("StorageManagerTest", throwable -> {
             throw new RethrownException();
         });
         try {
@@ -432,7 +433,7 @@ public class StorageManagerTest extends TestCase {
     public void testExceptionHandlingStrategyForMemoizedFunctions() throws Exception {
         class RethrownException extends RuntimeException {}
 
-        LockBasedStorageManager m = LockBasedStorageManager.createWithExceptionHandling(throwable -> {
+        LockBasedStorageManager m = LockBasedStorageManager.createWithExceptionHandling("StorageManagerTest", throwable -> {
             throw new RethrownException();
         });
         try {

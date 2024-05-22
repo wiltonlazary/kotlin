@@ -14,22 +14,32 @@
  * limitations under the License.
  */
 
+@file:Suppress("DEPRECATION") // TODO: needs an intensive rework for new Char API
 package org.jetbrains.kotlin.js.parser.sourcemaps
 
+import java.io.File
 import java.io.IOException
-import java.io.Reader
 import java.io.StringReader
 
 object SourceMapParser {
     @Throws(IOException::class)
-    fun parse(reader: Reader): SourceMapParseResult {
+    fun parse(file: File): SourceMapParseResult {
+        return parse(file.readText(Charsets.UTF_8))
+    }
+
+    @Throws(IOException::class)
+    fun parse(content: String): SourceMapParseResult {
         val jsonObject = try {
-            parseJson(reader)
+            parseJson(content)
         }
         catch (e: JsonSyntaxException) {
             return SourceMapError(e.message ?: "parse error")
         }
+        return parse(jsonObject)
+    }
 
+    @Throws(IOException::class)
+    private fun parse(jsonObject: JsonNode): SourceMapParseResult {
         if (jsonObject !is JsonObject) return SourceMapError("Top-level object expected")
 
         val version = jsonObject.properties["version"] ?: return SourceMapError("Version not defined")
@@ -76,6 +86,17 @@ object SourceMapParser {
             }
         }
 
+        val names = jsonObject.properties["names"].let {
+            if (it != null) {
+                val namesProperty = it as? JsonArray ?: return SourceMapError("'names' property is not of array type")
+                namesProperty.elements.map {
+                    (it as? JsonString ?: return SourceMapError("'names' array must contain strings")).value
+                }
+            } else {
+                emptyList()
+            }
+        }
+
         val sourcePathToContent = sources.zip(sourcesContent).associate { it }
 
         val mappings = jsonObject.properties["mappings"] ?: return SourceMapError("'mappings' property not found")
@@ -85,6 +106,7 @@ object SourceMapParser {
         var sourceLine = 0
         var sourceColumn = 0
         var sourceIndex = 0
+        var nameIndex = 0
         val stream = MappingStream(mappings.value)
         val sourceMap = SourceMap { sourcePathToContent[it]?.let { StringReader(it) } }
         var currentGroup = SourceMapGroup().also { sourceMap.groups += it }
@@ -103,21 +125,24 @@ object SourceMapParser {
                 sourceIndex += stream.readInt() ?: return stream.createError("VLQ-encoded source index expected")
                 sourceLine += stream.readInt() ?: return stream.createError("VLQ-encoded source line expected")
                 sourceColumn += stream.readInt() ?: return stream.createError("VLQ-encoded source column expected")
-                if (stream.isEncodedInt) {
-                    stream.readInt() ?: return stream.createError("VLQ-encoded name index expected")
-                }
+                val name = if (stream.isEncodedInt) {
+                    nameIndex += stream.readInt() ?: return stream.createError("VLQ-encoded name index expected")
+                    if (nameIndex !in names.indices) {
+                        return stream.createError("Name index $nameIndex is out of bounds ${names.indices}")
+                    }
+                    names[nameIndex]
+                } else null
 
                 if (sourceIndex !in sources.indices) {
                     return stream.createError("Source index $sourceIndex is out of bounds ${sources.indices}")
                 }
-                currentGroup.segments += SourceMapSegment(jsColumn, sourceRoot + sources[sourceIndex], sourceLine, sourceColumn)
-            }
-            else {
-                currentGroup.segments += SourceMapSegment(jsColumn, null, -1, -1)
+                currentGroup.segments += SourceMapSegment(jsColumn, sourceRoot + sources[sourceIndex], sourceLine, sourceColumn, name)
+            } else {
+                currentGroup.segments += SourceMapSegment(jsColumn, null, -1, -1, null)
             }
 
             when {
-                stream.isEof -> return stream.createError("Unexpected EOF, ',' or ';' expected")
+                stream.isEof -> break
                 stream.isGroupTerminator -> {
                     currentGroup = SourceMapGroup().also { sourceMap.groups += it }
                     jsColumn = 0

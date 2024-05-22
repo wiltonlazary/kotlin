@@ -16,61 +16,45 @@
 
 package org.jetbrains.kotlin.ir.expressions.impl
 
-import org.jetbrains.kotlin.descriptors.ClassConstructorDescriptor
-import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
+import org.jetbrains.kotlin.ir.declarations.IrAttributeContainer
 import org.jetbrains.kotlin.ir.expressions.IrEnumConstructorCall
-import org.jetbrains.kotlin.ir.expressions.copyTypeArgumentsFrom
-import org.jetbrains.kotlin.ir.expressions.typeArgumentsCount
+import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
-import org.jetbrains.kotlin.ir.symbols.impl.IrConstructorSymbolImpl
-import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
-import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
-import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.util.initializeParameterArguments
+import org.jetbrains.kotlin.ir.util.initializeTypeArguments
 
 class IrEnumConstructorCallImpl(
-    startOffset: Int,
-    endOffset: Int,
-    override val symbol: IrConstructorSymbol,
-    typeArgumentsCount: Int
-) :
-    IrCallWithIndexedArgumentsBase(
-        startOffset,
-        endOffset,
-        symbol.descriptor.builtIns.unitType,
-        typeArgumentsCount = typeArgumentsCount,
-        valueArgumentsCount = symbol.descriptor.valueParameters.size
-    ),
-    IrEnumConstructorCall {
+    override val startOffset: Int,
+    override val endOffset: Int,
+    override var type: IrType,
+    override var symbol: IrConstructorSymbol,
+    typeArgumentsCount: Int,
+    valueArgumentsCount: Int
+) : IrEnumConstructorCall() {
+    override var origin: IrStatementOrigin? = null
 
-    @Deprecated("Use constructor with typeArgumentsCount and fill type arguments explicitly or with copyTypeArgumentsFrom")
-    constructor(
-        startOffset: Int,
-        endOffset: Int,
-        symbol: IrConstructorSymbol,
-        typeArguments: Map<TypeParameterDescriptor, KotlinType>? = null
-    ) : this(startOffset, endOffset, symbol, symbol.descriptor.typeArgumentsCount) {
-        copyTypeArgumentsFrom(typeArguments)
-    }
+    override val typeArguments: Array<IrType?> = initializeTypeArguments(typeArgumentsCount)
 
-    @Deprecated("Creates unbound symbols")
-    constructor(
-        startOffset: Int,
-        endOffset: Int,
-        descriptor: ClassConstructorDescriptor,
-        typeArgumentsCount: Int
-    ) : this(startOffset, endOffset, IrConstructorSymbolImpl(descriptor), typeArgumentsCount)
+    override var dispatchReceiver: IrExpression? = null
+    override var extensionReceiver: IrExpression? = null
+    override val valueArguments: Array<IrExpression?> = initializeParameterArguments(valueArgumentsCount)
 
-    @Deprecated("Creates unbound symbols")
-    constructor(
-        startOffset: Int,
-        endOffset: Int,
-        descriptor: ClassConstructorDescriptor,
-        typeArguments: Map<TypeParameterDescriptor, KotlinType>? = null
-    ) : this(startOffset, endOffset, IrConstructorSymbolImpl(descriptor), typeArguments)
+    override var contextReceiversCount = 0
 
-    override val descriptor: ClassConstructorDescriptor get() = symbol.descriptor
+    override var attributeOwnerId: IrAttributeContainer = this
+    override var originalBeforeInline: IrAttributeContainer? = null
 
-    override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R {
-        return visitor.visitEnumConstructorCall(this, data)
+    companion object {
+        @ObsoleteDescriptorBasedAPI
+        fun fromSymbolDescriptor(
+            startOffset: Int,
+            endOffset: Int,
+            type: IrType,
+            symbol: IrConstructorSymbol,
+            typeArgumentsCount: Int
+        ) = IrEnumConstructorCallImpl(startOffset, endOffset, type, symbol, typeArgumentsCount, symbol.descriptor.valueParameters.size)
     }
 }

@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 //KT-3184 Type inference seems partially broken
 package a
 
@@ -7,7 +8,7 @@ private fun <T> test(value: T, extf: String.(value: T)->Unit) {
     "".extf(value)
 }
 
-fun main(args: Array<String>) {
+fun main() {
     test(1, {value -> println(value)})
 }
 

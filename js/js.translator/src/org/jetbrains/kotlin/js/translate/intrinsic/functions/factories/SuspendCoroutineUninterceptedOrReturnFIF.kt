@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.js.translate.intrinsic.functions.factories
@@ -16,7 +16,7 @@ import org.jetbrains.kotlin.js.translate.intrinsic.functions.basic.FunctionIntri
 
 object SuspendCoroutineUninterceptedOrReturnFIF: FunctionIntrinsicFactory {
     override fun getIntrinsic(descriptor: FunctionDescriptor, context: TranslationContext): FunctionIntrinsic? {
-        if (!descriptor.isBuiltInSuspendCoroutineUninterceptedOrReturn(context.languageVersionSettings)) return null
+        if (!descriptor.isBuiltInSuspendCoroutineUninterceptedOrReturn()) return null
         return Intrinsic
     }
     object Intrinsic: FunctionIntrinsic() {

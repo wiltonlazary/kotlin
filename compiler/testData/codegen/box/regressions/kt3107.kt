@@ -1,3 +1,4 @@
+
 fun foo(): String {
     val s = try {
         "OK"

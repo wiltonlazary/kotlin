@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.resolve.calls.results
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.psi.ValueArgument
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.calls.inference.ConstraintSystemBuilderImpl
@@ -24,8 +25,9 @@ import org.jetbrains.kotlin.resolve.calls.model.DefaultValueArgument
 import org.jetbrains.kotlin.resolve.calls.model.MutableResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCallImpl
-import org.jetbrains.kotlin.resolve.calls.results.FlatSignature.Companion.argumentValueType
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
+import org.jetbrains.kotlin.util.CancellationChecker
 import java.util.*
 
 
@@ -52,13 +54,22 @@ fun <RC : ResolvedCall<*>> RC.createFlatSignature(): FlatSignature<RC> {
 
 fun createOverloadingConflictResolver(
     builtIns: KotlinBuiltIns,
-    specificityComparator: TypeSpecificityComparator
+    module: ModuleDescriptor,
+    specificityComparator: TypeSpecificityComparator,
+    platformOverloadsSpecificityComparator: PlatformOverloadsSpecificityComparator,
+    cancellationChecker: CancellationChecker,
+    kotlinTypeRefiner: KotlinTypeRefiner,
 ) = OverloadingConflictResolver(
     builtIns,
+    module,
     specificityComparator,
-    MutableResolvedCall<*>::getResultingDescriptor,
+    platformOverloadsSpecificityComparator,
+    cancellationChecker,
+    ResolvedCall<*>::getResultingDescriptor,
     ConstraintSystemBuilderImpl.Companion::forSpecificity,
-    MutableResolvedCall<*>::createFlatSignature,
+    ResolvedCall<*>::createFlatSignature,
     { (it as? VariableAsFunctionResolvedCallImpl)?.variableCall },
-    { DescriptorToSourceUtils.descriptorToDeclaration(it) != null }
+    { DescriptorToSourceUtils.descriptorToDeclaration(it) != null },
+    null,
+    kotlinTypeRefiner
 )

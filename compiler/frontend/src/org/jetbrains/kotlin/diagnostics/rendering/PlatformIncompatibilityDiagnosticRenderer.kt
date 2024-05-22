@@ -16,15 +16,19 @@
 
 package org.jetbrains.kotlin.diagnostics.rendering
 
+import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.MemberDescriptor
-import org.jetbrains.kotlin.resolve.multiplatform.ExpectedActualResolver.Compatibility.Incompatible
+import org.jetbrains.kotlin.resolve.multiplatform.K1ExpectActualCompatibility.Incompatible
+import org.jetbrains.kotlin.resolve.multiplatform.K1ExpectActualMemberDiff
+import java.text.MessageFormat
 
 class PlatformIncompatibilityDiagnosticRenderer(
     private val mode: MultiplatformDiagnosticRenderingMode
-) : DiagnosticParameterRenderer<Map<Incompatible, Collection<MemberDescriptor>>> {
+) : DiagnosticParameterRenderer<Map<Incompatible<MemberDescriptor>, Collection<MemberDescriptor>>> {
     override fun render(
-        obj: Map<Incompatible, Collection<MemberDescriptor>>,
+        obj: Map<Incompatible<MemberDescriptor>, Collection<MemberDescriptor>>,
         renderingContext: RenderingContext
     ): String {
         if (obj.isEmpty()) return ""
@@ -43,9 +47,9 @@ class PlatformIncompatibilityDiagnosticRenderer(
 
 class IncompatibleExpectedActualClassScopesRenderer(
     private val mode: MultiplatformDiagnosticRenderingMode
-) : DiagnosticParameterRenderer<List<Pair<MemberDescriptor, Map<Incompatible, Collection<MemberDescriptor>>>>> {
+) : DiagnosticParameterRenderer<List<Pair<MemberDescriptor, Map<Incompatible<MemberDescriptor>, Collection<MemberDescriptor>>>>> {
     override fun render(
-        obj: List<Pair<MemberDescriptor, Map<Incompatible, Collection<MemberDescriptor>>>>,
+        obj: List<Pair<MemberDescriptor, Map<Incompatible<MemberDescriptor>, Collection<MemberDescriptor>>>>,
         renderingContext: RenderingContext
     ): String {
         if (obj.isEmpty()) return ""
@@ -62,13 +66,56 @@ class IncompatibleExpectedActualClassScopesRenderer(
     }
 }
 
+class ExpectActualScopeDiffsRenderer(
+    private val mode: MultiplatformDiagnosticRenderingMode,
+) : DiagnosticParameterRenderer<Set<K1ExpectActualMemberDiff<CallableMemberDescriptor, ClassDescriptor>>> {
+    override fun render(
+        obj: Set<K1ExpectActualMemberDiff<CallableMemberDescriptor, ClassDescriptor>>,
+        renderingContext: RenderingContext,
+    ): String {
+        check(obj.isNotEmpty())
+        return buildString {
+            mode.renderList(this, obj.toList().map { diff ->
+                {
+                    appendLine()
+                    appendLine(ExpectActualScopeDiffRenderer.render(diff, renderingContext))
+                }
+            })
+        }
+    }
+
+    companion object {
+        @JvmField
+        val TEXT = ExpectActualScopeDiffsRenderer(MultiplatformDiagnosticRenderingMode())
+    }
+}
+
+object ExpectActualScopeDiffRenderer : DiagnosticParameterRenderer<K1ExpectActualMemberDiff<CallableMemberDescriptor, ClassDescriptor>> {
+    override fun render(
+        obj: K1ExpectActualMemberDiff<CallableMemberDescriptor, ClassDescriptor>,
+        renderingContext: RenderingContext,
+    ): String = MessageFormat.format(
+        obj.kind.rawMessage,
+        Renderers.DECLARATION_NAME_WITH_KIND.render(obj.actualMember, renderingContext),
+        Renderers.NAME.render(obj.expectClass)
+    )
+}
+
+class ListRenderer<T>(
+    private val elementRenderer: DiagnosticParameterRenderer<T>,
+    private val elemProcessor: (String) -> String = { it },
+) : DiagnosticParameterRenderer<List<T>> {
+    override fun render(obj: List<T>, renderingContext: RenderingContext): String =
+        obj.joinToString { elemProcessor(elementRenderer.render(it, renderingContext)) }
+}
+
 open class MultiplatformDiagnosticRenderingMode {
     open fun newLine(sb: StringBuilder) {
-        sb.appendln()
+        sb.appendLine()
     }
 
     open fun renderList(sb: StringBuilder, elements: List<() -> Unit>) {
-        sb.appendln()
+        sb.appendLine()
         for (element in elements) {
             element()
         }
@@ -77,12 +124,12 @@ open class MultiplatformDiagnosticRenderingMode {
     open fun renderDescriptor(sb: StringBuilder, descriptor: DeclarationDescriptor, context: RenderingContext, indent: String) {
         sb.append(indent)
         sb.append(INDENTATION_UNIT)
-        sb.appendln(Renderers.COMPACT_WITH_MODIFIERS.render(descriptor, context))
+        sb.appendLine(Renderers.COMPACT_WITH_MODIFIERS.render(descriptor, context))
     }
 }
 
 private fun StringBuilder.renderIncompatibilityInformation(
-    map: Map<Incompatible, Collection<MemberDescriptor>>,
+    map: Map<Incompatible<MemberDescriptor>, Collection<MemberDescriptor>>,
     indent: String,
     context: RenderingContext,
     mode: MultiplatformDiagnosticRenderingMode
@@ -109,7 +156,7 @@ private fun StringBuilder.renderIncompatibilityInformation(
 }
 
 private fun StringBuilder.renderIncompatibleClassScopes(
-    unfulfilled: List<Pair<MemberDescriptor, Map<Incompatible, Collection<MemberDescriptor>>>>,
+    unfulfilled: List<Pair<MemberDescriptor, Map<Incompatible<MemberDescriptor>, Collection<MemberDescriptor>>>>,
     indent: String,
     context: RenderingContext,
     mode: MultiplatformDiagnosticRenderingMode

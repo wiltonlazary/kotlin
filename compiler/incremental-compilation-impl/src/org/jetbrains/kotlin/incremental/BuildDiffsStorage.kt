@@ -17,6 +17,8 @@
 package org.jetbrains.kotlin.incremental
 
 import org.jetbrains.annotations.TestOnly
+import org.jetbrains.kotlin.build.report.ICReporter
+import org.jetbrains.kotlin.build.report.info
 import org.jetbrains.kotlin.name.FqName
 import java.io.File
 import java.io.IOException
@@ -35,7 +37,7 @@ data class BuildDiffsStorage(val buildDiffs: List<BuildDifference>) {
 
         fun readDiffsFromFile(file: File, reporter: ICReporter?): MutableList<BuildDifference>? {
             fun reportFail(reason: String) {
-                reporter?.report { "Could not read diff from file $file: $reason" }
+                reporter?.info { "Could not read diff from file $file: $reason" }
             }
 
             if (!file.exists()) return null
@@ -55,30 +57,30 @@ data class BuildDiffsStorage(val buildDiffs: List<BuildDifference>) {
                     }
                     return result
                 }
-            }
-            catch (e: IOException) {
+            } catch (e: IOException) {
                 reportFail(e.toString())
             }
 
             return null
         }
 
-        fun writeToFile(file: File, storage: BuildDiffsStorage, reporter: ICReporter?) {
+        fun writeToFile(icContext: IncrementalCompilationContext, file: File, storage: BuildDiffsStorage) {
             file.parentFile.mkdirs()
 
             try {
-                ObjectOutputStream(file.outputStream().buffered()).use { output ->
-                    output.writeInt(CURRENT_VERSION)
+                icContext.transaction.write(file.toPath()) {
+                    ObjectOutputStream(file.outputStream().buffered()).use { output ->
+                        output.writeInt(CURRENT_VERSION)
 
-                    val diffsToWrite = storage.buildDiffs.sortedBy { it.ts }.takeLast(MAX_DIFFS_ENTRIES)
-                    output.writeInt(diffsToWrite.size)
-                    for (diff in diffsToWrite) {
-                        output.writeBuildDifference(diff)
+                        val diffsToWrite = storage.buildDiffs.sortedBy { it.ts }.takeLast(MAX_DIFFS_ENTRIES)
+                        output.writeInt(diffsToWrite.size)
+                        for (diff in diffsToWrite) {
+                            output.writeBuildDifference(diff)
+                        }
                     }
                 }
-            }
-            catch (e: IOException) {
-                reporter?.report { "Could not write diff to file $file: $e" }
+            } catch (e: IOException) {
+                icContext.reporter.info { "Could not write diff to file $file: $e" }
             }
         }
 
@@ -96,6 +98,23 @@ data class BuildDiffsStorage(val buildDiffs: List<BuildDifference>) {
         }
 
         private fun ObjectInputStream.readDirtyData(): DirtyData {
+            val lookupSymbols = readLookups()
+            val dirtyClassesFqNames = readFqNames()
+
+            return DirtyData(lookupSymbols, dirtyClassesFqNames)
+        }
+
+        fun ObjectInputStream.readFqNames(): ArrayList<FqName> {
+            val dirtyClassesSize = readInt()
+            val dirtyClassesFqNames = ArrayList<FqName>(dirtyClassesSize)
+            repeat(dirtyClassesSize) {
+                val fqNameString = readUTF()
+                dirtyClassesFqNames.add(FqName(fqNameString))
+            }
+            return dirtyClassesFqNames
+        }
+
+        fun ObjectInputStream.readLookups(): ArrayList<LookupSymbol> {
             val lookupSymbolSize = readInt()
             val lookupSymbols = ArrayList<LookupSymbol>(lookupSymbolSize)
             repeat(lookupSymbolSize) {
@@ -103,33 +122,30 @@ data class BuildDiffsStorage(val buildDiffs: List<BuildDifference>) {
                 val scope = readUTF()
                 lookupSymbols.add(LookupSymbol(name = name, scope = scope))
             }
-
-            val dirtyClassesSize = readInt()
-            val dirtyClassesFqNames = ArrayList<FqName>(dirtyClassesSize)
-            repeat(dirtyClassesSize) {
-                val fqNameString = readUTF()
-                dirtyClassesFqNames.add(FqName(fqNameString))
-            }
-
-            return DirtyData(lookupSymbols, dirtyClassesFqNames)
+            return lookupSymbols
         }
 
         private fun ObjectOutputStream.writeDirtyData(dirtyData: DirtyData) {
-            val lookupSymbols = dirtyData.dirtyLookupSymbols
-            writeInt(lookupSymbols.size)
-            for ((name, scope) in lookupSymbols) {
-                writeUTF(name)
-                writeUTF(scope)
-            }
+            writeLookups(dirtyData.dirtyLookupSymbols)
+            writeFqNames(dirtyData.dirtyClassesFqNames)
+        }
 
-            val dirtyClassesFqNames = dirtyData.dirtyClassesFqNames
+        fun ObjectOutputStream.writeFqNames(dirtyClassesFqNames: Collection<FqName> ) {
             writeInt(dirtyClassesFqNames.size)
             for (fqName in dirtyClassesFqNames) {
                 writeUTF(fqName.asString())
             }
         }
 
-        internal val MAX_DIFFS_ENTRIES: Int = 10
+        fun ObjectOutputStream.writeLookups(lookupSymbols: Collection<LookupSymbol>) {
+            writeInt(lookupSymbols.size)
+            for ((name, scope) in lookupSymbols) {
+                writeUTF(name)
+                writeUTF(scope)
+            }
+        }
+
+        internal const val MAX_DIFFS_ENTRIES: Int = 10
 
         @set:TestOnly
         var CURRENT_VERSION: Int = 0

@@ -16,43 +16,52 @@
 
 package kotlin.reflect.jvm.internal
 
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.PrimitiveType
+import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotated
-import org.jetbrains.kotlin.descriptors.annotations.isEffectivelyInlineOnly
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
+import org.jetbrains.kotlin.descriptors.impl.DeclarationDescriptorVisitorEmptyBodies
+import org.jetbrains.kotlin.descriptors.runtime.components.ReflectAnnotationSource
+import org.jetbrains.kotlin.descriptors.runtime.components.ReflectKotlinClass
+import org.jetbrains.kotlin.descriptors.runtime.components.RuntimeSourceElementFactory
+import org.jetbrains.kotlin.descriptors.runtime.components.tryLoadClass
+import org.jetbrains.kotlin.descriptors.runtime.structure.ReflectJavaAnnotation
+import org.jetbrains.kotlin.descriptors.runtime.structure.ReflectJavaClass
+import org.jetbrains.kotlin.descriptors.runtime.structure.safeClassLoader
 import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.load.kotlin.KotlinJvmBinarySourceElement
-import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
 import org.jetbrains.kotlin.metadata.ProtoBuf
+import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion
 import org.jetbrains.kotlin.metadata.deserialization.NameResolver
 import org.jetbrains.kotlin.metadata.deserialization.TypeTable
 import org.jetbrains.kotlin.metadata.deserialization.VersionRequirementTable
-import org.jetbrains.kotlin.metadata.deserialization.getExtensionOrNull
-import org.jetbrains.kotlin.metadata.jvm.JvmProtoBuf
-import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.platform.JavaToKotlinClassMap
 import org.jetbrains.kotlin.protobuf.MessageLite
-import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.constants.*
+import org.jetbrains.kotlin.resolve.descriptorUtil.annotationClass
 import org.jetbrains.kotlin.resolve.descriptorUtil.classId
+import org.jetbrains.kotlin.resolve.isInlineClassType
+import org.jetbrains.kotlin.resolve.needsMfvcFlattening
 import org.jetbrains.kotlin.serialization.deserialization.DeserializationContext
 import org.jetbrains.kotlin.serialization.deserialization.MemberDeserializer
+import java.lang.reflect.Field
+import java.lang.reflect.Method
+import java.lang.reflect.Type
 import kotlin.jvm.internal.FunctionReference
 import kotlin.jvm.internal.PropertyReference
+import kotlin.jvm.internal.RepeatableContainer
+import kotlin.reflect.KType
 import kotlin.reflect.KVisibility
 import kotlin.reflect.full.IllegalCallableAccessException
-import kotlin.reflect.jvm.internal.components.ReflectAnnotationSource
-import kotlin.reflect.jvm.internal.components.ReflectKotlinClass
-import kotlin.reflect.jvm.internal.components.RuntimeSourceElementFactory
-import kotlin.reflect.jvm.internal.components.tryLoadClass
-import kotlin.reflect.jvm.internal.structure.ReflectJavaAnnotation
-import kotlin.reflect.jvm.internal.structure.ReflectJavaClass
-import kotlin.reflect.jvm.internal.structure.safeClassLoader
+import kotlin.reflect.jvm.internal.calls.createAnnotationInstance
 
 internal val JVM_STATIC = FqName("kotlin.jvm.JvmStatic")
 
 internal fun ClassDescriptor.toJavaClass(): Class<*>? {
-    val source = source
-    return when (source) {
+    return when (val source = source) {
         is KotlinJvmBinarySourceElement -> {
             (source.binaryClass as ReflectKotlinClass).klass
         }
@@ -62,16 +71,19 @@ internal fun ClassDescriptor.toJavaClass(): Class<*>? {
         else -> {
             // If this is neither a Kotlin class nor a Java class, it's likely either a built-in or some fake class descriptor like the one
             // that's created for java.io.Serializable in JvmBuiltInsSettings
-            val classId = JavaToKotlinClassMap.mapKotlinToJava(DescriptorUtils.getFqName(this)) ?: classId ?: return null
-            val packageName = classId.packageFqName.asString()
-            val className = classId.relativeClassName.asString()
-            // All pseudo-classes like kotlin.String.Companion must be accessible from the current class loader
-            loadClass(javaClass.safeClassLoader, packageName, className)
+            val classId = classId ?: return null
+            loadClass(javaClass.safeClassLoader, classId, 0)
         }
     }
 }
 
-internal fun loadClass(classLoader: ClassLoader, packageName: String, className: String): Class<*>? {
+private fun loadClass(classLoader: ClassLoader, kotlinClassId: ClassId, arrayDimensions: Int = 0): Class<*>? {
+    val javaClassId = JavaToKotlinClassMap.mapKotlinToJava(kotlinClassId.asSingleFqName().toUnsafe()) ?: kotlinClassId
+    // All pseudo-classes like kotlin.String.Companion must be accessible from the current class loader
+    return loadClass(classLoader, javaClassId.packageFqName.asString(), javaClassId.relativeClassName.asString(), arrayDimensions)
+}
+
+private fun loadClass(classLoader: ClassLoader, packageName: String, className: String, arrayDimensions: Int): Class<*>? {
     if (packageName == "kotlin") {
         // See mapBuiltInType() in typeSignatureMapping.kt
         when (className) {
@@ -87,82 +99,159 @@ internal fun loadClass(classLoader: ClassLoader, packageName: String, className:
         }
     }
 
-    return classLoader.tryLoadClass("$packageName.${className.replace('.', '$')}")
+    val fqName = buildString {
+        if (arrayDimensions > 0) {
+            repeat(arrayDimensions) {
+                append("[")
+            }
+            append("L")
+        }
+        if (packageName.isNotEmpty()) {
+            append("$packageName.")
+        }
+        append(className.replace('.', '$'))
+        if (arrayDimensions > 0) {
+            append(";")
+        }
+    }
+
+    return classLoader.tryLoadClass(fqName)
 }
 
-internal fun Visibility.toKVisibility(): KVisibility? =
-        when (this) {
-            Visibilities.PUBLIC -> KVisibility.PUBLIC
-            Visibilities.PROTECTED -> KVisibility.PROTECTED
-            Visibilities.INTERNAL -> KVisibility.INTERNAL
-            Visibilities.PRIVATE, Visibilities.PRIVATE_TO_THIS -> KVisibility.PRIVATE
-            else -> null
-        }
+internal fun Class<*>.createArrayType(): Class<*> =
+    java.lang.reflect.Array.newInstance(this, 0)::class.java
+
+internal fun DescriptorVisibility.toKVisibility(): KVisibility? =
+    when (this) {
+        DescriptorVisibilities.PUBLIC -> KVisibility.PUBLIC
+        DescriptorVisibilities.PROTECTED -> KVisibility.PROTECTED
+        DescriptorVisibilities.INTERNAL -> KVisibility.INTERNAL
+        DescriptorVisibilities.PRIVATE, DescriptorVisibilities.PRIVATE_TO_THIS -> KVisibility.PRIVATE
+        else -> null
+    }
 
 internal fun Annotated.computeAnnotations(): List<Annotation> =
-        annotations.mapNotNull {
-            val source = it.source
-            when (source) {
-                is ReflectAnnotationSource -> source.annotation
-                is RuntimeSourceElementFactory.RuntimeSourceElement -> (source.javaElement as? ReflectJavaAnnotation)?.annotation
-                else -> null
+    annotations.mapNotNull {
+        when (val source = it.source) {
+            is ReflectAnnotationSource -> source.annotation
+            is RuntimeSourceElementFactory.RuntimeSourceElement -> (source.javaElement as? ReflectJavaAnnotation)?.annotation
+            else -> it.toAnnotationInstance()
+        }
+    }.unwrapRepeatableAnnotations()
+
+private fun List<Annotation>.unwrapRepeatableAnnotations(): List<Annotation> =
+    if (any { it.annotationClass.java.simpleName == JvmAbi.REPEATABLE_ANNOTATION_CONTAINER_NAME })
+        flatMap {
+            val klass = it.annotationClass.java
+            if (klass.simpleName == JvmAbi.REPEATABLE_ANNOTATION_CONTAINER_NAME &&
+                klass.getAnnotation(RepeatableContainer::class.java) != null
+            )
+                @Suppress("UNCHECKED_CAST")
+                (klass.getDeclaredMethod("value").invoke(it) as Array<out Annotation>).asList()
+            else
+                listOf(it)
+        }
+    else
+        this
+
+private fun AnnotationDescriptor.toAnnotationInstance(): Annotation? {
+    @Suppress("UNCHECKED_CAST")
+    val annotationClass = annotationClass?.toJavaClass() as? Class<out Annotation> ?: return null
+
+    return createAnnotationInstance(
+        annotationClass,
+        allValueArguments.entries
+            .mapNotNull { (name, value) -> value.toRuntimeValue(annotationClass.classLoader)?.let(name.asString()::to) }
+            .toMap()
+    )
+}
+
+// TODO: consider throwing exceptions such as AnnotationFormatError/AnnotationTypeMismatchException if a value of unexpected type is found
+private fun ConstantValue<*>.toRuntimeValue(classLoader: ClassLoader): Any? = when (this) {
+    is AnnotationValue -> value.toAnnotationInstance()
+    is ArrayValue -> arrayToRuntimeValue(classLoader)
+    is EnumValue -> {
+        val (enumClassId, entryName) = value
+        loadClass(classLoader, enumClassId)?.let { enumClass ->
+            @Suppress("UNCHECKED_CAST")
+            Util.getEnumConstantByName(enumClass as Class<out Enum<*>>, entryName.asString())
+        }
+    }
+    is KClassValue -> when (val classValue = value) {
+        is KClassValue.Value.NormalClass ->
+            loadClass(classLoader, classValue.classId, classValue.arrayDimensions)
+        is KClassValue.Value.LocalClass -> {
+            // TODO: this doesn't work because of KT-30013
+            (classValue.type.constructor.declarationDescriptor as? ClassDescriptor)?.toJavaClass()
+        }
+    }
+    is ErrorValue, is NullValue -> null
+    else -> value  // Primitives and strings
+}
+
+private fun ArrayValue.arrayToRuntimeValue(classLoader: ClassLoader): Any? {
+    val type = (this as? TypedArrayValue)?.type ?: return null
+    val values = value.map { it.toRuntimeValue(classLoader) }
+
+    return when (KotlinBuiltIns.getPrimitiveArrayElementType(type)) {
+        PrimitiveType.BOOLEAN -> BooleanArray(value.size) { values[it] as Boolean }
+        PrimitiveType.CHAR -> CharArray(value.size) { values[it] as Char }
+        PrimitiveType.BYTE -> ByteArray(value.size) { values[it] as Byte }
+        PrimitiveType.SHORT -> ShortArray(value.size) { values[it] as Short }
+        PrimitiveType.INT -> IntArray(value.size) { values[it] as Int }
+        PrimitiveType.FLOAT -> FloatArray(value.size) { values[it] as Float }
+        PrimitiveType.LONG -> LongArray(value.size) { values[it] as Long }
+        PrimitiveType.DOUBLE -> DoubleArray(value.size) { values[it] as Double }
+        null -> {
+            check(KotlinBuiltIns.isArray(type)) { "Not an array type: $type" }
+            val argType = type.arguments.single().type
+            val classifier = argType.constructor.declarationDescriptor as? ClassDescriptor ?: error("Not a class type: $argType")
+            when {
+                KotlinBuiltIns.isString(argType) -> Array(value.size) { values[it] as String }
+                KotlinBuiltIns.isKClass(classifier) -> Array(value.size) { values[it] as Class<*> }
+                else -> {
+                    val argClass = classifier.classId?.let { loadClass(classLoader, it) } ?: return null
+
+                    @Suppress("UNCHECKED_CAST")
+                    val array = java.lang.reflect.Array.newInstance(argClass, value.size) as Array<in Any?>
+                    repeat(values.size) { array[it] = values[it] }
+                    array
+                }
             }
         }
+    }
+}
 
 // TODO: wrap other exceptions
 internal inline fun <R> reflectionCall(block: () -> R): R =
-        try {
-            block()
-        }
-        catch (e: IllegalAccessException) {
-            throw IllegalCallableAccessException(e)
-        }
+    try {
+        block()
+    } catch (e: IllegalAccessException) {
+        throw IllegalCallableAccessException(e)
+    }
 
 internal fun Any?.asKFunctionImpl(): KFunctionImpl? =
-        this as? KFunctionImpl ?:
-        (this as? FunctionReference)?.compute() as? KFunctionImpl
+    this as? KFunctionImpl ?: (this as? FunctionReference)?.compute() as? KFunctionImpl
 
 internal fun Any?.asKPropertyImpl(): KPropertyImpl<*>? =
-        this as? KPropertyImpl<*> ?:
-        (this as? PropertyReference)?.compute() as? KPropertyImpl
+    this as? KPropertyImpl<*> ?: (this as? PropertyReference)?.compute() as? KPropertyImpl
 
 internal fun Any?.asKCallableImpl(): KCallableImpl<*>? =
-        this as? KCallableImpl<*> ?: asKFunctionImpl() ?: asKPropertyImpl()
+    this as? KCallableImpl<*> ?: asKFunctionImpl() ?: asKPropertyImpl()
 
-internal val ReflectKotlinClass.packageModuleName: String?
-    get() {
-        val header = classHeader
-        if (!header.metadataVersion.isCompatible()) return null
-
-        return when (header.kind) {
-            KotlinClassHeader.Kind.FILE_FACADE, KotlinClassHeader.Kind.MULTIFILE_CLASS_PART -> {
-                // TODO: avoid reading and parsing metadata twice (here and later in KPackageImpl#descriptor)
-                val (nameResolver, proto) = JvmProtoBufUtil.readPackageDataFrom(header.data!!, header.strings!!)
-                // If no packageModuleName extension is written, the name is assumed to be JvmAbi.DEFAULT_MODULE_NAME
-                // (see JvmSerializerExtension.serializePackage)
-                proto.getExtensionOrNull(JvmProtoBuf.packageModuleName)?.let(nameResolver::getString) ?: JvmAbi.DEFAULT_MODULE_NAME
-            }
-            KotlinClassHeader.Kind.MULTIFILE_CLASS -> {
-                val partName = header.multifilePartNames.firstOrNull() ?: return null
-                ReflectKotlinClass.create(klass.classLoader.loadClass(partName.replace('/', '.')))?.packageModuleName
-            }
-            else -> null
-        }
-    }
-
-internal val CallableMemberDescriptor.isPublicInBytecode: Boolean
-    get() {
-        val visibility = visibility
-        return (visibility == Visibilities.PUBLIC || visibility == Visibilities.INTERNAL) && !isEffectivelyInlineOnly()
-    }
+internal val CallableDescriptor.instanceReceiverParameter: ReceiverParameterDescriptor?
+    get() =
+        if (dispatchReceiverParameter != null) (containingDeclaration as ClassDescriptor).thisAsReceiverParameter
+        else null
 
 internal fun <M : MessageLite, D : CallableDescriptor> deserializeToDescriptor(
-        moduleAnchor: Class<*>,
-        proto: M,
-        nameResolver: NameResolver,
-        typeTable: TypeTable,
-        createDescriptor: MemberDeserializer.(M) -> D
-): D? {
+    moduleAnchor: Class<*>,
+    proto: M,
+    nameResolver: NameResolver,
+    typeTable: TypeTable,
+    metadataVersion: BinaryVersion,
+    createDescriptor: MemberDeserializer.(M) -> D
+): D {
     val moduleData = moduleAnchor.getOrCreateModule()
 
     val typeParameters = when (proto) {
@@ -172,8 +261,69 @@ internal fun <M : MessageLite, D : CallableDescriptor> deserializeToDescriptor(
     }
 
     val context = DeserializationContext(
-            moduleData.deserialization, nameResolver, moduleData.module, typeTable, VersionRequirementTable.EMPTY,
-            containerSource = null, parentTypeDeserializer = null, typeParameters = typeParameters
+        moduleData.deserialization, nameResolver, moduleData.module, typeTable, VersionRequirementTable.EMPTY, metadataVersion,
+        containerSource = null, parentTypeDeserializer = null, typeParameters = typeParameters
     )
     return MemberDeserializer(context).createDescriptor(proto)
 }
+
+internal val KType.isInlineClassType: Boolean
+    get() = (this as? KTypeImpl)?.type?.isInlineClassType() == true
+internal val KType.needsMultiFieldValueClassFlattening: Boolean
+    get() = (this as? KTypeImpl)?.type?.needsMfvcFlattening() == true
+
+internal fun defaultPrimitiveValue(type: Type): Any? =
+    if (type is Class<*> && type.isPrimitive) {
+        when (type) {
+            Boolean::class.java -> false
+            Char::class.java -> 0.toChar()
+            Byte::class.java -> 0.toByte()
+            Short::class.java -> 0.toShort()
+            Int::class.java -> 0
+            Float::class.java -> 0f
+            Long::class.java -> 0L
+            Double::class.java -> 0.0
+            Void.TYPE -> throw IllegalStateException("Parameter with void type is illegal")
+            else -> throw UnsupportedOperationException("Unknown primitive: $type")
+        }
+    } else null
+
+internal open class CreateKCallableVisitor(private val container: KDeclarationContainerImpl) :
+    DeclarationDescriptorVisitorEmptyBodies<KCallableImpl<*>, Unit>() {
+    override fun visitPropertyDescriptor(descriptor: PropertyDescriptor, data: Unit): KCallableImpl<*> {
+        val receiverCount = (descriptor.dispatchReceiverParameter?.let { 1 } ?: 0) +
+                (descriptor.extensionReceiverParameter?.let { 1 } ?: 0)
+
+        when {
+            descriptor.isVar -> when (receiverCount) {
+                0 -> return KMutableProperty0Impl<Any?>(container, descriptor)
+                1 -> return KMutableProperty1Impl<Any?, Any?>(container, descriptor)
+                2 -> return KMutableProperty2Impl<Any?, Any?, Any?>(container, descriptor)
+            }
+            else -> when (receiverCount) {
+                0 -> return KProperty0Impl<Any?>(container, descriptor)
+                1 -> return KProperty1Impl<Any?, Any?>(container, descriptor)
+                2 -> return KProperty2Impl<Any?, Any?, Any?>(container, descriptor)
+            }
+        }
+
+        throw KotlinReflectionInternalError("Unsupported property: $descriptor")
+    }
+
+    override fun visitFunctionDescriptor(descriptor: FunctionDescriptor, data: Unit): KCallableImpl<*> =
+        KFunctionImpl(container, descriptor)
+}
+
+internal fun Class<*>.getDeclaredMethodOrNull(name: String, vararg parameterTypes: Class<*>): Method? =
+    try {
+        getDeclaredMethod(name, *parameterTypes)
+    } catch (e: NoSuchMethodException) {
+        null
+    }
+
+internal fun Class<*>.getDeclaredFieldOrNull(name: String): Field? =
+    try {
+        getDeclaredField(name)
+    } catch (e: NoSuchFieldException) {
+        null
+    }

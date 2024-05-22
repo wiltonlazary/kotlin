@@ -1,5 +1,5 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
+// LAMBDAS: CLASS
 
 fun check(expected: String, obj: Any?) {
     val actual = obj.toString()

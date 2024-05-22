@@ -1,4 +1,5 @@
 // KT-15951 Callable reference to class constructor from object is not resolved
+// KT-63069
 
 object A {
     class Wrapper
@@ -16,6 +17,6 @@ fun test() {
 
     Outer.Companion::Wrapper
     (Outer.Companion)::<!UNRESOLVED_REFERENCE!>Wrapper<!>
-    <!UNUSED_EXPRESSION!>Outer::<!UNRESOLVED_REFERENCE!>Wrapper<!><!>
+    Outer::<!UNRESOLVED_REFERENCE!>Wrapper<!>
     (Outer)::<!UNRESOLVED_REFERENCE!>Wrapper<!>
 }

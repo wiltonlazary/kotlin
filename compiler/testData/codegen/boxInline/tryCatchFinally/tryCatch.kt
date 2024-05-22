@@ -1,4 +1,5 @@
-// IGNORE_BACKEND: NATIVE
+// WITH_STDLIB
+// KJS_WITH_FULL_RUNTIME
 // FILE: 1.kt
 
 class My(val value: Int)
@@ -7,7 +8,7 @@ inline fun <T, R> T.perform(job: (T)-> R) : R {
     return job(this)
 }
 
-public inline fun String.toInt2() : Int = java.lang.Integer.parseInt(this)
+public inline fun String.toInt2() : Int = this.toInt()
 
 // FILE: 2.kt
 

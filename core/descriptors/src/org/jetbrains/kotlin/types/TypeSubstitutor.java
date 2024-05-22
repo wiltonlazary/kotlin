@@ -20,12 +20,17 @@ import kotlin.jvm.functions.Function1;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
+import org.jetbrains.kotlin.builtins.StandardNames;
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
 import org.jetbrains.kotlin.descriptors.annotations.CompositeAnnotations;
 import org.jetbrains.kotlin.descriptors.annotations.FilteredAnnotations;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.resolve.calls.inference.CapturedTypeConstructorKt;
+import org.jetbrains.kotlin.types.checker.NewCapturedTypeConstructor;
+import org.jetbrains.kotlin.types.error.ErrorTypeKind;
+import org.jetbrains.kotlin.types.error.ErrorUtils;
+import org.jetbrains.kotlin.types.model.TypeSubstitutorMarker;
 import org.jetbrains.kotlin.types.typeUtil.TypeUtilsKt;
 import org.jetbrains.kotlin.types.typesApproximation.CapturedTypeApproximationKt;
 import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
@@ -34,7 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class TypeSubstitutor {
+public class TypeSubstitutor implements TypeSubstitutorMarker {
 
     private static final int MAX_RECURSION_DEPTH = 100;
 
@@ -49,6 +54,42 @@ public class TypeSubstitutor {
     @NotNull
     public static TypeSubstitutor create(@NotNull TypeSubstitution substitution) {
         return new TypeSubstitutor(substitution);
+    }
+
+    @NotNull
+    public TypeSubstitutor replaceWithNonApproximatingSubstitution() {
+        if (!(substitution instanceof IndexedParametersSubstitution) || !substitution.approximateContravariantCapturedTypes()) return this;
+
+        return new TypeSubstitutor(
+                new IndexedParametersSubstitution(
+                        ((IndexedParametersSubstitution) substitution).getParameters(),
+                        ((IndexedParametersSubstitution) substitution).getArguments(),
+                        false
+                )
+        );
+    }
+
+    @NotNull
+    public TypeSubstitutor replaceWithContravariantApproximatingSubstitution() {
+        if (substitution instanceof SubstitutionWithCapturedTypeApproximation) {
+            return new TypeSubstitutor(
+                    new SubstitutionWithContravariantCapturedTypeApproximation(
+                            ((SubstitutionWithCapturedTypeApproximation) substitution).getSubstitution()
+                    )
+            );
+        }
+
+        if (substitution instanceof IndexedParametersSubstitution && !substitution.approximateContravariantCapturedTypes()) {
+            return new TypeSubstitutor(
+                    new IndexedParametersSubstitution(
+                            ((IndexedParametersSubstitution) substitution).getParameters(),
+                            ((IndexedParametersSubstitution) substitution).getArguments(),
+                            true
+                    )
+            );
+        }
+
+        return this;
     }
 
     @NotNull
@@ -90,9 +131,9 @@ public class TypeSubstitutor {
         }
 
         try {
-            return unsafeSubstitute(new TypeProjectionImpl(howThisTypeIsUsed, type), 0).getType();
+            return unsafeSubstitute(new TypeProjectionImpl(howThisTypeIsUsed, type), null, 0).getType();
         } catch (SubstitutionException e) {
-            return ErrorUtils.createErrorType(e.getMessage());
+            return ErrorUtils.createErrorType(ErrorTypeKind.UNABLE_TO_SUBSTITUTE_TYPE, e.getMessage());
         }
     }
 
@@ -120,14 +161,18 @@ public class TypeSubstitutor {
         }
 
         try {
-            return unsafeSubstitute(typeProjection, 0);
+            return unsafeSubstitute(typeProjection, null, 0);
         } catch (SubstitutionException e) {
             return null;
         }
     }
 
     @NotNull
-    private TypeProjection unsafeSubstitute(@NotNull TypeProjection originalProjection, int recursionDepth) throws SubstitutionException {
+    private TypeProjection unsafeSubstitute(
+            @NotNull TypeProjection originalProjection,
+            @Nullable TypeParameterDescriptor typeParameter,
+            int recursionDepth
+    ) throws SubstitutionException {
         assertRecursionDepth(recursionDepth, originalProjection, substitution);
 
         if (originalProjection.isStarProjection()) return originalProjection;
@@ -140,11 +185,16 @@ public class TypeSubstitutor {
 
             TypeProjection substitution = unsafeSubstitute(
                     new TypeProjectionImpl(originalProjection.getProjectionKind(), origin),
+                    typeParameter,
                     recursionDepth + 1
             );
+            if (substitution.isStarProjection()) return substitution;
 
             KotlinType substitutedEnhancement = substitute(enhancement, originalProjection.getProjectionKind());
-            KotlinType resultingType = TypeWithEnhancementKt.wrapEnhancement(substitution.getType().unwrap(), substitutedEnhancement);
+            KotlinType resultingType = TypeWithEnhancementKt.wrapEnhancement(
+                    substitution.getType().unwrap(),
+                    substitutedEnhancement
+            );
 
             return new TypeProjectionImpl(substitution.getProjectionKind(), resultingType);
         }
@@ -153,14 +203,27 @@ public class TypeSubstitutor {
             return originalProjection; // todo investigate
         }
 
-        TypeProjection replacement = substitution.get(type);
+        TypeProjection substituted = substitution.get(type);
+        TypeProjection replacement =
+                substituted != null ?
+                projectedTypeForConflictedTypeWithUnsafeVariance(type, substituted, typeParameter, originalProjection) :
+                null;
+
         Variance originalProjectionKind = originalProjection.getProjectionKind();
-        if (replacement == null && FlexibleTypesKt.isFlexible(type) && !TypeCapabilitiesKt.isCustomTypeVariable(type)) {
+        if (replacement == null && FlexibleTypesKt.isFlexible(type) && !TypeCapabilitiesKt.isCustomTypeParameter(type)) {
             FlexibleType flexibleType = FlexibleTypesKt.asFlexibleType(type);
             TypeProjection substitutedLower =
-                    unsafeSubstitute(new TypeProjectionImpl(originalProjectionKind, flexibleType.getLowerBound()), recursionDepth + 1);
+                    unsafeSubstitute(
+                            new TypeProjectionImpl(originalProjectionKind, flexibleType.getLowerBound()),
+                            typeParameter,
+                            recursionDepth + 1
+                    );
             TypeProjection substitutedUpper =
-                    unsafeSubstitute(new TypeProjectionImpl(originalProjectionKind, flexibleType.getUpperBound()), recursionDepth + 1);
+                    unsafeSubstitute(
+                            new TypeProjectionImpl(originalProjectionKind, flexibleType.getUpperBound()),
+                            typeParameter,
+                            recursionDepth + 1
+                    );
 
             Variance substitutedProjectionKind = substitutedLower.getProjectionKind();
             assert (substitutedProjectionKind == substitutedUpper.getProjectionKind()) &&
@@ -194,12 +257,12 @@ public class TypeSubstitutor {
                 }
             }
             KotlinType substitutedType;
-            CustomTypeVariable typeVariable = TypeCapabilitiesKt.getCustomTypeVariable(type);
+            CustomTypeParameter customTypeParameter = TypeCapabilitiesKt.getCustomTypeParameter(type);
             if (replacement.isStarProjection()) {
                 return replacement;
             }
-            else if (typeVariable != null) {
-                substitutedType = typeVariable.substitutionResult(replacement.getType());
+            else if (customTypeParameter != null) {
+                substitutedType = customTypeParameter.substitutionResult(replacement.getType());
             }
             else {
                 // this is a simple type T or T?: if it's T, we should just take replacement, if T? - we make replacement nullable
@@ -225,12 +288,43 @@ public class TypeSubstitutor {
     }
 
     @NotNull
+    private static TypeProjection projectedTypeForConflictedTypeWithUnsafeVariance(
+            @NotNull  KotlinType originalType,
+            @NotNull TypeProjection substituted,
+            @Nullable TypeParameterDescriptor typeParameter,
+            @NotNull TypeProjection originalProjection
+    ) {
+        if (!originalType.getAnnotations().hasAnnotation(StandardNames.FqNames.unsafeVariance)) return substituted;
+
+        TypeConstructor constructor = substituted.getType().getConstructor();
+        if (!(constructor instanceof NewCapturedTypeConstructor)) return substituted;
+
+        NewCapturedTypeConstructor capturedType = (NewCapturedTypeConstructor) constructor;
+        TypeProjection capturedTypeProjection = capturedType.getProjection();
+        Variance varianceOfCapturedType = capturedTypeProjection.getProjectionKind();
+
+        VarianceConflictType conflictWithTopLevelType = conflictType(originalProjection.getProjectionKind(), varianceOfCapturedType);
+        if (conflictWithTopLevelType == VarianceConflictType.OUT_IN_IN_POSITION) {
+            return new TypeProjectionImpl(capturedTypeProjection.getType());
+        }
+
+        if (typeParameter == null) return substituted;
+
+        VarianceConflictType conflictTypeWithTypeParameter = conflictType(typeParameter.getVariance(), varianceOfCapturedType);
+        if (conflictTypeWithTypeParameter == VarianceConflictType.OUT_IN_IN_POSITION) {
+            return new TypeProjectionImpl(capturedTypeProjection.getType());
+        }
+
+        return substituted;
+    }
+
+    @NotNull
     private static Annotations filterOutUnsafeVariance(@NotNull Annotations annotations) {
-        if (!annotations.hasAnnotation(KotlinBuiltIns.FQ_NAMES.unsafeVariance)) return annotations;
+        if (!annotations.hasAnnotation(StandardNames.FqNames.unsafeVariance)) return annotations;
         return new FilteredAnnotations(annotations, new Function1<FqName, Boolean>() {
             @Override
             public Boolean invoke(@NotNull  FqName name) {
-                return !name.equals(KotlinBuiltIns.FQ_NAMES.unsafeVariance);
+                return !name.equals(StandardNames.FqNames.unsafeVariance);
             }
         });
     }
@@ -250,7 +344,9 @@ public class TypeSubstitutor {
         KotlinType substitutedAbbreviation = null;
         SimpleType abbreviation = SpecialTypesKt.getAbbreviation(type);
         if (abbreviation != null) {
-            substitutedAbbreviation = substitute(abbreviation, Variance.INVARIANT);
+            // We shouldn't approximate abbreviation at the top-level as they can't be projected: below we substitute this always as invariant
+            TypeSubstitutor substitutorForAbbreviation = replaceWithNonApproximatingSubstitution();
+            substitutedAbbreviation = substitutorForAbbreviation.substitute(abbreviation, Variance.INVARIANT);
         }
 
         List<TypeProjection> substitutedArguments = substituteTypeArguments(
@@ -274,7 +370,7 @@ public class TypeSubstitutor {
             TypeParameterDescriptor typeParameter = typeParameters.get(i);
             TypeProjection typeArgument = typeArguments.get(i);
 
-            TypeProjection substitutedTypeArgument = unsafeSubstitute(typeArgument, recursionDepth + 1);
+            TypeProjection substitutedTypeArgument = unsafeSubstitute(typeArgument, typeParameter, recursionDepth + 1);
 
             switch (conflictType(typeParameter.getVariance(), substitutedTypeArgument.getProjectionKind())) {
                 case NO_CONFLICT:

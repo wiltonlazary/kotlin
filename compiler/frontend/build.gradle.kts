@@ -1,25 +1,33 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 dependencies {
-    compile(project(":core:descriptors"))
-    compile(project(":core:deserialization"))
-    compile(project(":compiler:util"))
-    compile(project(":compiler:container"))
-    compile(project(":compiler:resolution"))
-    compile(project(":compiler:psi"))
-    compile(project(":kotlin-script-runtime"))
-    compile(commonDep("io.javaslang","javaslang"))
-    compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    compileOnly(intellijDep()) { includeJars("annotations", "trove4j", "guava", rootProject = rootProject) }
+    api(project(":kotlin-annotations-jvm"))
+    api(project(":core:descriptors"))
+    api(project(":core:deserialization"))
+    api(project(":compiler:util"))
+    api(project(":compiler:config"))
+    api(project(":compiler:container"))
+    api(project(":compiler:resolution"))
+    api(project(":compiler:psi"))
+    api(project(":compiler:frontend.common"))
+    api(project(":compiler:frontend.common-psi"))
+    api(project(":kotlin-script-runtime"))
+    api(commonDependency("io.javaslang","javaslang"))
+    compileOnly(intellijCore())
+    compileOnly(commonDependency("org.jetbrains.intellij.deps.fastutil:intellij-deps-fastutil"))
+    compileOnly(libs.guava)
 }
 
 sourceSets {
     "main" { projectDefault() }
     "test" {}
+}
+
+tasks.withType<KotlinJvmCompile>().configureEach {
+    compilerOptions.freeCompilerArgs.add("-Xconsistent-data-class-copy-visibility")
 }

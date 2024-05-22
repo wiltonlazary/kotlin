@@ -44,7 +44,7 @@ class TreeBasedMethod(
         get() = tree.modifiers.isFinal
 
     override val visibility: Visibility
-        get() = if (containingClass.isInterface) Visibilities.PUBLIC else tree.modifiers.visibility
+        get() = if (containingClass.isInterface) Visibilities.Public else tree.modifiers.visibility
 
     override val typeParameters: List<JavaTypeParameter>
         get() = tree.typeParameters.map { TreeBasedTypeParameter(it, compilationUnit, javac, this) }
@@ -55,6 +55,9 @@ class TreeBasedMethod(
     override val returnType: JavaType
         get() = TreeBasedType.create(tree.returnType, compilationUnit, javac, annotations, this)
 
-    override val hasAnnotationParameterDefaultValue: Boolean
-        get() = tree.defaultValue != null
+    // TODO: allow nullable names in Tree-based annotation arguments and pass null instead of a synthetic name
+    override val annotationParameterDefaultValue: JavaAnnotationArgument?
+        get() = tree.defaultValue?.let { defaultValue ->
+            createAnnotationArgument(defaultValue, Name.identifier("value"), compilationUnit, javac, containingClass, this)
+        }
 }

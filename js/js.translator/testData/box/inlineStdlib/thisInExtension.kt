@@ -1,9 +1,8 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1116
+// EXPECTED_REACHABLE_NODES: 1286
 package foo
 
-// CHECK_CONTAINS_NO_CALLS: testImplicitThis
-// CHECK_CONTAINS_NO_CALLS: testExplicitThis
+// CHECK_CONTAINS_NO_CALLS: testImplicitThis except=Unit_getInstance
+// CHECK_CONTAINS_NO_CALLS: testExplicitThis except=Unit_getInstance
 
 internal class A(var value: Int)
 

@@ -23,21 +23,30 @@ import org.jetbrains.kotlin.android.synthetic.descriptors.AndroidSyntheticPackag
 import org.jetbrains.kotlin.android.synthetic.descriptors.AndroidSyntheticPackageFragmentDescriptor
 import org.jetbrains.kotlin.android.synthetic.descriptors.LazySyntheticElementResolveContext
 import org.jetbrains.kotlin.android.synthetic.descriptors.PredefinedPackageFragmentDescriptor
+import org.jetbrains.kotlin.android.synthetic.descriptors.PredefinedPackageFragmentDescriptor.LazyAndroidExtensionsPackageFragmentDescriptor
 import org.jetbrains.kotlin.android.synthetic.forEachUntilLast
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PackageFragmentDescriptor
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider
+import org.jetbrains.kotlin.descriptors.PackageFragmentProviderOptimized
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.jvm.extensions.PackageFragmentProviderExtension
 import org.jetbrains.kotlin.storage.StorageManager
+import org.jetbrains.kotlin.utils.addIfNotNull
 
 abstract class AndroidPackageFragmentProviderExtension : PackageFragmentProviderExtension {
     protected abstract fun getLayoutXmlFileManager(project: Project, moduleInfo: ModuleInfo?): AndroidLayoutXmlFileManager?
 
     protected abstract fun isExperimental(moduleInfo: ModuleInfo?): Boolean
+
+    protected open fun <T : Any> createLazyValue(value: () -> T): () -> T {
+        // The default (CLI) implementation is not lazy
+        val evaluatedValue = value()
+        return { evaluatedValue }
+    }
 
     override fun getPackageFragmentProvider(
             project: Project,
@@ -55,21 +64,27 @@ abstract class AndroidPackageFragmentProviderExtension : PackageFragmentProvider
 
         val lazyContext = LazySyntheticElementResolveContext(module, storageManager)
 
-        val allPackageDescriptors = arrayListOf<PackageFragmentDescriptor>()
-        val packagesToLookupInCompletion = arrayListOf<PackageFragmentDescriptor>()
+        val packages = mutableMapOf<FqName, () -> PackageFragmentDescriptor>()
+        val packagesToLookupInCompletion = mutableListOf<LazyAndroidExtensionsPackageFragmentDescriptor>()
 
         // Packages with synthetic properties
         for (variantData in moduleData.variants) {
             for ((layoutName, layouts) in variantData.layouts) {
-                fun createPackageFragment(fqName: String, forView: Boolean, isDeprecated: Boolean = false) {
-                    val resources = layoutXmlFileManager.extractResources(AndroidLayoutGroupData(layoutName, layouts), module)
-                    val packageData = AndroidSyntheticPackageData(moduleData, forView, isDeprecated, resources)
-                    val packageDescriptor = AndroidSyntheticPackageFragmentDescriptor(
-                            module, FqName(fqName), packageData, lazyContext, storageManager, isExperimental,
+                fun createPackageFragment(fqNameString: String, forView: Boolean, isDeprecated: Boolean = false) {
+                    val fqName = FqName(fqNameString)
+
+                    val lazyPackageDescriptor = createLazyValue {
+                        val packageData = AndroidSyntheticPackageData(moduleData, forView, isDeprecated) {
+                            layoutXmlFileManager.extractResources(AndroidLayoutGroupData(layoutName, layouts), module)
+                        }
+
+                        AndroidSyntheticPackageFragmentDescriptor(
+                            module, fqName, packageData, lazyContext, storageManager, isExperimental,
                             lookupTracker, layoutName
-                    )
-                    packagesToLookupInCompletion += packageDescriptor
-                    allPackageDescriptors += packageDescriptor
+                        )
+                    }
+                    packages[fqName] = lazyPackageDescriptor
+                    packagesToLookupInCompletion += LazyAndroidExtensionsPackageFragmentDescriptor(lazyPackageDescriptor, isDeprecated)
                 }
 
                 val packageFqName = AndroidConst.SYNTHETIC_PACKAGE + '.' + variantData.variant.name + '.' + layoutName
@@ -80,40 +95,56 @@ abstract class AndroidPackageFragmentProviderExtension : PackageFragmentProvider
         }
 
         // Empty middle packages
-        AndroidConst.SYNTHETIC_SUBPACKAGES.forEachUntilLast { s ->
-            allPackageDescriptors += PredefinedPackageFragmentDescriptor(s, module, storageManager)
+        AndroidConst.SYNTHETIC_SUBPACKAGES.forEachUntilLast { fqNameString ->
+            val fqName = FqName(fqNameString)
+            packages[fqName] = createLazyValue {
+                PredefinedPackageFragmentDescriptor(fqName, module, storageManager)
+            }
         }
 
         for (variantData in moduleData.variants) {
-            val fqName = AndroidConst.SYNTHETIC_PACKAGE + '.' + variantData.variant.name
-            allPackageDescriptors += PredefinedPackageFragmentDescriptor(fqName, module, storageManager)
+            val fqName = FqName(AndroidConst.SYNTHETIC_PACKAGE + '.' + variantData.variant.name)
+            packages[fqName] = createLazyValue {
+                PredefinedPackageFragmentDescriptor(fqName, module, storageManager)
+            }
         }
 
         // Package with clearFindViewByIdCache()
-        AndroidConst.SYNTHETIC_SUBPACKAGES.last().let { s ->
-            val packageDescriptor = PredefinedPackageFragmentDescriptor(s, module, storageManager, packagesToLookupInCompletion) { descriptor ->
-                val widgetReceivers = lazyContext().getWidgetReceivers(forView = false, isExperimental = isExperimental) +
-                                      lazyContext().getWidgetReceivers(forView = true, isExperimental = isExperimental)
+        AndroidConst.SYNTHETIC_SUBPACKAGES.last().let { fqNameString ->
+            val fqName = FqName(fqNameString)
+            val lazyPackageDescriptor = createLazyValue {
+                PredefinedPackageFragmentDescriptor(fqName, module, storageManager, packagesToLookupInCompletion) { descriptor ->
+                    val widgetReceivers = lazyContext().getWidgetReceivers(forView = false, isExperimental = isExperimental) +
+                            lazyContext().getWidgetReceivers(forView = true, isExperimental = isExperimental)
 
-                widgetReceivers
+                    widgetReceivers
                         .filter { it.mayHaveCache }
                         .map { genClearCacheFunction(descriptor, it.type) }
+                }
             }
-            packagesToLookupInCompletion += packageDescriptor
-            allPackageDescriptors += packageDescriptor
+
+            packages[fqName] = lazyPackageDescriptor
+            packagesToLookupInCompletion += LazyAndroidExtensionsPackageFragmentDescriptor(lazyPackageDescriptor, false)
         }
 
-        return AndroidSyntheticPackageFragmentProvider(allPackageDescriptors)
+        return AndroidSyntheticPackageFragmentProvider(packages)
     }
 }
 
-class AndroidSyntheticPackageFragmentProvider(val packageFragments: Collection<PackageFragmentDescriptor>) : PackageFragmentProvider {
-    override fun getPackageFragments(fqName: FqName) = packageFragments.filter { it.fqName == fqName }
+class AndroidSyntheticPackageFragmentProvider(
+    val packages: Map<FqName, () -> PackageFragmentDescriptor>
+) : PackageFragmentProviderOptimized {
+    override fun collectPackageFragments(fqName: FqName, packageFragments: MutableCollection<PackageFragmentDescriptor>) =
+        packageFragments.addIfNotNull(packages[fqName]?.invoke())
+
+    override fun isEmpty(fqName: FqName): Boolean = !packages.containsKey(fqName)
+
+    @Deprecated("for usages use #packageFragments(FqName) at final point, for impl use #collectPackageFragments(FqName, MutableCollection<PackageFragmentDescriptor>)")
+    override fun getPackageFragments(fqName: FqName) = listOfNotNull(packages[fqName]?.invoke())
 
     override fun getSubPackagesOf(fqName: FqName, nameFilter: (Name) -> Boolean): List<FqName> {
-        return packageFragments.asSequence()
-                .map { it.fqName }
-                .filter { !it.isRoot && it.parent() == fqName }
-                .toList()
+        return packages.asSequence()
+            .filter { (k, _) -> !k.isRoot && k.parent() == fqName }
+            .mapTo(mutableListOf()) { it.key }
     }
 }

@@ -42,17 +42,14 @@ import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.psi.psiUtil.PsiUtilsKt;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
-import org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt;
+import org.jetbrains.kotlin.resolve.calls.util.CallUtilKt;
 import org.jetbrains.kotlin.resolve.calls.model.DefaultValueArgument;
 import org.jetbrains.kotlin.resolve.calls.model.ExpressionValueArgument;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedValueArgument;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 import static org.jetbrains.kotlin.js.translate.utils.BindingUtils.*;
 import static org.jetbrains.kotlin.js.translate.utils.FunctionBodyTranslator.setDefaultValueForArguments;
@@ -232,26 +229,30 @@ public final class ClassInitializerTranslator extends AbstractTranslator {
                 }
                 else {
                     for (ValueParameterDescriptor parameter : superDescriptor.getValueParameters()) {
-                        JsName parameterName = context.getNameForDescriptor(parameter);
+                        JsName parameterName = JsScope.declareTemporaryName(parameter.getName().asString());
                         arguments.add(parameterName.makeRef());
                         initializer.getParameters().add(new JsParameter(parameterName));
                     }
                 }
 
-                if (superDescriptor.isPrimary()) {
+                if (superDescriptor.isPrimary() || superDescriptor.getConstructedClass().isExternal()) {
                     addCallToSuperMethod(arguments, initializer, superCall.getCall().getCallElement());
                 }
                 else {
-                    int maxValueArgumentIndex = 0;
-                    for (ValueParameterDescriptor arg : superCall.getValueArguments().keySet()) {
-                        ResolvedValueArgument resolvedArg = superCall.getValueArguments().get(arg);
-                        if (!(resolvedArg instanceof DefaultValueArgument)) {
-                            maxValueArgumentIndex = Math.max(maxValueArgumentIndex, arg.getIndex() + 1);
+                    // Add `void 0` for the trailing default arguments
+                    // Anonymous object constructor already has all the parameters proxied, including ones with default values
+                    if (!DescriptorUtils.isAnonymousObject(classDescriptor)) {
+                        int maxValueArgumentIndex = 0;
+                        for (ValueParameterDescriptor arg : superCall.getValueArguments().keySet()) {
+                            ResolvedValueArgument resolvedArg = superCall.getValueArguments().get(arg);
+                            if (!(resolvedArg instanceof DefaultValueArgument)) {
+                                maxValueArgumentIndex = Math.max(maxValueArgumentIndex, arg.getIndex() + 1);
+                            }
                         }
-                    }
-                    int padSize = superDescriptor.getValueParameters().size() - maxValueArgumentIndex;
-                    while (padSize-- > 0) {
-                        arguments.add(Namer.getUndefinedExpression());
+                        int padSize = superDescriptor.getValueParameters().size() - maxValueArgumentIndex;
+                        while (padSize-- > 0) {
+                            arguments.add(Namer.getUndefinedExpression());
+                        }
                     }
                     addCallToSuperSecondaryConstructor(arguments, superDescriptor);
                 }
@@ -357,18 +358,18 @@ public final class ClassInitializerTranslator extends AbstractTranslator {
     private List<JsParameter> translatePrimaryConstructorParameters() {
         List<KtParameter> parameterList = getPrimaryConstructorParameters(classDeclaration);
         List<JsParameter> result = new ArrayList<>();
-        for (KtParameter jetParameter : parameterList) {
-            result.add(translateParameter(jetParameter));
+        for (KtParameter ktParameter : parameterList) {
+            result.add(translateParameter(ktParameter));
         }
         return result;
     }
 
     @NotNull
-    private JsParameter translateParameter(@NotNull KtParameter jetParameter) {
-        DeclarationDescriptor parameterDescriptor = getDescriptorForElement(bindingContext(), jetParameter);
+    private JsParameter translateParameter(@NotNull KtParameter ktParameter) {
+        DeclarationDescriptor parameterDescriptor = getDescriptorForElement(bindingContext(), ktParameter);
         JsName parameterName = context().getNameForDescriptor(parameterDescriptor);
         JsParameter jsParameter = new JsParameter(parameterName);
-        mayBeAddInitializerStatementForProperty(jsParameter, jetParameter);
+        mayBeAddInitializerStatementForProperty(jsParameter, ktParameter);
         return jsParameter;
     }
 

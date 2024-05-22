@@ -22,13 +22,13 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.search.SearchScope
 import com.intellij.util.IncorrectOperationException
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.psi.stubs.KotlinPlaceHolderStub
-import org.jetbrains.kotlin.psi.stubs.elements.KtPlaceHolderStubElementType
+import org.jetbrains.kotlin.psi.stubs.KotlinConstructorStub
+import org.jetbrains.kotlin.psi.stubs.elements.KtConstructorElementType
 import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementTypes
 
-abstract class KtConstructor<T : KtConstructor<T>> : KtDeclarationStub<KotlinPlaceHolderStub<T>>, KtFunction {
+abstract class KtConstructor<T : KtConstructor<T>> : KtDeclarationStub<KotlinConstructorStub<T>>, KtFunction {
     protected constructor(node: ASTNode) : super(node)
-    protected constructor(stub: KotlinPlaceHolderStub<T>, nodeType: KtPlaceHolderStubElementType<T>) : super(stub, nodeType)
+    protected constructor(stub: KotlinConstructorStub<T>, nodeType: KtConstructorElementType<T>) : super(stub, nodeType)
 
     abstract fun getContainingClassOrObject(): KtClassOrObject
 
@@ -39,6 +39,8 @@ abstract class KtConstructor<T : KtConstructor<T>> : KtDeclarationStub<KotlinPla
     override fun getValueParameters() = valueParameterList?.parameters ?: emptyList()
 
     override fun getReceiverTypeReference() = null
+
+    override fun getContextReceivers(): List<KtContextReceiver> = emptyList()
 
     override fun getTypeReference() = null
 
@@ -51,9 +53,30 @@ abstract class KtConstructor<T : KtConstructor<T>> : KtDeclarationStub<KotlinPla
 
     override fun getEqualsToken() = null
 
-    override fun hasBlockBody() = bodyExpression != null
+    override fun hasBlockBody() = hasBody()
 
-    override fun hasBody() = bodyExpression != null
+    fun isDelegatedCallToThis(): Boolean {
+        stub?.let { return it.isDelegatedCallToThis() }
+        return when (this) {
+            is KtPrimaryConstructor -> false
+            is KtSecondaryConstructor -> getDelegationCallOrNull()?.isCallToThis() ?: true
+            else -> throw IllegalStateException("Unknown constructor type: $this")
+        }
+    }
+
+    fun isExplicitDelegationCall(): Boolean {
+        stub?.let { return it.isExplicitDelegationCall() }
+        return when (this) {
+            is KtPrimaryConstructor -> false
+            is KtSecondaryConstructor -> getDelegationCallOrNull()?.isImplicit == false
+            else -> throw IllegalStateException("Unknown constructor type: $this")
+        }
+    }
+
+    override fun hasBody(): Boolean {
+        stub?.let { return it.hasBody() }
+        return bodyExpression != null
+    }
 
     override fun hasDeclaredReturnType() = false
 
@@ -75,6 +98,8 @@ abstract class KtConstructor<T : KtConstructor<T>> : KtDeclarationStub<KotlinPla
 
     override fun getNameIdentifier() = null
 
+    override fun getIdentifyingElement(): PsiElement? = getConstructorKeyword()
+
     @Throws(IncorrectOperationException::class)
     override fun setName(name: String): PsiElement = throw IncorrectOperationException("setName to constructor")
 
@@ -86,8 +111,8 @@ abstract class KtConstructor<T : KtConstructor<T>> : KtDeclarationStub<KotlinPla
 
     override fun getTextOffset(): Int {
         return getConstructorKeyword()?.textOffset
-                ?: valueParameterList?.textOffset
-                ?: super.getTextOffset()
+            ?: valueParameterList?.textOffset
+            ?: super.getTextOffset()
     }
 
     override fun getUseScope(): SearchScope {

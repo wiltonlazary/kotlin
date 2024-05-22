@@ -23,14 +23,14 @@ import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
 import org.jetbrains.org.objectweb.asm.MethodVisitor
 import org.jetbrains.org.objectweb.asm.Opcodes
 
-internal fun generateParameterNames(
+fun generateParameterNames(
         functionDescriptor: FunctionDescriptor,
         mv: MethodVisitor,
         jvmSignature: JvmMethodSignature,
         state: GenerationState,
         isSynthetic: Boolean
 ) {
-    if (!state.generateParametersMetadata || isSynthetic) {
+    if (!state.config.generateParametersMetadata || isSynthetic) {
         return
     }
 
@@ -46,7 +46,10 @@ internal fun generateParameterNames(
                 isEnumName = !isEnumName
                 if (!isEnumName) "\$enum\$name" else "\$enum\$ordinal"
             }
-            JvmMethodParameterKind.RECEIVER -> AsmUtil.RECEIVER_NAME
+            JvmMethodParameterKind.RECEIVER,
+            JvmMethodParameterKind.CONTEXT_RECEIVER -> {
+                DescriptorAsmUtil.getNameForReceiverParameter(functionDescriptor, state.bindingContext, state.languageVersionSettings)
+            }
             JvmMethodParameterKind.OUTER -> AsmUtil.CAPTURED_THIS_FIELD
             JvmMethodParameterKind.VALUE -> iterator.next().name.asString()
 
@@ -65,7 +68,7 @@ internal fun generateParameterNames(
         // declared implicitly in source code (§8.8.1, §8.8.9, §8.9.3, §15.9.5.1).
         val access = when (kind) {
             JvmMethodParameterKind.ENUM_NAME_OR_ORDINAL -> Opcodes.ACC_SYNTHETIC
-            JvmMethodParameterKind.RECEIVER -> Opcodes.ACC_MANDATED
+            JvmMethodParameterKind.RECEIVER, JvmMethodParameterKind.CONTEXT_RECEIVER -> Opcodes.ACC_MANDATED
             JvmMethodParameterKind.OUTER -> Opcodes.ACC_MANDATED
             JvmMethodParameterKind.VALUE -> 0
 

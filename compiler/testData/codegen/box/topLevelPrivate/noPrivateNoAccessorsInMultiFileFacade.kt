@@ -1,7 +1,5 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
-
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// WITH_STDLIB
 
 @file:kotlin.jvm.JvmMultifileClass
 @file:kotlin.jvm.JvmName("TestKt")
@@ -21,5 +19,5 @@ fun box(): String {
 
     return {
         prop + test()
-    }()
+    }.let { it() }
 }

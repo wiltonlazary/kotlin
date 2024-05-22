@@ -19,7 +19,7 @@ internal class A {
     }
 }
 
-// MODULE: main(lib)(lib)
+// MODULE: main()(lib)
 // FILE: main.kt
 
 package main

@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.contracts
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.contracts.description.*
 import org.jetbrains.kotlin.contracts.description.expressions.*
+import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.metadata.ProtoBuf
 import org.jetbrains.kotlin.metadata.deserialization.Flags
@@ -27,34 +28,39 @@ import org.jetbrains.kotlin.metadata.deserialization.isInstanceType
 import org.jetbrains.kotlin.serialization.deserialization.ContractDeserializer
 import org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration
 import org.jetbrains.kotlin.serialization.deserialization.TypeDeserializer
+import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.utils.addIfNotNull
 
-class ContractDeserializerImpl(private val configuration: DeserializationConfiguration) : ContractDeserializer {
+class ContractDeserializerImpl(
+    private val configuration: DeserializationConfiguration,
+    private val storageManager: StorageManager
+) : ContractDeserializer {
     override fun deserializeContractFromFunction(
         proto: ProtoBuf.Function,
         ownerFunction: FunctionDescriptor,
         typeTable: TypeTable,
         typeDeserializer: TypeDeserializer
-    ): Pair<FunctionDescriptor.UserDataKey<*>, LazyContractProvider>? {
+    ): Pair<CallableDescriptor.UserDataKey<*>, AbstractContractProvider>? {
         if (!proto.hasContract()) return null
 
         if (!configuration.readDeserializedContracts) return null
 
-        val worker = ContractDeserializationWorker(typeTable, typeDeserializer, ownerFunction)
-        val contract = worker.deserializeContract(proto.contract)
-        return ContractProviderKey to LazyContractProvider.createInitialized(contract)
+        val worker = ContractDeserializationWorker(typeTable, typeDeserializer, ownerFunction, storageManager)
+        val contract = worker.deserializeContract(proto.contract) ?: return null
+        return ContractProviderKey to ContractProviderImpl(contract)
     }
 
     private class ContractDeserializationWorker(
         private val typeTable: TypeTable,
         private val typeDeserializer: TypeDeserializer,
-        private val ownerFunction: FunctionDescriptor
+        private val ownerFunction: FunctionDescriptor,
+        private val storageManager: StorageManager
     ) {
 
         fun deserializeContract(proto: ProtoBuf.Contract): ContractDescription? {
             val effects = proto.effectList.map { deserializePossiblyConditionalEffect(it) ?: return null }
-            return ContractDescription(effects, ownerFunction)
+            return ContractDescription(effects, ownerFunction, storageManager)
         }
 
         private fun deserializePossiblyConditionalEffect(proto: ProtoBuf.Effect): EffectDeclaration? {
@@ -74,7 +80,7 @@ class ContractDeserializerImpl(private val configuration: DeserializationConfigu
                     val argument = proto.effectConstructorArgumentList.getOrNull(0)
                     val returnValue =
                         if (argument == null) ConstantReference.WILDCARD else deserializeExpression(argument) as? ConstantReference
-                                ?: return null
+                            ?: return null
                     ReturnsEffectDeclaration(returnValue)
                 }
 
@@ -88,7 +94,7 @@ class ContractDeserializerImpl(private val configuration: DeserializationConfigu
                     val invocationKind = if (proto.hasKind())
                         proto.kind.toDescriptorInvocationKind() ?: return null
                     else
-                        InvocationKind.UNKNOWN
+                        EventOccurrencesRange.UNKNOWN
                     CallsEffectDeclaration(callable, invocationKind)
                 }
             }
@@ -159,10 +165,10 @@ class ContractDeserializerImpl(private val configuration: DeserializationConfigu
                 BooleanVariableReference(parameterDescriptor)
         }
 
-        private fun ProtoBuf.Effect.InvocationKind.toDescriptorInvocationKind(): InvocationKind? = when (this) {
-            ProtoBuf.Effect.InvocationKind.AT_MOST_ONCE -> InvocationKind.AT_MOST_ONCE
-            ProtoBuf.Effect.InvocationKind.EXACTLY_ONCE -> InvocationKind.EXACTLY_ONCE
-            ProtoBuf.Effect.InvocationKind.AT_LEAST_ONCE -> InvocationKind.AT_LEAST_ONCE
+        private fun ProtoBuf.Effect.InvocationKind.toDescriptorInvocationKind(): EventOccurrencesRange? = when (this) {
+            ProtoBuf.Effect.InvocationKind.AT_MOST_ONCE -> EventOccurrencesRange.AT_MOST_ONCE
+            ProtoBuf.Effect.InvocationKind.EXACTLY_ONCE -> EventOccurrencesRange.EXACTLY_ONCE
+            ProtoBuf.Effect.InvocationKind.AT_LEAST_ONCE -> EventOccurrencesRange.AT_LEAST_ONCE
         }
 
         private fun extractType(proto: ProtoBuf.Expression): KotlinType? {

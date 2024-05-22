@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.js
@@ -20,7 +20,9 @@ public open external class Promise<out T>(executor: (resolve: (T) -> Unit, rejec
 
     public open fun <S> catch(onRejected: (Throwable) -> S): Promise<S>
 
-    companion object {
+    public open fun finally(onFinally: () -> Unit): Promise<T>
+
+    public companion object {
         public fun <S> all(promise: Array<out Promise<S>>): Promise<Array<out S>>
 
         public fun <S> race(promise: Array<out Promise<S>>): Promise<S>
@@ -33,13 +35,13 @@ public open external class Promise<out T>(executor: (resolve: (T) -> Unit, rejec
 }
 
 // It's workaround for KT-19672 since we can fix it properly until KT-11265 isn't fixed.
-inline fun <T, S> Promise<Promise<T>>.then(
+public inline fun <T, S> Promise<Promise<T>>.then(
     noinline onFulfilled: ((T) -> S)?
 ): Promise<S> {
     return this.unsafeCast<Promise<T>>().then(onFulfilled)
 }
 
-inline fun <T, S> Promise<Promise<T>>.then(
+public inline fun <T, S> Promise<Promise<T>>.then(
     noinline onFulfilled: ((T) -> S)?,
     noinline onRejected: ((Throwable) -> S)?
 ): Promise<S> {

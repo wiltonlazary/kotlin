@@ -1,5 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_ANONYMOUS_PARAMETER -UNUSED_VARIABLE
-// !WITH_NEW_INFERENCE
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_ANONYMOUS_PARAMETER -UNUSED_VARIABLE
 // NI_EXPECTED_FILE
 
 class GenericController<T> {
@@ -8,7 +8,7 @@ class GenericController<T> {
 
 fun <S> generate(g: suspend GenericController<S>.(S) -> Unit): S = TODO()
 
-val test1 = <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>generate<!> {
+val test1 = generate {
     yield(4)
 }
 

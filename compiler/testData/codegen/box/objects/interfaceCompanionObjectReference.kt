@@ -1,5 +1,5 @@
-// !LANGUAGE: +NestedClassesInAnnotations
-// WITH_RUNTIME
+// LANGUAGE: +NestedClassesInAnnotations
+// WITH_STDLIB
 
 import kotlin.test.*
 

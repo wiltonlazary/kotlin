@@ -1,5 +1,4 @@
-// !LANGUAGE: +MultiPlatformProjects
-// !DIAGNOSTICS: -NOTHING_TO_INLINE
+// DIAGNOSTICS: -NOTHING_TO_INLINE
 // MODULE: m1-common
 // FILE: common.kt
 
@@ -11,10 +10,10 @@ expect fun f4(s: () -> String)
 expect inline fun f5(s: () -> String)
 expect inline fun f6(crossinline s: () -> String)
 
-expect fun f7<!JVM:NO_ACTUAL_FOR_EXPECT!>(x: Any)<!>
-expect fun f8<!JVM:NO_ACTUAL_FOR_EXPECT!>(vararg x: Any)<!>
+expect fun f7<!NO_ACTUAL_FOR_EXPECT{JVM}!>(x: Any)<!>
+expect fun f8<!NO_ACTUAL_FOR_EXPECT{JVM}!>(vararg x: Any)<!>
 
-// MODULE: m2-jvm(m1-common)
+// MODULE: m2-jvm()()(m1-common)
 // FILE: jvm.kt
 
 actual inline fun f1(noinline s: () -> String) {}

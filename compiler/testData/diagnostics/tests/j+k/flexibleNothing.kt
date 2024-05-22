@@ -1,3 +1,5 @@
+// FIR_IDENTICAL
+
 // FILE: TestClass.java
 import org.jetbrains.annotations.Nullable;
 public class TestClass {

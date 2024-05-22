@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // FILE: Super.java
 public class Super {
     public boolean foo;
@@ -12,7 +13,7 @@ public class Super {
 public class Sub: Super() {
 }
 
-fun main(args: Array<String>) {
+fun main() {
     val x = Sub()
     x.foo = true
     x.bar = true

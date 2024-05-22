@@ -1,8 +1,11 @@
-// !CHECK_TYPE
+// FIR_IDENTICAL
+// CHECK_TYPE
 
 // KT-1410 Compiler does automatically infer type argument when using variance
 //+JDK
 package d
+
+import checkSubtype
 
 public fun <T> MutableCollection<out T>.filterToMy(result : MutableList<in T>, filter : (T) -> Boolean) : MutableCollection<out T> {
     for (t in this){
@@ -23,4 +26,4 @@ fun test(result: MutableList<in Any>, collection: MutableCollection<String>, pre
 }
 
 //from library
-fun String.startsWith(<!UNUSED_PARAMETER!>prefix<!>: String) : Boolean {<!NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY!>}<!>
+fun String.startsWith(prefix: String) : Boolean {<!NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY!>}<!>

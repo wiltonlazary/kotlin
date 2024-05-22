@@ -7,61 +7,102 @@ plugins {
 }
 
 val robolectricClasspath by configurations.creating
+val robolectricDependency by configurations.creating
+
+val androidExtensionsRuntimeForTests by configurations.creating
+val layoutLib by configurations.creating
+val layoutLibApi by configurations.creating
 
 dependencies {
-    testCompile(intellijCoreDep()) { includeJars("intellij-core") }
+    testApi(intellijCore())
 
-    compile(project(":compiler:util"))
-    compile(project(":compiler:plugin-api"))
-    compile(project(":compiler:frontend"))
-    compile(project(":compiler:frontend.java"))
-    compile(project(":compiler:backend"))
+    compileOnly(project(":compiler:util"))
+    compileOnly(project(":compiler:plugin-api"))
+    compileOnly(project(":compiler:frontend"))
+    compileOnly(project(":compiler:frontend.java"))
+    compileOnly(project(":compiler:backend"))
+    compileOnly(project(":compiler:ir.backend.common"))
+    compileOnly(project(":compiler:backend.jvm"))
+    compileOnly(project(":compiler:ir.tree"))
+    compileOnly(project(":compiler:cli"))
     compileOnly(project(":kotlin-android-extensions-runtime"))
-    compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    compileOnly(intellijDep()) { includeJars("asm-all") }
+    compileOnly(intellijCore())
+    compileOnly(commonDependency("org.jetbrains.intellij.deps:asm-all"))
 
-    testCompile(project(":compiler:util"))
-    testCompile(project(":compiler:backend"))
-    testCompile(project(":compiler:cli"))
-    testCompile(project(":compiler:tests-common"))
-    testCompile(project(":kotlin-android-extensions-runtime"))
-    testCompile(projectTests(":compiler:tests-common"))
-    testCompile(projectDist(":kotlin-test:kotlin-test-jvm"))
-    testCompile(commonDep("junit:junit"))
+    testApi(project(":compiler:util"))
+    testApi(project(":compiler:backend"))
+    testApi(project(":compiler:ir.backend.common"))
+    testApi(project(":compiler:backend.jvm"))
+    testApi(project(":compiler:cli"))
+    testApi(project(":kotlin-android-extensions-runtime"))
+    testApi(projectTests(":compiler:tests-common"))
+    testApi(kotlinTest("junit"))
+    testImplementation(libs.junit4)
 
-    testRuntime(intellijPluginDep("junit")) { includeJars("idea-junit", "resources_en") }
+    robolectricDependency("org.robolectric:android-all:5.0.2_r3-robolectric-r0")
 
-    robolectricClasspath(commonDep("org.robolectric", "robolectric"))
+    robolectricClasspath(commonDependency("org.robolectric", "robolectric"))
     robolectricClasspath(project(":kotlin-android-extensions-runtime")) { isTransitive = false }
 
-    embeddedComponents(project(":kotlin-android-extensions-runtime")) { isTransitive = false }
+    embedded(project(":kotlin-android-extensions-runtime")) { isTransitive = false }
+
+    androidExtensionsRuntimeForTests(project(":kotlin-android-extensions-runtime"))  { isTransitive = false }
+
+    layoutLib("org.jetbrains.intellij.deps.android.tools:layoutlib:26.5.0") { isTransitive = false }
+    layoutLibApi("com.android.tools.layoutlib:layoutlib-api:26.5.0") { isTransitive = false }
 }
+
+optInToExperimentalCompilerApi()
+optInToUnsafeDuringIrConstructionAPI()
 
 sourceSets {
     "main" { projectDefault() }
     "test" { projectDefault() }
 }
 
-runtimeJar {
-    fromEmbeddedComponents()
+runtimeJar()
+
+sourcesJar()
+
+javadocJar()
+
+testsJar()
+
+val robolectricDependencyDir = layout.buildDirectory.dir("robolectricDependencies")
+val prepareRobolectricDependencies by tasks.registering(Copy::class) {
+    from(robolectricDependency)
+    into(robolectricDependencyDir)
 }
 
-dist()
-
-ideaPlugin()
-
-testsJar {}
-
-evaluationDependsOn(":kotlin-android-extensions-runtime")
-
 projectTest {
-    environment("ANDROID_EXTENSIONS_RUNTIME_CLASSES", getSourceSetsFrom(":kotlin-android-extensions-runtime")["main"].output.classesDirs.asPath)
+    dependsOn(androidExtensionsRuntimeForTests)
+    dependsOn(robolectricClasspath)
+
+    dependsOn(prepareRobolectricDependencies)
     dependsOn(":dist")
+
     workingDir = rootDir
     useAndroidJar()
+
+    val androidExtensionsRuntimeProvider = project.provider {
+        androidExtensionsRuntimeForTests.asPath
+    }
+
+    val robolectricClasspathProvider = project.provider {
+        robolectricClasspath.asPath
+    }
+
+    val layoutLibConf: FileCollection = layoutLib
+    val layoutLibApiConf: FileCollection = layoutLibApi
+
     doFirst {
-        val androidPluginPath = File(intellijRootDir(), "plugins/android").canonicalPath
-        systemProperty("ideaSdk.androidPlugin.path", androidPluginPath)
-        systemProperty("robolectric.classpath", robolectricClasspath.asPath)
+        systemProperty("androidExtensionsRuntime.classpath", androidExtensionsRuntimeProvider.get())
+        systemProperty("robolectric.classpath", robolectricClasspathProvider.get())
+
+        systemProperty("robolectric.offline", "true")
+        systemProperty("robolectric.dependency.dir", robolectricDependencyDir.get().asFile)
+
+        systemProperty("layoutLib.path", layoutLibConf.singleFile.canonicalPath)
+        systemProperty("layoutLibApi.path", layoutLibApiConf.singleFile.canonicalPath)
     }
 }

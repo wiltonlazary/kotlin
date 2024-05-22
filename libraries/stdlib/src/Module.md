@@ -1,4 +1,4 @@
-# Module stdlib
+# Module kotlin-stdlib
 
 ## Kotlin Standard Library
 
@@ -34,17 +34,26 @@ Helper functions for creating [Comparator][java.util.Comparator] instances.
 
 Utility functions for concurrent programming.
 
-# Package kotlin.coroutines.experimental
+# Package kotlin.contracts
 
-Library support for coroutines, including support for lazy sequences.
+Experimental DSL for declaring custom function contracts.
 
-# Package kotlin.coroutines.experimental.intrinsics
+# Package kotlin.coroutines
+
+Basic primitives for creating and suspending coroutines: [Continuation][kotlin.coroutines.Continuation], 
+[CoroutineContext][kotlin.coroutines.CoroutineContext] interfaces, coroutine creation and suspension top-level functions.
+
+# Package kotlin.coroutines.intrinsics
 
 Low-level building blocks for libraries that provide coroutine-based APIs.
 
 # Package kotlin.dom
 
 Utility functions for working with the browser DOM.
+
+# Package kotlin.enum
+
+Utilities for working with Kotlin enum classes.
 
 # Package kotlin.experimental
 
@@ -54,6 +63,10 @@ Experimental APIs, subject to change in future versions of Kotlin.
 
 IO API for working with files and streams.
 
+# Package kotlin.io.path
+
+Convenient extensions for working with file system using [java.nio.file.Path][java.nio.file.Path].
+
 # Package kotlin.js
 
 Functions and other APIs specific to the JavaScript platform.
@@ -61,6 +74,10 @@ Functions and other APIs specific to the JavaScript platform.
 # Package kotlin.jvm
 
 Functions and annotations specific to the Java platform.
+
+# Package kotlin.jvm.optionals
+
+Convenience extension functions for `java.util.Optional` to simplify Kotlin-Java interop.
 
 # Package kotlin.math
 
@@ -70,24 +87,28 @@ The functions include trigonometric, hyperbolic, exponentiation and power, logar
 
 # Package kotlin.properties
 
-Standard implementations of delegates for [delegated properties](/docs/reference/delegated-properties.html)
+Standard implementations of delegates for [delegated properties](https://kotlinlang.org/docs/delegated-properties.html)
 and helper functions for implementing custom delegates.
+
+# Package kotlin.random
+
+Provides the default generator of pseudo-random values, the repeatable generator, and a base class for other RNG implementations.
 
 # Package kotlin.ranges
 
-[Ranges](/docs/reference/ranges.html), Progressions and related top-level and extension functions.
+[Ranges](https://kotlinlang.org/docs/ranges.html), Progressions and related top-level and extension functions.
 
 # Package kotlin.reflect
 
-Runtime API for [Kotlin reflection](/docs/reference/reflection.html)
+Runtime API for [Kotlin reflection](https://kotlinlang.org/docs/reflection.html)
 
 # Package kotlin.reflect.full
 
-Extensions for [Kotlin reflection](/docs/reference/reflection.html) provided by `kotlin-reflect` library.
+Extensions for [Kotlin reflection](https://kotlinlang.org/docs/reflection.html) provided by `kotlin-reflect` library.
 
 # Package kotlin.reflect.jvm
 
-Runtime API for interoperability between [Kotlin reflection](/docs/reference/reflection.html) and
+Runtime API for interoperability between [Kotlin reflection](https://kotlinlang.org/docs/reflection.html) and
 Java reflection provided by `kotlin-reflect` library.
 
 # Package kotlin.sequences
@@ -125,6 +146,12 @@ Functions for writing test assertions.
 # Package kotlin.text
 
 Functions for working with text and regular expressions.
+
+# Package kotlin.time
+
+API for measuring time intervals and calculating durations.
+
+For more information, see our [Time measurement](https://kotlinlang.org/docs/time-measurement.html) guide.
 
 # Package org.khronos.webgl
 

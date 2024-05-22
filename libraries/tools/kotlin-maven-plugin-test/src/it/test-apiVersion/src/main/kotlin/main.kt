@@ -1,4 +1,4 @@
-fun useApiFrom11() {
-    mapOf<Any, Any>().toMutableMap()
+fun test2() {
+    "".uppercase()
 }
 

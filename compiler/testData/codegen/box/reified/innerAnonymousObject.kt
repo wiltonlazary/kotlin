@@ -1,7 +1,7 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
-// WITH_RUNTIME
+// WITH_STDLIB
+package test
 
 import kotlin.test.assertEquals
 
@@ -27,6 +27,6 @@ inline fun<reified T> foo(): G {
 fun box(): String {
     val y = foo<String>().bar();
     assertEquals("OK", y.toString())
-    assertEquals("A<java.lang.String>", y.javaClass.getGenericSuperclass()?.toString())
+    assertEquals("test.A<java.lang.String>", y.javaClass.getGenericSuperclass()?.toString())
     return "OK"
 }

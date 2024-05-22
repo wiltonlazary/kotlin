@@ -20,6 +20,7 @@ import com.intellij.lang.ASTNode;
 import com.intellij.navigation.ItemPresentation;
 import com.intellij.navigation.ItemPresentationProviders;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiErrorElement;
 import com.intellij.psi.search.LocalSearchScope;
 import com.intellij.psi.search.SearchScope;
 import com.intellij.psi.tree.TokenSet;
@@ -84,7 +85,16 @@ public class KtParameter extends KtNamedDeclarationStub<KotlinParameterStub> imp
     @Nullable
     public KtExpression getDefaultValue() {
         KotlinParameterStub stub = getStub();
-        if (stub != null && !stub.hasDefaultValue()) return null;
+        if (stub != null) {
+            if (!stub.hasDefaultValue()) {
+                return null;
+            }
+
+            if (getContainingKtFile().isCompiled()) {
+                //don't load ast
+                return null;
+            }
+        }
 
         PsiElement equalsToken = getEqualsToken();
         return equalsToken != null ? PsiTreeUtil.getNextSiblingOfType(equalsToken, KtExpression.class) : null;
@@ -112,6 +122,7 @@ public class KtParameter extends KtNamedDeclarationStub<KotlinParameterStub> imp
         return getValOrVarKeyword() != null;
     }
 
+    @Override
     @Nullable
     public PsiElement getValOrVarKeyword() {
         KotlinParameterStub stub = getStub();
@@ -129,7 +140,7 @@ public class KtParameter extends KtNamedDeclarationStub<KotlinParameterStub> imp
         return findChildByType(KtNodeTypes.DESTRUCTURING_DECLARATION);
     }
 
-    private static final TokenSet VAL_VAR_TOKEN_SET = TokenSet.create(KtTokens.VAL_KEYWORD, KtTokens.VAR_KEYWORD);
+    public static final TokenSet VAL_VAR_TOKEN_SET = TokenSet.create(KtTokens.VAL_KEYWORD, KtTokens.VAR_KEYWORD);
 
     @Override
     public ItemPresentation getPresentation() {
@@ -138,6 +149,41 @@ public class KtParameter extends KtNamedDeclarationStub<KotlinParameterStub> imp
 
     public boolean isLoopParameter() {
         return getParent() instanceof KtForExpression;
+    }
+
+    private <T extends PsiElement> boolean checkParentOfParentType(Class<T> klass) {
+        // `parent` is supposed to be [KtParameterList]
+        PsiElement parent = getParent();
+        if (parent == null) {
+            return false;
+        }
+        return klass.isInstance(parent.getParent());
+    }
+
+    public boolean isCatchParameter() {
+        return checkParentOfParentType(KtCatchClause.class);
+    }
+
+    /**
+     * For example,
+     *   lambdaConsumer { lambdaParameter ->
+     *     ...
+     *   }
+     *
+     * @return [true] if this [KtParameter] is a parameter of a lambda.
+     */
+    public boolean isLambdaParameter() {
+        return checkParentOfParentType(KtFunctionLiteral.class);
+    }
+
+    /**
+     * For example,
+     *   fun foo(lambdaArgument: (functionTypeParameter: T, ...) -> R) { ... }
+     *
+     * @return [true] if this [KtParameter] is a parameter of a function type.
+     */
+    public boolean isFunctionTypeParameter() {
+        return checkParentOfParentType(KtFunctionType.class);
     }
 
     @Nullable
@@ -156,6 +202,12 @@ public class KtParameter extends KtNamedDeclarationStub<KotlinParameterStub> imp
     @Override
     public KtTypeReference getReceiverTypeReference() {
         return null;
+    }
+
+    @NotNull
+    @Override
+    public List<KtContextReceiver> getContextReceivers() {
+        return Collections.emptyList();
     }
 
     @Nullable

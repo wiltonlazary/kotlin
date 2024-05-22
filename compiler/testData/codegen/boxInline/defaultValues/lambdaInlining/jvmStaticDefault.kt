@@ -1,8 +1,10 @@
-// FILE: 1.kt
-// LANGUAGE_VERSION: 1.2
 // SKIP_INLINE_CHECK_IN: inlineFun$default
-// IGNORE_BACKEND: JS, NATIVE
-//WITH_RUNTIME
+// WITH_STDLIB
+// JVM_ABI_K1_K2_DIFF: KT-62464
+
+// FILE: 1.kt
+// TARGET_BACKEND: JVM
+
 package test
 
 object X {

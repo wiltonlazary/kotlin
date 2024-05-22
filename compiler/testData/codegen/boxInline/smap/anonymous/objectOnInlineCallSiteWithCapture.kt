@@ -1,5 +1,9 @@
+// NO_CHECK_LAMBDA_INLINING
+// IGNORE_BACKEND: JVM
+// IGNORE_BACKEND_MULTI_MODULE: JVM, JVM_MULTI_MODULE_IR_AGAINST_OLD
+// IGNORE_INLINER: IR
 // FILE: 1.kt
-
+// NO_SMAP_DUMP
 package builders
 //TODO there is a bug in asm it's skips linenumber on same line on reading bytecode
 inline fun call(crossinline init: () -> Unit) {
@@ -19,7 +23,6 @@ inline fun test(crossinline p: () -> String): String {
 
     return res
 }
-//TODO SHOULD BE LESS
 
 // FILE: 2.kt
 
@@ -29,6 +32,4 @@ import builders.*
 fun box(): String {
     return test{"OK"}
 }
-//NO_CHECK_LAMBDA_INLINING
 
-//TODO

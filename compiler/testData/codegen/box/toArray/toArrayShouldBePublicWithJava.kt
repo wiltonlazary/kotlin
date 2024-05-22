@@ -1,6 +1,5 @@
 // TARGET_BACKEND: JVM
-// WITH_RUNTIME
-// IGNORE_LIGHT_ANALYSIS
+// WITH_STDLIB
 
 // FILE: SingletonCollection.kt
 package test

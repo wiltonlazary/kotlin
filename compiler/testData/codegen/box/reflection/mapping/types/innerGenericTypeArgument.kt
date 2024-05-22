@@ -1,5 +1,7 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
+
+// "IOOBE: Invalid index 4, size is 4" for java.lang.reflect.ParameterizedType on Android
+// IGNORE_BACKEND: ANDROID
 
 // WITH_REFLECT
 

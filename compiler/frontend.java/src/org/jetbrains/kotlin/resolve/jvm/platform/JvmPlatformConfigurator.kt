@@ -1,39 +1,32 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.jvm.platform
 
+import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMapper
+import org.jetbrains.kotlin.container.PlatformExtensionsClashResolver
 import org.jetbrains.kotlin.container.StorageComponentContainer
 import org.jetbrains.kotlin.container.useImpl
 import org.jetbrains.kotlin.container.useInstance
-import org.jetbrains.kotlin.load.java.sam.SamConversionResolverImpl
-import org.jetbrains.kotlin.platform.JavaToKotlinClassMap
-import org.jetbrains.kotlin.resolve.PlatformConfigurator
-import org.jetbrains.kotlin.resolve.calls.checkers.ReifiedTypeParameterSubstitutionChecker
+import org.jetbrains.kotlin.load.java.sam.JvmSamConversionOracle
+import org.jetbrains.kotlin.resolve.PlatformConfiguratorBase
+import org.jetbrains.kotlin.resolve.checkers.BigFunctionTypeAvailabilityChecker
 import org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker
+import org.jetbrains.kotlin.resolve.calls.checkers.LateinitIntrinsicApplicabilityChecker
 import org.jetbrains.kotlin.resolve.jvm.*
 import org.jetbrains.kotlin.resolve.jvm.checkers.*
+import org.jetbrains.kotlin.resolve.jvm.multiplatform.JavaActualAnnotationArgumentExtractor
+import org.jetbrains.kotlin.resolve.sam.SamConversionResolver
+import org.jetbrains.kotlin.resolve.sam.SamConversionResolverImpl
 import org.jetbrains.kotlin.synthetic.JavaSyntheticScopes
-import org.jetbrains.kotlin.types.DynamicTypesSettings
+import org.jetbrains.kotlin.types.expressions.FunctionWithBigAritySupport
+import org.jetbrains.kotlin.types.expressions.GenericArrayClassLiteralSupport
 
-object JvmPlatformConfigurator : PlatformConfigurator(
-    DynamicTypesSettings(),
+object JvmPlatformConfigurator : PlatformConfiguratorBase(
     additionalDeclarationCheckers = listOf(
         JvmNameAnnotationChecker(),
-        VolatileAnnotationChecker(),
         SynchronizedAnnotationChecker(),
         LocalFunInlineChecker(),
         ExternalFunChecker(),
@@ -41,24 +34,43 @@ object JvmPlatformConfigurator : PlatformConfigurator(
         JvmFieldApplicabilityChecker(),
         TypeParameterBoundIsNotArrayChecker(),
         JvmSyntheticApplicabilityChecker(),
+        JvmInlineApplicabilityChecker(),
         StrictfpApplicabilityChecker(),
-        ExpectedActualDeclarationChecker
+        JvmAnnotationsTargetNonExistentAccessorChecker(),
+        SuspendInFunInterfaceChecker(),
+        BadInheritedJavaSignaturesChecker,
+        JvmMultifileClassStateChecker,
+        DefaultCheckerInTailrec,
+        FunctionDelegateMemberNameClashChecker,
+        ClassInheritsJavaSealedClassChecker,
+        JavaOverrideWithWrongNullabilityOverrideChecker,
     ),
 
     additionalCallCheckers = listOf(
+        MissingBuiltInDeclarationChecker,
         JavaAnnotationCallChecker(),
+        SuspensionPointInsideMutexLockChecker(),
         JavaClassOnCompanionChecker(),
         ProtectedInSuperClassCompanionCallChecker(),
         UnsupportedSyntheticCallableReferenceChecker(),
         SuperCallWithDefaultArgumentsChecker(),
         ProtectedSyntheticExtensionCallChecker,
-        ReifiedTypeParameterSubstitutionChecker(),
         RuntimeAssertionsOnExtensionReceiverCallChecker,
-        ApiVersionIsAtLeastArgumentsChecker
+        ApiVersionIsAtLeastArgumentsChecker,
+        InconsistentOperatorFromJavaCallChecker,
+        PolymorphicSignatureCallChecker,
+        SamInterfaceConstructorReferenceCallChecker,
+        EnumDeclaringClassDeprecationChecker,
+        UpperBoundViolatedInTypealiasConstructorChecker,
+        LateinitIntrinsicApplicabilityChecker(isWarningInPre19 = false),
+        JvmPropertyVsFieldAmbiguityCallChecker,
+    ),
+
+    additionalAssignmentCheckers = listOf(
+        JvmSyntheticAssignmentChecker,
     ),
 
     additionalTypeCheckers = listOf(
-        JavaNullabilityChecker(),
         RuntimeAssertionsTypeChecker,
         JavaGenericVarianceViolationTypeChecker,
         JavaTypeAccessibilityChecker(),
@@ -66,18 +78,25 @@ object JvmPlatformConfigurator : PlatformConfigurator(
     ),
 
     additionalClassifierUsageCheckers = listOf(
+        BigFunctionTypeAvailabilityChecker,
+        MissingBuiltInDeclarationChecker.ClassifierUsage
     ),
 
     additionalAnnotationCheckers = listOf(
-        RepeatableAnnotationChecker,
-        FileClassAnnotationsChecker
+        FileClassAnnotationsChecker,
+        ExplicitMetadataChecker,
+        SynchronizedAnnotationOnLambdaChecker,
+    ),
+
+    additionalClashResolvers = listOf(
+        PlatformExtensionsClashResolver.FallbackToDefault(SamConversionResolver.Empty, SamConversionResolver::class.java)
     ),
 
     identifierChecker = JvmSimpleNameBacktickChecker,
 
     overloadFilter = JvmOverloadFilter,
 
-    platformToKotlinClassMap = JavaToKotlinClassMap,
+    platformToKotlinClassMapper = JavaToKotlinClassMapper,
 
     delegationFilter = JvmDelegationFilter,
 
@@ -86,6 +105,8 @@ object JvmPlatformConfigurator : PlatformConfigurator(
     declarationReturnTypeSanitizer = JvmDeclarationReturnTypeSanitizer
 ) {
     override fun configureModuleComponents(container: StorageComponentContainer) {
+        container.useImpl<WarningAwareUpperBoundChecker>()
+        container.useImpl<JavaNullabilityChecker>()
         container.useImpl<JvmStaticChecker>()
         container.useImpl<JvmReflectionAPICallChecker>()
         container.useImpl<JavaSyntheticScopes>()
@@ -95,7 +116,22 @@ object JvmPlatformConfigurator : PlatformConfigurator(
         container.useImpl<InlinePlatformCompatibilityChecker>()
         container.useImpl<JvmModuleAccessibilityChecker>()
         container.useImpl<JvmModuleAccessibilityChecker.ClassifierUsage>()
-        container.useInstance(JvmTypeSpecificityComparator)
-        container.useImpl<JvmDefaultSuperCallChecker>()
+        container.useImpl<JvmTypeSpecificityComparatorDelegate>()
+        container.useImpl<JvmPlatformOverloadsSpecificityComparator>()
+        container.useImpl<JvmSamConversionOracle>()
+        container.useImpl<JvmAdditionalClassPartsProvider>()
+        container.useImpl<JvmRecordApplicabilityChecker>()
+        container.useImpl<JvmPlatformAnnotationFeaturesSupport>()
+
+        container.useInstance(FunctionWithBigAritySupport.LanguageVersionDependent)
+        container.useInstance(GenericArrayClassLiteralSupport.Enabled)
+        container.useInstance(JavaActualAnnotationArgumentExtractor())
+        container.useInstance(JvmSerializableLambdaAnnotationChecker)
+    }
+
+    override fun configureModuleDependentCheckers(container: StorageComponentContainer) {
+        super.configureModuleDependentCheckers(container)
+        container.useImpl<ExpectedActualDeclarationChecker>()
+        container.useImpl<RepeatableAnnotationChecker>()
     }
 }

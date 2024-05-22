@@ -21,7 +21,6 @@ import com.intellij.navigation.ItemPresentation;
 import com.intellij.navigation.ItemPresentationProviders;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiModifiableCodeBlock;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.TokenSet;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -37,10 +36,11 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.jetbrains.kotlin.KtNodeTypes.PROPERTY_DELEGATE;
-import static org.jetbrains.kotlin.lexer.KtTokens.*;
+import static org.jetbrains.kotlin.lexer.KtTokens.EQ;
+import static org.jetbrains.kotlin.psi.psiUtil.KtPsiUtilKt.isKtFile;
 
 public class KtProperty extends KtTypeParameterListOwnerStub<KotlinPropertyStub>
-        implements KtVariableDeclaration, PsiModifiableCodeBlock {
+        implements KtVariableDeclaration {
 
     private static final Logger LOG = Logger.getInstance(KtProperty.class);
 
@@ -83,7 +83,7 @@ public class KtProperty extends KtTypeParameterListOwnerStub<KotlinPropertyStub>
             return stub.isTopLevel();
         }
 
-        return getParent() instanceof KtFile;
+        return isKtFile(getParent());
     }
 
     @Nullable
@@ -111,6 +111,17 @@ public class KtProperty extends KtTypeParameterListOwnerStub<KotlinPropertyStub>
             }
         }
         return getReceiverTypeRefByTree();
+    }
+
+    @NotNull
+    @Override
+    public List<KtContextReceiver> getContextReceivers() {
+        KtContextReceiverList contextReceiverList = getStubOrPsiChild(KtStubElementTypes.CONTEXT_RECEIVER_LIST);
+        if (contextReceiverList != null) {
+            return contextReceiverList.contextReceivers();
+        } else {
+            return Collections.emptyList();
+        }
     }
 
     @Nullable
@@ -190,16 +201,31 @@ public class KtProperty extends KtTypeParameterListOwnerStub<KotlinPropertyStub>
         return null;
     }
 
+    @Nullable
+    public KtBackingField getFieldDeclaration() {
+        for (KtBackingField field : getStubOrPsiChildrenAsList(KtStubElementTypes.BACKING_FIELD)) {
+            return field;
+        }
+
+        return null;
+    }
+
     public boolean hasDelegate() {
         KotlinPropertyStub stub = getStub();
         if (stub != null) {
             return stub.hasDelegate();
         }
+
         return getDelegate() != null;
     }
 
     @Nullable
     public KtPropertyDelegate getDelegate() {
+        KotlinPropertyStub stub = getStub();
+        if (stub != null && !stub.hasDelegate()) {
+            return null;
+        }
+
         return (KtPropertyDelegate) findChildByType(PROPERTY_DELEGATE);
     }
 
@@ -208,15 +234,22 @@ public class KtProperty extends KtTypeParameterListOwnerStub<KotlinPropertyStub>
         if (stub != null) {
             return stub.hasDelegateExpression();
         }
+
         return getDelegateExpression() != null;
     }
 
     @Nullable
     public KtExpression getDelegateExpression() {
+        KotlinPropertyStub stub = getStub();
+        if (stub != null && !stub.hasDelegateExpression()) {
+            return null;
+        }
+
         KtPropertyDelegate delegate = getDelegate();
         if (delegate != null) {
             return delegate.getExpression();
         }
+
         return null;
     }
 
@@ -226,12 +259,25 @@ public class KtProperty extends KtTypeParameterListOwnerStub<KotlinPropertyStub>
         if (stub != null) {
             return stub.hasInitializer();
         }
+
         return getInitializer() != null;
     }
 
     @Override
     @Nullable
     public KtExpression getInitializer() {
+        KotlinPropertyStub stub = getStub();
+        if (stub != null) {
+            if (!stub.hasInitializer()) {
+                return null;
+            }
+
+            if (getContainingKtFile().isCompiled()) {
+                //don't load ast
+                return null;
+            }
+        }
+
         return PsiTreeUtil.getNextSiblingOfType(findChildByType(EQ), KtExpression.class);
     }
 
@@ -298,7 +344,7 @@ public class KtProperty extends KtTypeParameterListOwnerStub<KotlinPropertyStub>
         return ItemPresentationProviders.getItemPresentation(this);
     }
 
-    @Override
+    @SuppressWarnings({"unused", "MethodMayBeStatic"}) //keep for compatibility with potential plugins
     public boolean shouldChangeModificationCount(PsiElement place) {
         // Suppress Java check for out-of-block
         return false;

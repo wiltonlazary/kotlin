@@ -1,8 +1,8 @@
 class C {
 
-    fun f (<!UNUSED_PARAMETER!>a<!> : Boolean, <!UNUSED_PARAMETER!>b<!> : Boolean) {
+    fun f (a : Boolean, b : Boolean) {
         b@ while (true)
-          a@ {
+          <!REDUNDANT_LABEL_WARNING!>a@<!> {
             <!NOT_A_LOOP_LABEL!>break@f<!>
             break
             <!UNREACHABLE_CODE!>break@b<!>
@@ -12,7 +12,7 @@ class C {
         <!BREAK_OR_CONTINUE_OUTSIDE_A_LOOP!>continue<!>
 
         b@ while (true)
-          a@ {
+          <!REDUNDANT_LABEL_WARNING!>a@<!> {
             <!NOT_A_LOOP_LABEL!>continue@f<!>
             continue
             <!UNREACHABLE_CODE!>continue@b<!>
@@ -25,7 +25,7 @@ class C {
         <!NOT_A_LOOP_LABEL!>break@f<!>
     }
 
-    fun containsBreak(a: String?, <!UNUSED_PARAMETER!>b<!>: String?) {
+    fun containsBreak(a: String?, b: String?) {
         while (a == null) {
             break;
         }

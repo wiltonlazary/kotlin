@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.metadata.jvm.deserialization;
@@ -13,7 +13,19 @@ import java.util.List;
 import static org.jetbrains.kotlin.metadata.jvm.deserialization.UtfEncodingKt.MAX_UTF8_INFO_LENGTH;
 
 public class BitEncoding {
-    private static final boolean FORCE_8TO7_ENCODING = "true".equals(System.getProperty("kotlin.jvm.serialization.use8to7"));
+    private static final boolean FORCE_8TO7_ENCODING;
+
+    static {
+        String use8to7;
+        try {
+            use8to7 = System.getProperty("kotlin.jvm.serialization.use8to7");
+        }
+        catch (SecurityException e) {
+            use8to7 = null;
+        }
+
+        FORCE_8TO7_ENCODING = "true".equals(use8to7);
+    }
 
     private static final char _8TO7_MODE_MARKER = (char) -1;
 

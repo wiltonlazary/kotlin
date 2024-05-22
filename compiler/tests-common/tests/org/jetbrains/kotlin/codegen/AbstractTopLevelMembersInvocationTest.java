@@ -16,40 +16,37 @@
 
 package org.jetbrains.kotlin.codegen;
 
-import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.util.ArrayUtil;
 import kotlin.collections.CollectionsKt;
+import kotlin.io.FilesKt;
+import kotlin.sequences.SequencesKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
-import org.jetbrains.kotlin.test.CompilerTestUtil;
-import org.jetbrains.kotlin.test.ConfigurationKind;
-import org.jetbrains.kotlin.test.KotlinTestUtils;
-import org.jetbrains.kotlin.test.TestJdkKind;
+import org.jetbrains.kotlin.config.CommonConfigurationKeys;
+import org.jetbrains.kotlin.config.CompilerConfiguration;
+import org.jetbrains.kotlin.config.LanguageVersion;
+import org.jetbrains.kotlin.test.*;
+import org.jetbrains.kotlin.test.util.JUnit4Assertions;
+import org.jetbrains.kotlin.test.util.KtTestUtil;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static org.jetbrains.kotlin.codegen.BytecodeTextUtilsKt.checkGeneratedTextAgainstExpectedOccurrences;
+import static org.jetbrains.kotlin.codegen.BytecodeTextUtilsKt.readExpectedOccurrences;
+
 public abstract class AbstractTopLevelMembersInvocationTest extends AbstractBytecodeTextTest {
-
-    private static final String LIBRARY = "library";
-
     @Override
-    public void doTest(@NotNull String filename) throws Exception {
+    public void doTest(@NotNull String filename) {
         File root = new File(filename);
-        List<String> sourceFiles = new ArrayList<>(2);
+        List<String> sourceFiles = SequencesKt.toList(SequencesKt.map(
+                SequencesKt.filter(FilesKt.walkTopDown(root).maxDepth(1), File::isFile),
+                this::relativePath
+        ));
 
-        FileUtil.processFilesRecursively(root, file -> {
-            if (file.getName().endsWith(".kt")) {
-                sourceFiles.add(relativePath(file));
-                return true;
-            }
-            return true;
-        }, file -> !LIBRARY.equals(file.getName()));
-
-        File library = new File(root, LIBRARY);
+        File library = new File(root, "library");
         List<File> classPath =
                 library.exists()
                 ? Collections.singletonList(CompilerTestUtil.compileJvmLibrary(library))
@@ -58,18 +55,23 @@ public abstract class AbstractTopLevelMembersInvocationTest extends AbstractByte
         assert !sourceFiles.isEmpty() : getTestName(true) + " should contain at least one .kt file";
         Collections.sort(sourceFiles);
 
+        CompilerConfiguration configuration = KotlinTestUtils.newConfiguration(
+                ConfigurationKind.JDK_ONLY, TestJdkKind.MOCK_JDK,
+                CollectionsKt.plus(classPath, KtTestUtil.getAnnotationsJar()), Collections.emptyList()
+        );
+        if (LanguageVersion.LATEST_STABLE.compareTo(LanguageVersion.KOTLIN_2_0) >= 0) {
+            configuration.put(CommonConfigurationKeys.USE_FIR, true);
+        }
         myEnvironment = KotlinCoreEnvironment.createForTests(
                 getTestRootDisposable(),
-                KotlinTestUtils.newConfiguration(
-                        ConfigurationKind.JDK_ONLY, TestJdkKind.MOCK_JDK,
-                        CollectionsKt.plus(classPath, KotlinTestUtils.getAnnotationsJar()), Collections.emptyList()
-                ),
-                EnvironmentConfigFiles.JVM_CONFIG_FILES);
+                configuration,
+                EnvironmentConfigFiles.JVM_CONFIG_FILES
+        );
 
         loadFiles(ArrayUtil.toStringArray(sourceFiles));
 
-        List<OccurrenceInfo> expected = readExpectedOccurrences(KotlinTestUtils.getTestDataPathBase() + "/codegen/" + sourceFiles.get(0));
+        List<OccurrenceInfo> expected = readExpectedOccurrences(KtTestUtil.getTestDataPathBase() + "/codegen/" + sourceFiles.get(0));
         String actual = generateToText();
-        Companion.checkGeneratedTextAgainstExpectedOccurrences(actual, expected);
+        checkGeneratedTextAgainstExpectedOccurrences(actual, expected, TargetBackend.ANY, true, JUnit4Assertions.INSTANCE, false);
     }
 }

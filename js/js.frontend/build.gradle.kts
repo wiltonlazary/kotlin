@@ -1,23 +1,23 @@
-
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 dependencies {
-    compile(project(":compiler:util"))
-    compile(project(":compiler:frontend"))
-    compile(project(":js:js.ast"))
-    compile(project(":js:js.parser"))
-    compile(project(":js:js.serializer"))
-    compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    compileOnly(intellijDep()) { includeJars("guava", rootProject = rootProject) }
+    implementation(project(":kotlin-util-io"))
+    api(project(":compiler:util"))
+    api(project(":compiler:frontend"))
+    api(project(":core:compiler.common.js"))
+    implementation(project(":core:compiler.common.web"))
+    api(project(":js:js.ast"))
+    api(project(":js:js.parser"))
+    api(project(":js:js.serializer"))
+    api(project(":js:js.config"))
+    compileOnly(intellijCore())
+    compileOnly(libs.guava)
 }
 
 sourceSets {
     "main" { projectDefault() }
     "test" {}
 }
-

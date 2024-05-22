@@ -1,5 +1,11 @@
 $TESTDATA_DIR$/languageVersion.kt
--output
-$TEMP_DIR$/out.js
+-Xir-produce-klib-dir
+-Xir-only
+-ir-output-dir
+$TEMP_DIR$
+-ir-output-name
+out
 -language-version
-1.0
+1.5
+-libraries
+$STDLIB_JS$

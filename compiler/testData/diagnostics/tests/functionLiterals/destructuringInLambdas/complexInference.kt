@@ -1,6 +1,5 @@
-// !WITH_NEW_INFERENCE
-// !CHECK_TYPE
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// CHECK_TYPE
+// DIAGNOSTICS: -UNUSED_PARAMETER
 data class A(val x: Int, val y: String)
 data class B(val u: Double, val w: Short)
 
@@ -30,10 +29,10 @@ fun bar(aInstance: A, bInstance: B) {
         d checkType { _<Short>() }
     }
 
-    <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>foo<!>(bInstance) {
-        <!OI;CANNOT_INFER_PARAMETER_TYPE!>(<!NI;COMPONENT_FUNCTION_MISSING!>a<!>, <!NI;COMPONENT_FUNCTION_MISSING!>b<!>)<!>, (c, d) ->
-        <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>a<!> <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>checkType<!> { <!UNRESOLVED_REFERENCE!>_<!><Int>() }
-        <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>b<!> <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>checkType<!> { <!UNRESOLVED_REFERENCE!>_<!><String>() }
+    <!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>foo<!>(bInstance) {
+        <!CANNOT_INFER_PARAMETER_TYPE!>(a, b)<!>, (c, d) ->
+        <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>a<!> <!DEBUG_INFO_MISSING_UNRESOLVED!>checkType<!> { <!UNRESOLVED_REFERENCE!>_<!><Int>() }
+        <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>b<!> <!DEBUG_INFO_MISSING_UNRESOLVED!>checkType<!> { <!UNRESOLVED_REFERENCE!>_<!><String>() }
         c checkType { _<Double>() }
         d checkType { _<Short>() }
     }

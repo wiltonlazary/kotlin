@@ -1,7 +1,10 @@
-// !CHECK_TYPE
+// FIR_IDENTICAL
+// CHECK_TYPE
 
 //KT-1944 Inference fails on run()
 package j
+
+import checkSubtype
 
 class P {
     var x : Int = 0

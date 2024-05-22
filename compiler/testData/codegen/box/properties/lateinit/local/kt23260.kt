@@ -1,4 +1,6 @@
-// WITH_RUNTIME
+// WITH_STDLIB
+
+@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
 
 fun box(): String {
     lateinit var str: String

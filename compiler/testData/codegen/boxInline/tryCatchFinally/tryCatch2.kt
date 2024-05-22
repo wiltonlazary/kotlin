@@ -1,6 +1,8 @@
-// IGNORE_BACKEND: NATIVE
-// FILE: 1.kt
+// WITH_STDLIB
+// KJS_WITH_FULL_RUNTIME
+// JVM_ABI_K1_K2_DIFF: KT-63861
 
+// FILE: 1.kt
 class My(val value: Int)
 
 inline fun <T, R> T.performWithFail(job: (T)-> R, failJob : (T) -> R) : R {
@@ -19,7 +21,7 @@ inline fun <T, R> T.performWithFail2(job: (T)-> R, failJob : (e: RuntimeExceptio
     }
 }
 
-public inline fun String.toInt2() : Int = java.lang.Integer.parseInt(this)
+public inline fun String.toInt2() : Int = this.toInt()
 
 // FILE: 2.kt
 

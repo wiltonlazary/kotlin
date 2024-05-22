@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.importsDumper
@@ -8,7 +8,8 @@ package org.jetbrains.kotlin.importsDumper
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.testFramework.TestDataPath
 import junit.framework.TestCase
-import org.jetbrains.kotlin.cli.AbstractCliTest.*
+import org.jetbrains.kotlin.cli.AbstractCliTest.executeCompilerGrabOutput
+import org.jetbrains.kotlin.cli.AbstractCliTest.getNormalizedCompilerOutput
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.TestCaseWithTmpdir
@@ -56,18 +57,21 @@ class ImportsDumperTest : TestCaseWithTmpdir() {
                 testDataDir.absolutePath,
                 "-d",
                 tmpDir.path,
+                "-language-version",
+                "1.9",
                 "-Xplugin=${importsDumperJarInDist.path}",
                 "-P",
-                "plugin:${ImportsDumperCommandLineProcessor.PLUGIN_ID}:${ImportsDumperCliOptions.DESTINATION.name}=${actualDumpFile.path}"
+                "plugin:${ImportsDumperCommandLineProcessor.PLUGIN_ID}:" +
+                        "${ImportsDumperCliOptions.DESTINATION.optionName}=${actualDumpFile.path}"
             )
         )
 
-        return getNormalizedCompilerOutput(output, exitCode, testDataDir.path)
+        return getNormalizedCompilerOutput(output, exitCode, testDataDir.path, tmpDir.absolutePath)
     }
 }
 
 private fun String.relativizeAbsolutePaths(relativeTo: File): String {
     // JSON escapes slashes
-    val pattern = relativeTo.absoluteFile.toString().replace("/", "\\/")
+    val pattern = relativeTo.absoluteFile.toString().replace(File.separatorChar.toString(), "/")
     return this.replace(pattern, "\$TESTDATA_DIR$")
 }

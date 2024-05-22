@@ -30,7 +30,7 @@ import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.storage.LockBasedLazyResolveStorageManager
 import javax.inject.Inject
 
-open class LazyDeclarationResolver @Deprecated("") constructor(
+open class LazyDeclarationResolver constructor(
     globalContext: GlobalContext,
     delegationTrace: BindingTrace,
     private val topLevelDescriptorProvider: TopLevelDescriptorProvider,
@@ -61,8 +61,8 @@ open class LazyDeclarationResolver @Deprecated("") constructor(
     open fun getClassDescriptor(classOrObject: KtClassOrObject, location: LookupLocation): ClassDescriptor =
         findClassDescriptor(classOrObject, location)
 
-    fun getScriptDescriptor(script: KtScript, location: LookupLocation): ScriptDescriptor =
-        findClassDescriptor(script, location) as ScriptDescriptor
+    fun getScriptDescriptor(script: KtScript, location: LookupLocation): ClassDescriptorWithResolutionScopes =
+        findClassDescriptor(script, location) as ClassDescriptorWithResolutionScopes
 
     private fun findClassDescriptorIfAny(
         classObjectOrScript: KtNamedDeclaration,
@@ -130,9 +130,9 @@ open class LazyDeclarationResolver @Deprecated("") constructor(
                 val grandFather = parameter.parent.parent
                 when (grandFather) {
                     is KtPrimaryConstructor -> {
-                        val jetClass = grandFather.getContainingClassOrObject()
+                        val ktClassOrObject = grandFather.getContainingClassOrObject()
                         // This is a primary constructor parameter
-                        val classDescriptor = getClassDescriptorIfAny(jetClass, lookupLocationFor(jetClass, false))
+                        val classDescriptor = getClassDescriptorIfAny(ktClassOrObject, lookupLocationFor(ktClassOrObject, false))
                         return when {
                             classDescriptor == null -> null
                             parameter.hasValOrVar() -> {

@@ -1,7 +1,6 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
-// WITH_RUNTIME
+// WITH_STDLIB
 
 import java.lang.reflect.Method
 import kotlin.test.assertEquals
@@ -28,8 +27,6 @@ fun testClass(clazz: Class<*>, name: String) {
 
 fun box(): String {
     testClass(foo0(@Ann("OK") { }), "1")
-    testClass(foo0( @Ann("OK") { }), "2")
-
-    testClass(foo0() @Ann("OK") { }, "3")
+    testClass(foo0() @Ann("OK") { }, "2")
     return "OK"
 }

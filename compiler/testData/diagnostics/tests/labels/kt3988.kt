@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 //KT-3988 This@label for outer function not resolved
 
 class Comment() {
@@ -12,10 +13,10 @@ fun new(body: Comment.() -> Unit) = body
 
 fun new2(body: Comment2.() -> Unit) = body
 
-fun main(args: Array<String>) {
+fun main() {
     new {
         new2 {
-            <!UNUSED_EXPRESSION!>this@new<!> //UNRESOLVED REFERENCE
+            this@new //UNRESOLVED REFERENCE
         }
     }
 }

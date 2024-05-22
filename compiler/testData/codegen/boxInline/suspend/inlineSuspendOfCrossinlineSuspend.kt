@@ -1,8 +1,9 @@
+// WITH_COROUTINES
+// WITH_STDLIB
 // FILE: test.kt
-// COMMON_COROUTINES_TEST
-// WITH_RUNTIME
 
-import COROUTINES_PACKAGE.*
+import kotlin.coroutines.*
+import helpers.*
 
 // Block is allowed to be called inside the body of owner inline function
 // Block is allowed to be called from nested classes/lambdas (as common crossinlines)
@@ -31,22 +32,11 @@ suspend inline fun test3(crossinline c: suspend () -> Unit) {
 }
 
 // FILE: box.kt
-// COMMON_COROUTINES_TEST
-
-import COROUTINES_PACKAGE.*
+import kotlin.coroutines.*
+import helpers.*
 
 fun builder(c: suspend () -> Unit) {
-    c.startCoroutine(object: Continuation<Unit> {
-        override val context: CoroutineContext
-            get() = EmptyCoroutineContext
-
-        override fun resume(value: Unit) {
-        }
-
-        override fun resumeWithException(exception: Throwable) {
-            throw exception
-        }
-    })
+    c.startCoroutine(EmptyContinuation)
 }
 
 suspend fun calculate() = "OK"

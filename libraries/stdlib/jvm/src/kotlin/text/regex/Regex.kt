@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 package kotlin.text
 
@@ -50,17 +50,13 @@ public actual enum class RegexOption(override val value: Int, override val mask:
 //    /** Enables Unicode-aware case folding. */
 //    UNICODE_CASE(Pattern.UNICODE_CASE)
 
-    /** Enables Unix lines mode.
-     * In this mode, only the `'\n'` is recognized as a line terminator.
-     */
+    /** Enables Unix lines mode. In this mode, only the `'\n'` is recognized as a line terminator. */
     UNIX_LINES(Pattern.UNIX_LINES),
 
     /** Permits whitespace and comments in pattern. */
     COMMENTS(Pattern.COMMENTS),
 
-    /** Enables the mode, when the expression `.` matches any character,
-     * including a line terminator.
-     */
+    /** Enables the mode, when the expression `.` matches any character, including a line terminator. */
     DOT_MATCHES_ALL(Pattern.DOTALL),
 
     /** Enables equivalence by canonical decomposition. */
@@ -73,16 +69,16 @@ public actual enum class RegexOption(override val value: Int, override val mask:
  *
  * @param value The value of captured group.
  * @param range The range of indices in the input string where group was captured.
- *
- * The [range] property is available on JVM only.
  */
 public actual data class MatchGroup(public actual val value: String, public val range: IntRange)
 
 /**
- * Represents an immutable regular expression.
+ * Represents a compiled regular expression.
+ * Provides functions to match strings in text with a pattern, replace the found occurrences and split text around matches.
  *
- * For pattern syntax reference see [Pattern]
+ * For pattern syntax reference see [Pattern].
  */
+@Suppress("NO_ACTUAL_CLASS_MEMBER_FOR_EXPECTED_CLASS") // Counterpart for @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
 public actual class Regex
 @PublishedApi
 internal constructor(private val nativePattern: Pattern) : Serializable {
@@ -117,6 +113,8 @@ internal constructor(private val nativePattern: Pattern) : Serializable {
      *
      * @param startIndex An index to start search with, by default 0. Must be not less than zero and not greater than `input.length()`
      * @return An instance of [MatchResult] if match was found or `null` otherwise.
+     * @throws IndexOutOfBoundsException if [startIndex] is less than zero or greater than the length of the [input] char sequence.
+     * @sample samples.text.Regexps.find
      */
     @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
     public actual fun find(input: CharSequence, startIndex: Int = 0): MatchResult? =
@@ -124,10 +122,18 @@ internal constructor(private val nativePattern: Pattern) : Serializable {
 
     /**
      * Returns a sequence of all occurrences of a regular expression within the [input] string, beginning at the specified [startIndex].
+     *
+     * @throws IndexOutOfBoundsException if [startIndex] is less than zero or greater than the length of the [input] char sequence.
+     *
+     * @sample samples.text.Regexps.findAll
      */
     @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
-    public actual fun findAll(input: CharSequence, startIndex: Int = 0): Sequence<MatchResult> =
-        generateSequence({ find(input, startIndex) }, MatchResult::next)
+    public actual fun findAll(input: CharSequence, startIndex: Int = 0): Sequence<MatchResult> {
+        if (startIndex < 0 || startIndex > input.length) {
+            throw IndexOutOfBoundsException("Start index out of bounds: $startIndex, input length: ${input.length}")
+        }
+        return generateSequence({ find(input, startIndex) }, MatchResult::next)
+    }
 
     /**
      * Attempts to match the entire [input] CharSequence against the pattern.
@@ -136,10 +142,38 @@ internal constructor(private val nativePattern: Pattern) : Serializable {
      */
     public actual fun matchEntire(input: CharSequence): MatchResult? = nativePattern.matcher(input).matchEntire(input)
 
+    @SinceKotlin("1.7")
+    @WasExperimental(ExperimentalStdlibApi::class)
+    public actual fun matchAt(input: CharSequence, index: Int): MatchResult? =
+        nativePattern.matcher(input).useAnchoringBounds(false).useTransparentBounds(true).region(index, input.length).run {
+            if (lookingAt()) MatcherMatchResult(this, input) else null
+        }
+
+    @SinceKotlin("1.7")
+    @WasExperimental(ExperimentalStdlibApi::class)
+    public actual fun matchesAt(input: CharSequence, index: Int): Boolean =
+        nativePattern.matcher(input).useAnchoringBounds(false).useTransparentBounds(true).region(index, input.length).lookingAt()
+
     /**
      * Replaces all occurrences of this regular expression in the specified [input] string with specified [replacement] expression.
      *
-     * @param replacement A replacement expression that can include substitutions. See [Matcher.appendReplacement] for details.
+     * The replacement string may contain references to the captured groups during a match. Occurrences of `${name}` or `$index`
+     * in the replacement string will be substituted with the subsequences corresponding to the captured groups with the specified name or index.
+     * In case of `$index`, the first digit after '$' is always treated as a part of group reference. Subsequent digits are incorporated
+     * into `index` only if they would form a valid group reference. Only the digits '0'..'9' are considered as potential components
+     * of the group reference. Note that indexes of captured groups start from 1, and the group with index 0 is the whole match.
+     * In case of `${name}`, the `name` can consist of latin letters 'a'..'z' and 'A'..'Z', or digits '0'..'9'. The first character must be
+     * a letter.
+     *
+     * Backslash character '\' can be used to include the succeeding character as a literal in the replacement string, e.g, `\$` or `\\`.
+     * [Regex.escapeReplacement] can be used if [replacement] have to be treated as a literal string.
+     *
+     * Note that named capturing groups are supported in Java 7 or later.
+     *
+     * @param input the char sequence to find matches of this regular expression in
+     * @param replacement the expression to replace found matches with
+     * @return the result of replacing each occurrence of this regular expression in [input] with the result of evaluating the [replacement] expression
+     * @throws RuntimeException if [replacement] expression is malformed, or capturing group with specified `name` or `index` does not exist
      */
     public actual fun replace(input: CharSequence, replacement: String): String = nativePattern.matcher(input).replaceAll(replacement)
 
@@ -172,25 +206,94 @@ internal constructor(private val nativePattern: Pattern) : Serializable {
     /**
      * Replaces the first occurrence of this regular expression in the specified [input] string with specified [replacement] expression.
      *
-     * @param replacement A replacement expression that can include substitutions. See [Matcher.appendReplacement] for details.
+     * The replacement string may contain references to the captured groups during a match. Occurrences of `${name}` or `$index`
+     * in the replacement string will be substituted with the subsequences corresponding to the captured groups with the specified name or index.
+     * In case of `$index`, the first digit after '$' is always treated as a part of group reference. Subsequent digits are incorporated
+     * into `index` only if they would form a valid group reference. Only the digits '0'..'9' are considered as potential components
+     * of the group reference. Note that indexes of captured groups start from 1, and the group with index 0 is the whole match.
+     * In case of `${name}`, the `name` can consist of latin letters 'a'..'z' and 'A'..'Z', or digits '0'..'9'. The first character must be
+     * a letter.
+     *
+     * Backslash character '\' can be used to include the succeeding character as a literal in the replacement string, e.g, `\$` or `\\`.
+     * [Regex.escapeReplacement] can be used if [replacement] have to be treated as a literal string.
+     *
+     * Note that named capturing groups are supported in Java 7 or later.
+     *
+     * @param input the char sequence to find a match of this regular expression in
+     * @param replacement the expression to replace the found match with
+     * @return the result of replacing the first occurrence of this regular expression in [input] with the result of evaluating the [replacement] expression
+     * @throws RuntimeException if [replacement] expression is malformed, or capturing group with specified `name` or `index` does not exist
      */
     public actual fun replaceFirst(input: CharSequence, replacement: String): String =
         nativePattern.matcher(input).replaceFirst(replacement)
 
 
     /**
-     * Splits the [input] CharSequence around matches of this regular expression.
+     * Splits the [input] CharSequence to a list of strings around matches of this regular expression.
      *
      * @param limit Non-negative value specifying the maximum number of substrings the string can be split to.
      * Zero by default means no limit is set.
      */
     @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
     public actual fun split(input: CharSequence, limit: Int = 0): List<String> {
-        require(limit >= 0, { "Limit must be non-negative, but was $limit." })
-        return nativePattern.split(input, if (limit == 0) -1 else limit).asList()
+        requireNonNegativeLimit(limit)
+
+        val matcher = nativePattern.matcher(input)
+        if (limit == 1 || !matcher.find()) return listOf(input.toString())
+
+        val result = ArrayList<String>(if (limit > 0) limit.coerceAtMost(10) else 10)
+        var lastStart = 0
+        val lastSplit = limit - 1 // negative if there's no limit
+
+        do {
+            result.add(input.substring(lastStart, matcher.start()))
+            lastStart = matcher.end()
+            if (lastSplit >= 0 && result.size == lastSplit) break
+        } while (matcher.find())
+
+        result.add(input.substring(lastStart, input.length))
+
+        return result
     }
 
-    /** Returns the string representation of this regular expression, namely the [pattern] of this regular expression. */
+    /**
+     * Splits the [input] CharSequence to a sequence of strings around matches of this regular expression.
+     *
+     * @param limit Non-negative value specifying the maximum number of substrings the string can be split to.
+     * Zero by default means no limit is set.
+     * @sample samples.text.Regexps.splitToSequence
+     */
+    @SinceKotlin("1.6")
+    @WasExperimental(ExperimentalStdlibApi::class)
+    @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
+    public actual fun splitToSequence(input: CharSequence, limit: Int = 0): Sequence<String> {
+        requireNonNegativeLimit(limit)
+
+        return sequence {
+            val matcher = nativePattern.matcher(input)
+            if (limit == 1 || !matcher.find()) {
+                yield(input.toString())
+                return@sequence
+            }
+
+            var nextStart = 0
+            var splitCount = 0
+
+            do {
+                yield(input.substring(nextStart, matcher.start()))
+                nextStart = matcher.end()
+            } while (++splitCount != limit - 1 && matcher.find())
+
+            yield(input.substring(nextStart, input.length))
+        }
+    }
+
+    /**
+     * Returns the string representation of this regular expression, namely the [pattern] of this regular expression.
+     *
+     * Note that another regular expression constructed from the same pattern string may have different [options]
+     * and may match strings differently.
+     */
     public override fun toString(): String = nativePattern.toString()
 
     /**
@@ -210,14 +313,23 @@ internal constructor(private val nativePattern: Pattern) : Serializable {
         private fun readResolve(): Any = Regex(Pattern.compile(pattern, flags))
     }
 
-    actual companion object {
-        /** Returns a literal regex for the specified [literal] string. */
+    public actual companion object {
+        /**
+         * Returns a regular expression that matches the specified [literal] string literally.
+         * No characters of that string will have special meaning when searching for an occurrence of the regular expression.
+         */
         public actual fun fromLiteral(literal: String): Regex = literal.toRegex(RegexOption.LITERAL)
 
-        /** Returns a literal pattern for the specified [literal] string. */
+        /**
+         * Returns a regular expression pattern string that matches the specified [literal] string literally.
+         * No characters of that string will have special meaning when searching for an occurrence of the regular expression.
+         */
         public actual fun escape(literal: String): String = Pattern.quote(literal)
 
-        /** Returns a literal replacement expression for the specified [literal] string. */
+        /**
+         * Returns a literal replacement expression for the specified [literal] string.
+         * No characters of that string will have special meaning when it is used as a replacement string in [Regex.replace] function.
+         */
         public actual fun escapeReplacement(literal: String): String = Matcher.quoteReplacement(literal)
 
         private fun ensureUnicodeCase(flags: Int) = if (flags and Pattern.CASE_INSENSITIVE != 0) flags or Pattern.UNICODE_CASE else flags
@@ -236,7 +348,7 @@ private fun Matcher.matchEntire(input: CharSequence): MatchResult? {
 }
 
 private class MatcherMatchResult(private val matcher: Matcher, private val input: CharSequence) : MatchResult {
-    private val matchResult = matcher.toMatchResult()
+    private val matchResult: java.util.regex.MatchResult get() = matcher
     override val range: IntRange
         get() = matchResult.range()
     override val value: String
@@ -275,7 +387,7 @@ private class MatcherMatchResult(private val matcher: Matcher, private val input
 
     override fun next(): MatchResult? {
         val nextIndex = matchResult.end() + if (matchResult.end() == matchResult.start()) 1 else 0
-        return if (nextIndex <= input.length) matcher.findNext(nextIndex, input) else null
+        return if (nextIndex <= input.length) matcher.pattern().matcher(input).findNext(nextIndex, input) else null
     }
 }
 

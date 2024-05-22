@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_PARAMETER
 fun <R> foo(x: R, y: String) {}
 fun <R> foo(x: R, y: R) {
     foo<R>(x, "") // ok, resolved foo(x: R, y: String)

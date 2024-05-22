@@ -1,4 +1,4 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// DIAGNOSTICS: -UNUSED_VARIABLE
 package o
 
 class TestFunctionLiteral {
@@ -19,7 +19,7 @@ class TestObjectLiteral {
             val y = <!UNINITIALIZED_VARIABLE!>obj<!>
         }
     }
-    val obj1: A = l@ ( object: A(<!UNINITIALIZED_VARIABLE!>obj1<!>) {
+    val obj1: A = <!REDUNDANT_LABEL_WARNING!>l@<!> ( object: A(<!UNINITIALIZED_VARIABLE!>obj1<!>) {
         init {
             val x = <!UNINITIALIZED_VARIABLE!>obj1<!>
         }

@@ -1,7 +1,8 @@
-// FILE: inlined.kt
-// COMMON_COROUTINES_TEST
-// WITH_RUNTIME
+// CHECK_STATE_MACHINE
+// WITH_COROUTINES
 // NO_CHECK_LAMBDA_INLINING
+// WITH_STDLIB
+// FILE: inlined.kt
 
 interface SuspendRunnable {
     suspend fun run1()
@@ -12,8 +13,10 @@ suspend inline fun crossinlineMe(crossinline c1: suspend () -> Unit, crossinline
     val o = object : SuspendRunnable {
         override suspend fun run1() {
             c1()
+            c1()
         }
         override suspend fun run2() {
+            c2()
             c2()
         }
     }
@@ -22,41 +25,26 @@ suspend inline fun crossinlineMe(crossinline c1: suspend () -> Unit, crossinline
 }
 
 // FILE: inlineSite.kt
-// COMMON_COROUTINES_TEST
-
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import helpers.*
 
 fun builder(c: suspend () -> Unit) {
-    c.startCoroutine(object: Continuation<Unit> {
-        override val context: CoroutineContext
-            get() = EmptyCoroutineContext
-
-        override fun resume(value: Unit) {
-        }
-
-        override fun resumeWithException(exception: Throwable) {
-            throw exception
-        }
-    })
+    c.startCoroutine(CheckStateMachineContinuation)
 }
 
-var i = 0;
-var j = 0;
-
-suspend fun incrementI() {
-    i++
-}
+var j = 0
 
 suspend fun incrementJ() {
     j++
 }
 
 fun box(): String {
+    StateMachineChecker.reset()
     builder {
-        crossinlineMe({ incrementI() }) { incrementJ() }
+        crossinlineMe({ StateMachineChecker.suspendHere() }) { incrementJ() }
     }
-    if (i != 1) return "FAIL i $i"
-    if (j != 1) return "FAIL i $i"
+    if (j != 0) return "FAIL j != 0 $j"
+    StateMachineChecker.check(numberOfSuspensions = 2)
+    if (j != 2) return "FAIL j != 2 $j"
     return "OK"
 }

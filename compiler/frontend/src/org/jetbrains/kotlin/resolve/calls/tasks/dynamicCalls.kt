@@ -26,6 +26,7 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.DescriptorFactory
+import org.jetbrains.kotlin.resolve.calls.util.isConventionCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.scopes.MemberScopeImpl
 import org.jetbrains.kotlin.resolve.scopes.receivers.TransientReceiver
@@ -36,7 +37,7 @@ import org.jetbrains.kotlin.types.expressions.OperatorConventions
 import org.jetbrains.kotlin.utils.Printer
 import java.util.*
 
-class DynamicCallableDescriptors(storageManager: StorageManager, builtIns: KotlinBuiltIns) {
+class DynamicCallableDescriptors(private val storageManager: StorageManager, builtIns: KotlinBuiltIns) {
 
     val dynamicType by storageManager.createLazyValue {
         createDynamicType(builtIns)
@@ -88,7 +89,7 @@ class DynamicCallableDescriptors(storageManager: StorageManager, builtIns: Kotli
             owner,
             Annotations.EMPTY,
             Modality.FINAL,
-            Visibilities.PUBLIC,
+            DescriptorVisibilities.PUBLIC,
             true,
             name,
             CallableMemberDescriptor.Kind.DECLARATION,
@@ -104,12 +105,13 @@ class DynamicCallableDescriptors(storageManager: StorageManager, builtIns: Kotli
             dynamicType,
             createTypeParameters(propertyDescriptor, call),
             createDynamicDispatchReceiverParameter(propertyDescriptor),
-            null as KotlinType?
+            null,
+            emptyList()
         )
 
         val getter = DescriptorFactory.createDefaultGetter(propertyDescriptor, Annotations.EMPTY)
         getter.initialize(propertyDescriptor.type)
-        val setter = DescriptorFactory.createDefaultSetter(propertyDescriptor, Annotations.EMPTY)
+        val setter = DescriptorFactory.createDefaultSetter(propertyDescriptor, Annotations.EMPTY, Annotations.EMPTY)
 
         propertyDescriptor.initialize(getter, setter)
 
@@ -127,18 +129,20 @@ class DynamicCallableDescriptors(storageManager: StorageManager, builtIns: Kotli
         functionDescriptor.initialize(
             null,
             createDynamicDispatchReceiverParameter(functionDescriptor),
+            emptyList(),
             createTypeParameters(functionDescriptor, call),
             createValueParameters(functionDescriptor, call),
             dynamicType,
             Modality.FINAL,
-            Visibilities.PUBLIC
+            DescriptorVisibilities.PUBLIC
         )
         functionDescriptor.setHasSynthesizedParameterNames(true)
+        functionDescriptor.isOperator = isConventionCall(call)
         return functionDescriptor
     }
 
     private fun createDynamicDispatchReceiverParameter(owner: CallableDescriptor): ReceiverParameterDescriptorImpl {
-        return ReceiverParameterDescriptorImpl(owner, TransientReceiver(dynamicType))
+        return ReceiverParameterDescriptorImpl(owner, TransientReceiver(dynamicType), Annotations.EMPTY)
     }
 
     private fun createTypeParameters(owner: DeclarationDescriptor, call: Call): List<TypeParameterDescriptor> =
@@ -150,7 +154,8 @@ class DynamicCallableDescriptors(storageManager: StorageManager, builtIns: Kotli
                 false,
                 Variance.INVARIANT,
                 Name.identifier("T$index"),
-                index
+                index,
+                storageManager
             )
         }
 
@@ -181,9 +186,11 @@ class DynamicCallableDescriptors(storageManager: StorageManager, builtIns: Kotli
             val funLiteral = funLiteralExpr.functionLiteral
 
             val receiverType = funLiteral.receiverTypeReference?.let { dynamicType }
+            val contextReceiversTypes = funLiteral.contextReceivers.map { dynamicType }
+
             val parameterTypes = funLiteral.valueParameters.map { dynamicType }
 
-            return createFunctionType(owner.builtIns, Annotations.EMPTY, receiverType, parameterTypes, null, dynamicType)
+            return createFunctionType(owner.builtIns, Annotations.EMPTY, receiverType, contextReceiversTypes, parameterTypes, null, dynamicType)
         }
 
         for (arg in call.valueArguments) {
@@ -217,7 +224,7 @@ class DynamicCallableDescriptors(storageManager: StorageManager, builtIns: Kotli
                 for (funLiteralArg in call.functionLiteralArguments) {
                     addParameter(
                         funLiteralArg,
-                        funLiteralArg.getLambdaExpression()?.let { getFunctionType(it) } ?: TypeUtils.CANT_INFER_FUNCTION_PARAM_TYPE,
+                        funLiteralArg.getLambdaExpression()?.let { getFunctionType(it) } ?: TypeUtils.CANNOT_INFER_FUNCTION_PARAM_TYPE,
                         null)
                 }
 

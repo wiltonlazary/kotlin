@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.maven;
 
 import com.intellij.openapi.util.text.StringUtil;
+import kotlin.collections.CollectionsKt;
 import org.apache.maven.artifact.DependencyResolutionRequiredException;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
@@ -27,7 +28,7 @@ import org.apache.maven.project.MavenProject;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments;
 import org.jetbrains.kotlin.cli.js.K2JSCompiler;
-import org.jetbrains.kotlin.utils.LibraryUtils;
+import org.jetbrains.kotlin.utils.JsLibraryUtils;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -94,13 +95,17 @@ public class K2JSCompilerMojo extends KotlinCompileMojoBase<K2JSCompilerArgument
     @Parameter(defaultValue = "plain")
     private String moduleKind;
 
+    @Parameter(defaultValue = "false")
+    private boolean useIrBackend;
+
     @Override
     protected void configureSpecificCompilerArguments(@NotNull K2JSCompilerArguments arguments, @NotNull List<File> sourceRoots) throws MojoExecutionException {
-        arguments.setOutputFile(outputFile);
-        arguments.setNoStdlib(true);
-        arguments.setMetaInfo(metaInfo);
+        arguments.setOutputDir(new File(outputFile).getParent());
         arguments.setModuleKind(moduleKind);
         arguments.setMain(main);
+        arguments.setIrOnly(useIrBackend);
+        arguments.setIrProduceJs(useIrBackend);
+        arguments.setIrProduceKlibDir(useIrBackend);
 
         List<String> libraries;
         try {
@@ -138,6 +143,10 @@ public class K2JSCompilerMojo extends KotlinCompileMojoBase<K2JSCompilerArgument
         return project.getCompileClasspathElements();
     }
 
+    private boolean checkIsKotlinJavascriptLibrary(File file) {
+        return useIrBackend ? JsLibraryUtils.isKotlinJavascriptIrLibrary(file) : JsLibraryUtils.isKotlinJavascriptLibrary(file);
+    }
+
     /**
      * Returns all Kotlin Javascript dependencies that this project has, including transitive ones.
      *
@@ -150,7 +159,7 @@ public class K2JSCompilerMojo extends KotlinCompileMojoBase<K2JSCompilerArgument
         for (String path : getClassPathElements()) {
             File file = new File(path);
 
-            if (file.exists() && LibraryUtils.isKotlinJavascriptLibrary(file)) {
+            if (file.exists() && checkIsKotlinJavascriptLibrary(file)) {
                 libraries.add(file.getAbsolutePath());
             }
             else {
@@ -162,7 +171,7 @@ public class K2JSCompilerMojo extends KotlinCompileMojoBase<K2JSCompilerArgument
             for (String path : paths) {
                 File file = new File(path);
 
-                if (file.exists() && LibraryUtils.isKotlinJavascriptLibrary(file)) {
+                if (file.exists() && checkIsKotlinJavascriptLibrary(file)) {
                     libraries.add(file.getAbsolutePath());
                 }
                 else {

@@ -1,11 +1,11 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package test.utils
 
-import test.randomInt
+import kotlin.random.Random
 import kotlin.test.*
 
 
@@ -20,7 +20,7 @@ class KotlinVersionTest {
         val anotherCurrent = KotlinVersion.CURRENT.run { KotlinVersion(major, minor, patch) }
         assertEquals(KotlinVersion.CURRENT, anotherCurrent)
         assertEquals(KotlinVersion.CURRENT.hashCode(), anotherCurrent.hashCode())
-        assertEquals(0, KotlinVersion.CURRENT.compareTo(anotherCurrent))
+        assertEquals(0, KotlinVersion.CURRENT compareTo anotherCurrent)
     }
 
     @Test fun componentValidation() {
@@ -61,7 +61,7 @@ class KotlinVersionTest {
     }
 
     @Test fun randomVersionComparison() {
-        fun randomComponent(): Int = randomInt(KotlinVersion.MAX_COMPONENT_VALUE + 1)
+        fun randomComponent(): Int = Random.nextInt(KotlinVersion.MAX_COMPONENT_VALUE + 1)
         fun randomVersion() = KotlinVersion(randomComponent(), randomComponent(), randomComponent())
         repeat(1000) {
             val v1 = randomVersion()

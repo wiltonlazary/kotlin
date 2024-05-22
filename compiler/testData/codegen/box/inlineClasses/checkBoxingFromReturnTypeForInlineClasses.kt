@@ -1,6 +1,9 @@
-// !LANGUAGE: +InlineClasses
+// WITH_STDLIB
+// WORKS_WHEN_VALUE_CLASS
+// LANGUAGE: +ValueClasses
 
-inline class Foo(val a: Int) {
+OPTIONAL_JVM_INLINE_ANNOTATION
+value class Foo(val a: Int) {
     fun member(): String = ""
 
     fun asResult() = a
@@ -22,8 +25,8 @@ fun test(f: Foo): String {
     val a = id(f) // box unbox
     val b = id(f).idExtension() // box unbox
 
-    if (a.asResult() != 10) return "fail"
-    if (b.asResult() != 10) return "fail"
+    if (a.asResult() != 10) return "fail a"
+    if (b.asResult() != 10) return "fail b"
 
     return "OK"
 }

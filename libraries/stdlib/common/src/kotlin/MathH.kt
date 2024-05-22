@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2022 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:kotlin.jvm.JvmMultifileClass
@@ -20,7 +20,7 @@ public const val PI: Double = 3.141592653589793
 @SinceKotlin("1.2")
 public const val E: Double = 2.718281828459045
 
-// ================ Double Math ========================================
+// region ================ Double Math ========================================
 
 /** Computes the sine of the angle [x] given in radians.
  *
@@ -275,7 +275,7 @@ public expect fun ln1p(x: Double): Double
 /**
  * Rounds the given value [x] to an integer towards positive infinity.
 
- * @return the smallest double value that is greater than the given value [x] and is a mathematical integer.
+ * @return the smallest double value that is greater than or equal to the given value [x] and is a mathematical integer.
  *
  * Special cases:
  *   - `ceil(x)` is `x` where `x` is `NaN` or `+Inf` or `-Inf` or already a mathematical integer.
@@ -286,7 +286,7 @@ public expect fun ceil(x: Double): Double
 /**
  * Rounds the given value [x] to an integer towards negative infinity.
 
- * @return the largest double value that is smaller than the given value [x] and is a mathematical integer.
+ * @return the largest double value that is smaller than or equal to the given value [x] and is a mathematical integer.
  *
  * Special cases:
  *   - `floor(x)` is `x` where `x` is `NaN` or `+Inf` or `-Inf` or already a mathematical integer.
@@ -353,6 +353,22 @@ public expect fun min(a: Double, b: Double): Double
  */
 @SinceKotlin("1.2")
 public expect fun max(a: Double, b: Double): Double
+
+
+/**
+ * Returns the cube root of [x]. For any `x`, `cbrt(-x) == -cbrt(x)`;
+ * that is, the cube root of a negative value is the negative of the cube root
+ * of that value's magnitude. Special cases:
+ *
+ * Special cases:
+ *   - If the argument is `NaN`, then the result is `NaN`.
+ *   - If the argument is infinite, then the result is an infinity with the same sign as the argument.
+ *   - If the argument is zero, then the result is a zero with the same sign as the argument.
+ */
+@SinceKotlin("1.8")
+@WasExperimental(ExperimentalStdlibApi::class)
+public expect fun cbrt(x: Double): Double
+
 
 // extensions
 
@@ -477,10 +493,11 @@ public expect fun Double.roundToInt(): Int
 @SinceKotlin("1.2")
 public expect fun Double.roundToLong(): Long
 
+// endregion
 
 
 
-// ================ Float Math ========================================
+// region ================ Float Math ========================================
 
 /** Computes the sine of the angle [x] given in radians.
  *
@@ -716,7 +733,7 @@ public expect fun log10(x: Float): Float
 public expect fun log2(x: Float): Float
 
 /**
- * Computes `ln(a + 1)`.
+ * Computes `ln(x + 1)`.
  *
  * This function can be implemented to produce more precise result for [x] near zero.
  *
@@ -735,7 +752,7 @@ public expect fun ln1p(x: Float): Float
 /**
  * Rounds the given value [x] to an integer towards positive infinity.
 
- * @return the smallest Float value that is greater than the given value [x] and is a mathematical integer.
+ * @return the smallest Float value that is greater than or equal to the given value [x] and is a mathematical integer.
  *
  * Special cases:
  *   - `ceil(x)` is `x` where `x` is `NaN` or `+Inf` or `-Inf` or already a mathematical integer.
@@ -746,7 +763,7 @@ public expect fun ceil(x: Float): Float
 /**
  * Rounds the given value [x] to an integer towards negative infinity.
 
- * @return the largest Float value that is smaller than the given value [x] and is a mathematical integer.
+ * @return the largest Float value that is smaller than or equal to the given value [x] and is a mathematical integer.
  *
  * Special cases:
  *   - `floor(x)` is `x` where `x` is `NaN` or `+Inf` or `-Inf` or already a mathematical integer.
@@ -815,6 +832,22 @@ public expect fun min(a: Float, b: Float): Float
  */
 @SinceKotlin("1.2")
 public expect fun max(a: Float, b: Float): Float
+
+
+/**
+ * Returns the cube root of [x]. For any `x`, `cbrt(-x) == -cbrt(x)`;
+ * that is, the cube root of a negative value is the negative of the cube root
+ * of that value's magnitude. Special cases:
+ *
+ * Special cases:
+ *   - If the argument is `NaN`, then the result is `NaN`.
+ *   - If the argument is infinite, then the result is an infinity with the same sign as the argument.
+ *   - If the argument is zero, then the result is a zero with the same sign as the argument.
+ */
+@SinceKotlin("1.8")
+@WasExperimental(ExperimentalStdlibApi::class)
+public expect fun cbrt(x: Float): Float
+
 
 // extensions
 
@@ -906,6 +939,9 @@ public expect fun Float.roundToInt(): Int
 public expect fun Float.roundToLong(): Long
 
 
+// endregion
+
+// region ================ Integer Math ========================================
 
 
 /**
@@ -997,5 +1033,4 @@ public expect val Long.absoluteValue: Long
 public expect val Long.sign: Int
 
 
-
-
+// endregion

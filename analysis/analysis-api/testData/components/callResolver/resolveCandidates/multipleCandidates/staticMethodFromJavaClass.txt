@@ -1,0 +1,91 @@
+KtApplicableCallCandidateInfo:
+  candidate = KtSimpleFunctionCall:
+    isImplicitInvoke = false
+    partiallyAppliedSymbol = KtPartiallyAppliedSymbol:
+      dispatchReceiver = KtImplicitReceiverValue:
+        symbol = KtNamedClassOrObjectSymbol:
+          annotationsList: []
+          classIdIfNonLocal: BaseClass
+          classKind: CLASS
+          companionObject: null
+          contextReceivers: []
+          isActual: false
+          isData: false
+          isExpect: false
+          isExternal: false
+          isFun: false
+          isInline: false
+          isInner: false
+          modality: OPEN
+          name: BaseClass
+          origin: JAVA
+          superTypes: [
+            KtUsualClassType:
+              annotationsList: []
+              ownTypeArguments: []
+              type: kotlin/Any
+          ]
+          symbolKind: TOP_LEVEL
+          typeParameters: []
+          visibility: Public
+        type = kotlin.Unit
+      extensionReceiver = null
+      signature = KtFunctionLikeSignature:
+        receiverType = null
+        returnType = kotlin.Unit
+        symbol = /BaseClass.foo(): kotlin.Unit
+        valueParameters = []
+        callableIdIfNonLocal = /BaseClass.foo
+    typeArgumentsMapping = {}
+    argumentMapping = {}
+  isInBestCandidates = true
+
+KtInapplicableCallCandidateInfo:
+  diagnostic = ERROR<NO_VALUE_FOR_PARAMETER: No value passed for parameter 'i'.>
+  candidate = KtSimpleFunctionCall:
+    isImplicitInvoke = false
+    partiallyAppliedSymbol = KtPartiallyAppliedSymbol:
+      dispatchReceiver = KtImplicitReceiverValue:
+        symbol = KtNamedClassOrObjectSymbol:
+          annotationsList: []
+          classIdIfNonLocal: BaseClass
+          classKind: CLASS
+          companionObject: null
+          contextReceivers: []
+          isActual: false
+          isData: false
+          isExpect: false
+          isExternal: false
+          isFun: false
+          isInline: false
+          isInner: false
+          modality: OPEN
+          name: BaseClass
+          origin: JAVA
+          superTypes: [
+            KtUsualClassType:
+              annotationsList: []
+              ownTypeArguments: []
+              type: kotlin/Any
+          ]
+          symbolKind: TOP_LEVEL
+          typeParameters: []
+          visibility: Public
+        type = kotlin.Unit
+      extensionReceiver = null
+      signature = KtFunctionLikeSignature:
+        receiverType = null
+        returnType = kotlin.Unit
+        symbol = /BaseClass.foo(i: kotlin.Int): kotlin.Unit
+        valueParameters = [
+          KtVariableLikeSignature:
+            name = i
+            receiverType = null
+            returnType = kotlin.Int
+            symbol = i: kotlin.Int
+            callableIdIfNonLocal = null
+        ]
+        callableIdIfNonLocal = /BaseClass.foo
+    typeArgumentsMapping = {}
+    argumentMapping = {}
+  isInBestCandidates = false

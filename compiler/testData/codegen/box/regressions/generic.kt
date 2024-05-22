@@ -1,4 +1,4 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 
 fun <T> ArrayList<T>.findAll(predicate:  (T) -> Boolean): ArrayList<T> {
   val result = ArrayList<T>()

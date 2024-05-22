@@ -1,27 +1,18 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2022 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 // NOTE: THIS FILE IS AUTO-GENERATED, DO NOT EDIT!
-// See libraries/tools/idl2k for details
+// See github.com/kotlin/dukat for details
 
-@file:Suppress("NESTED_CLASS_IN_EXTERNAL_INTERFACE")
+@file:Suppress("NO_EXPLICIT_VISIBILITY_IN_API_MODE", "NO_EXPLICIT_RETURN_TYPE_IN_API_MODE") // TODO: Fix in dukat: https://github.com/Kotlin/dukat/issues/124
+
 package org.w3c.dom.parsing
 
 import kotlin.js.*
 import org.khronos.webgl.*
 import org.w3c.dom.*
-import org.w3c.dom.css.*
-import org.w3c.dom.events.*
-import org.w3c.dom.svg.*
-import org.w3c.dom.url.*
-import org.w3c.fetch.*
-import org.w3c.files.*
-import org.w3c.notifications.*
-import org.w3c.performance.*
-import org.w3c.workers.*
-import org.w3c.xhr.*
 
 /**
  * Exposes the JavaScript [DOMParser](https://developer.mozilla.org/en/docs/Web/API/DOMParser) to Kotlin
@@ -36,4 +27,3 @@ public external open class DOMParser {
 public external open class XMLSerializer {
     fun serializeToString(root: Node): String
 }
-

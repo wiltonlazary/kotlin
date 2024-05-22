@@ -45,12 +45,16 @@ public class KtFunctionType extends KtElementImplStub<KotlinPlaceHolderStub<KtFu
     @Override
     public List<KtTypeReference> getTypeArgumentsAsTypes() {
         ArrayList<KtTypeReference> result = Lists.newArrayList();
+        List<KtTypeReference> contextReceiversTypeRefs = getContextReceiversTypeReferences();
+        if (contextReceiversTypeRefs != null) {
+            result.addAll(contextReceiversTypeRefs);
+        }
         KtTypeReference receiverTypeRef = getReceiverTypeReference();
         if (receiverTypeRef != null) {
             result.add(receiverTypeRef);
         }
-        for (KtParameter jetParameter : getParameters()) {
-            result.add(jetParameter.getTypeReference());
+        for (KtParameter ktParameter : getParameters()) {
+            result.add(ktParameter.getTypeReference());
         }
         KtTypeReference returnTypeRef = getReturnTypeReference();
         if (returnTypeRef != null) {
@@ -87,6 +91,20 @@ public class KtFunctionType extends KtElementImplStub<KotlinPlaceHolderStub<KtFu
             return null;
         }
         return receiverDeclaration.getTypeReference();
+    }
+
+    @Nullable
+    public KtContextReceiverList getContextReceiverList() {
+        return getStubOrPsiChild(KtStubElementTypes.CONTEXT_RECEIVER_LIST);
+    }
+
+    public List<KtTypeReference> getContextReceiversTypeReferences() {
+        KtContextReceiverList contextReceiverList = getContextReceiverList();
+        if (contextReceiverList != null) {
+            return contextReceiverList.typeReferences();
+        } else {
+            return Collections.emptyList();
+        }
     }
 
     @Nullable

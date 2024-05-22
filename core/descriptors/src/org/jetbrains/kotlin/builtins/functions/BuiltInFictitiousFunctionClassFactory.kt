@@ -17,7 +17,7 @@
 package org.jetbrains.kotlin.builtins.functions
 
 import org.jetbrains.kotlin.builtins.BuiltInsPackageFragment
-import org.jetbrains.kotlin.builtins.functions.FunctionClassDescriptor.Kind
+import org.jetbrains.kotlin.builtins.FunctionInterfacePackageFragment
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.deserialization.ClassDescriptorFactory
@@ -33,44 +33,15 @@ class BuiltInFictitiousFunctionClassFactory(
         private val storageManager: StorageManager,
         private val module: ModuleDescriptor
 ) : ClassDescriptorFactory {
-
-    private data class KindWithArity(val kind: Kind, val arity: Int)
-
-    companion object {
-        private fun parseClassName(className: String, packageFqName: FqName): KindWithArity? {
-            val kind = FunctionClassDescriptor.Kind.byClassNamePrefix(packageFqName, className) ?: return null
-
-            val prefix = kind.classNamePrefix
-
-            val arity = toInt(className.substring(prefix.length)) ?: return null
-
-            // TODO: validate arity, should be <= 255
-            return KindWithArity(kind, arity)
-        }
-
-        @JvmStatic
-        fun getFunctionalClassKind(className: String, packageFqName: FqName) =
-                parseClassName(className, packageFqName)?.kind
-
-        private fun toInt(s: String): Int? {
-            if (s.isEmpty()) return null
-
-            var result = 0
-            for (c in s) {
-                val d = c - '0'
-                if (d !in 0..9) return null
-                result = result * 10 + d
-            }
-            return result
-        }
-    }
-
+    @OptIn(AllowedToUsedOnlyInK1::class)
     override fun shouldCreateClass(packageFqName: FqName, name: Name): Boolean {
         val string = name.asString()
-        return (string.startsWith("Function") || string.startsWith("KFunction")) // an optimization
-               && parseClassName(string, packageFqName) != null
+        return (string.startsWith("Function") || string.startsWith("KFunction") ||
+                string.startsWith("SuspendFunction") || string.startsWith("KSuspendFunction")) // an optimization
+               && FunctionTypeKindExtractor.Default.getFunctionalClassKindWithArity(packageFqName, string) != null
     }
 
+    @OptIn(AllowedToUsedOnlyInK1::class)
     override fun createClass(classId: ClassId): ClassDescriptor? {
         if (classId.isLocal || classId.isNestedClass) return null
 
@@ -78,12 +49,14 @@ class BuiltInFictitiousFunctionClassFactory(
         if ("Function" !in className) return null // An optimization
 
         val packageFqName = classId.packageFqName
-        val (kind, arity) = parseClassName(className, packageFqName) ?: return null
+        val (kind, arity) = FunctionTypeKindExtractor.Default.getFunctionalClassKindWithArity(packageFqName, className) ?: return null
 
-        // SuspendFunction$n can't be created by classId
-        if (kind == Kind.SuspendFunction) return null
 
-        val containingPackageFragment = module.getPackage(packageFqName).fragments.filterIsInstance<BuiltInsPackageFragment>().first()
+        val builtInsFragments = module.getPackage(packageFqName).fragments.filterIsInstance<BuiltInsPackageFragment>()
+
+        // JS IR backend uses separate FunctionInterfacePackageFragment for function interfaces
+        val containingPackageFragment =
+            builtInsFragments.filterIsInstance<FunctionInterfacePackageFragment>().firstOrNull() ?: builtInsFragments.first()
 
         return FunctionClassDescriptor(storageManager, containingPackageFragment, kind, arity)
     }

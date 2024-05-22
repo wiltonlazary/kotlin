@@ -67,6 +67,7 @@ final class LineBuffer {
     LineBuffer(Reader in, CodePosition position) {
         this.in = in;
         this.lineno = position.getLine();
+        this.columnno = position.getOffset();
         this.lineStart = -position.getOffset();
     }
 
@@ -77,14 +78,16 @@ final class LineBuffer {
 
             int c = buffer[offset];
             ++offset;
+            prevColumnno = columnno++;
 
             if ((c & EOL_HINT_MASK) == 0) {
                 switch (c) {
                     case '\r':
                         // if the next character is a newline, skip past it.
                         if (offset != end) {
-                            if (buffer[offset] == '\n')
+                            if (buffer[offset] == '\n') {
                                 ++offset;
+                            }
                         } else {
                             // set a flag for fill(), in case the first char
                             // of the next fill is a newline.
@@ -95,6 +98,8 @@ final class LineBuffer {
                         prevStart = lineStart;
                         lineStart = offset;
                         lineno++;
+                        prevColumnno = columnno;
+                        columnno = 0;
                         return '\n';
                 }
             }
@@ -120,10 +125,12 @@ final class LineBuffer {
         if (offset == 0) // Same as if (hitEOF)
             return;
         offset--;
+        columnno--;
         int c = buffer[offset];
         if ((c & EOL_HINT_MASK) == 0 && isEndOfLine(c)) {
             lineStart = prevStart;
             lineno--;
+            columnno = prevColumnno;
         }
     }
 
@@ -147,6 +154,7 @@ final class LineBuffer {
         }
 
         ++offset;
+        prevColumnno = columnno++;
     }
 
     int peek() throws IOException {
@@ -182,6 +190,7 @@ final class LineBuffer {
             int c = buffer[offset];
             if (test == c) {
                 ++offset;
+                prevColumnno = columnno++;
                 return true;
             }
             if (c < 128 || !formatChar(c)) {
@@ -284,7 +293,7 @@ final class LineBuffer {
         // If the last character of the previous fill was a carriage return,
         // then ignore a newline.
 
-        // There's another bizzare special case here.  If lastWasCR is
+        // There's another bizarre special case here.  If lastWasCR is
         // true, and we see a newline, and the buffer length is
         // 1... then we probably just read the last character of the
         // file, and returning after advancing offset is not the right
@@ -292,7 +301,8 @@ final class LineBuffer {
         // likely get to EOF for real) by doing yet another fill().
         if (lastWasCR) {
             if (buffer[0] == '\n') {
-              offset++;
+              ++offset;
+              prevColumnno = columnno++;
               if (end == 1)
                   return fill();
             }
@@ -303,6 +313,9 @@ final class LineBuffer {
     }
 
     int getLineno() { return lineno; }
+
+    int getColumnno() { return columnno; };
+
     boolean eof() { return hitEOF; }
 
     private static boolean formatChar(int c) {
@@ -322,6 +335,8 @@ final class LineBuffer {
     private int end = 0;
     private int otherEnd;
     private int lineno;
+    private int columnno;
+    private int prevColumnno = 0;
 
     private int lineStart = 0;
     private int otherStart = 0;

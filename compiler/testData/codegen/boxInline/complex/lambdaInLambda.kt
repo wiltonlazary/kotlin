@@ -1,6 +1,6 @@
-// IGNORE_BACKEND: NATIVE
+// WITH_STDLIB
+// TARGET_BACKEND: JVM
 // FILE: 1.kt
-// WITH_RUNTIME
 package test
 
 public class Input(val s1: String, val s2: String) {

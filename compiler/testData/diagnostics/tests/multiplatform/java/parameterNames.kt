@@ -1,4 +1,4 @@
-// !LANGUAGE: +MultiPlatformProjects
+// FIR_IDENTICAL
 // MODULE: m1-common
 // FILE: common.kt
 
@@ -6,7 +6,7 @@ expect class Foo {
     fun foo(i: Int, d: Double, f: Float): Unit
 }
 
-// MODULE: m2-jvm(m1-common)
+// MODULE: m2-jvm()()(m1-common)
 // FILE: FooImpl.java
 
 public class FooImpl {

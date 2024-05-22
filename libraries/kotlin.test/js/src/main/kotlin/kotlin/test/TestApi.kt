@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.test
@@ -53,7 +53,7 @@ internal fun suite(name: String, ignored: Boolean, suiteFn: () -> Unit) {
 }
 
 @JsName("test")
-internal fun test(name: String, ignored: Boolean, testFn: () -> Unit) {
+internal fun test(name: String, ignored: Boolean, testFn: () -> Any?) {
     adapter().test(name, ignored, testFn)
 }
 
@@ -65,11 +65,26 @@ internal fun adapter(): FrameworkAdapter {
     return result
 }
 
+@JsName("kotlinTest")
+public external val kotlinTestNamespace: KotlinTestNamespace
 
-internal fun detectAdapter() = when {
-    isQUnit() -> QUnitAdapter()
-    isJasmine() -> JasmineLikeAdapter()
-    else -> BareAdapter()
+public external interface KotlinTestNamespace {
+    public val adapterTransformer: ((FrameworkAdapter) -> FrameworkAdapter)?
+}
+
+internal fun detectAdapter(): FrameworkAdapter {
+    val frameworkAdapter = when {
+        isQUnit() -> QUnitAdapter()
+        isJasmine() -> JasmineLikeAdapter()
+        else -> BareAdapter()
+    }
+    return if (jsTypeOf(kotlinTestNamespace) != "undefined") {
+        val adapterTransform = kotlinTestNamespace
+            .adapterTransformer
+        if (adapterTransform !== null) {
+            adapterTransform(frameworkAdapter)
+        } else frameworkAdapter
+    } else frameworkAdapter
 }
 
 internal val NAME_TO_ADAPTER: Map<String, () -> FrameworkAdapter> = mapOf(

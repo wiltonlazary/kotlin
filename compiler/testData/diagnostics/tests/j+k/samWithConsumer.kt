@@ -1,4 +1,5 @@
-// !CHECK_TYPE
+// FIR_IDENTICAL
+// CHECK_TYPE
 // FULL_JDK
 // FILE: A.java
 import java.util.function.Consumer;

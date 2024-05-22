@@ -20,7 +20,9 @@ import com.intellij.lang.ASTNode
 import com.intellij.openapi.diagnostic.Logger
 import org.jetbrains.kotlin.psi.stubs.KotlinPlaceHolderStub
 import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementTypes
-import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementTypes.INSIDE_DIRECTIVE_EXPRESSIONS
+import org.jetbrains.kotlin.psi.stubs.elements.KtTokenSets.INSIDE_DIRECTIVE_EXPRESSIONS
+import org.jetbrains.kotlin.utils.exceptions.logErrorWithAttachment
+import org.jetbrains.kotlin.utils.exceptions.withPsiEntry
 
 class KtDotQualifiedExpression : KtExpressionImplStub<KotlinPlaceHolderStub<KtDotQualifiedExpression>>, KtQualifiedExpression {
     constructor(node: ASTNode) : super(node)
@@ -32,15 +34,15 @@ class KtDotQualifiedExpression : KtExpressionImplStub<KotlinPlaceHolderStub<KtDo
     }
 
     override val receiverExpression: KtExpression
-        get() {
-            val stub = stub
-            if (stub != null) {
-                val childExpressionsByStub = getChildExpressionsByStub(stub)
-                if (childExpressionsByStub != null) {
-                    return childExpressionsByStub[0]
-                }
-            }
-            return super.receiverExpression
+        get() = stubReceiverExpression ?: super.receiverExpression
+
+    @KtPsiInconsistencyHandling
+    override val receiverExpressionOrNull: KtExpression?
+        get() = stubReceiverExpression ?: super.receiverExpressionOrNull
+
+    private val stubReceiverExpression: KtExpression?
+        get() = stub?.let { stub ->
+            getChildExpressionsByStub(stub)?.getOrNull(0)
         }
 
     override val selectorExpression: KtExpression?
@@ -57,19 +59,20 @@ class KtDotQualifiedExpression : KtExpressionImplStub<KotlinPlaceHolderStub<KtDo
 
     private fun getChildExpressionsByStub(stub: KotlinPlaceHolderStub<KtDotQualifiedExpression>): Array<KtExpression>? {
         if (stub.getParentStubOfType(KtImportDirective::class.java) == null &&
-            stub.getParentStubOfType(KtPackageDirective::class.java) == null) {
+            stub.getParentStubOfType(KtPackageDirective::class.java) == null &&
+            stub.getParentStubOfType(KtValueArgument::class.java) == null
+        ) {
             LOG.error(
-                "KtDotQualifiedExpression should only have stubs inside import or package directives.\n" +
+                "KtDotQualifiedExpression should only have stubs inside import, argument or package directives.\n" +
                         "Stubs were created for:\n$text\nFile text:\n${containingFile.text}"
             )
             return null
         } else {
             val expressions = stub.getChildrenByType(INSIDE_DIRECTIVE_EXPRESSIONS, KtExpression.ARRAY_FACTORY)
             if (expressions.size !in 1..2) {
-                LOG.error(
-                    "Invalid stub structure. DOT_QUALIFIED_EXPRESSION must have one or two children. Was: ${expressions.size}\n" +
-                            "File text:\n${containingFile.text}"
-                )
+                LOG.logErrorWithAttachment("Invalid stub structure. DOT_QUALIFIED_EXPRESSION must have one or two children. Was: ${expressions.size}") {
+                    withPsiEntry("file", containingFile)
+                }
                 return null
             }
             return expressions

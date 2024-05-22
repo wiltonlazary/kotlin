@@ -41,16 +41,19 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtWhenEntry
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
+import org.jetbrains.kotlin.psi.stubs.elements.KtFileElementType
 import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementType
-import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementTypes
 
-class KotlinParserDefinition : ParserDefinition {
-
+/**
+ * Creates [org.jetbrains.kotlin.psi.KtCommonFile] when java psi is not available e.g. on JB Client.
+ * Otherwise, normal [KotlinParserDefinition] should be used.
+ */
+open class KotlinCommonParserDefinition : ParserDefinition {
     override fun createLexer(project: Project): Lexer = KotlinLexer()
 
     override fun createParser(project: Project): PsiParser = KotlinParser(project)
 
-    override fun getFileNodeType(): IFileElementType = KtStubElementTypes.FILE
+    override fun getFileNodeType(): IFileElementType = KtFileElementType.INSTANCE
 
     override fun getWhitespaceTokens(): TokenSet = KtTokens.WHITESPACES
 
@@ -72,8 +75,10 @@ class KotlinParserDefinition : ParserDefinition {
         }
     }
 
-    override fun createFile(fileViewProvider: FileViewProvider): PsiFile = KtFile(fileViewProvider, false)
+    @Suppress("DEPRECATION")
+    override fun createFile(fileViewProvider: FileViewProvider): PsiFile = org.jetbrains.kotlin.psi.KtCommonFile(fileViewProvider, false)
 
+    @Deprecated("Deprecated in Java")
     override fun spaceExistanceTypeBetweenTokens(left: ASTNode, right: ASTNode): ParserDefinition.SpaceRequirements {
         val rightTokenType = right.elementType
 
@@ -97,6 +102,12 @@ class KotlinParserDefinition : ParserDefinition {
 
         // Default
         return MAY
+    }
+}
+
+class KotlinParserDefinition : KotlinCommonParserDefinition() {
+    override fun createFile(fileViewProvider: FileViewProvider): PsiFile {
+        return KtFile(fileViewProvider, false)
     }
 
     companion object {

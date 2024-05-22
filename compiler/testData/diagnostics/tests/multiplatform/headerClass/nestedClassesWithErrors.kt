@@ -1,18 +1,17 @@
-// !LANGUAGE: +MultiPlatformProjects
 // MODULE: m1-common
 // FILE: common.kt
 
 expect class B {
     class N {
-        <!EXPECTED_DECLARATION_WITH_BODY, JVM:EXPECTED_DECLARATION_WITH_BODY!>fun body()<!> {}
-        <!WRONG_MODIFIER_TARGET, JVM:WRONG_MODIFIER_TARGET!>expect<!> fun extraHeader()
+        <!EXPECTED_DECLARATION_WITH_BODY, EXPECTED_DECLARATION_WITH_BODY{JVM}!>fun body()<!> {}
+        <!WRONG_MODIFIER_TARGET, WRONG_MODIFIER_TARGET{JVM}!>expect<!> fun extraHeader()
     }
 }
 
 expect class C {
-    <!WRONG_MODIFIER_TARGET, JVM:WRONG_MODIFIER_TARGET!>expect<!> class N
-    <!WRONG_MODIFIER_TARGET, JVM:WRONG_MODIFIER_TARGET!>expect<!> enum class E
-    <!WRONG_MODIFIER_TARGET, JVM:WRONG_MODIFIER_TARGET!>expect<!> inner class I
+    <!WRONG_MODIFIER_TARGET, WRONG_MODIFIER_TARGET{JVM}!>expect<!> class N
+    <!WRONG_MODIFIER_TARGET, WRONG_MODIFIER_TARGET{JVM}!>expect<!> enum class E
+    <!WRONG_MODIFIER_TARGET, WRONG_MODIFIER_TARGET{JVM}!>expect<!> inner class I
 }
 
 expect class D {
@@ -23,7 +22,7 @@ expect class E {
     class N
 }
 
-// MODULE: m1-jvm(m1-common)
+// MODULE: m1-jvm()()(m1-common)
 // FILE: jvm.kt
 
 actual class B {

@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // MODULE: m1
 // FILE: a.kt
 package foo
@@ -42,7 +43,7 @@ fun box() {
 
     println(::<!CALL_TO_JS_MODULE_WITHOUT_MODULE_SYSTEM!>bar<!>.name)
     println(::<!CALL_TO_JS_MODULE_WITHOUT_MODULE_SYSTEM!>baz<!>.name)
-    println(<!CALL_TO_JS_MODULE_WITHOUT_MODULE_SYSTEM!>A<!>::f.name)
+    println(<!CALL_TO_JS_MODULE_WITHOUT_MODULE_SYSTEM!>A<!>::<!CALL_TO_JS_MODULE_WITHOUT_MODULE_SYSTEM!>f<!>.name)
 
     B.<!CALL_TO_JS_MODULE_WITHOUT_MODULE_SYSTEM!>Nested<!>()
 
@@ -52,6 +53,9 @@ fun box() {
 
     println(<!CALL_TO_JS_MODULE_WITHOUT_MODULE_SYSTEM!>B::class<!>)
     println(<!CALL_TO_JS_MODULE_WITHOUT_MODULE_SYSTEM!>B.Nested::class<!>)
+
+    val x: Any = 1
+    println(x is B)
 }
 
 external class DerivedB : <!CALL_TO_JS_MODULE_WITHOUT_MODULE_SYSTEM!>B<!>

@@ -1,4 +1,5 @@
-// WITH_RUNTIME
+// WITH_STDLIB
+// JVM_ABI_K1_K2_DIFF: KT-63864
 class ArrayWrapper<T>() {
     val contents = ArrayList<T>()
 

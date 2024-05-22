@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.diagnostics.rendering.DiagnosticFactoryToRendererMap
 import org.jetbrains.kotlin.diagnostics.rendering.Renderers
 import org.jetbrains.kotlin.diagnostics.rendering.Renderers.RENDER_CLASS_OR_OBJECT
 import org.jetbrains.kotlin.diagnostics.rendering.Renderers.RENDER_TYPE
+import org.jetbrains.kotlin.diagnostics.rendering.Renderers.RENDER_TYPE_WITH_ANNOTATIONS
 
 object DefaultErrorMessagesAndroid : DefaultErrorMessages.Extension {
     private val MAP = DiagnosticFactoryToRendererMap("Android")
@@ -45,7 +46,7 @@ object DefaultErrorMessagesAndroid : DefaultErrorMessages.Extension {
                 "'Parcelable' should be a class")
 
         MAP.put(ErrorsAndroid.PARCELABLE_DELEGATE_IS_NOT_ALLOWED,
-                "Delegating 'Parcelable' is now allowed")
+                "Delegating 'Parcelable' is not allowed")
 
         MAP.put(ErrorsAndroid.PARCELABLE_SHOULD_NOT_BE_ENUM_CLASS,
                 "'Parcelable' should not be a 'enum class'")
@@ -89,7 +90,7 @@ object DefaultErrorMessagesAndroid : DefaultErrorMessages.Extension {
 
         MAP.put(ErrorsAndroid.PARCELER_TYPE_INCOMPATIBLE,
                 "Parceler type {0} is incompatible with {1}",
-                RENDER_TYPE, RENDER_TYPE)
+                RENDER_TYPE_WITH_ANNOTATIONS, RENDER_TYPE_WITH_ANNOTATIONS)
 
         MAP.put(ErrorsAndroid.DUPLICATING_TYPE_PARCELERS,
                 "Duplicating ''TypeParceler'' annotations")
@@ -101,5 +102,11 @@ object DefaultErrorMessagesAndroid : DefaultErrorMessages.Extension {
         MAP.put(ErrorsAndroid.CLASS_SHOULD_BE_PARCELIZE,
                 "{0} should be annotated with ''@Parcelize''",
                 RENDER_CLASS_OR_OBJECT)
+
+        MAP.put(ErrorsAndroid.INAPPLICABLE_IGNORED_ON_PARCEL,
+                "'@IgnoredOnParcel' is only applicable to class properties")
+
+        MAP.put(ErrorsAndroid.INAPPLICABLE_IGNORED_ON_PARCEL_CONSTRUCTOR_PROPERTY,
+                "'@IgnoredOnParcel' is inapplicable to properties declared in the primary constructor")
     }
 }

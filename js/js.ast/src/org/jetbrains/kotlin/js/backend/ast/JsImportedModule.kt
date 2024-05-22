@@ -16,8 +16,24 @@
 
 package org.jetbrains.kotlin.js.backend.ast
 
-class JsImportedModule(val externalName: String, var internalName: JsName, val plainReference: JsExpression?) {
+
+class JsImportedModule @JvmOverloads constructor(
+    val externalName: String,
+    var internalName: JsName,
+    val plainReference: JsExpression?,
+    val relativeRequirePath: String? = null
+) {
     val key = JsImportedModuleKey(externalName, plainReference?.toString())
+}
+
+const val REGULAR_EXTENSION = ".js"
+const val ESM_EXTENSION = ".mjs"
+
+fun JsImportedModule.getRequireName(isEsm: Boolean = false): String {
+    return relativeRequirePath?.let {
+        val extension = if (isEsm) ESM_EXTENSION else REGULAR_EXTENSION
+        "$it$extension"
+    } ?: externalName
 }
 
 data class JsImportedModuleKey(val baseName: String, val plainName: String?)

@@ -21,14 +21,18 @@ import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.lexer.KtTokens;
+import org.jetbrains.kotlin.psi.psiUtil.KtPsiUtilKt;
 
 public class KtWhenEntry extends KtElementImpl {
     public KtWhenEntry(@NotNull ASTNode node) {
         super(node);
     }
 
+    /**
+     * @return {@code true} if this is an {@code else} condition with no {@link #getGuard() guard}, {@code false} otherwise.
+     */
     public boolean isElse() {
-        return getElseKeyword() != null;
+        return getElseKeyword() != null && getGuard() == null;
     }
 
     @Nullable
@@ -49,5 +53,19 @@ public class KtWhenEntry extends KtElementImpl {
     @NotNull
     public KtWhenCondition[] getConditions() {
         return findChildrenByClass(KtWhenCondition.class);
+    }
+
+    @Nullable
+    public KtWhenEntryGuard getGuard() {
+        return findChildByClass(KtWhenEntryGuard.class);
+    }
+
+    public PsiElement getTrailingComma() {
+        return KtPsiUtilKt.getTrailingCommaByClosingElement(getArrow());
+    }
+
+    @Nullable
+    public PsiElement getArrow() {
+        return findChildByType(KtTokens.ARROW);
     }
 }

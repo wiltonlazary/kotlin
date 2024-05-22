@@ -1,6 +1,7 @@
-// IGNORE_BACKEND: NATIVE
-// FILE: 1.kt
 // WITH_REFLECT
+// NO_CHECK_LAMBDA_INLINING
+// TARGET_BACKEND: JVM
+// FILE: 1.kt
 package test
 
 import java.util.*
@@ -20,7 +21,6 @@ public class Box
 
 // FILE: 2.kt
 
-//NO_CHECK_LAMBDA_INLINING
 import test.*
 
 class Boxer {

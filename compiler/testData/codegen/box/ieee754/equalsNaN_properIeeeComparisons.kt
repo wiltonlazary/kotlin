@@ -1,5 +1,5 @@
-// !LANGUAGE: +ProperIeee754Comparisons
-// WITH_RUNTIME
+// LANGUAGE: +ProperIeee754Comparisons
+// WITH_STDLIB
 
 import kotlin.test.*
 
@@ -93,6 +93,7 @@ fun box(): String {
     assertTrue(adnq == dn, "Double: (Any?)NaN != NaN")
     assertTrue(adnq == adn, "Double: (Any?)NaN != (Any)NaN")
 
+    // JS IR fails due to: https://bugs.openjdk.java.net/browse/JDK-8141407
     assertFalse(dnq == dnq, "Double: NaN? == NaN?")
     assertTrue(dnq == adnq, "Double: NaN? != (Any?)NaN")
     assertTrue(adnq == dnq, "Double: (Any?)NaN != NaN?")
@@ -113,6 +114,7 @@ fun box(): String {
     assertFalse(adnq != dn, "Double: (Any?)NaN != NaN")
     assertFalse(adnq != adn, "Double: (Any?)NaN != (Any)NaN")
 
+    // JS IR fails due to: https://bugs.openjdk.java.net/browse/JDK-8141407
     assertTrue(dnq != dnq, "Double: NaN? == NaN?")
     assertFalse(dnq != adnq, "Double: NaN? != (Any?)NaN")
     assertFalse(adnq != dnq, "Double: (Any?)NaN != NaN?")

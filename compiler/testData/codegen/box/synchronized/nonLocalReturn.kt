@@ -1,8 +1,7 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
-
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// WITH_STDLIB
 // FULL_JDK
+// JVM_ABI_K1_K2_DIFF: KT-63864
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit

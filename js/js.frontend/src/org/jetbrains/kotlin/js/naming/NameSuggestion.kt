@@ -19,9 +19,12 @@ package org.jetbrains.kotlin.js.naming
 import org.jetbrains.kotlin.builtins.ReflectionTypes
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
+import org.jetbrains.kotlin.js.common.isES5IdentifierPart
+import org.jetbrains.kotlin.js.common.isES5IdentifierStart
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils.getNameForAnnotatedObject
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils.isNativeObject
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils.isCompanionObject
 import org.jetbrains.kotlin.resolve.calls.tasks.isDynamic
@@ -29,6 +32,11 @@ import org.jetbrains.kotlin.resolve.calls.util.FakeCallableDescriptorForObject
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.isEnumValueOfMethod
 import java.util.*
+import kotlin.math.abs
+
+class JsNameSuggestion : NameSuggestion()
+
+class WasmNameSuggestion : NameSuggestion()
 
 /**
  * This class is responsible for generating names for declarations. It does not produce fully-qualified JS name, instead
@@ -39,8 +47,8 @@ import java.util.*
  * A new instance of this class can be created for each request, however, it's recommended to use stable instance, since
  * [NameSuggestion] supports caching.
  */
-class NameSuggestion {
-    private val cache: MutableMap<DeclarationDescriptor, SuggestedName?> = WeakHashMap()
+open class NameSuggestion {
+    private val cache: MutableMap<DeclarationDescriptor, SuggestedName?> = Collections.synchronizedMap(WeakHashMap())
 
     /**
      * Generates names for declarations. Name consists of the following parts:
@@ -61,12 +69,15 @@ class NameSuggestion {
      * list consists of exactly one string for any declaration except for package. Package name lists
      * have at least one string.
      */
-    fun suggest(descriptor: DeclarationDescriptor) = cache.getOrPut(descriptor) { generate(descriptor.original) }
+    fun suggest(descriptor: DeclarationDescriptor, bindingContext: BindingContext) =
+        cache.getOrPut(descriptor) { generate(descriptor.original, bindingContext) }
 
-    private fun generate(descriptor: DeclarationDescriptor): SuggestedName? {
-        // Members of companion objects of classes are treated as static members of these classes
+    private fun generate(descriptor: DeclarationDescriptor, bindingContext: BindingContext): SuggestedName? {
+        fun suggest(d: DeclarationDescriptor) = suggest(d, bindingContext)
+
+            // Members of companion objects of classes are treated as static members of these classes
         if (isNativeObject(descriptor) && isCompanionObject(descriptor)) {
-            return suggest(descriptor.containingDeclaration!!)
+            return suggest(descriptor.containingDeclaration!!, bindingContext)
         }
 
         if (descriptor is FunctionDescriptor && descriptor.isSuspend) {
@@ -111,7 +122,7 @@ class NameSuggestion {
             // Local functions and variables are always private with their own names as suggested names
             is CallableDescriptor ->
                 if (DescriptorUtils.isDescriptorWithLocalVisibility(descriptor)) {
-                    val ownName = getNameForAnnotatedObject(descriptor) ?: getSuggestedName(descriptor)
+                    val ownName = getNameForAnnotatedObject(descriptor, bindingContext) ?: getSuggestedName(descriptor)
                     var name = ownName
                     var scope = descriptor.containingDeclaration
 
@@ -137,10 +148,10 @@ class NameSuggestion {
                 }
         }
 
-        return generateDefault(descriptor)
+        return generateDefault(descriptor, bindingContext)
     }
 
-    private fun generateDefault(descriptor: DeclarationDescriptor): SuggestedName {
+    private fun generateDefault(descriptor: DeclarationDescriptor, bindingContext: BindingContext): SuggestedName {
         // For any non-local declaration suggest its own suggested name and put it in scope of its containing declaration.
         // For local declaration get a sequence for names of all containing functions and join their names with '$' symbol,
         // and use container of topmost function, i.e.
@@ -178,7 +189,7 @@ class NameSuggestion {
             getSuggestedName(fixedDescriptor)
         }
         if (current.containingDeclaration is FunctionDescriptor && current !is TypeParameterDescriptor) {
-            val outerFunctionName = suggest(current.containingDeclaration as FunctionDescriptor)!!
+            val outerFunctionName = suggest(current.containingDeclaration as FunctionDescriptor, bindingContext)!!
             parts += outerFunctionName.names.single()
             current = outerFunctionName.scope
         }
@@ -194,7 +205,7 @@ class NameSuggestion {
 
         parts.reverse()
         val unmangledName = parts.joinToString("$")
-        val (id, stable) = mangleNameIfNecessary(unmangledName, fixedDescriptor)
+        val (id, stable) = mangleNameIfNecessary(unmangledName, fixedDescriptor, bindingContext)
         return SuggestedName(listOf(id), stable, fixedDescriptor, current)
     }
 
@@ -216,7 +227,7 @@ class NameSuggestion {
     }
 
     companion object {
-        private fun mangleNameIfNecessary(baseName: String, descriptor: DeclarationDescriptor): NameAndStability {
+        private fun mangleNameIfNecessary(baseName: String, descriptor: DeclarationDescriptor, bindingContext: BindingContext): NameAndStability {
             // If we have a callable descriptor (property or method) it can override method in a parent class.
             // Traverse to the topmost overridden method.
             // It does not matter which path to choose during traversal, since front-end must ensure
@@ -229,7 +240,7 @@ class NameSuggestion {
             }
 
             // If declaration is marked with either external, @native, @library or @JsName, return its stable name as is.
-            val nativeName = getNameForAnnotatedObject(overriddenDescriptor)
+            val nativeName = getNameForAnnotatedObject(overriddenDescriptor, bindingContext)
             if (nativeName != null) return NameAndStability(nativeName, true)
 
             if (overriddenDescriptor is FunctionDescriptor) {
@@ -283,7 +294,7 @@ class NameSuggestion {
                 is PackageFragmentDescriptor -> when {
                     effectiveVisibility.isPublicAPI -> mangledAndStable()
 
-                    effectiveVisibility == Visibilities.INTERNAL -> mangledInternal()
+                    effectiveVisibility == DescriptorVisibilities.INTERNAL -> mangledInternal()
 
                     else -> regularAndUnstable()
                 }
@@ -292,16 +303,16 @@ class NameSuggestion {
                     descriptor is FunctionDescriptor && descriptor.isEnumValueOfMethod() -> mangledAndStable()
 
                     // Make all public declarations stable
-                    effectiveVisibility == Visibilities.PUBLIC -> mangledAndStable()
+                    effectiveVisibility == DescriptorVisibilities.PUBLIC -> mangledAndStable()
 
                     descriptor.isOverridableOrOverrides -> mangledAndStable()
 
                     // Make all protected declarations of non-final public classes stable
-                    effectiveVisibility == Visibilities.PROTECTED &&
+                    effectiveVisibility == DescriptorVisibilities.PROTECTED &&
                         !containingDeclaration.isFinalClass &&
                         containingDeclaration.visibility.isPublicAPI -> mangledAndStable()
 
-                    effectiveVisibility == Visibilities.INTERNAL -> mangledInternal()
+                    effectiveVisibility == DescriptorVisibilities.INTERNAL -> mangledInternal()
 
                     // Mangle (but make unstable) all non-public API of public classes
                     containingDeclaration.visibility.isPublicAPI && !containingDeclaration.isFinalClass -> mangledPrivate()
@@ -339,12 +350,12 @@ class NameSuggestion {
         }
 
         private fun mangledId(forCalculateId: String): String {
-            val absHashCode = Math.abs(forCalculateId.hashCode())
-            return if (absHashCode != 0) Integer.toString(absHashCode, Character.MAX_RADIX) else ""
+            val absHashCode = abs(forCalculateId.hashCode())
+            return if (absHashCode != 0) absHashCode.toString(Character.MAX_RADIX) else ""
         }
 
-        private val DeclarationDescriptorWithVisibility.ownEffectiveVisibility
-            get() = visibility.effectiveVisibility(this, checkPublishedApi = true).toVisibility()
+        private val DeclarationDescriptorWithVisibility.ownEffectiveVisibility: DescriptorVisibility
+            get() = visibility.effectiveVisibility(this, checkPublishedApi = true).toDescriptorVisibility()
 
         @JvmStatic fun sanitizeName(name: String): String {
             if (name.isEmpty()) return "_"
@@ -354,28 +365,3 @@ class NameSuggestion {
         }
     }
 }
-
-// See ES 5.1 spec: https://www.ecma-international.org/ecma-262/5.1/#sec-7.6
-fun Char.isES5IdentifierStart() =
-        Character.isLetter(this) ||   // Lu | Ll | Lt | Lm | Lo
-        Character.getType(this).toByte() == Character.LETTER_NUMBER ||
-        // Nl which is missing in Character.isLetter, but present in UnicodeLetter in spec
-        this == '_' ||
-        this == '$'
-
-fun Char.isES5IdentifierPart() =
-        isES5IdentifierStart() ||
-        when (Character.getType(this).toByte()) {
-            Character.NON_SPACING_MARK,
-            Character.COMBINING_SPACING_MARK,
-            Character.DECIMAL_DIGIT_NUMBER,
-            Character.CONNECTOR_PUNCTUATION -> true
-            else -> false
-        } ||
-        this == '\u200C' ||   // Zero-width non-joiner
-        this == '\u200D'      // Zero-width joiner
-
-fun String.isValidES5Identifier() =
-        isNotEmpty() &&
-        first().isES5IdentifierStart() &&
-        drop(1).all { it.isES5IdentifierPart() }

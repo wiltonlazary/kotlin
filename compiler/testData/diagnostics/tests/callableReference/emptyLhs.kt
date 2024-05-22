@@ -1,5 +1,6 @@
-// !DIAGNOSTICS: -UNUSED_EXPRESSION, -EXTENSION_SHADOWED_BY_MEMBER
-// !LANGUAGE: +CallableReferencesToClassMembersWithEmptyLHS
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_EXPRESSION, -EXTENSION_SHADOWED_BY_MEMBER
+// LANGUAGE: +CallableReferencesToClassMembersWithEmptyLHS
 
 val topLevelVal = 1
 fun topLevelFun() = 2

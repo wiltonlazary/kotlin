@@ -25,8 +25,6 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperclassesWithoutAny
 import org.jetbrains.kotlin.resolve.scopes.*
 import org.jetbrains.kotlin.resolve.scopes.utils.ErrorLexicalScope
 import org.jetbrains.kotlin.storage.StorageManager
-import org.jetbrains.kotlin.utils.addIfNotNull
-import java.util.*
 
 class ClassResolutionScopesSupport(
     private val classDescriptor: ClassDescriptor,
@@ -35,7 +33,7 @@ class ClassResolutionScopesSupport(
     private val getOuterScope: () -> LexicalScope
 ) {
     private fun scopeWithGenerics(parent: LexicalScope): LexicalScopeImpl {
-        return LexicalScopeImpl(parent, classDescriptor, false, null, LexicalScopeKind.CLASS_HEADER) {
+        return LexicalScopeImpl(parent, classDescriptor, false, null, emptyList(), LexicalScopeKind.CLASS_HEADER) {
             classDescriptor.declaredTypeParameters.forEach { addClassifierDescriptor(it) }
         }
     }
@@ -70,6 +68,7 @@ class ClassResolutionScopesSupport(
             classDescriptor,
             true,
             classDescriptor.thisAsReceiverParameter,
+            classDescriptor.contextReceivers,
             LexicalScopeKind.CLASS_MEMBER_SCOPE
         )
     }
@@ -91,20 +90,17 @@ class ClassResolutionScopesSupport(
         isDeprecated: Boolean = false
     ): LexicalScope {
         val companionObjectDescriptor = classDescriptor.companionObjectDescriptor?.takeIf { withCompanionObject }
-        val staticScopes = ArrayList<MemberScope>(3)
-
-        staticScopes.add(classDescriptor.staticScope)
-        staticScopes.add(classDescriptor.unsubstitutedInnerClassesScope)
-        staticScopes.addIfNotNull(companionObjectDescriptor?.getStaticScopeOfCompanionObject(classDescriptor))
-
         val parentForNewScope = companionObjectDescriptor?.packScopesOfCompanionSupertypes(parent, ownerDescriptor) ?: parent
 
-        val lexicalChainedScope = LexicalChainedScope(
+        val lexicalChainedScope = LexicalChainedScope.create(
             parentForNewScope, ownerDescriptor,
             isOwnerDescriptorAccessibleByLabel = false,
             implicitReceiver = companionObjectDescriptor?.thisAsReceiverParameter,
+            contextReceiversGroup = emptyList(),
             kind = LexicalScopeKind.CLASS_INHERITANCE,
-            memberScopes = staticScopes,
+            classDescriptor.staticScope,
+            classDescriptor.unsubstitutedInnerClassesScope,
+            companionObjectDescriptor?.getStaticScopeOfCompanionObject(classDescriptor),
             isStaticScope = true
         )
 
@@ -134,7 +130,7 @@ class ClassResolutionScopesSupport(
     }
 
     private fun <T : Any> StorageManager.createLazyValue(onRecursion: ((Boolean) -> T), compute: () -> T) =
-        createLazyValueWithPostCompute(compute, onRecursion, {})
+        createLazyValue(compute, onRecursion)
 
     companion object {
         private val createErrorLexicalScope: (Boolean) -> LexicalScope = { ErrorLexicalScope() }
@@ -151,6 +147,7 @@ fun scopeForInitializerResolution(
         parentDescriptor,
         false,
         null,
+        emptyList(),
         LexicalScopeKind.CLASS_INITIALIZER
     ) {
         if (primaryConstructorParameters.isNotEmpty()) {

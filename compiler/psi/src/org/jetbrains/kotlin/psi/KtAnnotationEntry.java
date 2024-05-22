@@ -17,6 +17,8 @@
 package org.jetbrains.kotlin.psi;
 
 import com.intellij.lang.ASTNode;
+import com.intellij.navigation.ItemPresentation;
+import com.intellij.navigation.ItemPresentationProviders;
 import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -61,15 +63,21 @@ public class KtAnnotationEntry extends KtElementImplStub<KotlinAnnotationEntrySt
     @Override
     public KtValueArgumentList getValueArgumentList() {
         KotlinAnnotationEntryStub stub = getStub();
-        if (stub != null && !stub.hasValueArguments()) {
-            return null;
+        if (stub == null && getGreenStub() != null) {
+            return (KtValueArgumentList) findChildByType(KtNodeTypes.VALUE_ARGUMENT_LIST);
         }
-        return (KtValueArgumentList) findChildByType(KtNodeTypes.VALUE_ARGUMENT_LIST);
+
+        return getStubOrPsiChild(KtStubElementTypes.VALUE_ARGUMENT_LIST);
     }
 
     @NotNull
     @Override
     public List<? extends ValueArgument> getValueArguments() {
+        KotlinAnnotationEntryStub stub = getStub();
+        if (stub != null && !stub.hasValueArguments()) {
+            return Collections.<KtValueArgument>emptyList();
+        }
+
         KtValueArgumentList list = getValueArgumentList();
         return list != null ? list.getArguments() : Collections.<KtValueArgument>emptyList();
     }
@@ -145,5 +153,10 @@ public class KtAnnotationEntry extends KtElementImplStub<KotlinAnnotationEntrySt
             }
         }
         return null;
+    }
+
+    @Override
+    public ItemPresentation getPresentation() {
+        return ItemPresentationProviders.getItemPresentation(this);
     }
 }

@@ -21,11 +21,16 @@ import com.intellij.openapi.util.text.StringUtil;
 import kotlin.Pair;
 import kotlin.collections.CollectionsKt;
 import kotlin.io.FilesKt;
+import kotlin.io.path.PathsKt;
 import kotlin.text.Charsets;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.kotlin.checkers.AbstractForeignAnnotationsTestKt;
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.checkers.ThirdPartyAnnotationPathsKt;
 import org.jetbrains.kotlin.cli.common.CLITool;
+import org.jetbrains.kotlin.cli.common.CompilerSystemProperties;
 import org.jetbrains.kotlin.cli.common.ExitCode;
+import org.jetbrains.kotlin.cli.common.Usage;
+import org.jetbrains.kotlin.cli.common.messages.MessageRenderer;
 import org.jetbrains.kotlin.cli.js.K2JSCompiler;
 import org.jetbrains.kotlin.cli.js.dce.K2JSDce;
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler;
@@ -36,21 +41,40 @@ import org.jetbrains.kotlin.test.CompilerTestUtil;
 import org.jetbrains.kotlin.test.InTextDirectivesUtils;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
 import org.jetbrains.kotlin.test.TestCaseWithTmpdir;
+import org.jetbrains.kotlin.test.util.KtTestUtil;
+import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
 import org.jetbrains.kotlin.utils.JsMetadataVersion;
 import org.jetbrains.kotlin.utils.PathUtil;
 import org.jetbrains.kotlin.utils.StringsKt;
 import org.junit.Assert;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+
+import static org.jetbrains.kotlin.cli.common.arguments.PreprocessCommandLineArgumentsKt.ARGFILE_ARGUMENT;
 
 public abstract class AbstractCliTest extends TestCaseWithTmpdir {
     private static final String TESTDATA_DIR = "$TESTDATA_DIR$";
 
-    private static final String EXPERIMENTAL_ARGFILE_ARGUMENT_PREFIX = "-Xargfile=";
+    private static final String BUILD_FILE_ARGUMENT_PREFIX = "-Xbuild-file=";
 
-    public static Pair<String, ExitCode> executeCompilerGrabOutput(@NotNull CLITool<?> compiler, @NotNull List<String> args) {
+    public static Pair<String, ExitCode> executeCompilerGrabOutput(
+            @NotNull CLITool<?> compiler,
+            @NotNull List<String> args
+    ) {
+        return executeCompilerGrabOutput(compiler, args, null);
+    }
+
+    public static Pair<String, ExitCode> executeCompilerGrabOutput(
+            @NotNull CLITool<?> compiler,
+            @NotNull List<String> args,
+            @Nullable MessageRenderer messageRenderer
+    ) {
         StringBuilder output = new StringBuilder();
 
         int index = 0;
@@ -58,8 +82,10 @@ public abstract class AbstractCliTest extends TestCaseWithTmpdir {
             int next = args.subList(index, args.size()).indexOf("---");
             if (next == -1) {
                 next = args.size();
+            } else {
+                next = index + next;
             }
-            Pair<String, ExitCode> pair = CompilerTestUtil.executeCompiler(compiler, args.subList(index, next));
+            Pair<String, ExitCode> pair = CompilerTestUtil.executeCompiler(compiler, args.subList(index, next), messageRenderer);
             output.append(pair.getFirst());
             if (pair.getSecond() != ExitCode.OK) {
                 return new Pair<>(output.toString(), pair.getSecond());
@@ -72,25 +98,58 @@ public abstract class AbstractCliTest extends TestCaseWithTmpdir {
     }
 
     @NotNull
-    public static String getNormalizedCompilerOutput(@NotNull String pureOutput, @NotNull ExitCode exitCode, @NotNull String testDataDir) {
+    public static String getNormalizedCompilerOutput(
+            @NotNull String pureOutput,
+            @Nullable ExitCode exitCode,
+            @NotNull String testDataDir,
+            @NotNull String tmpdir
+    ) {
         String testDataAbsoluteDir = new File(testDataDir).getAbsolutePath();
+        String tmpDirAbsoluteDir = new File(tmpdir).getAbsolutePath();
         String normalizedOutputWithoutExitCode = StringUtil.convertLineSeparators(pureOutput)
                 .replace(testDataAbsoluteDir, TESTDATA_DIR)
                 .replace(FileUtil.toSystemIndependentName(testDataAbsoluteDir), TESTDATA_DIR)
                 .replace(PathUtil.getKotlinPathsForDistDirectory().getHomePath().getAbsolutePath(), "$PROJECT_DIR$")
-                .replace("expected version is " + JvmMetadataVersion.INSTANCE, "expected version is $ABI_VERSION$")
-                .replace("expected version is " + JsMetadataVersion.INSTANCE, "expected version is $ABI_VERSION$")
+                .replace(PathUtil.getKotlinPathsForDistDirectory().getHomePath().getParentFile().getAbsolutePath(), "$DIST_DIR$")
+                .replace(org.jetbrains.kotlin.konan.file.File.Companion.getUserDir().getAbsolutePath(), "$USER_DIR$")
+                .replace(tmpDirAbsoluteDir, "$TMP_DIR$")
                 .replace("\\", "/")
-                .replace(KotlinCompilerVersion.VERSION, "$VERSION$");
+                .replace(KtTestUtil.getJdk8Home().getAbsolutePath().replace("\\", "/"), "$JDK_1_8")
+                .replace(KtTestUtil.getJdk11Home().getAbsolutePath().replace("\\", "/"), "$JDK_11")
+                .replace(KtTestUtil.getJdk17Home().getAbsolutePath().replace("\\", "/"), "$JDK_17")
+                .replaceAll("info: executable production duration: \\d+ms", "info: executable production duration: [time]")
+                .replace(KotlinCompilerVersion.VERSION, "$VERSION$")
+                .replace(System.getProperty("java.runtime.version"), "$JVM_VERSION$")
+                .replace(" " + JvmMetadataVersion.INSTANCE, " $ABI_VERSION$")
+                .replace(" " + JsMetadataVersion.INSTANCE, " $ABI_VERSION$")
+                .replace(" " + JvmMetadataVersion.INSTANCE_NEXT, " $ABI_VERSION_NEXT$")
+                .replace("\n" + Usage.BAT_DELIMITER_CHARACTERS_NOTE + "\n", "")
+                .replaceAll("log4j:WARN.*\n", "");
 
-        return normalizedOutputWithoutExitCode + exitCode + "\n";
+
+        // Debug output for KT-64822 investigation
+        System.out.println("testDataAbsoluteDir: " + testDataAbsoluteDir);
+        System.out.println("pureOutput: " + pureOutput);
+        System.out.println("normalizedOutputWithoutExitCode: " + normalizedOutputWithoutExitCode);
+
+        return exitCode == null ? normalizedOutputWithoutExitCode : (normalizedOutputWithoutExitCode + exitCode + "\n");
     }
 
     private void doTest(@NotNull String fileName, @NotNull CLITool<?> compiler) {
         System.setProperty("java.awt.headless", "true");
+
+        File environmentTestConfig = new File(fileName.replaceFirst("\\.args$", ".env"));
+        if (environmentTestConfig.exists()) {
+            compiler.setReadingSettingsFromEnvironmentAllowed(true);
+            CompilerSystemProperties.LANGUAGE_VERSION_SETTINGS.setValue(FilesKt.readText(environmentTestConfig, Charsets.UTF_8));
+        }
+
         Pair<String, ExitCode> outputAndExitCode = executeCompilerGrabOutput(compiler, readArgs(fileName, tmpdir.getPath()));
         String actual = getNormalizedCompilerOutput(
-                outputAndExitCode.getFirst(), outputAndExitCode.getSecond(), new File(fileName).getParent()
+                outputAndExitCode.getFirst(),
+                outputAndExitCode.getSecond(),
+                new File(fileName).getParent(),
+                tmpdir.getAbsolutePath()
         );
 
         File outFile = new File(fileName.replaceFirst("\\.args$", ".out"));
@@ -185,13 +244,16 @@ public abstract class AbstractCliTest extends TestCaseWithTmpdir {
     private static List<String> readArgs(@NotNull String testArgsFilePath, @NotNull String tempDir) {
         File testArgsFile = new File(testArgsFilePath);
         List<String> lines = FilesKt.readLines(testArgsFile, Charsets.UTF_8);
-        return CollectionsKt.mapNotNull(lines, arg -> readArg(arg, testArgsFile.getParent(), tempDir));
+        return CollectionsKt.mapNotNull(lines, arg -> readArg(arg, testArgsFile.getParentFile().getAbsolutePath(), tempDir));
     }
 
     private static String readArg(String arg, @NotNull String testDataDir, @NotNull String tempDir) {
         if (arg.isEmpty()) {
             return null;
         }
+
+        if (arg.equals("$JDK_1_8")) return KtTestUtil.getJdk8Home().getAbsolutePath();
+        if (arg.equals("$JDK_11_0")) return KtTestUtil.getJdk11Home().getAbsolutePath();
 
         String argWithColonsReplaced = arg
                 .replace("\\:", "$COLON$")
@@ -200,29 +262,46 @@ public abstract class AbstractCliTest extends TestCaseWithTmpdir {
 
         String argWithTestPathsReplaced = replaceTestPaths(argWithColonsReplaced, testDataDir, tempDir);
 
-        if (arg.startsWith(EXPERIMENTAL_ARGFILE_ARGUMENT_PREFIX)) {
-            return mockArgfile(argWithTestPathsReplaced, testDataDir, tempDir);
+        if (arg.startsWith(BUILD_FILE_ARGUMENT_PREFIX)) {
+            return replacePathsInBuildXml(argWithTestPathsReplaced, testDataDir, tempDir);
         }
-        else {
-            return argWithTestPathsReplaced;
+
+        if (arg.startsWith(ARGFILE_ARGUMENT)) {
+            return createTempFileWithPathsReplaced(argWithTestPathsReplaced, ARGFILE_ARGUMENT, "", testDataDir, tempDir);
         }
+
+        return argWithTestPathsReplaced;
     }
 
-    // Create new temp. argfile with all test paths replaced and return argfile-argument pointing to that file
-    private static String mockArgfile(@NotNull String argfileArgument, @NotNull String testDataDir, @NotNull String tempDir) {
-        String argfilePath = kotlin.text.StringsKt.substringAfter(argfileArgument, EXPERIMENTAL_ARGFILE_ARGUMENT_PREFIX, argfileArgument);
-        File argfile = new File(argfilePath);
+    @NotNull
+    public static String replacePathsInBuildXml(@NotNull String argument, @NotNull String testDataDir, @NotNull String tempDir) {
+        return createTempFileWithPathsReplaced(argument, BUILD_FILE_ARGUMENT_PREFIX, ".xml", testDataDir, tempDir);
+    }
 
-        if (argfile.exists()) {
-            File mockArgfile = FilesKt.createTempFile(argfile.getAbsolutePath(), "", new File(tempDir));
-            String oldArgfileContent = FilesKt.readText(argfile, Charsets.UTF_8);
-            String newArgfileContent = replaceTestPaths(oldArgfileContent, testDataDir, tempDir);
-            FilesKt.writeText(mockArgfile, newArgfileContent, Charsets.UTF_8);
-            return EXPERIMENTAL_ARGFILE_ARGUMENT_PREFIX + mockArgfile.getAbsolutePath();
-        } else {
-            return argfileArgument;
+    // Create new temporary file with all test paths replaced and return the new argument value with the new file path
+    @NotNull
+    private static String createTempFileWithPathsReplaced(
+            @NotNull String argument,
+            @NotNull String argumentPrefix,
+            @NotNull String tempFileSuffix,
+            @NotNull String testDataDir,
+            @NotNull String tempDir
+    ) {
+        String filePath = kotlin.text.StringsKt.substringAfter(argument, argumentPrefix, argument);
+        Path file = Paths.get(filePath);
+        if (!Files.exists(file)) return argument;
+
+        try {
+            Path result = Files.createTempFile(Paths.get(tempDir), file.getFileName().toString(), tempFileSuffix);
+            String oldContent = PathsKt.readText(file, Charsets.UTF_8);
+            String newContent = replaceTestPaths(oldContent, testDataDir, tempDir);
+            PathsKt.writeText(result, newContent, Charsets.UTF_8);
+
+            return argumentPrefix + result.toAbsolutePath();
         }
-
+        catch (IOException e) {
+            throw ExceptionUtilsKt.rethrow(e);
+        }
     }
 
     private static String replaceTestPaths(@NotNull String str, @NotNull String testDataDir, @NotNull String tempDir) {
@@ -231,7 +310,21 @@ public abstract class AbstractCliTest extends TestCaseWithTmpdir {
                 .replace(TESTDATA_DIR, testDataDir)
                 .replace(
                         "$FOREIGN_ANNOTATIONS_DIR$",
-                        new File(AbstractForeignAnnotationsTestKt.getFOREIGN_ANNOTATIONS_SOURCES_PATH()).getPath()
+                        new File(ThirdPartyAnnotationPathsKt.FOREIGN_ANNOTATIONS_SOURCES_PATH).getPath()
+                )
+                .replace(
+                        "$JSR_305_DECLARATIONS$",
+                        new File(ThirdPartyAnnotationPathsKt.JSR_305_SOURCES_PATH).getPath()
+                )
+                .replace(
+                        "$FOREIGN_JAVA8_ANNOTATIONS_DIR$",
+                        new File(ThirdPartyAnnotationPathsKt.FOREIGN_JDK8_ANNOTATIONS_SOURCES_PATH).getPath()
+                ).replace(
+                        "$JDK_17$",
+                        KtTestUtil.getJdk17Home().getPath()
+                ).replace(
+                        "$STDLIB_JS$",
+                        PathUtil.getKotlinPathsForCompiler().getJsStdLibKlibPath().getAbsolutePath()
                 );
     }
 

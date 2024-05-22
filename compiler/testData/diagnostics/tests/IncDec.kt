@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 class IncDec() {
   operator fun inc() : IncDec = this
   operator fun dec() : IncDec = this
@@ -9,10 +10,10 @@ fun testIncDec() {
   ++x
   x--
   --x
-  x = <!UNUSED_CHANGED_VALUE!>x++<!>
-  x = <!UNUSED_CHANGED_VALUE!>x--<!>
+  x = x++
+  x = x--
   x = ++x
-  <!UNUSED_VALUE!>x =<!> --x
+  x = --x
 }
 
 class WrongIncDec() {
@@ -39,8 +40,8 @@ fun testUnitIncDec() {
   <!INC_DEC_SHOULD_NOT_RETURN_UNIT!>++<!>x
   x<!INC_DEC_SHOULD_NOT_RETURN_UNIT!>--<!>
   <!INC_DEC_SHOULD_NOT_RETURN_UNIT!>--<!>x
-  x = <!UNUSED_CHANGED_VALUE!>x<!INC_DEC_SHOULD_NOT_RETURN_UNIT!>++<!><!>
-  x = <!UNUSED_CHANGED_VALUE!>x<!INC_DEC_SHOULD_NOT_RETURN_UNIT!>--<!><!>
+  x = x<!INC_DEC_SHOULD_NOT_RETURN_UNIT!>++<!>
+  x = x<!INC_DEC_SHOULD_NOT_RETURN_UNIT!>--<!>
   x = <!INC_DEC_SHOULD_NOT_RETURN_UNIT!>++<!>x
-  <!UNUSED_VALUE!>x =<!> <!INC_DEC_SHOULD_NOT_RETURN_UNIT!>--<!>x
+  x = <!INC_DEC_SHOULD_NOT_RETURN_UNIT!>--<!>x
 }

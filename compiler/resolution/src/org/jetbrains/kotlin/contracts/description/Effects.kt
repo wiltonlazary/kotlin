@@ -53,17 +53,7 @@ class ReturnsEffectDeclaration(val value: ConstantReference) : EffectDeclaration
  * Effect which specifies, that during execution of subroutine, callable [variableReference] will be invoked
  * [kind] amount of times, and will never be invoked after subroutine call is finished.
  */
-class CallsEffectDeclaration(val variableReference: VariableReference, val kind: InvocationKind) : EffectDeclaration {
+class CallsEffectDeclaration(val variableReference: VariableReference, val kind: EventOccurrencesRange) : EffectDeclaration {
     override fun <R, D> accept(contractDescriptionVisitor: ContractDescriptionVisitor<R, D>, data: D): R =
         contractDescriptionVisitor.visitCallsEffectDeclaration(this, data)
 }
-
-enum class InvocationKind {
-    AT_MOST_ONCE,
-    EXACTLY_ONCE,
-    AT_LEAST_ONCE,
-    UNKNOWN
-}
-
-fun InvocationKind.isDefinitelyVisited(): Boolean = this == InvocationKind.EXACTLY_ONCE || this == InvocationKind.AT_LEAST_ONCE
-fun InvocationKind.canBeRevisited(): Boolean = this == InvocationKind.UNKNOWN || this == InvocationKind.AT_LEAST_ONCE

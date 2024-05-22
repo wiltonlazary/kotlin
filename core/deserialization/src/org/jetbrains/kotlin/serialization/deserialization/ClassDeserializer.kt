@@ -16,8 +16,9 @@
 
 package org.jetbrains.kotlin.serialization.deserialization
 
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.packageFragments
 import org.jetbrains.kotlin.metadata.deserialization.TypeTable
 import org.jetbrains.kotlin.metadata.deserialization.VersionRequirementTable
 import org.jetbrains.kotlin.name.ClassId
@@ -25,7 +26,7 @@ import org.jetbrains.kotlin.serialization.deserialization.descriptors.Deserializ
 
 class ClassDeserializer(private val components: DeserializationComponents) {
     private val classes: (ClassKey) -> ClassDescriptor? =
-            components.storageManager.createMemoizedFunctionWithNullableValues { key -> createClass(key) }
+        components.storageManager.createMemoizedFunctionWithNullableValues { key -> createClass(key) }
 
     // Additional ClassData parameter is needed to avoid calling ClassDataFinder#findClassData()
     // if it is already computed at the call site
@@ -39,9 +40,9 @@ class ClassDeserializer(private val components: DeserializationComponents) {
         }
         if (classId in BLACK_LIST) return null
 
-        val (nameResolver, classProto, sourceElement) = key.classData
-                ?: components.classDataFinder.findClassData(classId)
-                ?: return null
+        val (nameResolver, classProto, metadataVersion, sourceElement) = key.classData
+            ?: components.classDataFinder.findClassData(classId)
+            ?: return null
 
         val outerClassId = classId.outerClassId
         val outerContext = if (outerClassId != null) {
@@ -51,21 +52,21 @@ class ClassDeserializer(private val components: DeserializationComponents) {
             if (!outerClass.hasNestedClass(classId.shortClassName)) return null
 
             outerClass.c
-        }
-        else {
-            val fragments = components.packageFragmentProvider.getPackageFragments(classId.packageFqName)
+        } else {
+            val fragments = components.packageFragmentProvider.packageFragments(classId.packageFqName)
             val fragment = fragments.firstOrNull { it !is DeserializedPackageFragment || it.hasTopLevelClass(classId.shortClassName) }
-                           ?: return null
+                ?: return null
 
             components.createContext(
-                    fragment, nameResolver,
-                    TypeTable(classProto.typeTable),
-                    VersionRequirementTable.create(classProto.versionRequirementTable),
-                    containerSource = null
+                fragment, nameResolver,
+                TypeTable(classProto.typeTable),
+                VersionRequirementTable.create(classProto.versionRequirementTable),
+                metadataVersion,
+                containerSource = null
             )
         }
 
-        return DeserializedClassDescriptor(outerContext, classProto, nameResolver, sourceElement)
+        return DeserializedClassDescriptor(outerContext, classProto, nameResolver, metadataVersion, sourceElement)
     }
 
     private class ClassKey(val classId: ClassId, val classData: ClassData?) {
@@ -83,7 +84,7 @@ class ClassDeserializer(private val components: DeserializationComponents) {
          * but the metadata is still serialized for kotlin-reflect 1.0 to work (see BuiltInsSerializer.kt).
          */
         val BLACK_LIST = setOf(
-                ClassId.topLevel(KotlinBuiltIns.FQ_NAMES.cloneable.toSafe())
+            ClassId.topLevel(StandardNames.FqNames.cloneable.toSafe())
         )
     }
 }

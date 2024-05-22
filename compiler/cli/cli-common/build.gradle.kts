@@ -1,22 +1,33 @@
-
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 dependencies {
-    compile(project(":core:util.runtime"))
-    compile(project(":compiler:frontend"))
-    compile(project(":compiler:frontend.java"))
-    compile(project(":compiler:frontend.script"))
-    compileOnly(project(":kotlin-reflect-api"))
-    compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    compileOnly(intellijDep()) { includeIntellijCoreJarDependencies(project) }
+    api(project(":core:util.runtime"))
+    api(project(":compiler:config"))
+    api(project(":compiler:config.jvm"))
+    api(project(":js:js.config"))
+    api(project(":wasm:wasm.config"))
+    api(project(":native:kotlin-native-utils"))
+    api(project(":compiler:plugin-api"))
+    compileOnly(commonDependency("org.jetbrains.kotlin:kotlin-reflect")) { isTransitive = false }
+    compileOnly(intellijCore())
+    compileOnly(libs.guava)
+    compileOnly(commonDependency("org.jetbrains.intellij.deps:asm-all"))
 }
 
 sourceSets {
-    "main" { projectDefault() }
+    "main" {
+        projectDefault()
+        generatedDir()
+    }
     "test" {}
+}
+
+optInToExperimentalCompilerApi()
+
+tasks.getByName<Jar>("jar") {
+    //excludes unused bunch files
+    exclude("META-INF/extensions/*.xml.**")
 }

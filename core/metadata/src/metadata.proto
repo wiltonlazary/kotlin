@@ -18,11 +18,17 @@ package org.jetbrains.kotlin.metadata;
 
 import "core/metadata/src/ext_options.proto";
 
+// Changes to this proto are tracked by versions of proto files that include `import metadata.proto`.
+// Namely BuiltInsBinaryVersion, JvmMetadataVersion, JsMetadataVersion, KlibMetadataVersion, and probably something else.
+// See their KDocs.
+
 option java_outer_classname = "ProtoBuf";
 option optimize_for = LITE_RUNTIME;
 
 message StringTable {
   repeated string string = 1;
+
+  option (skip_message_in_comparison) = true;
 }
 
 message QualifiedNameTable {
@@ -40,6 +46,8 @@ message QualifiedNameTable {
   }
 
   repeated QualifiedName qualified_name = 1;
+
+  option (skip_message_in_comparison) = true;
 }
 
 message Annotation {
@@ -83,6 +91,22 @@ message Annotation {
       optional Annotation annotation = 8;
 
       repeated Value array_element = 9;
+
+      // If type = CLASS, the number of dimensions of the array of the class specified in class_id.
+      // E.g. if class_id = kotlin/String, this annotation argument value denotes:
+      // - String::class, if array_dimension_count = 0
+      // - Array<String>::class, if array_dimension_count = 1
+      // - Array<Array<String>>::class, if array_dimension_count = 2
+      // - etc.
+      // Since it's very difficult to represent Kotlin-specific type aspects (nullability, type projections) of array arguments
+      // in class literals on JVM, we don't bother to do represent this in our format as well.
+      // So, for example, values `Array<Array<in B?>>::class` and `Array<out Array<B>>?>::class` will be represented exactly the same here.
+      optional int32 array_dimension_count = 11 [default = 0];
+
+      /*
+        isUnsigned
+      */
+      optional int32 flags = 10 [default = 0];
     }
 
     required int32 name_id = 1 [(name_id_in_table) = true];
@@ -107,7 +131,7 @@ message Type {
 
     // When projection is STAR, no type is written, otherwise type must be specified
     optional Type type = 2;
-    optional int32 type_id = 3;
+    optional int32 type_id = 3 [(type_id_in_table) = true];
   }
 
   repeated Argument argument = 2;
@@ -119,7 +143,7 @@ message Type {
   optional int32 flexible_type_capabilities_id = 4 [(string_id_in_table) = true];
 
   optional Type flexible_upper_bound = 5;
-  optional int32 flexible_upper_bound_id = 8;
+  optional int32 flexible_upper_bound_id = 8 [(type_id_in_table) = true];
 
   // Only one of [class_name, type_parameter, type_parameter_name, type_alias_name] should be present
 
@@ -134,13 +158,14 @@ message Type {
 
   // Outer type may be present only if class_name or type_alias_name is present
   optional Type outer_type = 10;
-  optional int32 outer_type_id = 11;
+  optional int32 outer_type_id = 11 [(type_id_in_table) = true];
 
   optional Type abbreviated_type = 13;
-  optional int32 abbreviated_type_id = 14;
+  optional int32 abbreviated_type_id = 14 [(type_id_in_table) = true];
 
   /*
     suspend
+    definitelyNonNull
    */
   optional int32 flags = 1;
 
@@ -162,7 +187,7 @@ message TypeParameter {
   optional Variance variance = 4 [default = INV];
 
   repeated Type upper_bound = 5;
-  repeated int32 upper_bound_id = 6 [packed = true];
+  repeated int32 upper_bound_id = 6 [packed = true, (type_id_in_table) = true];
 
   extensions 100 to 999;
 }
@@ -189,6 +214,8 @@ message Class {
     isExternal
     isExpect
     isInline
+    isFun
+    hasEnumEntries
   */
   optional int32 flags = 1 [default = 6 /* public final class, no annotations */];
 
@@ -199,9 +226,12 @@ message Class {
   repeated TypeParameter type_parameter = 5;
 
   repeated Type supertype = 6;
-  repeated int32 supertype_id = 2 [packed = true];
+  repeated int32 supertype_id = 2 [packed = true, (type_id_in_table) = true];
 
   repeated int32 nested_class_name = 7 [packed = true, (name_id_in_table) = true];
+
+  repeated Type context_receiver_type = 20;
+  repeated int32 context_receiver_type_id = 21 [packed = true, (type_id_in_table) = true];
 
   repeated Constructor constructor = 8;
   repeated Function function = 9;
@@ -212,10 +242,19 @@ message Class {
 
   repeated int32 sealed_subclass_fq_name = 16 [packed = true, (fq_name_id_in_table) = true];
 
+  optional int32 inline_class_underlying_property_name = 17 [(name_id_in_table) = true];
+
+  optional Type inline_class_underlying_type = 18;
+  optional int32 inline_class_underlying_type_id = 19 [(type_id_in_table) = true];
+
+  repeated int32 multi_field_value_class_underlying_name = 22 [packed = true, (name_id_in_table) = true];
+  repeated Type multi_field_value_class_underlying_type = 23;
+  repeated int32 multi_field_value_class_underlying_type_id = 24 [packed = true, (type_id_in_table) = true];
+
   optional TypeTable type_table = 30;
 
   // Index into the VersionRequirementTable
-  optional int32 version_requirement = 31;
+  repeated int32 version_requirement = 31;
 
   optional VersionRequirementTable version_requirement_table = 32;
 
@@ -240,6 +279,8 @@ message TypeTable {
   // Index starting from which all types are nullable, or nothing if all types in this table are non-null.
   // Note that the 'nullable' field of Type messages is ignored and shouldn't be written because it wastes too much space
   optional int32 first_nullable = 2 [default = -1];
+
+  option (skip_message_in_comparison) = true;
 }
 
 message Constructor {
@@ -247,13 +288,14 @@ message Constructor {
     hasAnnotations
     Visibility
     isSecondary
+    hasNonStableParameterNames
   */
   optional int32 flags = 1 [default = 6 /* public constructor, no annotations */];
 
   repeated ValueParameter value_parameter = 2;
 
   // Index into the VersionRequirementTable
-  optional int32 version_requirement = 31;
+  repeated int32 version_requirement = 31;
 
   extensions 100 to 18999;
 }
@@ -271,6 +313,7 @@ message Function {
     isExternal
     isSuspend
     isExpect
+    hasNonStableParameterNames
   */
   optional int32 flags = 9 [default = 6 /* public final function, no annotations */];
   optional int32 old_flags = 1 [default = 6];
@@ -278,19 +321,22 @@ message Function {
   required int32 name = 2 [(name_id_in_table) = true];
 
   optional Type return_type = 3;
-  optional int32 return_type_id = 7;
+  optional int32 return_type_id = 7 [(type_id_in_table) = true];
 
   repeated TypeParameter type_parameter = 4;
 
   optional Type receiver_type = 5;
-  optional int32 receiver_type_id = 8;
+  optional int32 receiver_type_id = 8 [(type_id_in_table) = true];
+
+  repeated Type context_receiver_type = 10;
+  repeated int32 context_receiver_type_id = 11 [packed = true, (type_id_in_table) = true];
 
   repeated ValueParameter value_parameter = 6;
 
   optional TypeTable type_table = 30;
 
   // Index into the VersionRequirementTable
-  optional int32 version_requirement = 31;
+  repeated int32 version_requirement = 31;
 
   optional Contract contract = 32;
 
@@ -319,12 +365,15 @@ message Property {
   required int32 name = 2 [(name_id_in_table) = true];
 
   optional Type return_type = 3;
-  optional int32 return_type_id = 9;
+  optional int32 return_type_id = 9 [(type_id_in_table) = true];
 
   repeated TypeParameter type_parameter = 4;
 
   optional Type receiver_type = 5;
-  optional int32 receiver_type_id = 10;
+  optional int32 receiver_type_id = 10 [(type_id_in_table) = true];
+
+  repeated Type context_receiver_type = 12;
+  repeated int32 context_receiver_type_id = 13 [packed = true, (type_id_in_table) = true];
 
   optional ValueParameter setter_value_parameter = 6;
 
@@ -344,7 +393,7 @@ message Property {
   optional int32 setter_flags = 8;
 
   // Index into the VersionRequirementTable
-  optional int32 version_requirement = 31;
+  repeated int32 version_requirement = 31;
 
   extensions 100 to 18999;
 }
@@ -361,10 +410,10 @@ message ValueParameter {
   required int32 name = 2 [(name_id_in_table) = true];
 
   optional Type type = 3;
-  optional int32 type_id = 5;
+  optional int32 type_id = 5 [(type_id_in_table) = true];
 
   optional Type vararg_element_type = 4;
-  optional int32 vararg_element_type_id = 6;
+  optional int32 vararg_element_type_id = 6 [(type_id_in_table) = true];
 
   extensions 100 to 199;
 }
@@ -381,15 +430,15 @@ message TypeAlias {
   repeated TypeParameter type_parameter = 3;
 
   optional Type underlying_type = 4;
-  optional int32 underlying_type_id = 5;
+  optional int32 underlying_type_id = 5 [(type_id_in_table) = true];
 
   optional Type expanded_type = 6;
-  optional int32 expanded_type_id = 7;
+  optional int32 expanded_type_id = 7 [(type_id_in_table) = true];
 
   repeated Annotation annotation = 8;
 
   // Index into the VersionRequirementTable
-  optional int32 version_requirement = 31;
+  repeated int32 version_requirement = 31;
 
   extensions 100 to 199;
 }
@@ -541,7 +590,7 @@ message Expression {
   // present => this expression is IsInstancePredicate,  with 'variableName' as LHS
   // and with type encoded in either one of next two fields as RHS.
   optional Type is_instance_type = 4;
-  optional int32 is_instance_type_id = 5;
+  optional int32 is_instance_type_id = 5 [(type_id_in_table) = true];
 
   // non-empty => this expression is boolean formula of form 'andArguments[0] && andArguments[1] && ...'
   // Additionally, if first argument of formula is primitive expression (i.e. predicate or value),

@@ -16,26 +16,37 @@
 
 package org.jetbrains.kotlin.javac.components
 
+import org.jetbrains.kotlin.config.JvmTarget
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.javac.JavacWrapper
 import org.jetbrains.kotlin.load.java.AbstractJavaClassFinder
-import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.load.java.JavaClassFinder
+import org.jetbrains.kotlin.load.java.structure.JavaClass
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.lazy.KotlinCodeAnalyzer
 
 class JavacBasedClassFinder : AbstractJavaClassFinder() {
-
     private lateinit var javac: JavacWrapper
 
-    override fun initialize(trace: BindingTrace, codeAnalyzer: KotlinCodeAnalyzer) {
+    override fun initialize(
+        trace: BindingTrace,
+        codeAnalyzer: KotlinCodeAnalyzer,
+        languageVersionSettings: LanguageVersionSettings,
+        jvmTarget: JvmTarget,
+    ) {
         javac = JavacWrapper.getInstance(project)
-        super.initialize(trace, codeAnalyzer)
+        super.initialize(trace, codeAnalyzer, languageVersionSettings, jvmTarget)
     }
 
-    override fun findClass(classId: ClassId) = javac.findClass(classId, javaSearchScope)
+    override fun findClass(request: JavaClassFinder.Request) =
+        // TODO: reuse previouslyFoundClassFileContent if it's possible in javac
+        javac.findClass(request.classId, javaSearchScope)
 
-    override fun findPackage(fqName: FqName) = javac.findPackage(fqName, javaSearchScope)
+    override fun findClasses(request: JavaClassFinder.Request): List<JavaClass> = listOfNotNull(findClass(request))
+
+    override fun findPackage(fqName: FqName, mayHaveAnnotations: Boolean) = javac.findPackage(fqName, javaSearchScope)
 
     override fun knownClassNamesInPackage(packageFqName: FqName) = javac.knownClassNamesInPackage(packageFqName)
-
+    override fun canComputeKnownClassNamesInPackage(): Boolean = true
 }

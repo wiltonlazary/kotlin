@@ -17,14 +17,34 @@
 package org.jetbrains.kotlin.descriptors
 
 import org.jetbrains.kotlin.descriptors.impl.SyntheticFieldDescriptor
-import org.jetbrains.kotlin.psi.KtPropertyAccessor
+import org.jetbrains.kotlin.psi.KtDeclarationWithBody
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 
 fun PropertyAccessorDescriptor.hasBody(): Boolean {
-    val ktAccessor = DescriptorToSourceUtils.getSourceFromDescriptor(this) as? KtPropertyAccessor
+    val ktAccessor = DescriptorToSourceUtils.getSourceFromDescriptor(this) as? KtDeclarationWithBody
     return ktAccessor != null && ktAccessor.hasBody()
 }
 
 fun isBackingFieldReference(descriptor: DeclarationDescriptor?): Boolean {
     return descriptor is SyntheticFieldDescriptor
 }
+
+/**
+ * @return naturally-ordered list of the parameters that can have values specified at call site.
+ */
+val CallableDescriptor.explicitParameters: List<ParameterDescriptor>
+    get() {
+        val result = ArrayList<ParameterDescriptor>(valueParameters.size + 2)
+
+        this.dispatchReceiverParameter?.let {
+            result.add(it)
+        }
+
+        this.extensionReceiverParameter?.let {
+            result.add(it)
+        }
+
+        result.addAll(valueParameters)
+
+        return result
+    }

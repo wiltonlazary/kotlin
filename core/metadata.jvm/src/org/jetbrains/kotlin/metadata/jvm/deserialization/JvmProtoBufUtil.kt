@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.metadata.jvm.deserialization
@@ -19,6 +19,8 @@ object JvmProtoBufUtil {
     val EXTENSION_REGISTRY: ExtensionRegistryLite = ExtensionRegistryLite.newInstance().apply(JvmProtoBuf::registerAllExtensions)
 
     const val PLATFORM_TYPE_ID = "kotlin.jvm.PlatformType"
+
+    const val DEFAULT_MODULE_NAME = "main"
 
     @JvmStatic
     fun readClassDataFrom(data: Array<String>, strings: Array<String>): Pair<JvmNameResolver, ProtoBuf.Class> =
@@ -50,27 +52,30 @@ object JvmProtoBufUtil {
         JvmNameResolver(JvmProtoBuf.StringTableTypes.parseDelimitedFrom(this, EXTENSION_REGISTRY), strings)
 
     /**
-     * Serializes [message] and [stringTable] into a string array which must be further written to [Metadata.d1]
+     * Serializes [message] and [stringTable] into a string array which must be further written to [Metadata.data1]
      */
     @JvmStatic
     fun writeData(message: MessageLite, stringTable: JvmStringTable): Array<String> =
-        BitEncoding.encodeBytes(ByteArrayOutputStream().apply {
+        BitEncoding.encodeBytes(writeDataBytes(stringTable, message))
+
+    @JvmStatic
+    fun writeDataBytes(stringTable: JvmStringTable, message: MessageLite) =
+        ByteArrayOutputStream().apply {
             stringTable.serializeTo(this)
             message.writeTo(this)
-        }.toByteArray())
+        }.toByteArray()
 
     // returns JVM signature in the format: "equals(Ljava/lang/Object;)Z"
     fun getJvmMethodSignature(
-            proto: ProtoBuf.Function,
-            nameResolver: NameResolver,
-            typeTable: TypeTable
-    ): String? {
+        proto: ProtoBuf.Function,
+        nameResolver: NameResolver,
+        typeTable: TypeTable
+    ): JvmMemberSignature.Method? {
         val signature = proto.getExtensionOrNull(JvmProtoBuf.methodSignature)
         val name = if (signature != null && signature.hasName()) signature.name else proto.name
         val desc = if (signature != null && signature.hasDesc()) {
             nameResolver.getString(signature.desc)
-        }
-        else {
+        } else {
             val parameterTypes = listOfNotNull(proto.receiverType(typeTable)) + proto.valueParameterList.map { it.type(typeTable) }
 
             val parametersDesc = parameterTypes.map { mapTypeDefault(it, nameResolver) ?: return null }
@@ -78,46 +83,58 @@ object JvmProtoBufUtil {
 
             parametersDesc.joinToString(separator = "", prefix = "(", postfix = ")") + returnTypeDesc
         }
-        return nameResolver.getString(name) + desc
+        return JvmMemberSignature.Method(nameResolver.getString(name), desc)
     }
 
     fun getJvmConstructorSignature(
-            proto: ProtoBuf.Constructor,
-            nameResolver: NameResolver,
-            typeTable: TypeTable
-    ): String? {
+        proto: ProtoBuf.Constructor,
+        nameResolver: NameResolver,
+        typeTable: TypeTable
+    ): JvmMemberSignature.Method? {
         val signature = proto.getExtensionOrNull(JvmProtoBuf.constructorSignature)
+        val name = if (signature != null && signature.hasName()) {
+            nameResolver.getString(signature.name)
+        } else {
+            "<init>"
+        }
         val desc = if (signature != null && signature.hasDesc()) {
             nameResolver.getString(signature.desc)
-        }
-        else {
+        } else {
             proto.valueParameterList.map {
                 mapTypeDefault(it.type(typeTable), nameResolver) ?: return null
             }.joinToString(separator = "", prefix = "(", postfix = ")V")
         }
-        return "<init>" + desc
+        return JvmMemberSignature.Method(name, desc)
     }
 
     fun getJvmFieldSignature(
-            proto: ProtoBuf.Property,
-            nameResolver: NameResolver,
-            typeTable: TypeTable
-    ): PropertySignature? {
+        proto: ProtoBuf.Property,
+        nameResolver: NameResolver,
+        typeTable: TypeTable,
+        requireHasFieldFlag: Boolean = true
+    ): JvmMemberSignature.Field? {
         val signature = proto.getExtensionOrNull(JvmProtoBuf.propertySignature) ?: return null
-        val field =
-                if (signature.hasField()) signature.field else null
+        val field = if (signature.hasField()) signature.field else null
+        if (field == null && requireHasFieldFlag) return null
 
         val name = if (field != null && field.hasName()) field.name else proto.name
         val desc =
-                if (field != null && field.hasDesc()) nameResolver.getString(field.desc)
-                else mapTypeDefault(proto.returnType(typeTable), nameResolver) ?: return null
+            if (field != null && field.hasDesc()) nameResolver.getString(field.desc)
+            else mapTypeDefault(proto.returnType(typeTable), nameResolver) ?: return null
 
-        return PropertySignature(nameResolver.getString(name), desc)
+        return JvmMemberSignature.Field(nameResolver.getString(name), desc)
     }
 
-    data class PropertySignature(val name: String, val desc: String)
 
     private fun mapTypeDefault(type: ProtoBuf.Type, nameResolver: NameResolver): String? {
         return if (type.hasClassName()) ClassMapperLite.mapClass(nameResolver.getQualifiedClassName(type.className)) else null
     }
+
+    @JvmStatic
+    fun isMovedFromInterfaceCompanion(proto: ProtoBuf.Property): Boolean =
+        JvmFlags.IS_MOVED_FROM_INTERFACE_COMPANION.get(proto.getExtension(JvmProtoBuf.flags))
+
+    @JvmStatic
+    fun isNewPlaceForBodyGeneration(proto: ProtoBuf.Class): Boolean =
+        JvmFlags.IS_COMPILED_IN_JVM_DEFAULT_MODE.get(proto.getExtension(JvmProtoBuf.jvmClassFlags))
 }

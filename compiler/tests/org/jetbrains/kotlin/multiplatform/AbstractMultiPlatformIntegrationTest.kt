@@ -24,7 +24,9 @@ import org.jetbrains.kotlin.cli.metadata.K2MetadataCompiler
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.testFramework.KtUsefulTestCase
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.jetbrains.kotlin.test.util.trimTrailingWhitespacesAndAddNewlineAtEOF
+import org.jetbrains.kotlin.utils.PathUtil
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -33,44 +35,68 @@ import java.nio.file.Paths
 abstract class AbstractMultiPlatformIntegrationTest : KtUsefulTestCase() {
     fun doTest(directoryPath: String) {
         val root = File(directoryPath).apply { assert(exists()) }
-        val commonSrc = File(root, "common.kt")
-        val jsSrc = File(root, "js.kt")
-        val jvmSrc = File(root, "jvm.kt")
+        val commonSrc = File(root, "common.kt").apply { assert(exists()) }
+        val jsSrc = File(root, "js.kt").takeIf(File::exists)
+        val jvmSrc = File(root, "jvm.kt").takeIf(File::exists)
         // TODO: consider inventing a more clever scheme
-        val jvm2Src = File(root, "jvm2.kt")
+        val common2Src = File(root, "common2.kt").takeIf(File::exists)
+        val jvm2Src = File(root, "jvm2.kt").takeIf(File::exists)
 
-        val tmpdir = KotlinTestUtils.tmpDir(getTestName(true))
+        val tmpdir = KtTestUtil.tmpDir(getTestName(true))
 
-        val optionalStdlibCommon =
-                if (InTextDirectivesUtils.isDirectiveDefined(commonSrc.readText(), "WITH_RUNTIME"))
-                    arrayOf("-cp", findStdlibCommon().absolutePath)
-                else emptyArray()
+        val withStdlib = InTextDirectivesUtils.isDirectiveDefined(commonSrc.readText(), "WITH_STDLIB")
+        val optionalStdlibCommon = if (withStdlib) arrayOf("-cp", findStdlibCommon().absolutePath) else emptyArray()
 
         val commonDest = File(tmpdir, "common").absolutePath
-        val jvmDest = File(tmpdir, "jvm").absolutePath
-        val jsDest = File(File(tmpdir, "js"), "output.js").absolutePath
-        val jvm2Dest = File(tmpdir, "jvm2").absolutePath
+        val jvmDest = File(tmpdir, "jvm").absolutePath.takeIf { jvmSrc != null }
+        val jsDest = File(tmpdir, "js").absolutePath.takeIf { jsSrc != null }
+        val common2Dest = File(tmpdir, "common2").absolutePath.takeIf { common2Src != null }
+        val jvm2Dest = File(tmpdir, "jvm2").absolutePath.takeIf { jvm2Src != null }
 
         val result = buildString {
-            appendln("-- Common --")
-            appendln(K2MetadataCompiler().compile(listOf(commonSrc), "-d", commonDest, *optionalStdlibCommon))
+            appendLine("-- Common --")
+            appendLine(K2MetadataCompiler().compile(commonSrc, null, "-d", commonDest, *optionalStdlibCommon))
 
-            if (jvmSrc.exists()) {
-                appendln()
-                appendln("-- JVM --")
-                appendln(K2JVMCompiler().compileBothWays(commonSrc, jvmSrc, "-d", jvmDest))
+            if (jvmSrc != null) {
+                appendLine()
+                appendLine("-- JVM --")
+                appendLine(K2JVMCompiler().compile(jvmSrc, commonSrc, "-d", jvmDest!!))
             }
 
-            if (jsSrc.exists()) {
-                appendln()
-                appendln("-- JS --")
-                appendln(K2JSCompiler().compileBothWays(commonSrc, jsSrc, "-output", jsDest))
+            if (jsSrc != null) {
+                appendLine()
+                appendLine("-- JS --")
+                appendLine(
+                    K2JSCompiler().compile(
+                        jsSrc,
+                        commonSrc,
+                        "-Xir-produce-klib-dir",
+                        "-Xir-only",
+                        "-libraries",
+                        PathUtil.kotlinPathsForCompiler.jsStdLibKlibPath.absolutePath,
+                        "-ir-output-dir",
+                        jsDest!!,
+                        "-ir-output-name",
+                        "output"
+                    )
+                )
             }
 
-            if (jvm2Src.exists()) {
-                appendln()
-                appendln("-- JVM (2) --")
-                appendln(K2JVMCompiler().compile(listOf(jvm2Src), "-d", jvm2Dest, "-cp", listOf(commonDest, jvmDest).joinToString(File.pathSeparator)))
+            if (common2Src != null) {
+                appendLine()
+                appendLine("-- Common (2) --")
+                appendLine(K2MetadataCompiler().compile(common2Src, null, "-d", common2Dest!!, "-cp", commonDest, *optionalStdlibCommon))
+            }
+
+            if (jvm2Src != null) {
+                appendLine()
+                appendLine("-- JVM (2) --")
+                appendLine(
+                    K2JVMCompiler().compile(
+                        jvm2Src, common2Src, "-d", jvm2Dest!!,
+                        "-cp", listOfNotNull(commonDest, common2Dest, jvmDest).joinToString(File.pathSeparator)
+                    )
+                )
             }
         }
 
@@ -79,6 +105,9 @@ abstract class AbstractMultiPlatformIntegrationTest : KtUsefulTestCase() {
 
     private fun findStdlibCommon(): File {
         // Take kotlin-stdlib-common.jar from dist/ when it's there
+        val fromDist = File("dist/kotlinc/lib/kotlin-stdlib-common.jar")
+        if (fromDist.isFile) return fromDist
+
         val stdlibCommonLibsDir = "libraries/stdlib/common/build/libs"
         val commonLibs = Files.newDirectoryStream(Paths.get(stdlibCommonLibsDir)).use(Iterable<Path>::toList)
         return commonLibs.sorted().findLast {
@@ -87,32 +116,16 @@ abstract class AbstractMultiPlatformIntegrationTest : KtUsefulTestCase() {
         }?.toFile() ?: error("kotlin-stdlib-common is not found in $stdlibCommonLibsDir")
     }
 
-    private fun CLICompiler<*>.compileBothWays(commonSource: File, platformSource: File, vararg mainArguments: String): String {
-        val configurations = listOf(
-                listOf(platformSource, commonSource),
-                listOf(commonSource, platformSource)
-        )
-
-        val (platformFirst, commonFirst) = configurations.map { compile(it, *mainArguments) }
-
-        if (platformFirst != commonFirst) {
-            assertEquals(
-                    "Compilation results are different when compiling [platform-specific, common] compared to when compiling [common, platform-specific]",
-                    "// Compiling [platform-specific, common]\n\n$platformFirst",
-                    "// Compiling [common, platform-specific]\n\n$commonFirst"
-            )
-        }
-        return platformFirst
-    }
-
-    private fun CLICompiler<*>.compile(sources: List<File>, vararg mainArguments: String): String = buildString {
+    private fun CLICompiler<*>.compile(sources: File, commonSources: File?, vararg mainArguments: String): String = buildString {
         val (output, exitCode) = AbstractCliTest.executeCompilerGrabOutput(
-                this@compile,
-                sources.map(File::getAbsolutePath) + listOf("-Xmulti-platform") + mainArguments + loadExtraArguments(sources)
+            this@compile,
+            listOfNotNull(sources.absolutePath, commonSources?.absolutePath, commonSources?.absolutePath?.let("-Xcommon-sources="::plus)) +
+                    "-Xmulti-platform" + mainArguments +
+                    loadExtraArguments(listOfNotNull(sources, commonSources))
         )
-        appendln("Exit code: $exitCode")
-        appendln("Output:")
-        appendln(output)
+        appendLine("Exit code: $exitCode")
+        appendLine("Output:")
+        appendLine(output)
     }.trimTrailingWhitespacesAndAddNewlineAtEOF().trimEnd('\r', '\n')
 
     private fun loadExtraArguments(sources: List<File>): List<String> = sources.flatMap { source ->

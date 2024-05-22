@@ -1,17 +1,16 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 class Controller {
     var i = 0
-    suspend fun suspendHere(): Int = suspendCoroutineOrReturn { x ->
+    suspend fun suspendHere(): Int = suspendCoroutineUninterceptedOrReturn { x ->
         x.resume(i++)
         COROUTINE_SUSPENDED
     }
-    suspend fun suspendThere(): String = suspendCoroutineOrReturn { x ->
+    suspend fun suspendThere(): String = suspendCoroutineUninterceptedOrReturn { x ->
         x.resume("?")
         COROUTINE_SUSPENDED
     }

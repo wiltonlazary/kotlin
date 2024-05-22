@@ -16,13 +16,15 @@
 
 package org.jetbrains.kotlin.cli.common.messages;
 
-import com.intellij.openapi.util.SystemInfo;
-import com.intellij.util.LineSeparator;
 import kotlin.text.StringsKt;
 import org.fusesource.jansi.Ansi;
+import org.fusesource.jansi.AnsiConsole;
 import org.fusesource.jansi.internal.CLibrary;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.cli.common.CompilerSystemProperties;
+import org.jetbrains.kotlin.cli.common.PropertiesKt;
+import org.jetbrains.kotlin.util.capitalizeDecapitalize.CapitalizeDecapitalizeKt;
 
 import java.util.EnumSet;
 import java.util.Set;
@@ -30,27 +32,36 @@ import java.util.Set;
 import static org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.*;
 
 public abstract class PlainTextMessageRenderer implements MessageRenderer {
-    public static final String KOTLIN_COLORS_ENABLED_PROPERTY = "kotlin.colors.enabled";
-    public static final boolean COLOR_ENABLED;
+    private static final boolean IS_STDERR_A_TTY;
 
     static {
-        boolean colorEnabled = false;
+        boolean isStderrATty = false;
         // TODO: investigate why ANSI escape codes on Windows only work in REPL for some reason
-        if (!SystemInfo.isWindows && "true".equals(System.getProperty(KOTLIN_COLORS_ENABLED_PROPERTY))) {
+        if (!PropertiesKt.isWindows() && "true".equals(CompilerSystemProperties.KOTLIN_COLORS_ENABLED_PROPERTY.getValue())) {
             try {
-                // AnsiConsole doesn't check isatty() for stderr (see https://github.com/fusesource/jansi/pull/35).
-                colorEnabled = CLibrary.isatty(CLibrary.STDERR_FILENO) != 0;
+                isStderrATty = CLibrary.isatty(CLibrary.STDERR_FILENO) != 0;
             }
-            catch (UnsatisfiedLinkError e) {
-                colorEnabled = false;
+            catch (UnsatisfiedLinkError ignored) {
             }
         }
-        COLOR_ENABLED = colorEnabled;
+        IS_STDERR_A_TTY = isStderrATty;
     }
 
-    private static final String LINE_SEPARATOR = LineSeparator.getSystemLineSeparator().getSeparatorString();
+    private static final String LINE_SEPARATOR = System.lineSeparator();
 
     private static final Set<CompilerMessageSeverity> IMPORTANT_MESSAGE_SEVERITIES = EnumSet.of(EXCEPTION, ERROR, STRONG_WARNING, WARNING);
+
+    private final boolean colorEnabled;
+
+    public PlainTextMessageRenderer() {
+        this(IS_STDERR_A_TTY);
+    }
+
+    // This constructor can be used in a compilation server to still be able to generate colored output, even if stderr is not a TTY.
+    @SuppressWarnings("WeakerAccess")
+    public PlainTextMessageRenderer(boolean colorEnabled) {
+        this.colorEnabled = colorEnabled;
+    }
 
     @Override
     public String renderPreamble() {
@@ -58,11 +69,13 @@ public abstract class PlainTextMessageRenderer implements MessageRenderer {
     }
 
     @Override
-    public String render(@NotNull CompilerMessageSeverity severity, @NotNull String message, @Nullable CompilerMessageLocation location) {
+    public String render(@NotNull CompilerMessageSeverity severity, @NotNull String message, @Nullable CompilerMessageSourceLocation location) {
         StringBuilder result = new StringBuilder();
 
         int line = location != null ? location.getLine() : -1;
         int column = location != null ? location.getColumn() : -1;
+        int lineEnd = location != null ? location.getLineEnd() : -1;
+        int columnEnd = location != null ? location.getColumnEnd() : -1;
         String lineContent = location != null ? location.getLineContent() : null;
 
         String path = location != null ? getPath(location) : null;
@@ -78,7 +91,7 @@ public abstract class PlainTextMessageRenderer implements MessageRenderer {
             result.append(" ");
         }
 
-        if (COLOR_ENABLED) {
+        if (this.colorEnabled) {
             Ansi ansi = Ansi.ansi()
                     .bold()
                     .fg(severityColor(severity))
@@ -111,7 +124,13 @@ public abstract class PlainTextMessageRenderer implements MessageRenderer {
             result.append(lineContent);
             result.append(LINE_SEPARATOR);
             result.append(StringsKt.repeat(" ", column - 1));
-            result.append("^");
+            if (lineEnd > line) {
+                result.append(StringsKt.repeat("^", lineContent.length() - column + 1));
+            } else if (lineEnd == line && columnEnd > column) {
+                result.append(StringsKt.repeat("^", columnEnd - column));
+            } else {
+                result.append("^");
+            }
         }
 
         return result.toString();
@@ -130,7 +149,7 @@ public abstract class PlainTextMessageRenderer implements MessageRenderer {
             return message;
         }
 
-        return StringsKt.decapitalize(message);
+        return CapitalizeDecapitalizeKt.decapitalizeAsciiOnly(message);
     }
 
     @NotNull
@@ -156,7 +175,7 @@ public abstract class PlainTextMessageRenderer implements MessageRenderer {
     }
 
     @Nullable
-    protected abstract String getPath(@NotNull CompilerMessageLocation location);
+    protected abstract String getPath(@NotNull CompilerMessageSourceLocation location);
 
     @Override
     public String renderUsage(@NotNull String usage) {
@@ -166,5 +185,17 @@ public abstract class PlainTextMessageRenderer implements MessageRenderer {
     @Override
     public String renderConclusion() {
         return "";
+    }
+
+    public void enableColorsIfNeeded() {
+        if (colorEnabled) {
+            AnsiConsole.systemInstall();
+        }
+    }
+
+    public void disableColorsIfNeeded() {
+        if (colorEnabled) {
+            AnsiConsole.systemUninstall();
+        }
     }
 }

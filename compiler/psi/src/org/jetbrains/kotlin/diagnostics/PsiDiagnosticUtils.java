@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.diagnostics;
@@ -17,6 +17,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.psi.KtExpression;
 import org.jetbrains.kotlin.psi.psiUtil.PsiUtilsKt;
 
+// TODO: extract PSI-independent parts, specifically coordinate classes
 public class PsiDiagnosticUtils {
     public static String atLocation(@NotNull PsiElement element) {
         if (element.isValid()) {
@@ -61,12 +62,12 @@ public class PsiDiagnosticUtils {
         int offset = textRange.getStartOffset();
         VirtualFile virtualFile = file.getVirtualFile();
         String pathSuffix = " in " + (virtualFile == null ? file.getName() : virtualFile.getPath());
-        return offsetToLineAndColumn(document, offset).toString() + pathSuffix;
+        return offsetToLineAndColumn(document, offset) + pathSuffix;
     }
 
     @NotNull
     public static LineAndColumn offsetToLineAndColumn(@Nullable Document document, int offset) {
-        if (document == null) {
+        if (document == null || document.getTextLength() == 0) {
             return new LineAndColumn(-1, offset, null);
         }
 
@@ -114,6 +115,37 @@ public class PsiDiagnosticUtils {
                 return "(offset: " + column + " line unknown)";
             }
             return "(" + line + "," + column + ")";
+        }
+    }
+
+    public static final class LineAndColumnRange {
+
+        public static final LineAndColumnRange NONE = new LineAndColumnRange(LineAndColumn.NONE, LineAndColumn.NONE);
+
+        private final LineAndColumn start;
+        private final LineAndColumn end;
+
+        public LineAndColumnRange(LineAndColumn start, LineAndColumn end) {
+            this.start = start;
+            this.end = end;
+        }
+
+        public LineAndColumn getStart() {
+            return start;
+        }
+
+        public LineAndColumn getEnd() {
+            return end;
+        }
+
+        // NOTE: This method is used for presenting positions to the user
+        @Override
+        public String toString() {
+            if (start.line == end.line) {
+                return "(" + start.line + "," + start.column + "-" + end.column + ")";
+            }
+
+            return start + " - " + end;
         }
     }
 }

@@ -1,3 +1,4 @@
+
 fun foo(x: Long, y: Int, z: Double, s: String) {}
 
 fun box(): String {

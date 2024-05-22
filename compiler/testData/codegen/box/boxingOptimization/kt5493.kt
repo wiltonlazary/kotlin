@@ -1,3 +1,4 @@
+
 fun box() : String {
     try {
         return "OK"

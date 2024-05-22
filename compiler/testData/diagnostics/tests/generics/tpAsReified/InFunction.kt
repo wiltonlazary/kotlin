@@ -1,18 +1,21 @@
-// !WITH_NEW_INFERENCE
-// !DIAGNOSTICS: -UNUSED_PARAMETER
+// DIAGNOSTICS: -UNUSED_PARAMETER, -UNUSED_EXPRESSION
+
+inline fun <reified T> foo() {
+    <!CALLABLE_REFERENCE_LHS_NOT_A_CLASS!>T::<!UNRESOLVED_REFERENCE!>toString<!><!>
+}
 
 inline fun <reified T> f(): T = throw UnsupportedOperationException()
 
 fun <T> id(p: T): T = p
 
 fun <A> main() {
-    <!NI;REIFIED_TYPE_FORBIDDEN_SUBSTITUTION, OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>f<!>()
+    <!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>f<!>()
 
-    <!NI;UNREACHABLE_CODE!>val <!OI;UNUSED_VARIABLE!>a<!>: A = <!TYPE_PARAMETER_AS_REIFIED!>f<!>()<!>
-    <!NI;UNREACHABLE_CODE!>f<<!TYPE_PARAMETER_AS_REIFIED!>A<!>>()<!>
+    val a: A = <!TYPE_PARAMETER_AS_REIFIED!>f<!>()
+    f<<!TYPE_PARAMETER_AS_REIFIED!>A<!>>()
 
-    <!NI;UNREACHABLE_CODE!>val <!OI;UNUSED_VARIABLE!>b<!>: Int = f()<!>
-    <!NI;UNREACHABLE_CODE!>f<Int>()<!>
+    val b: Int = f()
+    f<Int>()
 
-    <!NI;UNREACHABLE_CODE!>val <!OI;UNUSED_VARIABLE!>с<!>: A = id(<!NI;TYPE_PARAMETER_AS_REIFIED, TYPE_PARAMETER_AS_REIFIED!>f<!>())<!>
+    val с: A = id(<!TYPE_PARAMETER_AS_REIFIED!>f<!>())
 }

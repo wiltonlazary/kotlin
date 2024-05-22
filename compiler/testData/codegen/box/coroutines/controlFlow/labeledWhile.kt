@@ -1,9 +1,8 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 fun builder(c: suspend () -> Unit): Unit {
     c.startCoroutine(handleResultContinuation {
@@ -39,7 +38,7 @@ fun box(): String {
     return "OK"
 }
 
-suspend fun suspendAndContinue(): Unit = suspendCoroutineOrReturn { c ->
+suspend fun suspendAndContinue(): Unit = suspendCoroutineUninterceptedOrReturn { c ->
     postponed = {
         c.resume(Unit)
     }

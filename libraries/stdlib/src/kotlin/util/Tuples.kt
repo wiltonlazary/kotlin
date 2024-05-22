@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:kotlin.jvm.JvmName("TuplesKt")
@@ -44,6 +44,7 @@ public infix fun <A, B> A.to(that: B): Pair<A, B> = Pair(this, that)
 
 /**
  * Converts this pair into a list.
+ * @sample samples.misc.Tuples.pairToList
  */
 public fun <T> Pair<T, T>.toList(): List<T> = listOf(first, second)
 
@@ -76,5 +77,6 @@ public data class Triple<out A, out B, out C>(
 
 /**
  * Converts this triple into a list.
+ * @sample samples.misc.Tuples.tripleToList
  */
 public fun <T> Triple<T, T, T>.toList(): List<T> = listOf(first, second, third)

@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// LANGUAGE: -JvmStaticInInterface
+// DIAGNOSTICS: -UNUSED_VARIABLE
 interface B {
     companion object {
         <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!>@JvmStatic fun a1()<!> {
@@ -16,6 +17,8 @@ interface B {
         <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!>@JvmStatic internal fun a4()<!> {
 
         }
+
+        <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!>@JvmStatic external fun a5()<!>
 
         <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!>@JvmStatic
         var foo<!> = 1
@@ -44,10 +47,15 @@ interface B {
             <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!>@JvmStatic get<!>
 
         private var foo8 = 1
-        <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!>@JvmStatic <!SETTER_VISIBILITY_INCONSISTENT_WITH_PROPERTY_VISIBILITY!>public<!> set<!>
+        <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!><!ANNOTATION_TARGETS_NON_EXISTENT_ACCESSOR!>@JvmStatic<!> <!SETTER_VISIBILITY_INCONSISTENT_WITH_PROPERTY_VISIBILITY!>public<!> set<!>
 
         public var foo9 = 1
         <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!>@JvmStatic private set<!>
+
+        <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!>@JvmStatic
+        val foo10: Int<!> external get
+
+        val foo11: Int <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!>@JvmStatic external get<!>
     }
 
 }

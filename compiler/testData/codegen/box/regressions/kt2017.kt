@@ -1,4 +1,4 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 
 fun box(): String {
     val sorted = arrayListOf("1", "3", "2").sorted()

@@ -1,7 +1,9 @@
+// FIR_IDENTICAL
 @Target(AnnotationTarget.FUNCTION)
 annotation class FunAnn
 
 @Target(AnnotationTarget.EXPRESSION)
+@Retention(AnnotationRetention.SOURCE)
 annotation class ExprAnn
 
 fun foo(): Int {

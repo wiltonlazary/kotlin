@@ -1,5 +1,7 @@
 // TARGET_BACKEND: JVM
-// WITH_RUNTIME
+// WITH_STDLIB
+
+// JVM_ABI_K1_K2_DIFF: KT-63864
 inline fun ok(): String {
     return foo(1, 1.0, 1.0f, 1L, "O", C(if (bar()) return "zap" else "K"))
 }
@@ -9,7 +11,7 @@ fun box(): String {
     if (ok != "OK") return "Fail: $ok"
 
     val r = log.toString()
-    if (r != "<clinit>;bar;<init>;foo;") return "Fail: '$r'"
+    if (r != "bar;<clinit>;<init>;foo;") return "Fail: '$r'"
 
     return "OK"
 }

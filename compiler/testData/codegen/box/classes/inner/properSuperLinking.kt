@@ -1,4 +1,3 @@
-
 open class A(val s: String) {
 
     val z = s

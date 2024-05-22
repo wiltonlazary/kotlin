@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:kotlin.jvm.JvmName("LazyKt")
@@ -90,7 +90,7 @@ private class SynchronizedLazyImpl<out T>(initializer: () -> T, lock: Any? = nul
 private class SafePublicationLazyImpl<out T>(initializer: () -> T) : Lazy<T>, Serializable {
     @Volatile private var initializer: (() -> T)? = initializer
     @Volatile private var _value: Any? = UNINITIALIZED_VALUE
-    // this final field is required to enable safe publication of constructed instance
+    // this final field is required to enable safe initialization of the constructed instance
     private val final: Any = UNINITIALIZED_VALUE
 
     override val value: T

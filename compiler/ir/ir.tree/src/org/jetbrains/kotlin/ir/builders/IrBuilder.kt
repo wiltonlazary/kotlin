@@ -19,14 +19,15 @@ package org.jetbrains.kotlin.ir.builders
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
-import org.jetbrains.kotlin.ir.expressions.IrBlock
-import org.jetbrains.kotlin.ir.expressions.IrBlockBody
-import org.jetbrains.kotlin.ir.expressions.IrExpression
-import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
-import org.jetbrains.kotlin.ir.expressions.impl.IrBlockBodyImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrBlockImpl
-import org.jetbrains.kotlin.types.KotlinType
-import java.util.*
+import org.jetbrains.kotlin.ir.builders.declarations.buildVariable
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import org.jetbrains.kotlin.ir.declarations.IrVariable
+import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.expressions.impl.*
+import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.impl.IrSimpleTypeImpl
+import org.jetbrains.kotlin.name.Name
 
 abstract class IrBuilder(
     override val context: IrGeneratorContext,
@@ -51,6 +52,10 @@ abstract class IrStatementsBuilder<out T : IrElement>(
         addStatement(this)
     }
 
+    operator fun List<IrStatement>.unaryPlus() {
+        forEach(::addStatement)
+    }
+
     protected abstract fun addStatement(irStatement: IrStatement)
     abstract fun doBuild(): T
 }
@@ -61,7 +66,7 @@ open class IrBlockBodyBuilder(
     startOffset: Int,
     endOffset: Int
 ) : IrStatementsBuilder<IrBlockBody>(context, scope, startOffset, endOffset) {
-    private val irBlockBody = IrBlockBodyImpl(startOffset, endOffset)
+    private val irBlockBody = context.irFactory.createBlockBody(startOffset, endOffset)
 
     inline fun blockBody(body: IrBlockBodyBuilder.() -> Unit): IrBlockBody {
         body()
@@ -78,14 +83,18 @@ open class IrBlockBodyBuilder(
 }
 
 class IrBlockBuilder(
-    context: IrGeneratorContext, scope: Scope,
-    startOffset: Int, endOffset: Int,
+    context: IrGeneratorContext,
+    scope: Scope,
+    startOffset: Int,
+    endOffset: Int,
     val origin: IrStatementOrigin? = null,
-    var resultType: KotlinType? = null
-) : IrStatementsBuilder<IrBlock>(context, scope, startOffset, endOffset) {
+    var resultType: IrType? = null,
+    val isTransparent:Boolean = false
+) : IrStatementsBuilder<IrContainerExpression>(context, scope, startOffset, endOffset) {
+
     private val statements = ArrayList<IrStatement>()
 
-    inline fun block(body: IrBlockBuilder.() -> Unit): IrBlock {
+    inline fun block(body: IrBlockBuilder.() -> Unit): IrContainerExpression {
         body()
         return doBuild()
     }
@@ -94,23 +103,54 @@ class IrBlockBuilder(
         statements.add(irStatement)
     }
 
-    override fun doBuild(): IrBlock {
-        val resultType = this.resultType ?: (statements.lastOrNull() as? IrExpression)?.type ?: context.builtIns.unitType
-        val irBlock = IrBlockImpl(startOffset, endOffset, resultType, origin)
+    override fun doBuild(): IrContainerExpression {
+        val resultType = this.resultType
+            ?: (statements.lastOrNull() as? IrExpression)?.type
+            ?: context.irBuiltIns.unitType
+        val irBlock =
+            if (isTransparent) IrCompositeImpl(startOffset, endOffset, resultType, origin)
+            else IrBlockImpl(startOffset, endOffset, resultType, origin)
         irBlock.statements.addAll(statements)
         return irBlock
     }
 }
 
-fun <T : IrBuilder> T.at(startOffset: Int, endOffset: Int): T {
+class IrSingleStatementBuilder(
+    context: IrGeneratorContext,
+    scope: Scope,
+    startOffset: Int,
+    endOffset: Int,
+    val origin: IrStatementOrigin? = null
+) : IrBuilderWithScope(context, scope, startOffset, endOffset) {
+
+    inline fun <T : IrElement> build(statementBuilder: IrSingleStatementBuilder.() -> T): T =
+        statementBuilder()
+}
+
+inline fun <T : IrElement> IrGeneratorWithScope.buildStatement(
+    startOffset: Int,
+    endOffset: Int,
+    origin: IrStatementOrigin?,
+    builder: IrSingleStatementBuilder.() -> T
+) =
+    IrSingleStatementBuilder(context, scope, startOffset, endOffset, origin).builder()
+
+inline fun <T : IrElement> IrGeneratorWithScope.buildStatement(
+    startOffset: Int,
+    endOffset: Int,
+    builder: IrSingleStatementBuilder.() -> T
+) =
+    IrSingleStatementBuilder(context, scope, startOffset, endOffset).builder()
+
+fun <T : IrBuilder> T.at(startOffset: Int, endOffset: Int) = apply {
     this.startOffset = startOffset
     this.endOffset = endOffset
-    return this
 }
 
 inline fun IrGeneratorWithScope.irBlock(
-    startOffset: Int = UNDEFINED_OFFSET, endOffset: Int = UNDEFINED_OFFSET,
-    origin: IrStatementOrigin? = null, resultType: KotlinType? = null,
+    startOffset: Int, endOffset: Int,
+    origin: IrStatementOrigin? = null,
+    resultType: IrType? = null,
     body: IrBlockBuilder.() -> Unit
 ): IrExpression =
     IrBlockBuilder(
@@ -120,8 +160,21 @@ inline fun IrGeneratorWithScope.irBlock(
         origin, resultType
     ).block(body)
 
+inline fun IrGeneratorWithScope.irComposite(
+    startOffset: Int, endOffset: Int,
+    origin: IrStatementOrigin? = null,
+    resultType: IrType? = null,
+    body: IrBlockBuilder.() -> Unit
+): IrExpression =
+    IrBlockBuilder(
+        context, scope,
+        startOffset,
+        endOffset,
+        origin, resultType, true
+    ).block(body)
+
 inline fun IrGeneratorWithScope.irBlockBody(
-    startOffset: Int = UNDEFINED_OFFSET, endOffset: Int = UNDEFINED_OFFSET,
+    startOffset: Int, endOffset: Int,
     body: IrBlockBodyBuilder.() -> Unit
 ): IrBlockBody =
     IrBlockBodyBuilder(
@@ -129,3 +182,61 @@ inline fun IrGeneratorWithScope.irBlockBody(
         startOffset,
         endOffset
     ).blockBody(body)
+
+fun IrBuilderWithScope.irWhile(origin: IrStatementOrigin? = null) =
+    IrWhileLoopImpl(startOffset, endOffset, context.irBuiltIns.unitType, origin)
+
+fun IrBuilderWithScope.irDoWhile(origin: IrStatementOrigin? = null) =
+    IrDoWhileLoopImpl(startOffset, endOffset, context.irBuiltIns.unitType, origin)
+
+fun IrBuilderWithScope.irBreak(loop: IrLoop) =
+    IrBreakImpl(startOffset, endOffset, context.irBuiltIns.nothingType, loop)
+
+fun IrBuilderWithScope.irContinue(loop: IrLoop) =
+    IrContinueImpl(startOffset, endOffset, context.irBuiltIns.nothingType, loop)
+
+fun IrBuilderWithScope.irGetObject(classSymbol: IrClassSymbol) =
+    IrGetObjectValueImpl(startOffset, endOffset, IrSimpleTypeImpl(classSymbol, false, emptyList(), emptyList()), classSymbol)
+
+// Also adds created variable into building block
+fun <T : IrElement> IrStatementsBuilder<T>.createTmpVariable(
+    irExpression: IrExpression,
+    nameHint: String? = null,
+    isMutable: Boolean = false,
+    origin: IrDeclarationOrigin = IrDeclarationOrigin.IR_TEMPORARY_VARIABLE,
+    irType: IrType? = null
+): IrVariable {
+    val variable = scope.createTmpVariable(irExpression, nameHint, isMutable, origin, irType)
+    +variable
+    return variable
+}
+
+fun Scope.createTmpVariable(
+    irType: IrType,
+    nameHint: String? = null,
+    isMutable: Boolean = false,
+    initializer: IrExpression? = null,
+    origin: IrDeclarationOrigin = IrDeclarationOrigin.IR_TEMPORARY_VARIABLE,
+    startOffset: Int = UNDEFINED_OFFSET,
+    endOffset: Int = UNDEFINED_OFFSET
+): IrVariable =
+    buildVariable(
+        getLocalDeclarationParent(), startOffset, endOffset, origin, Name.identifier(nameHint ?: "tmp"),
+        irType, isMutable
+    ).apply {
+        this.initializer = initializer
+    }
+
+fun Scope.createTmpVariable(
+    irExpression: IrExpression,
+    nameHint: String? = null,
+    isMutable: Boolean = false,
+    origin: IrDeclarationOrigin = IrDeclarationOrigin.IR_TEMPORARY_VARIABLE,
+    irType: IrType? = null
+): IrVariable =
+    buildVariable(
+        getLocalDeclarationParent(), irExpression.startOffset, irExpression.endOffset, origin, Name.identifier(nameHint ?: "tmp"),
+        irType ?: irExpression.type, isMutable
+    ).apply {
+        initializer = irExpression
+    }

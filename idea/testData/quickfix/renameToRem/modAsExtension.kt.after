@@ -1,9 +1,0 @@
-// "Rename to 'rem'" "true"
-
-object A
-operator<caret> fun A.rem(x: Int) {}
-
-fun test() {
-    A.rem(3)
-    A % 2
-}

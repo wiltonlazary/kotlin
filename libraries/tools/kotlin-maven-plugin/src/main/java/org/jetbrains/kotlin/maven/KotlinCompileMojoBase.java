@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.maven;
@@ -21,8 +10,10 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.util.ArrayUtil;
 import org.apache.maven.artifact.Artifact;
+import org.apache.maven.artifact.repository.ArtifactRepository;
 import org.apache.maven.artifact.resolver.ArtifactResolutionRequest;
 import org.apache.maven.artifact.resolver.ArtifactResolutionResult;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.model.PluginExecution;
@@ -46,10 +37,12 @@ import org.jetbrains.kotlin.config.KotlinCompilerVersion;
 import org.jetbrains.kotlin.config.Services;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.jetbrains.kotlin.maven.Util.joinArrays;
 
@@ -62,6 +55,9 @@ public abstract class KotlinCompileMojoBase<A extends CommonCompilerArguments> e
 
     @Component
     protected RepositorySystem system;
+
+    @Parameter(defaultValue = "${session}", readonly = true, required = true)
+    protected MavenSession session;
 
     /**
      * The source directories containing the sources to be compiled.
@@ -85,8 +81,12 @@ public abstract class KotlinCompileMojoBase<A extends CommonCompilerArguments> e
     private boolean multiPlatform = false;
 
     protected List<String> getSourceFilePaths() {
-        if (sourceDirs != null && !sourceDirs.isEmpty()) return sourceDirs;
-        return project.getCompileSourceRoots();
+        List<String> sourceFilePaths = new ArrayList<>();
+        if (sourceDirs != null && !sourceDirs.isEmpty()) sourceFilePaths.addAll(sourceDirs);
+        sourceFilePaths.addAll(project.getCompileSourceRoots());
+
+        return sourceFilePaths.stream().map(path -> new File(path).toPath().normalize().toString())
+                .distinct().collect(Collectors.toList());
     }
 
     @NotNull
@@ -203,7 +203,7 @@ public abstract class KotlinCompileMojoBase<A extends CommonCompilerArguments> e
                 " (JRE " + System.getProperty("java.runtime.version") + ")");
 
         if (!hasKotlinFilesInSources()) {
-            getLog().warn("No sources found skipping Kotlin compile");
+            getLog().info("No sources to compile");
             return;
         }
 
@@ -231,16 +231,19 @@ public abstract class KotlinCompileMojoBase<A extends CommonCompilerArguments> e
             A arguments,
             List<File> sourceRoots
     ) throws MojoExecutionException {
+        ArrayList<String> freeArgs = new ArrayList<>(arguments.getFreeArgs());
         for (File sourceRoot : sourceRoots) {
-            arguments.getFreeArgs().add(sourceRoot.getPath());
+            freeArgs.add(sourceRoot.getPath());
         }
+        arguments.setFreeArgs(freeArgs);
         return compiler.exec(messageCollector, Services.EMPTY, arguments);
     }
 
     private boolean hasKotlinFilesInSources() throws MojoExecutionException {
         for (File root : getSourceDirs()) {
             if (root.exists()) {
-                boolean sourcesExists = !FileUtil.processFilesRecursively(root, file -> !file.getName().endsWith(".kt"));
+                boolean sourcesExists =
+                        !FileUtil.processFilesRecursively(root, file -> !file.getName().endsWith(".kt") && !file.getName().endsWith(".kts"));
                 if (sourcesExists) return true;
             }
         }
@@ -259,19 +262,16 @@ public abstract class KotlinCompileMojoBase<A extends CommonCompilerArguments> e
                     String valueString;
                     if (value instanceof Object[]) {
                         valueString = Arrays.deepToString((Object[]) value);
-                    }
-                    else if (value != null) {
+                    } else if (value != null) {
                         valueString = String.valueOf(value);
-                    }
-                    else {
+                    } else {
                         valueString = "(null)";
                     }
 
                     getLog().debug(f.getName() + "=" + valueString);
                 }
                 getLog().debug("End of arguments");
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 getLog().warn("Failed to print compiler arguments: " + e, e);
             }
         }
@@ -285,14 +285,24 @@ public abstract class KotlinCompileMojoBase<A extends CommonCompilerArguments> e
 
     protected abstract void configureSpecificCompilerArguments(@NotNull A arguments, @NotNull List<File> sourceRoots) throws MojoExecutionException;
 
+    @NotNull
     private List<String> getCompilerPluginClassPaths() {
         ArrayList<String> result = new ArrayList<>();
 
         List<File> files = new ArrayList<>();
 
+        ArtifactRepository localRepo = session == null ? null : session.getLocalRepository();
+        List<ArtifactRepository> remoteRepos = session == null ? null : session.getCurrentProject().getPluginArtifactRepositories();
+
         for (Dependency dependency : mojoExecution.getPlugin().getDependencies()) {
             Artifact artifact = system.createDependencyArtifact(dependency);
-            ArtifactResolutionResult resolved = system.resolve(new ArtifactResolutionRequest().setArtifact(artifact));
+
+            ArtifactResolutionRequest request = new ArtifactResolutionRequest().setArtifact(artifact);
+            if (localRepo != null) request.setLocalRepository(localRepo);
+            if (remoteRepos != null) request.setRemoteRepositories(remoteRepos);
+            if (localRepo != null || remoteRepos != null) request.setResolveTransitively(true);
+
+            ArtifactResolutionResult resolved = system.resolve(request);
 
             for (Artifact resolvedArtifact : resolved.getArtifacts()) {
                 File file = resolvedArtifact.getFile();
@@ -320,9 +330,9 @@ public abstract class KotlinCompileMojoBase<A extends CommonCompilerArguments> e
             try {
                 KotlinMavenPluginExtension extension = container.lookup(KotlinMavenPluginExtension.class, pluginName);
                 loadedPlugins.put(pluginName, extension);
-                getLog().debug("Got plugin instance" + pluginName + " of type " + extension.getClass().getName());
+                getLog().debug("Got plugin instance " + pluginName + " of type " + extension.getClass().getName());
             } catch (ComponentLookupException e) {
-                getLog().debug("Unable to get plugin instance" + pluginName);
+                getLog().debug("Unable to get plugin instance " + pluginName);
                 throw new PluginNotFoundException(pluginName, e);
             }
         }
@@ -449,16 +459,15 @@ public abstract class KotlinCompileMojoBase<A extends CommonCompilerArguments> e
         arguments.setApiVersion(apiVersion);
         arguments.setMultiPlatform(multiPlatform);
 
-        if (experimentalCoroutines != null) {
-            arguments.setCoroutinesState(experimentalCoroutines);
-        }
-
         configureSpecificCompilerArguments(arguments, sourceRoots);
+
+        if (args != null && args.contains(null)) {
+            throw new MojoExecutionException("Empty compiler argument passed in the <configuration> section");
+        }
 
         try {
             compiler.parseArguments(ArrayUtil.toStringArray(args), arguments);
-        }
-        catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException e) {
             throw new MojoExecutionException(e.getMessage());
         }
 
@@ -467,7 +476,7 @@ public abstract class KotlinCompileMojoBase<A extends CommonCompilerArguments> e
         }
 
         List<String> pluginClassPaths = getCompilerPluginClassPaths();
-        if (pluginClassPaths != null && !pluginClassPaths.isEmpty()) {
+        if (!pluginClassPaths.isEmpty()) {
             if (arguments.getPluginClasspaths() == null || arguments.getPluginClasspaths().length == 0) {
                 arguments.setPluginClasspaths(pluginClassPaths.toArray(new String[pluginClassPaths.size()]));
             } else {

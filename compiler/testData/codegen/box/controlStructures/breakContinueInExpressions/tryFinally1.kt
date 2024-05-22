@@ -1,3 +1,4 @@
+
 fun box(): String {
     var x = "OK"
     while (true) {

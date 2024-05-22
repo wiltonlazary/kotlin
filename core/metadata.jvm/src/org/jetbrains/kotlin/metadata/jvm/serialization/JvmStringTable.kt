@@ -1,13 +1,16 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.metadata.jvm.serialization
 
+import org.jetbrains.kotlin.metadata.deserialization.NameResolver
 import org.jetbrains.kotlin.metadata.jvm.JvmProtoBuf
 import org.jetbrains.kotlin.metadata.jvm.JvmProtoBuf.StringTableTypes.Record
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmNameResolver
+import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmNameResolverBase
+import org.jetbrains.kotlin.metadata.jvm.deserialization.toExpandedRecordsList
 import org.jetbrains.kotlin.metadata.serialization.StringTable
 import java.io.OutputStream
 
@@ -21,7 +24,7 @@ open class JvmStringTable(nameResolver: JvmNameResolver? = null) : StringTable {
     init {
         if (nameResolver != null) {
             strings.addAll(nameResolver.strings)
-            nameResolver.records.mapTo(records, JvmProtoBuf.StringTableTypes.Record::toBuilder)
+            nameResolver.types.recordList.mapTo(records, JvmProtoBuf.StringTableTypes.Record::toBuilder)
             for (index in strings.indices) {
                 map[nameResolver.getString(index)] = index
             }
@@ -30,17 +33,16 @@ open class JvmStringTable(nameResolver: JvmNameResolver? = null) : StringTable {
     }
 
     override fun getStringIndex(string: String): Int =
-            map.getOrPut(string) {
-                strings.size.apply {
-                    strings.add(string)
+        map.getOrPut(string) {
+            strings.size.apply {
+                strings.add(string)
 
-                    val lastRecord = records.lastOrNull()
-                    if (lastRecord != null && lastRecord.isTrivial()) {
-                        lastRecord.range = lastRecord.range + 1
-                    }
-                    else records.add(Record.newBuilder())
-                }
+                val lastRecord = records.lastOrNull()
+                if (lastRecord != null && lastRecord.isTrivial()) {
+                    lastRecord.range = lastRecord.range + 1
+                } else records.add(Record.newBuilder())
             }
+        }
 
     private fun Record.Builder.isTrivial(): Boolean {
         return !hasPredefinedIndex() && !hasOperation() && substringIndexCount == 0 && replaceCharCount == 0
@@ -73,15 +75,13 @@ open class JvmStringTable(nameResolver: JvmNameResolver? = null) : StringTable {
         // If the class is local or any of its outer class names contains '$', store a literal string
         if (isLocal || '$' in className) {
             strings.add(className)
-        }
-        else {
-            val predefinedIndex = JvmNameResolver.getPredefinedStringIndex(className)
+        } else {
+            val predefinedIndex = JvmNameResolverBase.getPredefinedStringIndex(className)
             if (predefinedIndex != null) {
                 record.predefinedIndex = predefinedIndex
                 // TODO: move all records with predefined names to the end and do not write associated strings for them (since they are ignored)
                 strings.add("")
-            }
-            else {
+            } else {
                 record.operation = Record.Operation.DESC_TO_CLASS_ID
                 strings.add("L${className.replace('.', '$')};")
             }
@@ -101,4 +101,11 @@ open class JvmStringTable(nameResolver: JvmNameResolver? = null) : StringTable {
             build().writeDelimitedTo(output)
         }
     }
+
+    fun toNameResolver(): NameResolver =
+        JvmNameResolverBase(
+            strings.toTypedArray(),
+            localNames,
+            records.map { it.build() }.toExpandedRecordsList()
+        )
 }

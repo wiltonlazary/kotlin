@@ -20,17 +20,16 @@ import com.intellij.lang.ASTNode;
 import com.intellij.lang.PsiBuilder;
 import com.intellij.lang.PsiParser;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.tree.IElementType;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.kotlin.script.ScriptDefinitionProvider;
+import org.jetbrains.kotlin.idea.KotlinFileType;
 
 public class KotlinParser implements PsiParser {
 
-    private final ScriptDefinitionProvider scriptDefinitionProvider;
 
     public KotlinParser(Project project) {
-        scriptDefinitionProvider = ScriptDefinitionProvider.Companion.getInstance(project);
     }
 
     @Override
@@ -41,16 +40,23 @@ public class KotlinParser implements PsiParser {
 
     // we need this method because we need psiFile
     @NotNull
-    public ASTNode parse(IElementType iElementType, PsiBuilder psiBuilder, PsiFile psiFile) {
+    public static ASTNode parse(PsiBuilder psiBuilder, PsiFile psiFile) {
         KotlinParsing ktParsing = KotlinParsing.createForTopLevel(new SemanticWhitespaceAwarePsiBuilderImpl(psiBuilder));
-        if (scriptDefinitionProvider != null && scriptDefinitionProvider.isScript(psiFile.getName())
-            || psiFile.getName().endsWith(KotlinParserDefinition.STD_SCRIPT_EXT)) {
-            ktParsing.parseScript();
-        }
-        else {
+        String extension = FileUtilRt.getExtension(psiFile.getName());
+        if (extension.isEmpty() || extension.equals(KotlinFileType.EXTENSION) || isCompiledFile(psiFile)) {
             ktParsing.parseFile();
         }
+        else {
+            ktParsing.parseScript();
+        }
         return psiBuilder.getTreeBuilt();
+    }
+
+    @SuppressWarnings({"deprecation", "UnnecessaryFullyQualifiedName"})
+    private static boolean isCompiledFile(PsiFile psiFile) {
+        //avoid loading KtFile which depends on java psi, which is not available in some setup
+        //e.g. remote dev https://youtrack.jetbrains.com/issue/GTW-7554
+        return psiFile instanceof org.jetbrains.kotlin.psi.KtCommonFile && ((org.jetbrains.kotlin.psi.KtCommonFile) psiFile).isCompiled();
     }
 
     @NotNull
@@ -78,6 +84,13 @@ public class KotlinParser implements PsiParser {
     public static ASTNode parseLambdaExpression(PsiBuilder psiBuilder) {
         KotlinParsing ktParsing = KotlinParsing.createForTopLevel(new SemanticWhitespaceAwarePsiBuilderImpl(psiBuilder));
         ktParsing.parseLambdaExpression();
+        return psiBuilder.getTreeBuilt();
+    }
+
+    @NotNull
+    public static ASTNode parseBlockExpression(PsiBuilder psiBuilder) {
+        KotlinParsing ktParsing = KotlinParsing.createForTopLevel(new SemanticWhitespaceAwarePsiBuilderImpl(psiBuilder));
+        ktParsing.parseBlockExpression();
         return psiBuilder.getTreeBuilt();
     }
 }

@@ -1,3 +1,0 @@
-import java.util.Date
-
-val x = java.sql.Date(1)

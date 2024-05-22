@@ -1,4 +1,5 @@
-// !LANGUAGE: +ProhibitInnerClassesOfGenericClassExtendingThrowable
+// FIR_IDENTICAL
+// LANGUAGE: +ProhibitInnerClassesOfGenericClassExtendingThrowable
 package test
 
 var global: Throwable? = null
@@ -15,7 +16,7 @@ fun <T> foo(x: Throwable, z: T, b: (T) -> Unit) {
     }
 }
 
-fun main(args: Array<String>) {
+fun main() {
     foo(RuntimeException(), 1) { throw IllegalStateException() }
     foo(global!!, "") { it.length } // (*)
 }

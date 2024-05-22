@@ -1,4 +1,5 @@
-// !API_VERSION: 1.1
+// FIR_IDENTICAL
+// API_VERSION: 1.1
 
 @SinceKotlin("0.9")
 fun ok1() {}

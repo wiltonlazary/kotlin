@@ -16,9 +16,9 @@
 
 package org.jetbrains.kotlin.psi;
 
+import kotlin.annotations.jvm.ReadOnly;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.ReadOnly;
 
 import java.util.List;
 
@@ -57,5 +57,12 @@ public interface KtPureClassOrObject extends KtPureElement, KtDeclarationContain
     @NotNull
     @ReadOnly
     List<KtSecondaryConstructor> getSecondaryConstructors();
+
+    @NotNull
+    @ReadOnly
+    List<KtContextReceiver> getContextReceivers();
+
+    @Nullable
+    KtClassBody getBody();
 }
 

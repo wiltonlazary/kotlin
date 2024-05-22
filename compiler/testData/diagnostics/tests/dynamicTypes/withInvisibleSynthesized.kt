@@ -1,4 +1,4 @@
-// !MARK_DYNAMIC_CALLS
+// MARK_DYNAMIC_CALLS
 
 // FILE: p/J.java
 
@@ -20,12 +20,12 @@ public class J {
 import p.*
 
 class K: J.C() {
-    fun <!UNSUPPORTED, DYNAMIC_RECEIVER_NOT_ALLOWED!>dynamic<!>.test() {
+    fun <!DYNAMIC_RECEIVER_NOT_ALLOWED, UNSUPPORTED!>dynamic<!>.test() {
         <!DEBUG_INFO_DYNAMIC!>sam<!>(null)
         <!DEBUG_INFO_DYNAMIC!>sam<!>(
             name = null,
-            <!ARGUMENT_PASSED_TWICE!>name<!> = null
-        <!NO_VALUE_FOR_PARAMETER!>)<!>
+            <!NO_VALUE_FOR_PARAMETER!><!ARGUMENT_PASSED_TWICE!>name<!> = null
+        )<!>
     }
 
     fun test() {

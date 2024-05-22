@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2022 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.generators.mockJDK;
@@ -276,8 +265,6 @@ public class GenerateMockJdk {
             "META-INF/MANIFEST.MF",
     };
 
-
-
     private static void generateFilteredJar(
             String jdkPath,
             String childName,
@@ -296,7 +283,7 @@ public class GenerateMockJdk {
 
         List<JarEntry> sourceList = Collections.list(sourceJar.entries());
         for (JarEntry entry : sourceList) {
-            // For Map$Entry.class we want to check Map.class presense
+            // For Map$Entry.class we want to check Map.class presence
             String topLevelClassFile = entry.getName().replaceAll("\\$.+\\.class$", ".class");
 
             if (entryNamesToInclude.contains(topLevelClassFile) && foundEntries.add(entry.getName())) {
@@ -331,7 +318,7 @@ public class GenerateMockJdk {
         return entrySet;
     }
 
-    private static Set<String> getClassFileEntries() {
+    /* package-private */ static Set<String> getClassFileEntries() {
         return new HashSet<>(Arrays.asList(ENTRIES));
     }
 
@@ -360,11 +347,12 @@ public class GenerateMockJdk {
                 }
             }
         }
+        File mockJdkRuntimeJarPath = new File("compiler/testData/mockJDK/jre/lib/rt.jar");
 
         generateFilteredJar(
                 openjdk7Path,
                 "jre/lib/rt.jar",
-                new File("compiler/testData/mockJDK/jre/lib/rt.jar"),
+                mockJdkRuntimeJarPath,
                 getClassFileEntries(),
                 true);
         generateFilteredJar(
@@ -373,6 +361,7 @@ public class GenerateMockJdk {
                 new File("compiler/testData/mockJDK/src.zip"),
                 sourceFileEntries,
                 false);
+        FilterMockJdkKt.removeInterfacesFromMockJdkClassfiles(mockJdkRuntimeJarPath);
     }
 
     private GenerateMockJdk() {

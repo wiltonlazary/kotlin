@@ -1,5 +1,5 @@
-// IGNORE_BACKEND: JS, NATIVE
-// WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// WITH_STDLIB
 
 import java.io.*
 import kotlin.test.*

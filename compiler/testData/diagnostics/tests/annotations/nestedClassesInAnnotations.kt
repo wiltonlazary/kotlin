@@ -1,4 +1,5 @@
-// !LANGUAGE: +NestedClassesInAnnotations
+// FIR_IDENTICAL
+// LANGUAGE: +NestedClassesInAnnotations
 
 annotation class Foo {
     class Nested
@@ -16,7 +17,7 @@ annotation class Foo {
     }
 
 
-    <!ANNOTATION_CLASS_MEMBER!>constructor(<!UNUSED_PARAMETER!>s<!>: Int) {}<!>
+    <!ANNOTATION_CLASS_MEMBER!>constructor(s: Int) {}<!>
     <!ANNOTATION_CLASS_MEMBER!>init {}<!>
     <!ANNOTATION_CLASS_MEMBER!>fun function() {}<!>
     <!ANNOTATION_CLASS_MEMBER!>val property get() = Unit<!>

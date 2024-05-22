@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package test.ranges
@@ -31,14 +31,21 @@ public class RangeTest {
         assertTrue(1.toShort() in range)
         assertTrue(1.toByte() in range)
         assertTrue(1.toLong() in range)
-        assertTrue(1.toFloat() in range)
-        assertTrue(1.toDouble() in range)
 
         assertFalse(Long.MAX_VALUE in range)
 
+        assertFalse(null in range)
+        assertTrue(1 as Int? in range)
+        assertFalse(10 as Int? in range)
+
+        val closedRange = 1..9
         val openRange = 1 until 10
         assertTrue(9 in openRange)
         assertFalse(10 in openRange)
+        assertEquals(closedRange, openRange)
+
+        val openRange2 = 1..<10
+        assertEquals(closedRange, openRange2)
 
         assertTrue((1 until Int.MIN_VALUE).isEmpty())
     }
@@ -64,10 +71,10 @@ public class RangeTest {
         assertTrue(1.toShort() in range)
         assertTrue(1.toInt() in range)
         assertTrue(1.toLong() in range)
-        assertTrue(1.toFloat() in range)
-        assertTrue(1.toDouble() in range)
 
         assertFalse(Long.MAX_VALUE in range)
+
+        // assertTrue(1.toByte() as Byte? in range) // expected not to compile
 
         val openRange = 1.toByte() until 10.toByte()
         assertTrue(9.toByte() in openRange)
@@ -98,10 +105,10 @@ public class RangeTest {
         assertTrue(1.toByte() in range)
         assertTrue(1.toInt() in range)
         assertTrue(1.toLong() in range)
-        assertTrue(1.toFloat() in range)
-        assertTrue(1.toDouble() in range)
 
         assertFalse(Long.MAX_VALUE in range)
+
+        // assertTrue(1.toShort() as Short? in range) // expected not to compile
 
         val openRange = 1.toShort() until 10.toShort()
         assertTrue(9.toShort() in openRange)
@@ -134,18 +141,22 @@ public class RangeTest {
         assertTrue(1.toByte() in range)
         assertTrue(1.toShort() in range)
         assertTrue(1.toInt() in range)
-        assertTrue(1.toFloat() in range)
-        assertTrue(1.toDouble() in range)
 
-        assertFalse(Double.MAX_VALUE in range)
+        assertFalse(null in range)
+        assertTrue(1L as Long? in range)
+        assertFalse(10L as Long? in range)
 
+        val closedRange = 1L..9L
         val openRange = 1L until 10L
         assertTrue(9L in openRange)
         assertFalse(10L in openRange)
+        assertEquals(closedRange, openRange)
+
+        val openRange2 = 1L..<10L
+        assertEquals(closedRange, openRange2)
 
         assertTrue((0 until Long.MIN_VALUE).isEmpty())
         assertTrue((0L until Long.MIN_VALUE).isEmpty())
-
     }
 
     @Test fun charRange() {
@@ -168,11 +179,20 @@ public class RangeTest {
         assertTrue('v' in (range as ClosedRange<Char>))
         assertFalse((range as ClosedRange<Char>).isEmpty())
 
+        assertFalse(null in range)
+        assertTrue('p' as Char? in range)
+        assertFalse('z' as Char? in range)
+
+        val closedRange = 'A'..'Y'
         val openRange = 'A' until 'Z'
         assertTrue('Y' in openRange)
         assertFalse('Z' in openRange)
+        assertEquals(closedRange, openRange)
 
-        assertTrue(('A' until '\u0000').isEmpty())
+        val openRange2 = 'A'..<'Z'
+        assertEquals(closedRange, openRange2)
+
+        assertTrue(('A' until Char.MIN_VALUE).isEmpty())
     }
 
     @Test fun doubleRange() {
@@ -194,10 +214,6 @@ public class RangeTest {
 
         assertFalse(range.isEmpty())
 
-        assertTrue(1.toByte() in range)
-        assertTrue(1.toShort() in range)
-        assertTrue(1.toInt() in range)
-        assertTrue(1.toLong() in range)
         assertTrue(1.toFloat() in range)
 
         val zeroRange = 0.0..-0.0
@@ -219,6 +235,19 @@ public class RangeTest {
         assertFalse(Double.NEGATIVE_INFINITY in halfInfRange)
         assertFalse(Double.NaN in halfInfRange)
         assertTrue(Float.POSITIVE_INFINITY in halfInfRange)
+
+        val openRange = 0.0..<Double.POSITIVE_INFINITY
+        assertTrue(Double.MAX_VALUE in openRange)
+        assertFalse(Double.POSITIVE_INFINITY in openRange)
+        assertFalse(Double.NEGATIVE_INFINITY in openRange)
+        assertFalse(Double.NaN in openRange)
+        assertFalse(Float.POSITIVE_INFINITY in openRange)
+
+        val openNanRange = 0.0..<Double.NaN
+        assertFalse(1.0 in openNanRange)
+        assertFalse(Double.NaN in openNanRange)
+        assertFalse(Float.NaN in openNanRange)
+        assertTrue(openNanRange.isEmpty())
     }
 
     @Test fun floatRange() {
@@ -240,10 +269,6 @@ public class RangeTest {
 
         assertFalse(range.isEmpty())
 
-        assertTrue(1.toByte() in range)
-        assertTrue(1.toShort() in range)
-        assertTrue(1.toInt() in range)
-        assertTrue(1.toLong() in range)
         assertTrue(1.toDouble() in range)
 
         assertFalse(Double.MAX_VALUE in range)
@@ -266,13 +291,45 @@ public class RangeTest {
         assertFalse(Float.NaN in halfInfRange)
         assertTrue(Double.POSITIVE_INFINITY in halfInfRange)
         assertTrue(Double.MAX_VALUE in halfInfRange)
+
+        val openRange = 0.0F..<Float.POSITIVE_INFINITY
+        assertTrue(Float.MAX_VALUE in openRange)
+        assertFalse(Float.POSITIVE_INFINITY in openRange)
+        assertFalse(Float.NEGATIVE_INFINITY in openRange)
+        assertFalse(Float.NaN in openRange)
+
+        val openNanRange = 0.0F..<Float.NaN
+        assertFalse(1.0F in openNanRange)
+        assertFalse(Float.NaN in openNanRange)
+        assertTrue(openNanRange.isEmpty())
     }
 
+    @Test
+    @Suppress("DEPRECATION")
+    fun openRangeEndExclusive() {
+        assertEquals((1..5).endInclusive, (1..<4).endExclusive + 1)
+        assertEquals((1L..5L).endInclusive, (1L..<4L).endExclusive + 1)
+        assertEquals(('X'..'Z').endInclusive, ('X'..<'Y').endExclusive + 1)
+
+        assertNotEquals(Int.MIN_VALUE, (1..<Int.MIN_VALUE).endExclusive)
+        assertNotEquals(Long.MIN_VALUE, (1..<Long.MIN_VALUE).endExclusive)
+        assertNotEquals(Char.MIN_VALUE, ('A'..<Char.MIN_VALUE).endExclusive)
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun openRangeEndExclusiveThrows() {
+        assertFailsWith<IllegalStateException> { (1..Int.MAX_VALUE).endExclusive }
+        assertFailsWith<IllegalStateException> { (1..Long.MAX_VALUE).endExclusive }
+        assertFailsWith<IllegalStateException> { ('A'..Char.MAX_VALUE).endExclusive }
+    }
+
+    @Suppress("EmptyRange")
     @Test fun isEmpty() {
         assertTrue((2..1).isEmpty())
         assertTrue((2L..0L).isEmpty())
-        assertTrue((1.toShort()..-1.toShort()).isEmpty())
-        assertTrue((0.toByte()..-1.toByte()).isEmpty())
+        assertTrue((1.toShort()..(-1).toShort()).isEmpty())
+        assertTrue((0.toByte()..(-1).toByte()).isEmpty())
         assertTrue((0f..-3.14f).isEmpty())
         assertTrue((-2.72..-3.14).isEmpty())
         assertTrue(('z'..'x').isEmpty())
@@ -287,6 +344,7 @@ public class RangeTest {
         assertTrue(("range".."progression").isEmpty())
     }
 
+    @Suppress("ReplaceAssertBooleanWithAssertEquality", "EmptyRange")
     @Test fun emptyEquals() {
         assertTrue(IntRange.EMPTY == IntRange.EMPTY)
         assertEquals(IntRange.EMPTY, IntRange.EMPTY)
@@ -300,6 +358,8 @@ public class RangeTest {
         assertEquals(2.toByte()..1.toByte(), 1.toByte()..0.toByte())
         assertEquals(0f..-3.14f, 3.14f..0f)
         assertEquals(-2.0..-3.0, 3.0..2.0)
+        assertEquals(0.0..Double.NaN, 1.0..0.0)
+        assertEquals(0.0F..Float.NaN, 1.0F..0.0F)
         assertEquals('b'..'a', 'c'..'b')
 
         assertTrue(1 downTo 2 == 2 downTo 3)
@@ -312,14 +372,15 @@ public class RangeTest {
         assertFalse(("aa".."bb") == ("aaa".."bbb"))
     }
 
+    @Suppress("EmptyRange")
     @Test fun emptyHashCode() {
         assertEquals((0..42).hashCode(), (0..42).hashCode())
         assertEquals((1.23..4.56).hashCode(), (1.23..4.56).hashCode())
 
         assertEquals((0..-1).hashCode(), IntRange.EMPTY.hashCode())
         assertEquals((2L..1L).hashCode(), (1L..0L).hashCode())
-        assertEquals((0.toShort()..-1.toShort()).hashCode(), (42.toShort()..0.toShort()).hashCode())
-        assertEquals((0.toByte()..-1.toByte()).hashCode(), (42.toByte()..0.toByte()).hashCode())
+        assertEquals((0.toShort()..(-1).toShort()).hashCode(), (42.toShort()..0.toShort()).hashCode())
+        assertEquals((0.toByte()..(-1).toByte()).hashCode(), (42.toByte()..0.toByte()).hashCode())
         assertEquals((0f..-3.14f).hashCode(), (2.39f..1.41f).hashCode())
         assertEquals((0.0..-10.0).hashCode(), (10.0..0.0).hashCode())
         assertEquals(('z'..'x').hashCode(), ('l'..'k').hashCode())
@@ -331,8 +392,29 @@ public class RangeTest {
         assertEquals(("range".."progression").hashCode(), ("hashcode".."equals").hashCode())
     }
 
+    @Suppress("EmptyRange")
+    @Test fun emptyOpenEquals() {
+        assertEquals(0..<0, 1..<1)
+        assertEquals(0..-1, 1..<1)
+        assertEquals(0L..<0L, 1L..<1L)
+        assertEquals(0L..-1L, 1L..<1L)
+
+        assertEquals(0u..<0u, 1u..<1u)
+        assertEquals(1u..0u, 2u..<2u)
+        assertEquals(0uL..<0uL, 1uL..<1uL)
+        assertEquals(1uL..0uL, 2uL..<2uL)
+
+        assertEquals(Double.NaN..<0.0, 0.0..<0.0)
+        assertEquals(0.0F..<Float.NaN, 0.0F..<0.0F)
+        assertNotEquals<Any>(1.0..0.0, 1.0..<0.0)
+        assertNotEquals<Any>(1.0F..0.0F, 1.0F..<0.0F)
+    }
+
     @Test fun comparableRange() {
         val range = "island".."isle"
+        assertEquals("island..isle", range.toString())
+        assertEquals(range, range.start..range.endInclusive)
+
         assertFalse("apple" in range)
         assertFalse("icicle" in range)
 
@@ -344,6 +426,25 @@ public class RangeTest {
         assertFalse("trail" in range)
 
         assertFalse(range.isEmpty())
+        assertFalse(("empty".."empty").isEmpty())
+    }
+
+    @Test fun comparableOpenRange() {
+        val range = "island"..<"isle"
+        assertEquals("island..<isle", range.toString())
+        assertEquals(range, range.start..<range.endExclusive)
+        assertFalse("apple" in range)
+        assertFalse("icicle" in range)
+
+        assertTrue("island" in range)
+        assertFalse("isle" in range)
+        assertTrue("islandic" in range)
+
+        assertFalse("item" in range)
+        assertFalse("trail" in range)
+
+        assertFalse(range.isEmpty())
+        assertTrue(("empty"..<"empty").isEmpty())
     }
 
     private fun assertFailsWithIllegalArgument(f: () -> Unit) = assertFailsWith<IllegalArgumentException> { f() }
@@ -362,8 +463,8 @@ public class RangeTest {
         assertFailsWithIllegalArgument { 'a'..'z' step 0 }
 
         assertFailsWithIllegalArgument { 0 downTo -5 step 0 }
-        assertFailsWithIllegalArgument { 0.toByte() downTo -5.toByte() step 0 }
-        assertFailsWithIllegalArgument { 0.toShort() downTo -5.toShort() step 0 }
+        assertFailsWithIllegalArgument { 0.toByte() downTo (-5).toByte() step 0 }
+        assertFailsWithIllegalArgument { 0.toShort() downTo (-5).toShort() step 0 }
         assertFailsWithIllegalArgument { 0L downTo -5L step 0L }
         assertFailsWithIllegalArgument { 'z' downTo 'a' step 0 }
 
@@ -375,9 +476,55 @@ public class RangeTest {
 
 
         assertFailsWithIllegalArgument { 0 downTo -5 step -2 }
-        assertFailsWithIllegalArgument { 0.toByte() downTo -5.toByte() step -2 }
-        assertFailsWithIllegalArgument { 0.toShort() downTo -5.toShort() step -2 }
+        assertFailsWithIllegalArgument { 0.toByte() downTo (-5).toByte() step -2 }
+        assertFailsWithIllegalArgument { 0.toShort() downTo (-5).toShort() step -2 }
         assertFailsWithIllegalArgument { 0L downTo -5L step -2L }
         assertFailsWithIllegalArgument { 'z' downTo 'a' step -2 }
+    }
+
+    @Test fun stepSizeIsTooLow() {
+        assertFailsWithIllegalArgument { CharProgression.fromClosedRange('a', 'b', Int.MIN_VALUE) }
+        assertFailsWithIllegalArgument { IntProgression.fromClosedRange(0, 1, Int.MIN_VALUE) }
+        assertFailsWithIllegalArgument { LongProgression.fromClosedRange(0, 1, Long.MIN_VALUE) }
+    }
+
+    @Test fun randomInEmptyRange() {
+        assertFailsWith<NoSuchElementException> { IntRange.EMPTY.random() }
+        assertFailsWith<NoSuchElementException> { LongRange.EMPTY.random() }
+        assertFailsWith<NoSuchElementException> { CharRange.EMPTY.random() }
+    }
+
+    @Test fun randomOrNullInEmptyRange() {
+        assertNull(IntRange.EMPTY.randomOrNull())
+        assertNull(LongRange.EMPTY.randomOrNull())
+        assertNull(CharRange.EMPTY.randomOrNull())
+    }
+
+    @Test fun firstInEmptyRange() {
+        assertFailsWith<NoSuchElementException> { IntRange.EMPTY.first() }
+        assertFailsWith<NoSuchElementException> { LongRange.EMPTY.first() }
+        assertFailsWith<NoSuchElementException> { CharRange.EMPTY.first() }
+        assertFailsWith<NoSuchElementException> { IntProgression.fromClosedRange(0, 3, -2).first() }
+    }
+
+    @Test fun firstOrNullInEmptyRange() {
+        assertNull(IntRange.EMPTY.firstOrNull())
+        assertNull(LongRange.EMPTY.firstOrNull())
+        assertNull(CharRange.EMPTY.firstOrNull())
+        assertNull(IntProgression.fromClosedRange(0, 3, -2).firstOrNull())
+    }
+
+    @Test fun lastInEmptyRange() {
+        assertFailsWith<NoSuchElementException> { IntRange.EMPTY.last() }
+        assertFailsWith<NoSuchElementException> { LongRange.EMPTY.last() }
+        assertFailsWith<NoSuchElementException> { CharRange.EMPTY.last() }
+        assertFailsWith<NoSuchElementException> { IntProgression.fromClosedRange(0, 3, -2).last() }
+    }
+
+    @Test fun lastOrNullInEmptyRange() {
+        assertNull(IntRange.EMPTY.lastOrNull())
+        assertNull(LongRange.EMPTY.lastOrNull())
+        assertNull(CharRange.EMPTY.lastOrNull())
+        assertNull(IntProgression.fromClosedRange(0, 3, -2).lastOrNull())
     }
 }

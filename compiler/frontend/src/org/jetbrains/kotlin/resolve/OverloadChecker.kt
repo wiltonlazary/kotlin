@@ -18,20 +18,12 @@ package org.jetbrains.kotlin.resolve
 
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.resolve.calls.inference.ConstraintSystemBuilderImpl
-import org.jetbrains.kotlin.resolve.calls.results.FlatSignature
-import org.jetbrains.kotlin.resolve.calls.results.SpecificityComparisonCallbacks
-import org.jetbrains.kotlin.resolve.calls.results.TypeSpecificityComparator
-import org.jetbrains.kotlin.resolve.calls.results.isSignatureNotLessSpecific
+import org.jetbrains.kotlin.resolve.calls.results.*
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasLowPriorityInOverloadResolution
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExtensionProperty
 import org.jetbrains.kotlin.resolve.descriptorUtil.varargParameterPosition
-import org.jetbrains.kotlin.types.ErrorUtils
-import org.jetbrains.kotlin.types.KotlinType
-
-object OverloadabilitySpecificityCallbacks : SpecificityComparisonCallbacks {
-    override fun isNonSubtypeNotLessSpecific(specific: KotlinType, general: KotlinType): Boolean =
-        false
-}
+import org.jetbrains.kotlin.types.error.ErrorUtils
+import org.jetbrains.kotlin.types.model.KotlinTypeMarker
 
 class OverloadChecker(val specificityComparator: TypeSpecificityComparator) {
     /**
@@ -55,7 +47,9 @@ class OverloadChecker(val specificityComparator: TypeSpecificityComparator) {
         // They can be disambiguated by providing explicit type parameters.
         if (a.typeParameters.isEmpty() != b.typeParameters.isEmpty()) return true
 
-        if (ErrorUtils.containsErrorType(a) || ErrorUtils.containsErrorType(b)) return true
+        if (a is FunctionDescriptor && ErrorUtils.containsErrorTypeInParameters(a) ||
+            b is FunctionDescriptor && ErrorUtils.containsErrorTypeInParameters(b)
+        ) return true
         if (a.varargParameterPosition() != b.varargParameterPosition()) return true
 
         val aSignature = FlatSignature.createFromCallableDescriptor(a)

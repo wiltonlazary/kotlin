@@ -19,11 +19,10 @@ package org.jetbrains.kotlin.codegen.optimization
 import org.jetbrains.kotlin.codegen.inline.insnText
 import org.jetbrains.kotlin.codegen.optimization.common.OptimizationBasicInterpreter
 import org.jetbrains.kotlin.codegen.optimization.common.StrictBasicValue
+import org.jetbrains.kotlin.codegen.optimization.common.removeAll
 import org.jetbrains.kotlin.codegen.optimization.fixStack.peek
 import org.jetbrains.kotlin.codegen.optimization.fixStack.top
 import org.jetbrains.kotlin.codegen.optimization.transformer.MethodTransformer
-import org.jetbrains.kotlin.utils.addToStdlib.cast
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.tree.*
@@ -31,14 +30,26 @@ import org.jetbrains.org.objectweb.asm.tree.analysis.BasicValue
 import org.jetbrains.org.objectweb.asm.tree.analysis.Frame
 
 class ConstantConditionEliminationMethodTransformer : MethodTransformer() {
-    private val deadCodeElimination = DeadCodeEliminationMethodTransformer()
 
     override fun transform(internalClassName: String, methodNode: MethodNode) {
+        if (!methodNode.hasOptimizableConditions()) {
+            return
+        }
         do {
             val changes = ConstantConditionsOptimization(internalClassName, methodNode).run()
-            if (changes) deadCodeElimination.transform(internalClassName, methodNode)
         } while (changes)
     }
+
+    private fun MethodNode.hasOptimizableConditions(): Boolean {
+        return instructions.any { it.isIntJump() } && instructions.any { it.isIntConst() }
+    }
+
+    private fun AbstractInsnNode.isIntConst() =
+        opcode in Opcodes.ICONST_M1..Opcodes.ICONST_5 || opcode == Opcodes.BIPUSH || opcode == Opcodes.SIPUSH ||
+                (opcode == Opcodes.LDC && this is LdcInsnNode && cst is Int)
+
+    private fun AbstractInsnNode.isIntJump() =
+        opcode in Opcodes.IFEQ..Opcodes.IFLE || opcode in Opcodes.IF_ICMPEQ..Opcodes.IF_ICMPLE
 
     private class ConstantConditionsOptimization(val internalClassName: String, val methodNode: MethodNode) {
         fun run(): Boolean {
@@ -49,11 +60,23 @@ class ConstantConditionEliminationMethodTransformer : MethodTransformer() {
 
         private fun collectRewriteActions(): List<() -> Unit> =
             arrayListOf<() -> Unit>().also { actions ->
+                val deadCode = ArrayList<AbstractInsnNode>()
+
                 val frames = analyze(internalClassName, methodNode, ConstantPropagationInterpreter())
                 val insns = methodNode.instructions.toArray()
+
                 for (i in frames.indices) {
-                    val frame = frames[i] ?: continue
-                    val insn = insns[i] as? JumpInsnNode ?: continue
+                    val insn = insns[i]
+                    val frame = frames[i]
+
+                    if (frame == null) {
+                        if (insn !is LabelNode) {
+                            deadCode.add(insn)
+                        }
+                        continue
+                    }
+
+                    if (insn !is JumpInsnNode) continue
                     when (insn.opcode) {
                         in Opcodes.IFEQ..Opcodes.IFLE ->
                             tryRewriteComparisonWithZero(insn, frame, actions)
@@ -61,10 +84,16 @@ class ConstantConditionEliminationMethodTransformer : MethodTransformer() {
                             tryRewriteBinaryComparison(insn, frame, actions)
                     }
                 }
+
+                if (deadCode.isNotEmpty()) {
+                    actions.add {
+                        methodNode.instructions.removeAll(deadCode)
+                    }
+                }
             }
 
         private fun tryRewriteComparisonWithZero(insn: JumpInsnNode, frame: Frame<BasicValue>, actions: ArrayList<() -> Unit>) {
-            val top = frame.top()!!.safeAs<IConstValue>() ?: return
+            val top = frame.top()!! as? IConstValue ?: return
 
             val constCondition = when (insn.opcode) {
                 Opcodes.IFEQ -> top.value == 0
@@ -167,9 +196,9 @@ class ConstantConditionEliminationMethodTransformer : MethodTransformer() {
                 in Opcodes.ICONST_M1..Opcodes.ICONST_5 ->
                     IConstValue.of(insn.opcode - Opcodes.ICONST_0)
                 Opcodes.BIPUSH, Opcodes.SIPUSH ->
-                    IConstValue.of(insn.cast<IntInsnNode>().operand)
+                    IConstValue.of((insn as IntInsnNode).operand)
                 Opcodes.LDC -> {
-                    val operand = insn.cast<LdcInsnNode>().cst
+                    val operand = (insn as LdcInsnNode).cst
                     if (operand is Int)
                         IConstValue.of(operand)
                     else

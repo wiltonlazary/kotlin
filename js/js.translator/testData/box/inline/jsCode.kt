@@ -1,11 +1,13 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1115
+// EXPECTED_REACHABLE_NODES: 1283
 package foo
 
 // CHECK_CONTAINS_NO_CALLS: test
+// CHECK_NOT_CALLED_IN_SCOPE: function=sum scope=test
 
 internal inline fun sum(x: Int, y: Int): Int = js("x + y")
 
+// CHECK_BREAKS_COUNT: function=test count=0 TARGET_BACKENDS=JS_IR
+// CHECK_LABELS_COUNT: function=test name=$l$block count=0 TARGET_BACKENDS=JS_IR
 internal fun test(x: Int, y: Int): Int = sum(sum(x, x), sum(y, y))
 
 fun box(): String {

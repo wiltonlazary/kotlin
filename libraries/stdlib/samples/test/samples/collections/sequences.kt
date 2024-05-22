@@ -2,11 +2,10 @@ package samples.collections
 
 import samples.*
 import kotlin.test.*
-import kotlin.coroutines.experimental.buildIterator
-import kotlin.coroutines.experimental.buildSequence
 
 @RunWith(Enclosed::class)
 class Sequences {
+
     class Building {
 
         @Sample
@@ -77,6 +76,14 @@ class Sequences {
         }
 
         @Sample
+        fun sequenceFromMap() {
+            val map = mapOf(1 to "x", 2 to "y", -1 to "zz")
+            val sequence = map.asSequence()
+
+            assertPrints(sequence.joinToString(), "1=x, 2=y, -1=zz")
+        }
+
+        @Sample
         fun sequenceFromIterator() {
             val array = arrayOf(1, 2, 3)
 
@@ -112,7 +119,7 @@ class Sequences {
 
         @Sample
         fun buildFibonacciSequence() {
-            fun fibonacci() = buildSequence {
+            fun fibonacci() = sequence {
                 var terms = Pair(0, 1)
 
                 // this sequence is infinite
@@ -127,7 +134,7 @@ class Sequences {
 
         @Sample
         fun buildSequenceYieldAll() {
-            val sequence = buildSequence {
+            val sequence = sequence {
                 val start = 0
                 // yielding a single value
                 yield(start)
@@ -146,7 +153,7 @@ class Sequences {
             val wrappedCollection = object : AbstractCollection<Any>() {
                 override val size: Int = collection.size + 2
 
-                override fun iterator(): Iterator<Any> = buildIterator {
+                override fun iterator(): Iterator<Any> = iterator {
                     yield("first")
                     yieldAll(collection)
                     yield("last")
@@ -158,6 +165,30 @@ class Sequences {
 
     }
 
+    class Usage {
+
+        @Sample
+        fun sequenceOrEmpty() {
+            val nullSequence: Sequence<Int>? = null
+            assertPrints(nullSequence.orEmpty().toList(), "[]")
+
+            val sequence: Sequence<Int>? = sequenceOf(1, 2, 3)
+            assertPrints(sequence.orEmpty().toList(), "[1, 2, 3]")
+        }
+
+        @Sample
+        fun sequenceIfEmpty() {
+            val empty = emptySequence<Int>()
+
+            val emptyOrDefault = empty.ifEmpty { sequenceOf("default") }
+            assertPrints(emptyOrDefault.toList(), "[default]")
+
+            val nonEmpty = sequenceOf("value")
+
+            val nonEmptyOrDefault = nonEmpty.ifEmpty { sequenceOf("default") }
+            assertPrints(nonEmptyOrDefault.toList(), "[value]")
+        }
+    }
 
     class Transformations {
 
@@ -204,6 +235,46 @@ class Sequences {
 
             val result = sequenceA.zip(sequenceB) { a, b -> "$a/$b" }
             assertPrints(result.take(4).toList(), "[a/1, b/3, c/7, d/15]")
+        }
+
+        @Sample
+        fun partition() {
+            fun fibonacci(): Sequence<Int> {
+                // fibonacci terms
+                // 0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, ...
+                return generateSequence(Pair(0, 1), { Pair(it.second, it.first + it.second) }).map { it.first }
+            }
+
+            val (even, odd) = fibonacci().take(10).partition { it % 2 == 0 }
+
+            assertPrints(even, "[0, 2, 8, 34]")
+            assertPrints(odd, "[1, 1, 3, 5, 13, 21]")
+        }
+
+        @Sample
+        fun flattenSequenceOfSequences() {
+            val sequence: Sequence<Int> = generateSequence(1) { it + 1 }
+            val sequenceOfSequences: Sequence<Sequence<Int>> = sequence.map { number ->
+                generateSequence { number }.take(number)
+            }
+
+            assertPrints(sequenceOfSequences.flatten().take(10).toList(), "[1, 2, 2, 3, 3, 3, 4, 4, 4, 4]")
+        }
+
+        @Sample
+        fun flattenSequenceOfLists() {
+            val sequence: Sequence<String> = sequenceOf("123", "45")
+            val sequenceOfLists: Sequence<List<Char>> = sequence.map { it.toList() }
+
+            assertPrints(sequenceOfLists.flatten().toList(), "[1, 2, 3, 4, 5]")
+        }
+
+        @Sample
+        fun unzip() {
+            val result = generateSequence(0 to 1) { it.first + 1 to it.second * 2 }.take(8).unzip()
+
+            assertPrints(result.first.toList(), "[0, 1, 2, 3, 4, 5, 6, 7]")
+            assertPrints(result.second.toList(), "[1, 2, 4, 8, 16, 32, 64, 128]")
         }
     }
 

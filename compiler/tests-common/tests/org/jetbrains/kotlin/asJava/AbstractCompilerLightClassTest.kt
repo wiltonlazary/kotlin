@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2023 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.asJava
@@ -22,34 +11,46 @@ import org.jetbrains.kotlin.asJava.finder.JavaElementFinder
 import org.jetbrains.kotlin.checkers.KotlinMultiFileTestWithJava
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.test.ConfigurationKind
+import org.jetbrains.kotlin.psi.KtEnumEntry
+import org.jetbrains.kotlin.test.Directives
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
+import org.jetbrains.kotlin.test.KotlinBaseTest
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.util.KotlinFrontEndException
 import org.junit.Assert
 import java.io.File
 
-abstract class AbstractCompilerLightClassTest : KotlinMultiFileTestWithJava<Void, Void>() {
-    override fun getConfigurationKind(): ConfigurationKind = ConfigurationKind.ALL
+abstract class AbstractCompilerLightClassTest : KotlinMultiFileTestWithJava<KotlinBaseTest.TestModule, KotlinBaseTest.TestFile>() {
 
     override fun isKotlinSourceRootNeeded(): Boolean = true
 
-    override fun doMultiFileTest(file: File, modules: MutableMap<String, ModuleAndDependencies>, files: MutableList<Void>) {
-        val environment = createEnvironment(file)
-        val expectedFile = KotlinTestUtils.replaceExtension(file, "java")
-        val allowFrontendExceptions = InTextDirectivesUtils.isDirectiveDefined(file.readText(), "// ALLOW_FRONTEND_EXCEPTION")
+    override fun doMultiFileTest(wholeFile: File, files: List<TestFile>) {
+        val environment = createEnvironment(wholeFile, files)
+        val expectedFile = KotlinTestUtils.replaceExtension(wholeFile, "descriptors.java").takeIf(File::exists)
+            ?: KotlinTestUtils.replaceExtension(wholeFile, "java")
 
-        LightClassTestCommon.testLightClass(
-            expectedFile,
-            file,
+        val allowFrontendExceptions = InTextDirectivesUtils.isDirectiveDefined(wholeFile.readText(), "// ALLOW_FRONTEND_EXCEPTION")
+
+        val actual = LightClassTestCommon.getActualLightClassText(
+            wholeFile,
             { fqname -> findLightClass(allowFrontendExceptions, environment, fqname) },
-            LightClassTestCommon::removeEmptyDefaultImpls
+            { LightClassTestCommon.removeEmptyDefaultImpls(it).replace("\$test_module", "\$light_idea_test_case") },
         )
+        KotlinTestUtils.assertEqualsToFile(expectedFile, actual)
     }
 
-    override fun createTestModule(name: String): Void? = null
+    override fun createTestModule(
+        name: String,
+        dependencies: List<String>,
+        friends: List<String>
+    ): TestModule? = null
 
-    override fun createTestFile(module: Void?, fileName: String, text: String, directives: Map<String, String>): Void? = null
+    override fun createTestFile(
+        module: TestModule?,
+        fileName: String,
+        text: String,
+        directives: Directives
+    ): TestFile = TestFile(fileName, text, directives)
 
     companion object {
         fun findLightClass(allowFrontendExceptions: Boolean, environment: KotlinCoreEnvironment, fqname: String): PsiClass? {
@@ -57,14 +58,17 @@ abstract class AbstractCompilerLightClassTest : KotlinMultiFileTestWithJava<Void
                 KotlinTestUtils.resolveAllKotlinFiles(environment)
             }
 
-            val lightCLassForScript = KotlinAsJavaSupport
-                .getInstance(environment.project)
-                .getScriptClasses(FqName(fqname), GlobalSearchScope.allScope(environment.project))
+            val searchScope = GlobalSearchScope.allScope(environment.project)
+            val kotlinAsJavaSupport = KotlinAsJavaSupport.getInstance(environment.project)
+            val lightClassForScript = kotlinAsJavaSupport
+                .getScriptClasses(FqName(fqname), searchScope)
                 .firstOrNull()
 
-            return lightCLassForScript ?: JavaElementFinder
-                .getInstance(environment.project)
-                .findClass(fqname, GlobalSearchScope.allScope(environment.project))
+            return lightClassForScript
+                ?: JavaElementFinder.getInstance(environment.project).findClass(fqname, searchScope)
+                ?: kotlinAsJavaSupport.findClassOrObjectDeclarations(FqName(fqname), searchScope).firstOrNull {
+                    it is KtEnumEntry // JavaElementFinder will ignore enum entry
+                }?.toLightClass()
         }
 
         private fun assertException(shouldOccur: Boolean, klass: Class<out Throwable>, f: () -> Unit) {

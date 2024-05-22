@@ -1,4 +1,4 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 
 class S(val a: String, val b: String) {
   operator fun component1() : String = a

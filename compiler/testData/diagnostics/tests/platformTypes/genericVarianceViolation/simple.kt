@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_VARIABLE
 // FILE: A.java
 
 import java.util.*;
@@ -11,7 +12,7 @@ public class A {
     void foo(Map<Object, Object> x) {}
     void foo(Map.Entry<Object, Object> x) {}
 
-    void foo(List<List<Object>> x) {}
+    void foo1(List<List<Object>> x) {}
 }
 
 // FILE: main.kt
@@ -59,9 +60,9 @@ fun main(
     a.foo(me as Map.Entry<Any, Any>)
 
     // Lists of lists
-    a.foo(<!JAVA_TYPE_MISMATCH!>mll<!>)
-    a.foo(ll)
-    a.foo(mll <!UNCHECKED_CAST!>as MutableList<MutableList<Any>><!>)
-    a.foo(ll as List<List<Any>>)
+    a.foo1(<!JAVA_TYPE_MISMATCH!>mll<!>)
+    a.foo1(ll)
+    a.foo1(mll <!UNCHECKED_CAST!>as MutableList<MutableList<Any>><!>)
+    a.foo1(ll as List<List<Any>>)
 
 }

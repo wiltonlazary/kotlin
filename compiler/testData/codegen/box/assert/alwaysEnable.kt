@@ -1,6 +1,11 @@
+// IGNORE_BACKEND: WASM
+// IGNORE_BACKEND: JS_IR
+// IGNORE_BACKEND: JS_IR_ES6
 // IGNORE_BACKEND: JS
-// KOTLIN_CONFIGURATION_FLAGS: ASSERTIONS_MODE=always-enable
-// WITH_RUNTIME
+// ASSERTIONS_MODE: always-enable
+// WITH_STDLIB
+
+@file:Suppress("OPT_IN_USAGE_ERROR") // ExperimentalNativeApi is defined only in Native
 
 fun checkTrue(): Boolean {
     var hit = false

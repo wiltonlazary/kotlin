@@ -1,4 +1,4 @@
-//WITH_RUNTIME
+// WITH_STDLIB
 
 fun foo(x: String, ys: List<String>) =
         x + ys.fold("", { a, b -> a + b })

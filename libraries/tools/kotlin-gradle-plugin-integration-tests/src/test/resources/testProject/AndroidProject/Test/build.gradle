@@ -1,9 +1,19 @@
-apply plugin: 'com.android.test'
-apply plugin: 'kotlin-android'
+plugins {
+    id 'com.android.test'
+    id 'org.jetbrains.kotlin.android'
+}
+
+dependencies {
+    implementation "junit:junit:4.13.2"
+}
+
+java {
+    toolchain.languageVersion.set(JavaLanguageVersion.of(8))
+}
 
 android {
     compileSdkVersion 22
-    buildToolsVersion "25.0.2"
+    namespace 'org.jetbrains.kotlin.gradle.test.android.test'
 
     defaultConfig {
         minSdkVersion 7
@@ -12,19 +22,21 @@ android {
         testApplicationId 'org.jetbrains.kotlin.gradle.test.androidalfa'
     }
 
-    targetProjectPath ':Android'
-    if (VersionNumber.parse(android_tools_version) < VersionNumber.parse("3.0.0-alpha1")) {
-        targetVariant 'flavor1Debug'
+    // Needed for older AGP. It can be removed when the lowest supported AGP version is 4.2.0 or newer.
+    compileOptions {
+        sourceCompatibility 1.8
+        targetCompatibility 1.8
     }
-    else {
-        flavorDimensions "myFlavor"
-        productFlavors {
-            flavor1 {
-                dimension "myFlavor"
-            }
-            flavor2 {
-                dimension "myFlavor"
-            }
+
+    targetProjectPath ':Android'
+    flavorDimensions "myFlavor"
+    productFlavors {
+        flavor1 {
+            dimension "myFlavor"
+        }
+        flavor2 {
+            dimension "myFlavor"
         }
     }
+    lintOptions.abortOnError = false
 }

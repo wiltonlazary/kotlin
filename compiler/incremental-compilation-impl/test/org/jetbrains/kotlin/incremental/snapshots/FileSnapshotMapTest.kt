@@ -1,8 +1,15 @@
+/*
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
+ */
+
 package org.jetbrains.kotlin.incremental.snapshots
 
 import org.jetbrains.kotlin.TestWithWorkingDir
+import org.jetbrains.kotlin.incremental.IncrementalCompilationContext
+import org.jetbrains.kotlin.incremental.storage.RelocatableFileToPathConverter
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertArrayEquals
 import org.junit.Before
 import org.junit.Test
 import java.io.File
@@ -16,12 +23,15 @@ class FileSnapshotMapTest : TestWithWorkingDir() {
         super.setUp()
         val caches = File(workingDir, "caches").apply { mkdirs() }
         val snapshotMapFile = File(caches, "snapshots.tab")
-        snapshotMap = FileSnapshotMap(snapshotMapFile)
+        val pathConverter = RelocatableFileToPathConverter((workingDir.canonicalFile))
+        val icContext = IncrementalCompilationContext(
+            pathConverterForSourceFiles = pathConverter
+        )
+        snapshotMap = FileSnapshotMap(snapshotMapFile, icContext)
     }
 
     @After
     override fun tearDown() {
-        snapshotMap.flush(false)
         snapshotMap.close()
         super.tearDown()
     }
@@ -37,12 +47,16 @@ class FileSnapshotMapTest : TestWithWorkingDir() {
 
         val diff1 = snapshotMap.compareAndUpdate(src.filesWithExt("txt"))
 
-        assertArrayEquals("diff1.removed",
-                diff1.removed.toSortedPaths(),
-                emptyArray<String>())
-        assertArrayEquals("diff1.newOrModified",
-                diff1.modified.toSortedPaths(),
-                listOf(removedTxt, unchangedTxt, changedTxt).toSortedPaths())
+        assertArrayEquals(
+            "diff1.removed",
+            diff1.removed.toSortedPaths(),
+            emptyArray<String>()
+        )
+        assertArrayEquals(
+            "diff1.newOrModified",
+            diff1.modified.toSortedPaths(),
+            listOf(removedTxt, unchangedTxt, changedTxt).toSortedPaths()
+        )
 
         removedTxt.delete()
         unchangedTxt.writeText("unchanged")
@@ -50,17 +64,21 @@ class FileSnapshotMapTest : TestWithWorkingDir() {
         val newTxt = File(foo, "new.txt").apply { writeText("new") }
 
         val diff2 = snapshotMap.compareAndUpdate(src.filesWithExt("txt"))
-        assertArrayEquals("diff2.removed",
-                diff2.removed.toSortedPaths(),
-                listOf(removedTxt).toSortedPaths())
-        assertArrayEquals("diff2.newOrModified",
-                diff2.modified.toSortedPaths(),
-                listOf(newTxt, changedTxt).toSortedPaths())
+        assertArrayEquals(
+            "diff2.removed",
+            diff2.removed.toSortedPaths(),
+            listOf(removedTxt).toSortedPaths()
+        )
+        assertArrayEquals(
+            "diff2.newOrModified",
+            diff2.modified.toSortedPaths(),
+            listOf(newTxt, changedTxt).toSortedPaths()
+        )
     }
 
     private fun Iterable<File>.toSortedPaths(): Array<String> =
-            map { it.canonicalPath }.sorted().toTypedArray()
+        map { it.canonicalPath }.sorted().toTypedArray()
 
     private fun File.filesWithExt(ext: String): Iterable<File> =
-            walk().filter { it.isFile && it.extension.equals(ext, ignoreCase = true) }.toList()
+        walk().filter { it.isFile && it.extension.equals(ext, ignoreCase = true) }.toList()
 }

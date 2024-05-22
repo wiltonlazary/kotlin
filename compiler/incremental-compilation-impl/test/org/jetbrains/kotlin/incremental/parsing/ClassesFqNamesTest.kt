@@ -1,12 +1,11 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.incremental.parsing
 
 import com.intellij.openapi.util.io.FileUtil
-import com.intellij.testFramework.UsefulTestCase
 import org.jetbrains.kotlin.test.testFramework.KtUsefulTestCase
 import org.junit.After
 import org.junit.Before
@@ -138,6 +137,6 @@ class ClassesFqNamesTest : KtUsefulTestCase() {
 
         val expected = expectedClasses.sorted().joinToString("\n")
         val actual = classesFqNames(setOf(testKt)).sorted().joinToString("\n")
-        UsefulTestCase.assertEquals(expected, actual)
+        assertEquals(expected, actual)
     }
 }

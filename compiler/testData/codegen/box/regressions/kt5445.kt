@@ -1,14 +1,13 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
-// WITH_RUNTIME
+// WITH_STDLIB
 // FILE: 1.kt
 
 package test2
 
 import test.A
 
-public fun box(): String {
+fun box(): String {
     return B().test(B())
 }
 

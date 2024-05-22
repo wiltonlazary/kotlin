@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.descriptors.impl.PropertyGetterDescriptorImpl
 import org.jetbrains.kotlin.descriptors.impl.PropertySetterDescriptorImpl
 import org.jetbrains.kotlin.descriptors.impl.TypeParameterDescriptorImpl
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.DescriptorFactory
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.types.KotlinType
 
@@ -42,7 +43,7 @@ open class AccessorForPropertyDescriptor private constructor(
     null,
     Annotations.EMPTY,
     Modality.FINAL,
-    Visibilities.LOCAL,
+    DescriptorVisibilities.LOCAL,
     calleeDescriptor.isVar,
     Name.identifier("access$$accessorSuffix"),
     CallableMemberDescriptor.Kind.DECLARATION,
@@ -95,7 +96,13 @@ open class AccessorForPropertyDescriptor private constructor(
     )
 
     init {
-        setType(propertyType, emptyList<TypeParameterDescriptorImpl>(), dispatchReceiverParameter, receiverType)
+        setType(
+            propertyType,
+            emptyList<TypeParameterDescriptorImpl>(),
+            dispatchReceiverParameter,
+            DescriptorFactory.createExtensionReceiverParameterForCallable(this, receiverType, Annotations.EMPTY),
+            original.contextReceiverParameters
+        )
 
         val getterDescriptor =
             if (isWithSyntheticGetterAccessor) Getter(this, accessorKind) else calleeDescriptor.getter as PropertyGetterDescriptorImpl?
@@ -107,7 +114,7 @@ open class AccessorForPropertyDescriptor private constructor(
         property,
         Annotations.EMPTY,
         Modality.FINAL,
-        Visibilities.LOCAL,
+        DescriptorVisibilities.LOCAL,
         false,
         false,
         false,
@@ -132,7 +139,7 @@ open class AccessorForPropertyDescriptor private constructor(
         property,
         Annotations.EMPTY,
         Modality.FINAL,
-        Visibilities.LOCAL,
+        DescriptorVisibilities.LOCAL,
         false,
         false,
         false,

@@ -1,5 +1,5 @@
 // TARGET_BACKEND: JVM
-
+// JVM_ABI_K1_K2_DIFF: KT-63864
 public object SomeObject {
     private val workerThread = object : Thread() {
         override fun run() {
@@ -41,7 +41,7 @@ public class SomeClass() {
     }
 }
 
-public fun box(): String {
+fun box(): String {
     var obj = SomeClass()
     return if (obj.status == null) "OK" else {
         (obj.status as java.lang.Throwable).printStackTrace()

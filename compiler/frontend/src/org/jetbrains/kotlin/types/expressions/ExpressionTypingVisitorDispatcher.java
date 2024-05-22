@@ -1,12 +1,14 @@
 /*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2017 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.types.expressions;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.IndexNotReadyException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.diagnostics.Errors;
@@ -23,11 +25,12 @@ import org.jetbrains.kotlin.resolve.calls.context.CallPosition;
 import org.jetbrains.kotlin.resolve.scopes.LexicalScopeKind;
 import org.jetbrains.kotlin.resolve.scopes.LexicalWritableScope;
 import org.jetbrains.kotlin.types.DeferredType;
-import org.jetbrains.kotlin.types.ErrorUtils;
+import org.jetbrains.kotlin.types.error.ErrorTypeKind;
+import org.jetbrains.kotlin.types.error.ErrorUtils;
 import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.kotlin.types.expressions.typeInfoFactory.TypeInfoFactoryKt;
 import org.jetbrains.kotlin.util.KotlinFrontEndException;
-import org.jetbrains.kotlin.util.LookupTrackerUtilKt;
+import org.jetbrains.kotlin.util.IncrementalTrackerUtilKt;
 import org.jetbrains.kotlin.util.PerformanceCounter;
 import org.jetbrains.kotlin.util.ReenteringLazyValueComputationException;
 import org.jetbrains.kotlin.utils.KotlinExceptionWithAttachments;
@@ -122,7 +125,7 @@ public abstract class ExpressionTypingVisitorDispatcher extends KtVisitor<Kotlin
             return typeInfo;
         }
         return typeInfo
-                .replaceType(ErrorUtils.createErrorType("Type for " + expression.getText()))
+                .replaceType(ErrorUtils.createErrorType(ErrorTypeKind.NO_RECORDED_TYPE, expression.getText()))
                 .replaceDataFlowInfo(context.dataFlowInfo);
     }
 
@@ -158,6 +161,7 @@ public abstract class ExpressionTypingVisitorDispatcher extends KtVisitor<Kotlin
 
     @NotNull
     private KotlinTypeInfo getTypeInfo(@NotNull KtExpression expression, ExpressionTypingContext context, KtVisitor<KotlinTypeInfo, ExpressionTypingContext> visitor) {
+        ProgressManager.checkCanceled();
         return typeInfoPerfCounter.time(() -> {
             try {
                 KotlinTypeInfo recordedTypeInfo = BindingContextUtils.getRecordedTypeInfo(expression, context.trace.getBindingContext());
@@ -180,10 +184,20 @@ public abstract class ExpressionTypingVisitorDispatcher extends KtVisitor<Kotlin
                     if (result.getType() instanceof DeferredType) {
                         result = result.replaceType(((DeferredType) result.getType()).getDelegate());
                     }
+
+                    KotlinType refinedType =
+                            result.getType() != null
+                            ? components.kotlinTypeChecker.getKotlinTypeRefiner().refineType(result.getType())
+                            : null;
+
+                    if (refinedType != result.getType()) {
+                        result = result.replaceType(refinedType);
+                    }
+
                     context.trace.record(BindingContext.EXPRESSION_TYPE_INFO, expression, result);
                 }
                 catch (ReenteringLazyValueComputationException e) {
-                    context.trace.report(TYPECHECKER_HAS_RUN_INTO_RECURSIVE_PROBLEM.on(expression));
+                    context.trace.report(TYPECHECKER_HAS_RUN_INTO_RECURSIVE_PROBLEM.onError(expression));
                     result = TypeInfoFactoryKt.noTypeInfo(context);
                 }
 
@@ -198,19 +212,19 @@ public abstract class ExpressionTypingVisitorDispatcher extends KtVisitor<Kotlin
                     recordTypeInfo(expression, result);
                 }
                 catch (ReenteringLazyValueComputationException e) {
-                    context.trace.report(TYPECHECKER_HAS_RUN_INTO_RECURSIVE_PROBLEM.on(expression));
+                    context.trace.report(TYPECHECKER_HAS_RUN_INTO_RECURSIVE_PROBLEM.onError(expression));
                     return TypeInfoFactoryKt.noTypeInfo(context);
                 }
                 return result;
             }
-            catch (ProcessCanceledException | KotlinFrontEndException e) {
+            catch (ProcessCanceledException | KotlinFrontEndException | IndexNotReadyException e) {
                 throw e;
             }
             catch (Throwable e) {
                 context.trace.report(Errors.EXCEPTION_FROM_ANALYZER.on(expression, e));
                 logOrThrowException(expression, e);
                 return TypeInfoFactoryKt.createTypeInfo(
-                        ErrorUtils.createErrorType(e.getClass().getSimpleName() + " from analyzer"),
+                        ErrorUtils.createErrorType(ErrorTypeKind.TYPE_FOR_COMPILER_EXCEPTION, e.getClass().getSimpleName()),
                         context
                 );
             }
@@ -222,16 +236,23 @@ public abstract class ExpressionTypingVisitorDispatcher extends KtVisitor<Kotlin
         KotlinType resultType = typeInfo.getType();
 
         if (resultType != null) {
-            LookupTrackerUtilKt.record(lookupTracker, expression, resultType);
+            IncrementalTrackerUtilKt.record(lookupTracker, expression, resultType);
         }
     }
 
     private static void logOrThrowException(@NotNull KtExpression expression, Throwable e) {
         try {
+            String location;
+            try {
+                location = " in " + PsiDiagnosticUtils.atLocation(expression);
+            }
+            catch (Exception ex) {
+                location = "";
+            }
             // This trows AssertionError in CLI and reports the error in the IDE
             LOG.error(
-                    new KotlinExceptionWithAttachments("Exception while analyzing expression at " + PsiDiagnosticUtils.atLocation(expression), e)
-                        .withAttachment("expression.kt", expression.getText())
+                    new KotlinExceptionWithAttachments("Exception while analyzing expression" + location, e)
+                            .withPsiAttachment("expression.kt", expression)
             );
         }
         catch (AssertionError errorFromLogger) {

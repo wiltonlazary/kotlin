@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin
@@ -14,7 +14,7 @@ package kotlin
  * @constructor Creates a version from all three components.
  */
 @SinceKotlin("1.1")
-public class KotlinVersion(val major: Int, val minor: Int, val patch: Int) : Comparable<KotlinVersion> {
+public class KotlinVersion(public val major: Int, public val minor: Int, public val patch: Int) : Comparable<KotlinVersion> {
     /**
      * Creates a version from [major] and [minor] components, leaving [patch] component zero.
      */
@@ -61,17 +61,23 @@ public class KotlinVersion(val major: Int, val minor: Int, val patch: Int) : Com
                 (this.minor > minor || this.minor == minor &&
                         this.patch >= patch))
 
-    companion object {
+    public companion object {
         /**
          * Maximum value a version component can have, a constant value 255.
          */
         // NOTE: Must be placed before CURRENT because its initialization requires this field being initialized in JS
-        public const val MAX_COMPONENT_VALUE = 255
+        public const val MAX_COMPONENT_VALUE: Int = 255
 
         /**
          * Returns the current version of the Kotlin standard library.
          */
         @kotlin.jvm.JvmField
-        public val CURRENT: KotlinVersion = KotlinVersion(1, 2, 0) // value is written here automatically during build
+        public val CURRENT: KotlinVersion = KotlinVersionCurrentValue.get()
     }
+}
+
+// this class is ignored during classpath normalization when considering whether to recompile dependencies in Kotlin build
+private object KotlinVersionCurrentValue {
+    @kotlin.jvm.JvmStatic
+    fun get(): KotlinVersion = KotlinVersion(2, 0, 255) // value is written here automatically during build
 }

@@ -1,12 +1,13 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls.smartcasts
 
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
@@ -23,9 +24,8 @@ import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils
 import org.jetbrains.kotlin.types.isError
 
-@Deprecated("Please, avoid to use that implementation explicitly. If you need DataFlowValueFactory, use injection")
-class DataFlowValueFactoryImpl : DataFlowValueFactory {
-
+// Please, avoid using this implementation explicitly. If you need DataFlowValueFactory, use injection.
+class DataFlowValueFactoryImpl constructor(private val languageVersionSettings: LanguageVersionSettings) : DataFlowValueFactory {
     // Receivers
     override fun createDataFlowValue(
         receiverValue: ReceiverValue,
@@ -60,7 +60,7 @@ class DataFlowValueFactoryImpl : DataFlowValueFactory {
     ): DataFlowValue {
         val identifierInfo = IdentifierInfo.Variable(
             variableDescriptor,
-            variableDescriptor.variableKind(usageContainingModule, bindingContext, property),
+            variableDescriptor.variableKind(usageContainingModule, bindingContext, property, languageVersionSettings),
             bindingContext[BindingContext.BOUND_INITIALIZER_VALUE, variableDescriptor]
         )
         return DataFlowValue(identifierInfo, variableDescriptor.type)
@@ -101,7 +101,7 @@ class DataFlowValueFactoryImpl : DataFlowValueFactory {
                 DataFlowValue(IdentifierInfo.Expression(expression, stableComplex = true), type)
 
             else -> {
-                val result = getIdForStableIdentifier(expression, bindingContext, containingDeclarationOrModule)
+                val result = getIdForStableIdentifier(expression, bindingContext, containingDeclarationOrModule, languageVersionSettings)
                 DataFlowValue(if (result === IdentifierInfo.NO) IdentifierInfo.Expression(expression) else result, type)
             }
         }

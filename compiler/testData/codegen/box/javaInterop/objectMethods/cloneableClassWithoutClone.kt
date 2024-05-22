@@ -1,5 +1,5 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
+// TARGET_BACKEND: JVM_IR
 
 data class A(val s: String) : Cloneable {
     fun externalClone(): A = clone() as A

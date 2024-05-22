@@ -73,5 +73,6 @@ fun test() {
     genericVararg(xs = *arrayOfNulls<Int>(1))
 }
 
+// 0 arraycopy
 // 0 copyOf
 // 0 clone

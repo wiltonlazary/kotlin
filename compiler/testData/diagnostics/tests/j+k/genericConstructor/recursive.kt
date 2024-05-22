@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 // FILE: C.java
 
 // See KT-10410
@@ -9,4 +8,4 @@ public class C {
 
 // FILE: main.kt
 
-fun foo() = <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>C<!>(<!NO_VALUE_FOR_PARAMETER!>)<!>
+fun foo() = C<!NO_VALUE_FOR_PARAMETER!>()<!>

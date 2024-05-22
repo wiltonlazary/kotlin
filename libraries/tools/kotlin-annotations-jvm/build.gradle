@@ -2,9 +2,9 @@ description = 'Kotlin annotations for JVM'
 
 apply plugin: 'kotlin'
 
-configureJvm6Project(project)
-configureDist(project)
-configurePublishing(project)
+JvmToolchain.configureJvmToolchain(project, JdkMajorVersion.JDK_1_8)
+
+RepoArtifacts.publish(project)
 
 sourceSets {
     main {
@@ -14,25 +14,16 @@ sourceSets {
     }
 }
 
-artifacts {
-    archives sourcesJar
-    archives javadocJar
+dependencies {
+    compileOnly RepoDependencies.kotlinBuiltins(project)
 }
 
-dist {
-    from (jar, sourcesJar)
-}
-
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile) {
-    kotlinOptions.jdkHome = JDK_16
-    kotlinOptions.jvmTarget = 1.6
-}
+RepoArtifacts.sourcesJar(project)
+RepoArtifacts.javadocJar(project)
 
 compileKotlin {
-    kotlinOptions.freeCompilerArgs = [
+    compilerOptions.freeCompilerArgs = [
             "-Xallow-kotlin-package",
-            "-Xnormalize-constructor-calls=enable",
-            "-module-name", project.name
     ]
+    compilerOptions.moduleName = project.name
 }
-

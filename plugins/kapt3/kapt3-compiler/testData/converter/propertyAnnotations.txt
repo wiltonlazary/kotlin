@@ -1,35 +1,61 @@
-import java.lang.System;
-
-@kotlin.Metadata()
 @java.lang.annotation.Retention(value = java.lang.annotation.RetentionPolicy.RUNTIME)
+/**
+ * public final annotation class Anno : kotlin/Annotation {
+ *
+ *   // signature: <init>()V
+ *   public constructor()
+ *
+ *   // module name: main
+ * }
+ */
+@kotlin.Metadata()
 public abstract @interface Anno {
 }
 
 ////////////////////
 
 
-import java.lang.System;
-
-@kotlin.Metadata()
-@java.lang.annotation.Target(value = {java.lang.annotation.ElementType.TYPE})
-@java.lang.annotation.Retention(value = java.lang.annotation.RetentionPolicy.RUNTIME)
 @kotlin.annotation.Target(allowedTargets = {kotlin.annotation.AnnotationTarget.PROPERTY, kotlin.annotation.AnnotationTarget.CLASS})
+@java.lang.annotation.Retention(value = java.lang.annotation.RetentionPolicy.RUNTIME)
+@java.lang.annotation.Target(value = {java.lang.annotation.ElementType.TYPE})
+/**
+ * public final annotation class Anno2 : kotlin/Annotation {
+ *
+ *   // signature: <init>()V
+ *   public constructor()
+ *
+ *   // module name: main
+ * }
+ */
+@kotlin.Metadata()
 public abstract @interface Anno2 {
 }
 
 ////////////////////
 
 
-import java.lang.System;
-
+/**
+ * public final class Test : kotlin/Any {
+ *
+ *   // signature: <init>()V
+ *   public constructor()
+ *
+ *   // field: prop:Ljava/lang/String;
+ *   // getter: getProp()Ljava/lang/String;
+ *   // synthetic method for annotations: getProp$annotations()V
+ *   public final val prop: kotlin/String (* = ... *)
+ *     public final get
+ *
+ *   // module name: main
+ * }
+ */
 @kotlin.Metadata()
 public final class Test {
     @org.jetbrains.annotations.NotNull()
     private final java.lang.String prop = "A";
 
-    @Anno2()
-    @Anno()
-    public static void prop$annotations() {
+    public Test() {
+        super();
     }
 
     @org.jetbrains.annotations.NotNull()
@@ -37,7 +63,9 @@ public final class Test {
         return null;
     }
 
-    public Test() {
-        super();
+    @Anno()
+    @Anno2()
+    @java.lang.Deprecated()
+    public static void getProp$annotations() {
     }
 }

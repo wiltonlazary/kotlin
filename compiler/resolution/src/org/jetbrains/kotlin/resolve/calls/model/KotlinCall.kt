@@ -1,12 +1,11 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls.model
 
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 
 interface KotlinCall : ResolutionAtom {
@@ -24,6 +23,8 @@ interface KotlinCall : ResolutionAtom {
     val argumentsInParenthesis: List<KotlinCallArgument>
 
     val externalArgument: KotlinCallArgument?
+
+    val isForImplicitInvoke: Boolean
 }
 
 private fun SimpleKotlinCallArgument.checkReceiverInvariants() {
@@ -40,8 +41,8 @@ fun KotlinCall.checkCallInvariants() {
         "Lambda argument or callable reference is not allowed as explicit receiver: $explicitReceiver"
     }
 
-    explicitReceiver.safeAs<SimpleKotlinCallArgument>()?.checkReceiverInvariants()
-    dispatchReceiverForInvokeExtension.safeAs<SimpleKotlinCallArgument>()?.checkReceiverInvariants()
+    (explicitReceiver as? SimpleKotlinCallArgument)?.checkReceiverInvariants()
+    (dispatchReceiverForInvokeExtension as? SimpleKotlinCallArgument)?.checkReceiverInvariants()
 
     when (callKind) {
         KotlinCallKind.FUNCTION, KotlinCallKind.INVOKE -> {
@@ -67,6 +68,18 @@ fun KotlinCall.checkCallInvariants() {
                 "Dispatch receiver for invoke should be null for not function call: $dispatchReceiverForInvokeExtension"
             }
 
+        }
+
+        KotlinCallKind.CALLABLE_REFERENCE -> {
+            assert(argumentsInParenthesis.isEmpty()) {
+                "Callable references can't have value arguments"
+            }
+            assert(typeArguments.isEmpty()) {
+                "Callable references can't have explicit type arguments"
+            }
+            assert(externalArgument == null) {
+                "External argument is not allowed not for function call: $externalArgument."
+            }
         }
 
         KotlinCallKind.UNSUPPORTED -> error("Call with UNSUPPORTED kind")

@@ -1,5 +1,6 @@
-// CHECK_CASES_COUNT: function=doTheThing count=2
-// CHECK_IF_COUNT: function=doTheThing count=2
+// JVM_ABI_K1_K2_DIFF: KT-62903
+// CHECK_CASES_COUNT: function=doTheThing count=2 TARGET_BACKENDS=JS
+// CHECK_IF_COUNT: function=doTheThing count=2 TARGET_BACKENDS=JS
 
 private fun Any?.doTheThing(): String {
     when (this) {

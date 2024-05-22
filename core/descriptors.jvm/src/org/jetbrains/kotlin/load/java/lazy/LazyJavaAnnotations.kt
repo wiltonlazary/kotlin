@@ -16,8 +16,7 @@
 
 package org.jetbrains.kotlin.load.java.lazy
 
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
-import org.jetbrains.kotlin.descriptors.annotations.AnnotationWithTarget
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.load.java.components.JavaAnnotationMapper
 import org.jetbrains.kotlin.load.java.structure.JavaAnnotation
@@ -25,27 +24,28 @@ import org.jetbrains.kotlin.load.java.structure.JavaAnnotationOwner
 import org.jetbrains.kotlin.name.FqName
 
 class LazyJavaAnnotations(
-        private val c: LazyJavaResolverContext,
-        private val annotationOwner: JavaAnnotationOwner
+    private val c: LazyJavaResolverContext,
+    private val annotationOwner: JavaAnnotationOwner,
+    private val areAnnotationsFreshlySupported: Boolean = false
 ) : Annotations {
-    private val annotationDescriptors = c.components.storageManager.createMemoizedFunctionWithNullableValues {
-        annotation: JavaAnnotation -> JavaAnnotationMapper.mapOrResolveJavaAnnotation(annotation, c)
+    private val annotationDescriptors = c.components.storageManager.createMemoizedFunctionWithNullableValues { annotation: JavaAnnotation ->
+        JavaAnnotationMapper.mapOrResolveJavaAnnotation(annotation, c, areAnnotationsFreshlySupported)
     }
 
     override fun findAnnotation(fqName: FqName) =
-            annotationOwner.findAnnotation(fqName)?.let(annotationDescriptors)
+        annotationOwner.findAnnotation(fqName)?.let(annotationDescriptors)
             ?: JavaAnnotationMapper.findMappedJavaAnnotation(fqName, annotationOwner, c)
 
-    override fun getUseSiteTargetedAnnotations() = emptyList<AnnotationWithTarget>()
-
-    override fun getAllAnnotations() = this.map { AnnotationWithTarget(it, null) }
-
     override fun iterator() =
-            (annotationOwner.annotations.asSequence().map(annotationDescriptors)
-             + JavaAnnotationMapper.findMappedJavaAnnotation(KotlinBuiltIns.FQ_NAMES.deprecated, annotationOwner, c)).filterNotNull().iterator()
+        (annotationOwner.annotations.asSequence().map(annotationDescriptors) +
+                JavaAnnotationMapper.findMappedJavaAnnotation(
+                    StandardNames.FqNames.deprecated,
+                    annotationOwner,
+                    c
+                )).filterNotNull().iterator()
 
     override fun isEmpty() = annotationOwner.annotations.isEmpty() && !annotationOwner.isDeprecatedInJavaDoc
 }
 
-fun LazyJavaResolverContext.resolveAnnotations(annotationsOwner: JavaAnnotationOwner): Annotations
-        = LazyJavaAnnotations(this, annotationsOwner)
+fun LazyJavaResolverContext.resolveAnnotations(annotationsOwner: JavaAnnotationOwner): Annotations =
+    LazyJavaAnnotations(this, annotationsOwner)

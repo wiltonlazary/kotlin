@@ -1,7 +1,8 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
-
+// TARGET_BACKEND: JVM
+// LAMBDAS: CLASS
 // WITH_REFLECT
+
+package test
 
 class C {
     fun foo(): Any {
@@ -16,7 +17,7 @@ fun box(): String {
     if (enclosingMethod?.getName() != "foo") return "method: $enclosingMethod"
 
     val enclosingClass = javaClass.getEnclosingClass()
-    if (enclosingClass?.getName() != "C") return "enclosing class: $enclosingClass"
+    if (enclosingClass?.getName() != "test.C") return "enclosing class: $enclosingClass"
 
     val declaringClass = javaClass.getDeclaringClass()
     if (declaringClass != null) return "anonymous function has a declaring class: $declaringClass"

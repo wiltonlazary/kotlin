@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// LANGUAGE: -JvmStaticInInterface
+// DIAGNOSTICS: -UNUSED_VARIABLE
 open class B {
     public open val base1 : Int = 1
     public open val base2 : Int = 1
@@ -7,7 +8,7 @@ open class B {
 class A {
     companion object : B() {
         var p1:Int = 1
-            @JvmStatic set(<!UNUSED_PARAMETER!>p<!>: Int) {
+            @JvmStatic set(p: Int) {
                 p1 = 1
             }
 
@@ -21,7 +22,7 @@ class A {
 
     object A : B() {
         var p:Int = 1
-            @JvmStatic set(<!UNUSED_PARAMETER!>p1<!>: Int) {
+            @JvmStatic set(p1: Int) {
                 p = 1
             }
 
@@ -36,7 +37,7 @@ class A {
     }
 
     var p:Int = 1
-        <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!>@JvmStatic set(<!UNUSED_PARAMETER!>p1<!>: Int)<!> {
+        <!JVM_STATIC_NOT_IN_OBJECT_OR_CLASS_COMPANION!>@JvmStatic set(p1: Int)<!> {
             p = 1
         }
 

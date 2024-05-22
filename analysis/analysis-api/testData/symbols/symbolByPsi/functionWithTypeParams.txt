@@ -1,0 +1,72 @@
+KtTypeParameterSymbol:
+  annotationsList: []
+  isReified: false
+  name: X
+  origin: SOURCE
+  typeParameters: []
+  upperBounds: []
+  variance: INVARIANT
+  getContainingFileSymbol: KtFileSymbol(functionWithTypeParams.kt)
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null
+
+KtFunctionSymbol:
+  annotationsList: []
+  callableIdIfNonLocal: /foo
+  contextReceivers: []
+  contractEffects: []
+  hasStableParameterNames: true
+  isActual: false
+  isBuiltinFunctionInvoke: false
+  isExpect: false
+  isExtension: false
+  isExternal: false
+  isInfix: false
+  isInline: false
+  isOperator: false
+  isOverride: false
+  isStatic: false
+  isSuspend: false
+  isTailRec: false
+  modality: FINAL
+  name: foo
+  origin: SOURCE
+  receiverParameter: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: kotlin/Unit
+  symbolKind: TOP_LEVEL
+  typeParameters: [
+    KtTypeParameterSymbol(X)
+  ]
+  valueParameters: [
+    KtValueParameterSymbol:
+      annotationsList: []
+      callableIdIfNonLocal: null
+      contextReceivers: []
+      generatedPrimaryConstructorProperty: null
+      hasDefaultValue: false
+      isCrossinline: false
+      isExtension: false
+      isImplicitLambdaParameter: false
+      isNoinline: false
+      isVararg: false
+      name: x
+      origin: SOURCE
+      receiverParameter: null
+      returnType: KtTypeParameterType:
+        annotationsList: []
+        type: X
+      symbolKind: LOCAL
+      typeParameters: []
+      getContainingFileSymbol: KtFileSymbol(functionWithTypeParams.kt)
+      getContainingJvmClassName: FunctionWithTypeParamsKt
+      getContainingModule: KtSourceModule "Sources of main"
+      deprecationStatus: null
+  ]
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(functionWithTypeParams.kt)
+  getContainingJvmClassName: FunctionWithTypeParamsKt
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null

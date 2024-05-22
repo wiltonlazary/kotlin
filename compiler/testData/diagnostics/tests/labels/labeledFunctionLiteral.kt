@@ -1,4 +1,4 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// DIAGNOSTICS: -UNUSED_VARIABLE
 
 val funLit = lambda@ fun String.() {
     val d1 = this@lambda
@@ -12,6 +12,6 @@ fun test() {
 
 fun lambda() {
     val funLit = lambda@ fun String.(): String {
-        return <!NO_THIS!>this@lambda<!>
+        return <!NO_THIS!>this<!LABEL_RESOLVE_WILL_CHANGE!>@lambda<!><!>
     }
 }

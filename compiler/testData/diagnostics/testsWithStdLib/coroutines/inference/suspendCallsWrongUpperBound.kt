@@ -1,5 +1,4 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
-// !WITH_NEW_INFERENCE
+// DIAGNOSTICS: -UNUSED_PARAMETER
 // NI_EXPECTED_FILE
 
 class Controller<T : Number> {
@@ -8,6 +7,6 @@ class Controller<T : Number> {
 
 fun <S : Number> generate(g: suspend Controller<S>.() -> Unit): S = TODO()
 
-val test = <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>generate<!> {
-    yield(<!NI;TYPE_MISMATCH!>"foo"<!>)
+val test = generate {
+    yield(<!TYPE_MISMATCH!>"foo"<!>)
 }

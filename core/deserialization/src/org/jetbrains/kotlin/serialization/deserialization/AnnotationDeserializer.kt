@@ -20,19 +20,18 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptorImpl
-import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.metadata.ProtoBuf.Annotation
 import org.jetbrains.kotlin.metadata.ProtoBuf.Annotation.Argument
 import org.jetbrains.kotlin.metadata.ProtoBuf.Annotation.Argument.Value
 import org.jetbrains.kotlin.metadata.ProtoBuf.Annotation.Argument.Value.Type
+import org.jetbrains.kotlin.metadata.deserialization.Flags
 import org.jetbrains.kotlin.metadata.deserialization.NameResolver
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.constants.*
-import org.jetbrains.kotlin.types.*
-import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
-import org.jetbrains.kotlin.types.typeUtil.replaceArgumentsWithStarProjections
+import org.jetbrains.kotlin.types.error.ErrorUtils
+import org.jetbrains.kotlin.types.KotlinType
 
 class AnnotationDeserializer(private val module: ModuleDescriptor, private val notFoundClasses: NotFoundClasses) {
     private val builtIns: KotlinBuiltIns
@@ -54,106 +53,72 @@ class AnnotationDeserializer(private val module: ModuleDescriptor, private val n
     }
 
     private fun resolveArgument(
-            proto: Argument,
-            parameterByName: Map<Name, ValueParameterDescriptor>,
-            nameResolver: NameResolver
+        proto: Argument,
+        parameterByName: Map<Name, ValueParameterDescriptor>,
+        nameResolver: NameResolver
     ): Pair<Name, ConstantValue<*>>? {
         val parameter = parameterByName[nameResolver.getName(proto.nameId)] ?: return null
-        return Pair(nameResolver.getName(proto.nameId), resolveValue(parameter.type, proto.value, nameResolver))
+        return Pair(nameResolver.getName(proto.nameId), resolveValueAndCheckExpectedType(parameter.type, proto.value, nameResolver))
     }
 
-    fun resolveValue(
-            expectedType: KotlinType,
-            value: Value,
-            nameResolver: NameResolver
-    ): ConstantValue<*> {
-        val result: ConstantValue<*> = when (value.type) {
-            Type.BYTE -> ByteValue(value.intValue.toByte())
-            Type.CHAR -> CharValue(value.intValue.toChar())
-            Type.SHORT -> ShortValue(value.intValue.toShort())
-            Type.INT -> IntValue(value.intValue.toInt())
-            Type.LONG -> LongValue(value.intValue)
+    private fun resolveValueAndCheckExpectedType(expectedType: KotlinType, value: Value, nameResolver: NameResolver): ConstantValue<*> {
+        return resolveValue(expectedType, value, nameResolver).takeIf {
+            doesValueConformToExpectedType(it, expectedType, value)
+        } ?: ErrorValue.create("Unexpected argument value: actual type ${value.type} != expected type $expectedType")
+    }
+
+    fun resolveValue(expectedType: KotlinType, value: Value, nameResolver: NameResolver): ConstantValue<*> {
+        val isUnsigned = Flags.IS_UNSIGNED.get(value.flags)
+
+        return when (value.type) {
+            Type.BYTE -> value.intValue.toByte().letIf(isUnsigned, ::UByteValue, ::ByteValue)
+            Type.CHAR -> CharValue(value.intValue.toInt().toChar())
+            Type.SHORT -> value.intValue.toShort().letIf(isUnsigned, ::UShortValue, ::ShortValue)
+            Type.INT -> value.intValue.toInt().letIf(isUnsigned, ::UIntValue, ::IntValue)
+            Type.LONG -> value.intValue.letIf(isUnsigned, ::ULongValue, ::LongValue)
             Type.FLOAT -> FloatValue(value.floatValue)
             Type.DOUBLE -> DoubleValue(value.doubleValue)
             Type.BOOLEAN -> BooleanValue(value.intValue != 0L)
-            Type.STRING -> {
-                StringValue(nameResolver.getString(value.stringValue))
-            }
-            Type.CLASS -> {
-                resolveClassLiteralValue(nameResolver.getClassId(value.classId))
-            }
-            Type.ENUM -> {
-                EnumValue(nameResolver.getClassId(value.classId), nameResolver.getName(value.enumValueId))
-            }
-            Type.ANNOTATION -> {
-                AnnotationValue(deserializeAnnotation(value.annotation, nameResolver))
-            }
-            Type.ARRAY -> {
-                val expectedIsArray = KotlinBuiltIns.isArray(expectedType) || KotlinBuiltIns.isPrimitiveArray(expectedType)
-                val arrayElements = value.arrayElementList
-
-                val actualArrayType =
-                        if (arrayElements.isNotEmpty()) {
-                            val actualElementType = resolveArrayElementType(arrayElements.first(), nameResolver)
-                            builtIns.getPrimitiveArrayKotlinTypeByPrimitiveKotlinType(actualElementType) ?:
-                            builtIns.getArrayType(Variance.INVARIANT, actualElementType)
-                        }
-                        else {
-                            // In the case of empty array, no element has the element type, so we fall back to the expected type, if any.
-                            // This is not very accurate when annotation class has been changed without recompiling clients,
-                            // but should not in fact matter because the value is empty anyway
-                            if (expectedIsArray) expectedType else builtIns.getArrayType(Variance.INVARIANT, builtIns.anyType)
-                        }
-
-                val expectedElementType = builtIns.getArrayElementType(if (expectedIsArray) expectedType else actualArrayType)
-
-                ConstantValueFactory.createArrayValue(
-                        arrayElements.map {
-                            resolveValue(expectedElementType, it, nameResolver)
-                        },
-                        actualArrayType
-                )
-            }
+            Type.STRING -> StringValue(nameResolver.getString(value.stringValue))
+            Type.CLASS -> KClassValue(nameResolver.getClassId(value.classId), value.arrayDimensionCount)
+            Type.ENUM -> EnumValue(nameResolver.getClassId(value.classId), nameResolver.getName(value.enumValueId))
+            Type.ANNOTATION -> AnnotationValue(deserializeAnnotation(value.annotation, nameResolver))
+            Type.ARRAY -> ConstantValueFactory.createArrayValue(
+                value.arrayElementList.map { resolveValue(builtIns.anyType, it, nameResolver) },
+                expectedType
+            )
             else -> error("Unsupported annotation argument type: ${value.type} (expected $expectedType)")
         }
-
-        return if (result.getType(module).isSubtypeOf(expectedType)) {
-            result
-        }
-        else {
-            // This means that an annotation class has been changed incompatibly without recompiling clients
-            ErrorValue.create("Unexpected argument value")
-        }
     }
 
-    private fun resolveClassLiteralValue(classId: ClassId): ConstantValue<*> {
-        // If value refers to a class named test.Foo.Bar where both Foo and Bar have generic type parameters,
-        // we're constructing a type `KClass<test.Foo<*>.Bar<*>>` below
-        val starProjectedType = resolveClass(classId).defaultType.replaceArgumentsWithStarProjections()
-        val kClass = resolveClass(ClassId.topLevel(KotlinBuiltIns.FQ_NAMES.kClass.toSafe()))
-        val type = KotlinTypeFactory.simpleNotNullType(Annotations.EMPTY, kClass, listOf(TypeProjectionImpl(starProjectedType)))
-        return KClassValue(type)
-    }
-
-    private fun resolveArrayElementType(value: Value, nameResolver: NameResolver): SimpleType =
-            with(builtIns) {
-                when (value.type) {
-                    Type.BYTE -> byteType
-                    Type.CHAR -> charType
-                    Type.SHORT -> shortType
-                    Type.INT -> intType
-                    Type.LONG -> longType
-                    Type.FLOAT -> floatType
-                    Type.DOUBLE -> doubleType
-                    Type.BOOLEAN -> booleanType
-                    Type.STRING -> stringType
-                    Type.CLASS -> error("Arrays of class literals are not supported yet") // TODO: support arrays of class literals
-                    Type.ENUM -> resolveClass(nameResolver.getClassId(value.classId)).defaultType
-                    Type.ANNOTATION -> resolveClass(nameResolver.getClassId(value.annotation.id)).defaultType
-                    Type.ARRAY -> error("Array of arrays is impossible")
-                    else -> error("Unknown type: ${value.type}")
+    // This method returns false if the actual value loaded from an annotation argument does not conform to the expected type of the
+    // corresponding parameter in the annotation class. This usually means that the annotation class has been changed incompatibly
+    // without recompiling clients, in which case we prefer not to load the annotation argument value at all, to avoid constructing
+    // an incorrect model and breaking some assumptions in the compiler.
+    private fun doesValueConformToExpectedType(result: ConstantValue<*>, expectedType: KotlinType, value: Value): Boolean {
+        return when (value.type) {
+            Type.CLASS -> {
+                val expectedClass = expectedType.constructor.declarationDescriptor as? ClassDescriptor
+                // We could also check that the class value's type is a subtype of the expected type, but loading the definition of the
+                // referenced class here is undesirable and may even be incorrect (because the module might be different at the
+                // destination where these constant values are read). This can lead to slightly incorrect model in some edge cases.
+                expectedClass == null || KotlinBuiltIns.isKClass(expectedClass)
+            }
+            Type.ARRAY -> {
+                check(result is ArrayValue && result.value.size == value.arrayElementList.size) {
+                    "Deserialized ArrayValue should have the same number of elements as the original array value: $result"
+                }
+                val expectedElementType = builtIns.getArrayElementType(expectedType)
+                result.value.indices.all { i ->
+                    doesValueConformToExpectedType(result.value[i], expectedElementType, value.getArrayElement(i))
                 }
             }
+            else -> result.getType(module) == expectedType
+        }
+    }
+
+    private inline fun <T, R> T.letIf(predicate: Boolean, f: (T) -> R, g: (T) -> R): R =
+        if (predicate) f(this) else g(this)
 
     private fun resolveClass(classId: ClassId): ClassDescriptor {
         return module.findNonGenericClassAcrossDependencies(classId, notFoundClasses)

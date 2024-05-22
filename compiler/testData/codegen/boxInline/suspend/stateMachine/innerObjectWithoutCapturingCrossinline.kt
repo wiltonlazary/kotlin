@@ -1,16 +1,11 @@
-// FILE: inlined.kt
-// COMMON_COROUTINES_TEST
-// WITH_RUNTIME
+// CHECK_STATE_MACHINE
+// WITH_COROUTINES
 // NO_CHECK_LAMBDA_INLINING
+// WITH_STDLIB
+// FILE: inlined.kt
 
-import COROUTINES_PACKAGE.intrinsics.*
-
-var i = 0;
-
-suspend fun suspendHere() = suspendCoroutineOrReturn<Unit> {
-    i++
-    COROUTINE_SUSPENDED
-}
+import kotlin.coroutines.intrinsics.*
+import helpers.*
 
 interface SuspendRunnable {
     suspend fun run()
@@ -19,42 +14,32 @@ interface SuspendRunnable {
 suspend inline fun crossinlineMe(crossinline c: suspend () -> Unit) {
     val o = object : SuspendRunnable {
         override suspend fun run() {
-            suspendHere()
-            suspendHere()
-            suspendHere()
-            suspendHere()
-            suspendHere()
+            StateMachineChecker.suspendHere()
+            StateMachineChecker.suspendHere()
+            StateMachineChecker.suspendHere()
+            StateMachineChecker.suspendHere()
+            StateMachineChecker.suspendHere()
         }
     }
     o.run()
 }
 
 // FILE: inlineSite.kt
-// COMMON_COROUTINES_TEST
-
-import COROUTINES_PACKAGE.*
+import kotlin.coroutines.*
+import helpers.*
 
 fun builder(c: suspend () -> Unit) {
-    c.startCoroutine(object: Continuation<Unit> {
-        override val context: CoroutineContext
-            get() = EmptyCoroutineContext
-
-        override fun resume(value: Unit) {
-        }
-
-        override fun resumeWithException(exception: Throwable) {
-            throw exception
-        }
-    })
+    c.startCoroutine(CheckStateMachineContinuation)
 }
 
 fun box(): String {
+    StateMachineChecker.reset()
     var res = "OK"
     builder {
         crossinlineMe {
             res = "FAIL 1"
         }
     }
-    if (i != 1) return "FAIL 2"
+    StateMachineChecker.check(numberOfSuspensions = 5)
     return res
 }

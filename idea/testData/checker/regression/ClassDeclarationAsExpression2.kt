@@ -1,1 +1,0 @@
-fun g() = 1 < <error>class A</error>

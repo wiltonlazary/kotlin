@@ -19,8 +19,10 @@ package org.jetbrains.kotlin.psi;
 import com.intellij.lang.ASTNode;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.util.AstLoadingFilter;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.KtNodeTypes;
 import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.psi.stubs.KotlinPropertyAccessorStub;
 import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementTypes;
@@ -86,7 +88,39 @@ public class KtPropertyAccessor extends KtDeclarationStub<KotlinPropertyAccessor
     @Nullable
     @Override
     public KtExpression getBodyExpression() {
-        return findChildByClass(KtExpression.class);
+        KotlinPropertyAccessorStub stub = getStub();
+        if (stub != null) {
+            if (!stub.hasBody()) {
+                return null;
+            }
+
+            if (getContainingKtFile().isCompiled()) {
+                return null;
+            }
+        }
+
+        return  findChildByClass(KtExpression.class);
+    }
+
+    @Nullable
+    @Override
+    public KtBlockExpression getBodyBlockExpression() {
+        KotlinPropertyAccessorStub stub = getStub();
+        if (stub != null) {
+            if (!(stub.hasBlockBody() && stub.hasBody())) {
+                return null;
+            }
+            if (getContainingKtFile().isCompiled()) {
+                return null;
+            }
+        }
+
+        KtExpression bodyExpression = findChildByClass(KtExpression.class);
+        if (bodyExpression instanceof KtBlockExpression) {
+            return (KtBlockExpression) bodyExpression;
+        }
+
+        return null;
     }
 
     @Override
@@ -114,6 +148,11 @@ public class KtPropertyAccessor extends KtDeclarationStub<KotlinPropertyAccessor
     }
 
     @Override
+    public KtContractEffectList getContractDescription() {
+        return getStubOrPsiChild(KtStubElementTypes.CONTRACT_EFFECT_LIST);
+    }
+
+    @Override
     public boolean hasDeclaredReturnType() {
         return true;
     }
@@ -133,8 +172,13 @@ public class KtPropertyAccessor extends KtDeclarationStub<KotlinPropertyAccessor
     }
 
     @Nullable
-    public ASTNode getRightParenthesis() {
-        return getNode().findChildByType(KtTokens.RPAR);
+    public PsiElement getRightParenthesis() {
+        return findChildByType(KtTokens.RPAR);
+    }
+
+    @Nullable
+    public PsiElement getLeftParenthesis() {
+        return findChildByType(KtTokens.LPAR);
     }
 
     @Nullable
@@ -151,5 +195,10 @@ public class KtPropertyAccessor extends KtDeclarationStub<KotlinPropertyAccessor
     @NotNull
     public KtProperty getProperty() {
         return (KtProperty) getParent();
+    }
+
+    @Override
+    public int getTextOffset() {
+        return getNamePlaceholder().getTextRange().getStartOffset();
     }
 }

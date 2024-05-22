@@ -1,4 +1,4 @@
-// !LANGUAGE: +MultiPlatformProjects
+// FIR_IDENTICAL
 // MODULE: m1-common
 // FILE: common.kt
 
@@ -46,7 +46,7 @@ expect annotation class ClassArrays(
     vararg val v: Int = [42]
 )
 
-// MODULE: m2-jvm(m1-common)
+// MODULE: m2-jvm()()(m1-common)
 // FILE: jvm.kt
 
 import kotlin.reflect.KClass

@@ -1,5 +1,6 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1112
+// EXPECTED_REACHABLE_NODES: 1371
+// IGNORE_BACKEND: JS_IR_ES6
+
 interface A {
     fun foo(): String
 }
@@ -10,13 +11,14 @@ class B : A {
 
 fun box(): String {
     val b = B::class.js
-    val c = js("""
+    val c = js("""(function() {
     function C() {
         b.call(this);
     };
     C.prototype = Object.create(b.prototype);
     C.prototype.constructor = C;
-    new C();
+    return new C();
+    })()
     """)
 
     if (c !is B) return "fail: c !is B"

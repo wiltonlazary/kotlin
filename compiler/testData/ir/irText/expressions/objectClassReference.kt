@@ -1,4 +1,6 @@
-//WITH_RUNTIME
+// TARGET_BACKEND: JVM
+// FIR_IDENTICAL
+// WITH_STDLIB
 object A
 
 fun test() {

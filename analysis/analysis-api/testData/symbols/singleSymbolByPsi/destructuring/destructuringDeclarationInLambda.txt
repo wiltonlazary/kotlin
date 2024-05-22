@@ -1,0 +1,12 @@
+KtDestructuringDeclarationSymbol:
+  annotationsList: []
+  entries: [
+    KtLocalVariableSymbol(<local>/a)
+    KtLocalVariableSymbol(<local>/b)
+  ]
+  origin: SOURCE
+  symbolKind: LOCAL
+  typeParameters: []
+  getContainingFileSymbol: KtFileSymbol(destructuringDeclarationInLambda.kt)
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null

@@ -1,10 +1,12 @@
 // IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1118
-package foo
+// IGNORE_BACKEND: JS_IR_ES6
+// EXPECTED_REACHABLE_NODES: 1288
 
+@JsExport
 val x: Int
     @JsName("getX_") get() = 23
 
+@JsExport
 var y: Int = 0
     @JsName("getY_") get() = field + 10
     @JsName("setY_") set(value) {
@@ -12,7 +14,7 @@ var y: Int = 0
     }
 
 
-fun getPackage() = js("return JS_TESTS.foo")
+fun getPackage() = js("return main")
 
 fun box(): String {
     assertEquals(23, x)

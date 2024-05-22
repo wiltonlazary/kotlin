@@ -1,7 +1,6 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
-// WITH_RUNTIME
+// WITH_STDLIB
 
 inline fun <reified T : Any> jClass() = T::class.java
 inline fun <reified T : Any> jClassArray() = jClass<Array<T>>()

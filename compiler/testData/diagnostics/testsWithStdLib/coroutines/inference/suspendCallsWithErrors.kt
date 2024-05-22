@@ -1,6 +1,10 @@
-// !DIAGNOSTICS: -UNUSED_PARAMETER
-// !WITH_NEW_INFERENCE
+// OPT_IN: kotlin.RequiresOptIn
+// DIAGNOSTICS: -UNUSED_PARAMETER
 // NI_EXPECTED_FILE
+
+@file:OptIn(ExperimentalTypeInference::class)
+
+import kotlin.experimental.ExperimentalTypeInference
 
 class Controller<T> {
     suspend fun yield(t: T) {}
@@ -10,10 +14,10 @@ fun <S> generate(g: suspend Controller<S>.() -> Unit): S = TODO()
 
 class A
 
-val test1 = <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>generate<!> {
+val test1 = <!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>generate<!> {
     yield(<!NO_COMPANION_OBJECT!>A<!>)
 }
 
-val test2: Int = <!NI;TYPE_MISMATCH, OI;TYPE_INFERENCE_EXPECTED_TYPE_MISMATCH!>generate {
-    yield(<!NI;TYPE_MISMATCH, NI;TYPE_MISMATCH!>A()<!>)
-}<!>
+val test2: Int = generate {
+    yield(<!TYPE_MISMATCH!>A()<!>)
+}

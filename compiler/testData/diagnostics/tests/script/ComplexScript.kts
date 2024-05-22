@@ -1,4 +1,8 @@
-fun foo(<!UNUSED_PARAMETER!>x<!>: Int) = 1
+// FIR_IDENTICAL
+// DUMP_CFG: LEVELS
+// DIAGNOSTICS: -UNUSED_PARAMETER
+
+fun foo(x: Int) = 1
 
 val y = 2
 

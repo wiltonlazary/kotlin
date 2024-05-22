@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.types;
@@ -9,14 +9,15 @@ import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
-import org.jetbrains.kotlin.descriptors.ClassDescriptor;
-import org.jetbrains.kotlin.descriptors.ClassifierDescriptor;
-import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor;
-import org.jetbrains.kotlin.descriptors.annotations.Annotations;
+import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.renderer.DescriptorRenderer;
+import org.jetbrains.kotlin.resolve.DescriptorUtils;
 import org.jetbrains.kotlin.resolve.scopes.MemberScope;
+import org.jetbrains.kotlin.types.error.ErrorScopeKind;
+import org.jetbrains.kotlin.types.error.ErrorTypeKind;
 import org.jetbrains.kotlin.types.typeUtil.TypeUtilsKt;
 import org.jetbrains.kotlin.utils.DFS;
+import org.jetbrains.kotlin.types.error.ErrorUtils;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -113,7 +114,7 @@ public class CommonSupertypes {
                 iterator.remove();
             }
             if (KotlinTypeKt.isError(type)) {
-                return ErrorUtils.createErrorType("Supertype of error type " + type);
+                return ErrorUtils.createErrorType(ErrorTypeKind.SUPER_TYPE_FOR_ERROR_TYPE, type.toString());
             }
             nullable |= type.isMarkedNullable();
         }
@@ -153,7 +154,7 @@ public class CommonSupertypes {
                         .append("- DeclarationDescriptor class: ").append(classOfDeclarationDescriptor(type)).append('\n')
                         .append('\n');
             }
-            throw new IllegalStateException("There is no common supertype for: " + types + " \n" + info.toString());
+            throw new IllegalStateException("[Report version 3] There is no common supertype for: " + types + " \n" + info.toString());
         }
 
         // constructor of the supertype -> all of its instantiations occurring as supertypes
@@ -177,7 +178,13 @@ public class CommonSupertypes {
         }
 
         AbstractTypeConstructor abstractTypeConstructor = (AbstractTypeConstructor) typeConstructor;
-        return abstractTypeConstructor.renderAdditionalDebugInformation();
+        DeclarationDescriptor declarationDescriptor = abstractTypeConstructor.getDeclarationDescriptor();
+        String moduleDescriptorString = declarationDescriptor == null
+                                        ? "<no module for null descriptor>"
+                                        : Objects.toString(DescriptorUtils.getContainingModule(declarationDescriptor));
+        return "descriptor=" + declarationDescriptor + "@" + Integer.toHexString(Objects.hashCode(declarationDescriptor)) +
+               ", moduleDescriptor=" + moduleDescriptorString +
+               ", " + abstractTypeConstructor.renderAdditionalDebugInformation();
     }
 
     @Nullable
@@ -265,9 +272,9 @@ public class CommonSupertypes {
             newScope = classifier.getDefaultType().getMemberScope();
         }
         else {
-            newScope = ErrorUtils.createErrorScope("A scope for common supertype which is not a normal classifier", true);
+            newScope = ErrorUtils.createErrorScope(ErrorScopeKind.NON_CLASSIFIER_SUPER_TYPE_SCOPE, true);
         }
-        return KotlinTypeFactory.simpleTypeWithNonTrivialMemberScope(Annotations.Companion.getEMPTY(), constructor, newProjections, nullable, newScope);
+        return KotlinTypeFactory.simpleTypeWithNonTrivialMemberScope(TypeAttributes.Companion.getEmpty(), constructor, newProjections, nullable, newScope);
     }
 
     @NotNull

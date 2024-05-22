@@ -1,3 +1,0 @@
-sealed class Sealed
-
-private object SubSealed : Sealed()

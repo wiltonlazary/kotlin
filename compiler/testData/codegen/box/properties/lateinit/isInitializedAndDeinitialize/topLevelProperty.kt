@@ -1,6 +1,5 @@
-// IGNORE_BACKEND: NATIVE
-// LANGUAGE_VERSION: 1.2
-// WITH_RUNTIME
+// LANGUAGE: -NativeJsProhibitLateinitIsInitializedIntrinsicWithoutPrivateAccess
+// WITH_STDLIB
 
 lateinit var bar: String
 

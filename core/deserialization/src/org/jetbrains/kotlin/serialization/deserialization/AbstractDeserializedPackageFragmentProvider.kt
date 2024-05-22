@@ -18,26 +18,41 @@ package org.jetbrains.kotlin.serialization.deserialization
 
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PackageFragmentDescriptor
-import org.jetbrains.kotlin.descriptors.PackageFragmentProvider
+import org.jetbrains.kotlin.descriptors.PackageFragmentProviderOptimized
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.storage.StorageManager
+import org.jetbrains.kotlin.utils.addIfNotNull
 
 abstract class AbstractDeserializedPackageFragmentProvider(
-        protected val storageManager: StorageManager,
-        protected val finder: KotlinMetadataFinder,
-        protected val moduleDescriptor: ModuleDescriptor
-) : PackageFragmentProvider {
+    protected val storageManager: StorageManager,
+    protected val finder: KotlinMetadataFinder,
+    protected val moduleDescriptor: ModuleDescriptor
+) : PackageFragmentProviderOptimized {
     protected lateinit var components: DeserializationComponents
 
     private val fragments = storageManager.createMemoizedFunctionWithNullableValues<FqName, PackageFragmentDescriptor> { fqName ->
         findPackage(fqName)?.apply {
-            components = this@AbstractDeserializedPackageFragmentProvider.components
+            initialize(components)
         }
     }
 
     protected abstract fun findPackage(fqName: FqName): DeserializedPackageFragment?
 
+    override fun collectPackageFragments(fqName: FqName, packageFragments: MutableCollection<PackageFragmentDescriptor>) {
+        packageFragments.addIfNotNull(fragments(fqName))
+    }
+
+    override fun isEmpty(fqName: FqName): Boolean {
+        val descriptor = if (fragments.isComputed(fqName)) {
+            fragments.invoke(fqName)
+        } else {
+            findPackage(fqName)
+        }
+        return descriptor == null
+    }
+
+    @Deprecated("for usages use #packageFragments(FqName) at final point, for impl use #collectPackageFragments(FqName, MutableCollection<PackageFragmentDescriptor>)")
     override fun getPackageFragments(fqName: FqName): List<PackageFragmentDescriptor> = listOfNotNull(fragments(fqName))
 
     override fun getSubPackagesOf(fqName: FqName, nameFilter: (Name) -> Boolean): Collection<FqName> = emptySet()

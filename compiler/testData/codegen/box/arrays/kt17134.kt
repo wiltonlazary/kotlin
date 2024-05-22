@@ -1,6 +1,5 @@
-//WITH_RUNTIME
-// IGNORE_BACKEND: JS
-// IGNORE_BACKEND: NATIVE
+// WITH_STDLIB
+// TARGET_BACKEND: JVM
 
 object A {
     @JvmStatic fun main(args: Array<String>) {

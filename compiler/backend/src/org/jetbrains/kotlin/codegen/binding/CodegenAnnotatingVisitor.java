@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.binding;
@@ -9,11 +9,16 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.stubs.StubElement;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.tree.TokenSet;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.Stack;
 import kotlin.Pair;
 import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.backend.common.SamType;
+import org.jetbrains.kotlin.backend.common.SamTypeApproximator;
+import org.jetbrains.kotlin.builtins.FunctionTypesKt;
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.builtins.ReflectionTypes;
 import org.jetbrains.kotlin.cfg.WhenChecker;
 import org.jetbrains.kotlin.codegen.*;
@@ -21,7 +26,7 @@ import org.jetbrains.kotlin.codegen.coroutines.CoroutineCodegenUtilKt;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
 import org.jetbrains.kotlin.codegen.when.SwitchCodegenProvider;
 import org.jetbrains.kotlin.codegen.when.WhenByEnumsMapping;
-import org.jetbrains.kotlin.config.LanguageFeature;
+import org.jetbrains.kotlin.config.JvmDefaultMode;
 import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.coroutines.CoroutineUtilKt;
 import org.jetbrains.kotlin.descriptors.*;
@@ -30,25 +35,27 @@ import org.jetbrains.kotlin.descriptors.impl.AnonymousFunctionDescriptor;
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor;
 import org.jetbrains.kotlin.fileClasses.JvmFileClassUtil;
 import org.jetbrains.kotlin.load.java.JvmAbi;
-import org.jetbrains.kotlin.load.java.sam.SamConstructorDescriptor;
+import org.jetbrains.kotlin.load.java.sam.JavaSingleAbstractMethodUtils;
 import org.jetbrains.kotlin.name.ClassId;
 import org.jetbrains.kotlin.name.Name;
+import org.jetbrains.kotlin.name.SpecialNames;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.psi.stubs.KotlinFileStub;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.BindingTrace;
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
-import org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt;
-import org.jetbrains.kotlin.resolve.calls.model.ExpressionValueArgument;
-import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
-import org.jetbrains.kotlin.resolve.calls.model.ResolvedValueArgument;
-import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall;
+import org.jetbrains.kotlin.resolve.calls.model.*;
+import org.jetbrains.kotlin.resolve.calls.tower.NewAbstractResolvedCall;
+import org.jetbrains.kotlin.resolve.calls.tower.NewResolvedCallImpl;
+import org.jetbrains.kotlin.resolve.calls.tower.NewVariableAsFunctionResolvedCallImpl;
+import org.jetbrains.kotlin.resolve.calls.util.CallUtilKt;
 import org.jetbrains.kotlin.resolve.constants.ConstantValue;
 import org.jetbrains.kotlin.resolve.constants.EnumValue;
 import org.jetbrains.kotlin.resolve.constants.NullValue;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
 import org.jetbrains.kotlin.resolve.jvm.RuntimeAssertionsOnDeclarationBodyChecker;
+import org.jetbrains.kotlin.resolve.sam.SamConstructorDescriptor;
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue;
 import org.jetbrains.kotlin.resolve.scopes.receivers.TransientReceiver;
 import org.jetbrains.kotlin.types.KotlinType;
@@ -82,6 +89,9 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
     private final SwitchCodegenProvider switchCodegenProvider;
     private final LanguageVersionSettings languageVersionSettings;
     private final ClassBuilderMode classBuilderMode;
+    private final DelegatedPropertiesCodegenHelper delegatedPropertiesCodegenHelper;
+    private final JvmDefaultMode jvmDefaultMode;
+    private final SamTypeApproximator samTypeApproximator;
 
     public CodegenAnnotatingVisitor(@NotNull GenerationState state) {
         this.bindingTrace = state.getBindingTrace();
@@ -91,6 +101,9 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         this.switchCodegenProvider = new SwitchCodegenProvider(state);
         this.languageVersionSettings = state.getLanguageVersionSettings();
         this.classBuilderMode = state.getClassBuilderMode();
+        this.delegatedPropertiesCodegenHelper = new DelegatedPropertiesCodegenHelper(state);
+        this.jvmDefaultMode = state.getJvmDefaultMode();
+        this.samTypeApproximator = new SamTypeApproximator(state.getModule().getBuiltIns(), state.getLanguageVersionSettings());
     }
 
     @NotNull
@@ -138,7 +151,6 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
     }
 
     @NotNull
-    @SuppressWarnings("ConstantConditions")
     private DeclarationDescriptor correctContainerForLambda(@NotNull CallableDescriptor descriptor) {
         DeclarationDescriptor container = descriptor.getContainingDeclaration();
 
@@ -217,7 +229,15 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
 
     @Override
     public void visitKtFile(@NotNull KtFile file) {
-        nameStack.push(AsmUtil.internalNameByFqNameWithoutInnerClasses(file.getPackageFqName()));
+        String name;
+        if (file instanceof KtCodeFragment) {
+            CodeFragmentCodegenInfo info = CodeFragmentCodegen.getCodeFragmentInfo((KtCodeFragment) file);
+            name = info.getClassDescriptor().getName().asString() + "$" + info.getMethodDescriptor().getName().asString();
+        } else {
+            name = AsmUtil.internalNameByFqNameWithoutInnerClasses(file.getPackageFqName());
+        }
+
+        nameStack.push(name);
         visitKtElement(file);
         nameStack.pop();
     }
@@ -277,7 +297,7 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
 
     private String getName(ClassDescriptor classDescriptor) {
         String base = peekFromStack(nameStack);
-        Name descriptorName = safeIdentifier(classDescriptor.getName());
+        Name descriptorName = SpecialNames.safeIdentifier(classDescriptor.getName());
         if (DescriptorUtils.isTopLevelDeclaration(classDescriptor)) {
             return base.isEmpty() ? descriptorName.asString() : base + '/' + descriptorName;
         }
@@ -331,19 +351,7 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         nameStack.push(name);
 
         if (CoroutineUtilKt.isSuspendLambda(functionDescriptor)) {
-            SimpleFunctionDescriptor jvmSuspendFunctionView =
-                    CoroutineCodegenUtilKt.getOrCreateJvmSuspendFunctionView(
-                            (SimpleFunctionDescriptor) functionDescriptor,
-                            languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines)
-                    );
-
-            bindingTrace.record(
-                    CodegenBinding.SUSPEND_FUNCTION_TO_JVM_VIEW,
-                    functionDescriptor,
-                    jvmSuspendFunctionView
-            );
-            closure.setSuspend(true);
-            closure.setSuspendLambda();
+            createAndRecordSuspendFunctionView(closure, (SimpleFunctionDescriptor) functionDescriptor, true);
         }
         functionsStack.push(functionDescriptor);
 
@@ -352,6 +360,33 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         functionsStack.pop();
         nameStack.pop();
         classStack.pop();
+    }
+
+    private boolean isAdaptedCallableReference(
+            @NotNull KtCallableReferenceExpression expression,
+            @NotNull ResolvedCall<?> resolvedCall,
+            boolean isSuspendConversion
+    ) {
+        if (isSuspendConversion) return true;
+
+        CallableDescriptor resultingDescriptor = resolvedCall.getResultingDescriptor();
+        if (!(resultingDescriptor instanceof FunctionDescriptor)) return false;
+        FunctionDescriptor functionDescriptor = (FunctionDescriptor) resultingDescriptor;
+
+        // Callable reference is adapted if:
+        // - adapter arguments mapping is present in value arguments of corresponding resolved call;
+        // - return type is not Unit, and expected return type is Unit.
+
+        if (!resolvedCall.getValueArguments().isEmpty()) return true;
+
+        KotlinType callableReferenceType = bindingContext.getType(expression);
+        if (callableReferenceType != null) {
+            KotlinType callableReferenceReturnType = CollectionsKt.last(callableReferenceType.getArguments()).getType();
+            KotlinType functionReturnType = functionDescriptor.getReturnType();
+            return functionReturnType != null &&
+                   KotlinBuiltIns.isUnit(callableReferenceReturnType) && !KotlinBuiltIns.isUnit(functionReturnType);
+        }
+        return false;
     }
 
     @Override
@@ -373,11 +408,20 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         Collection<KotlinType> supertypes;
 
         if (target instanceof FunctionDescriptor) {
+            FunctionDescriptor targetFunction = (FunctionDescriptor) target;
             callableDescriptor = bindingContext.get(FUNCTION, expression);
             if (callableDescriptor == null) return;
 
+            KotlinType functionReferenceType = bindingContext.getType(expression);
+            boolean isSuspendConversion =
+                    !targetFunction.isSuspend() &&
+                    functionReferenceType != null &&
+                    FunctionTypesKt.isKSuspendFunctionType(functionReferenceType);
+
             supertypes = runtimeTypes.getSupertypesForFunctionReference(
-                    (FunctionDescriptor) target, (AnonymousFunctionDescriptor) callableDescriptor, receiverType != null
+                    targetFunction, (AnonymousFunctionDescriptor) callableDescriptor, receiverType != null,
+                    isAdaptedCallableReference(expression, referencedFunction, isSuspendConversion),
+                    isSuspendConversion
             );
         }
         else if (target instanceof PropertyDescriptor) {
@@ -401,16 +445,56 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         ClassDescriptor classDescriptor = recordClassForCallable(expression, callableDescriptor, supertypes, name);
         MutableClosure closure = recordClosure(classDescriptor, name);
 
+        if (callableDescriptor instanceof SimpleFunctionDescriptor) {
+            SimpleFunctionDescriptor functionDescriptor = (SimpleFunctionDescriptor) callableDescriptor;
+            if (functionDescriptor.isSuspend()) {
+                createAndRecordSuspendFunctionView(closure, functionDescriptor, false);
+                boolean isRecursive = false;
+                for (FunctionDescriptor descriptor: functionsStack) {
+                    if (descriptor == target) {
+                        isRecursive = true;
+                        break;
+                    }
+                }
+                bindingTrace.record(RECURSIVE_SUSPEND_CALLABLE_REFERENCE, classDescriptor, isRecursive);
+            }
+        }
+
         if (receiverType != null) {
-            closure.setCaptureReceiverType(receiverType);
+            closure.setCustomCapturedReceiverType(receiverType);
         }
 
         super.visitCallableReferenceExpression(expression);
     }
 
+    private SimpleFunctionDescriptor createAndRecordSuspendFunctionView(
+            MutableClosure closure,
+            SimpleFunctionDescriptor functionDescriptor,
+            boolean isSuspendLambda
+    ) {
+        SimpleFunctionDescriptor jvmSuspendFunctionView =
+                CoroutineCodegenUtilKt.getOrCreateJvmSuspendFunctionView(
+                        functionDescriptor,
+                        this.bindingContext
+                );
+
+        bindingTrace.record(
+                CodegenBinding.SUSPEND_FUNCTION_TO_JVM_VIEW,
+                functionDescriptor,
+                jvmSuspendFunctionView
+        );
+
+        closure.setSuspend(true);
+        if (isSuspendLambda) {
+            closure.setSuspendLambda();
+        }
+        return jvmSuspendFunctionView;
+    }
+
     @NotNull
     private MutableClosure recordClosure(@NotNull ClassDescriptor classDescriptor, @NotNull String name) {
-        return CodegenBinding.recordClosure(bindingTrace, classDescriptor, getProperEnclosingClass(), Type.getObjectType(name));
+        Type type = Type.getObjectType(JvmCodegenUtil.sanitizeNameIfNeeded(name, languageVersionSettings));
+        return CodegenBinding.recordClosure(bindingTrace, classDescriptor, getProperEnclosingClass(), type);
     }
 
     @Nullable
@@ -467,15 +551,20 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
             ClassDescriptor classDescriptor = recordClassForCallable(delegate, variableDescriptor, Collections.singleton(supertype), name);
             recordClosure(classDescriptor, name);
 
-            Type containerType = getMetadataOwner(property);
-            List<VariableDescriptorWithAccessors> descriptors = bindingTrace.get(DELEGATED_PROPERTIES, containerType);
-            if (descriptors == null) {
-                descriptors = new ArrayList<>(1);
-                bindingTrace.record(DELEGATED_PROPERTIES, containerType, descriptors);
-            }
-            descriptors.add(variableDescriptor);
+            if (delegatedPropertiesCodegenHelper.isDelegatedPropertyMetadataRequired(variableDescriptor)) {
+                Type containerType = getMetadataOwner(property);
+                List<VariableDescriptorWithAccessors> descriptors = bindingTrace.get(DELEGATED_PROPERTIES_WITH_METADATA, containerType);
+                if (descriptors == null) {
+                    descriptors = new ArrayList<>(1);
+                    bindingTrace.record(DELEGATED_PROPERTIES_WITH_METADATA, containerType, descriptors);
+                }
+                descriptors.add(variableDescriptor);
 
-            bindingTrace.record(DELEGATED_PROPERTY_METADATA_OWNER, variableDescriptor, containerType);
+                bindingTrace.record(DELEGATED_PROPERTY_METADATA_OWNER, variableDescriptor, containerType);
+            }
+            else {
+                bindingTrace.record(DELEGATED_PROPERTY_WITH_OPTIMIZED_METADATA, variableDescriptor);
+            }
         }
 
         super.visitProperty(property);
@@ -502,7 +591,7 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
                 }
 
                 return AsmUtil.asmTypeByClassId(
-                        DescriptorUtils.isInterface(descriptor)
+                        DescriptorUtils.isInterface(descriptor) && !jvmDefaultMode.isEnabled()
                         ? classId.createNestedClassId(Name.identifier(JvmAbi.DEFAULT_IMPLS_CLASS_NAME))
                         : classId
                 );
@@ -533,12 +622,18 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         String nameForClassOrPackageMember = getNameForClassOrPackageMember(functionDescriptor);
 
         if (functionDescriptor instanceof SimpleFunctionDescriptor && functionDescriptor.isSuspend() &&
-            !functionDescriptor.getVisibility().equals(Visibilities.LOCAL)) {
+            !functionDescriptor.getVisibility().equals(DescriptorVisibilities.LOCAL)) {
+
+            if (nameForClassOrPackageMember != null) {
+                nameStack.push(nameForClassOrPackageMember);
+            }
+
+            String name = inventAnonymousClassName();
+            ClassDescriptor classDescriptor = recordClassForFunction(function, functionDescriptor, name, functionDescriptor);
+            MutableClosure closure = recordClosure(classDescriptor, name);
+
             SimpleFunctionDescriptor jvmSuspendFunctionView =
-                    CoroutineCodegenUtilKt.getOrCreateJvmSuspendFunctionView(
-                            (SimpleFunctionDescriptor) functionDescriptor,
-                            languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines)
-                    );
+                    createAndRecordSuspendFunctionView(closure, (SimpleFunctionDescriptor) functionDescriptor, false);
 
             // This is a very subtle place (hack).
             // When generating bytecode of some suspend function, we replace the original descriptor
@@ -554,21 +649,6 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
                 );
             }
 
-            bindingTrace.record(
-                    CodegenBinding.SUSPEND_FUNCTION_TO_JVM_VIEW,
-                    functionDescriptor,
-                    jvmSuspendFunctionView
-            );
-
-            if (nameForClassOrPackageMember != null) {
-                nameStack.push(nameForClassOrPackageMember);
-            }
-
-            String name = inventAnonymousClassName();
-            ClassDescriptor classDescriptor =
-                    recordClassForFunction(function, functionDescriptor, name, functionDescriptor);
-            MutableClosure closure = recordClosure(classDescriptor, name);
-            closure.setSuspend(true);
             functionsStack.push(functionDescriptor);
 
             super.visitNamedFunction(function);
@@ -597,21 +677,7 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
             nameStack.push(name);
 
             if (functionDescriptor instanceof SimpleFunctionDescriptor && functionDescriptor.isSuspend()) {
-                SimpleFunctionDescriptor jvmSuspendFunctionView =
-                        CoroutineCodegenUtilKt.getOrCreateJvmSuspendFunctionView(
-                                (SimpleFunctionDescriptor) functionDescriptor,
-                                languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines),
-                                /*bindingContext*/ null,
-                                /*dropSuspend*/ true
-                        );
-
-                bindingTrace.record(
-                        CodegenBinding.SUSPEND_FUNCTION_TO_JVM_VIEW,
-                        functionDescriptor,
-                        jvmSuspendFunctionView
-                );
-                closure.setSuspend(true);
-                closure.setSuspendLambda();
+                createAndRecordSuspendFunctionView(closure, (SimpleFunctionDescriptor) functionDescriptor, true);
             }
 
             functionsStack.push(functionDescriptor);
@@ -644,10 +710,10 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
     public void visitCallExpression(@NotNull KtCallExpression expression) {
         super.visitCallExpression(expression);
         checkSamCall(expression);
-        checkCrossinlineSuspendCall(expression);
+        checkCrossinlineCall(expression);
     }
 
-    private void checkCrossinlineSuspendCall(@NotNull KtCallExpression expression) {
+    private void checkCrossinlineCall(@NotNull KtCallExpression expression) {
         KtExpression callee = expression.getCalleeExpression();
         Call call = bindingContext.get(CALL, callee);
         ResolvedCall<?> resolvedCall = bindingContext.get(RESOLVED_CALL, call);
@@ -655,30 +721,24 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         if (resolvedCall instanceof VariableAsFunctionResolvedCall) {
             VariableAsFunctionResolvedCall variableAsFunction = (VariableAsFunctionResolvedCall) resolvedCall;
             VariableDescriptor variableDescriptor = variableAsFunction.getVariableCall().getResultingDescriptor();
-            CallableDescriptor callableDescriptor = ((ResolvedCall) variableAsFunction).getResultingDescriptor();
 
             if (variableDescriptor instanceof ValueParameterDescriptor &&
-                ((ValueParameterDescriptor) variableDescriptor).isCrossinline() &&
-                callableDescriptor instanceof FunctionDescriptor &&
-                ((FunctionDescriptor) callableDescriptor).isSuspend()) {
-                FunctionDescriptor enclosingDescriptor =
-                        bindingContext.get(ENCLOSING_SUSPEND_FUNCTION_FOR_SUSPEND_FUNCTION_CALL, resolvedCall.getCall());
-                if (enclosingDescriptor == null) return;
-
+                ((ValueParameterDescriptor) variableDescriptor).isCrossinline()) {
                 DeclarationDescriptor functionWithCrossinlineParameter = variableDescriptor.getContainingDeclaration();
+                if (functionsStack.peek().isSuspend()) {
+                    bindingTrace.record(CALL_SITE_IS_SUSPEND_FOR_CROSSINLINE_LAMBDA, (ValueParameterDescriptor) variableDescriptor, true);
+                }
                 for (int i = functionsStack.size() - 1; i >= 0; i--) {
-                    if (functionsStack.get(i).isSuspend()) {
-                        Boolean alreadyPutValue = bindingTrace.getBindingContext()
-                                .get(CodegenBinding.CAPTURES_CROSSINLINE_SUSPEND_LAMBDA, functionsStack.get(i));
-                        if (alreadyPutValue != null && alreadyPutValue) {
-                            return;
-                        }
-                        bindingTrace.record(
-                                CodegenBinding.CAPTURES_CROSSINLINE_SUSPEND_LAMBDA,
-                                functionsStack.get(i),
-                                true
-                        );
+                    Boolean alreadyPutValue = bindingTrace.getBindingContext()
+                            .get(CodegenBinding.CAPTURES_CROSSINLINE_LAMBDA, functionsStack.get(i));
+                    if (alreadyPutValue != null && alreadyPutValue) {
+                        return;
                     }
+                    bindingTrace.record(
+                            CodegenBinding.CAPTURES_CROSSINLINE_LAMBDA,
+                            functionsStack.get(i),
+                            true
+                    );
                     if (functionsStack.get(i) == functionWithCrossinlineParameter) {
                         return;
                     }
@@ -694,30 +754,105 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         CallableDescriptor descriptor = call.getResultingDescriptor();
         if (!(descriptor instanceof FunctionDescriptor)) return;
 
+        recordSamValuesForNewInference(call);
         recordSamConstructorIfNeeded(expression, call);
+        recordSamValuesForOldInference(call, descriptor);
+    }
 
+    private void recordSamValuesForOldInference(ResolvedCall<?> call, CallableDescriptor descriptor) {
         FunctionDescriptor original = SamCodegenUtil.getOriginalIfSamAdapter((FunctionDescriptor) descriptor);
         if (original == null) return;
 
-        List<ResolvedValueArgument> valueArguments = call.getValueArgumentsByIndex();
-        if (valueArguments == null) return;
-
+        // TODO we can just record SAM_VALUE on relevant value arguments as we do in recordSamValuesForNewInference
+        List<ValueParameterDescriptor> valueParametersWithSAMConversion = new SmartList<>();
         for (ValueParameterDescriptor valueParameter : original.getValueParameters()) {
             ValueParameterDescriptor adaptedParameter = descriptor.getValueParameters().get(valueParameter.getIndex());
             if (KotlinTypeChecker.DEFAULT.equalTypes(adaptedParameter.getType(), valueParameter.getType())) continue;
+            valueParametersWithSAMConversion.add(valueParameter);
+        }
+        writeSamValueForValueParameters(valueParametersWithSAMConversion, call.getValueArgumentsByIndex());
+    }
 
-            SamType samType = SamType.createByValueParameter(valueParameter);
+    private void recordSamValuesForNewInference(@NotNull ResolvedCall<?> call) {
+        NewAbstractResolvedCall<?> newResolvedCall = getNewResolvedCallForCallWithPossibleSamConversions(call);
+        if (!(newResolvedCall instanceof NewResolvedCallImpl<?>)) return;
+
+        Map<ValueParameterDescriptor, ResolvedValueArgument> arguments = newResolvedCall.getValueArguments();
+        for (ValueParameterDescriptor valueParameter : arguments.keySet()) {
+            ResolvedValueArgument argument = arguments.get(valueParameter);
+            if (argument instanceof ExpressionValueArgument) {
+                ValueArgument valueArgument = ((ExpressionValueArgument) argument).getValueArgument();
+                if (valueArgument != null && ((NewResolvedCallImpl<?>)newResolvedCall).getExpectedTypeForSamConvertedArgument(valueArgument) != null) {
+                    recordSamTypeOnArgumentExpression(valueParameter, valueArgument);
+                }
+            } else if (argument instanceof VarargValueArgument) {
+                VarargValueArgument varargValueArgument = (VarargValueArgument) argument;
+                for (ValueArgument valueArgument : varargValueArgument.getArguments()) {
+                    if (valueArgument != null && ((NewResolvedCallImpl<?>)newResolvedCall).getExpectedTypeForSamConvertedArgument(valueArgument) != null) {
+                        recordSamTypeOnArgumentExpression(valueParameter, valueArgument);
+                    }
+                }
+            }
+        }
+    }
+
+    @Nullable
+    private static NewAbstractResolvedCall<?> getNewResolvedCallForCallWithPossibleSamConversions(@NotNull ResolvedCall<?> call) {
+        if (call instanceof NewVariableAsFunctionResolvedCallImpl) {
+            return ((NewVariableAsFunctionResolvedCallImpl) call).getFunctionCall();
+        }
+        else if (call instanceof NewResolvedCallImpl) {
+            return (NewResolvedCallImpl<?>) call;
+        }
+        else {
+            return null;
+        }
+    }
+
+    @Nullable
+    private SamType createSamType(KotlinType kotlinType) {
+        if (!JavaSingleAbstractMethodUtils.isSamType(kotlinType)) return null;
+        return new SamType(kotlinType);
+    }
+
+    @Nullable
+    private SamType createSamTypeByValueParameter(ValueParameterDescriptor valueParameterDescriptor) {
+        KotlinType kotlinSamType = samTypeApproximator.getSamTypeForValueParameter(valueParameterDescriptor, false);
+        if (kotlinSamType == null) return null;
+        if (!JavaSingleAbstractMethodUtils.isSamType(kotlinSamType)) return null;
+        return new SamType(kotlinSamType);
+    }
+
+    private void writeSamValueForValueParameters(
+            @NotNull Collection<ValueParameterDescriptor> valueParametersWithSAMConversion,
+            @Nullable List<ResolvedValueArgument> valueArguments
+    ) {
+        if (valueArguments == null) return;
+
+        for (ValueParameterDescriptor valueParameter : valueParametersWithSAMConversion) {
+            SamType samType = createSamTypeByValueParameter(valueParameter);
             if (samType == null) continue;
 
             ResolvedValueArgument resolvedValueArgument = valueArguments.get(valueParameter.getIndex());
             assert resolvedValueArgument instanceof ExpressionValueArgument : resolvedValueArgument;
             ValueArgument valueArgument = ((ExpressionValueArgument) resolvedValueArgument).getValueArgument();
             assert valueArgument != null;
-            KtExpression argumentExpression = valueArgument.getArgumentExpression();
-            assert argumentExpression != null : valueArgument.asElement().getText();
-
-            bindingTrace.record(CodegenBinding.SAM_VALUE, argumentExpression, samType);
+            recordSamTypeOnArgumentExpression(samType, valueArgument);
         }
+    }
+
+    private void recordSamTypeOnArgumentExpression(ValueParameterDescriptor valueParameter, ValueArgument valueArgument) {
+        SamType samType = createSamTypeByValueParameter(valueParameter);
+        if (samType == null) return;
+
+        recordSamTypeOnArgumentExpression(samType, valueArgument);
+    }
+
+    private void recordSamTypeOnArgumentExpression(SamType samType, ValueArgument valueArgument) {
+        KtExpression argumentExpression = valueArgument.getArgumentExpression();
+        assert argumentExpression != null : valueArgument.asElement().getText();
+
+        bindingTrace.record(CodegenBinding.SAM_VALUE, argumentExpression, samType);
     }
 
     @Override
@@ -750,6 +885,19 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         checkSamCall(call);
     }
 
+    @Override
+    public void visitParameter(@NotNull KtParameter parameter) {
+        PsiElement parent = parameter.getParent(); // KtParameterList
+        if (parent != null && parent.getParent() instanceof KtConstructor<?>) {
+            KtExpression defaultValue = parameter.getDefaultValue();
+            if (defaultValue != null) {
+                withinUninitializedClass(defaultValue, () -> defaultValue.accept(this));
+            }
+        } else {
+            super.visitParameter(parameter);
+        }
+    }
+
     private void withinUninitializedClass(@NotNull KtElement element, @NotNull Runnable operation) {
         ClassDescriptor currentClass = peekFromStack(classStack);
         assert currentClass != null : element.getClass().getSimpleName() + " should be inside a class: " + element.getText();
@@ -775,8 +923,7 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         KtExpression argumentExpression = argument.getArgumentExpression();
         bindingTrace.record(SAM_CONSTRUCTOR_TO_ARGUMENT, expression, argumentExpression);
 
-        //noinspection ConstantConditions
-        SamType samType = SamType.create(callableDescriptor.getReturnType());
+        SamType samType = createSamType(callableDescriptor.getReturnType());
         bindingTrace.record(SAM_VALUE, argumentExpression, samType);
     }
 
@@ -787,10 +934,13 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         DeclarationDescriptor operationDescriptor = bindingContext.get(BindingContext.REFERENCE_TARGET, expression.getOperationReference());
         if (!(operationDescriptor instanceof FunctionDescriptor)) return;
 
+        ResolvedCall<?> resolvedCall = CallUtilKt.getResolvedCall(expression, bindingContext);
+        if (resolvedCall != null) recordSamValuesForNewInference(resolvedCall);
+
         FunctionDescriptor original = SamCodegenUtil.getOriginalIfSamAdapter((FunctionDescriptor) operationDescriptor);
         if (original == null) return;
 
-        SamType samType = SamType.createByValueParameter(original.getValueParameters().get(0));
+        SamType samType = createSamTypeByValueParameter(original.getValueParameters().get(0));
         if (samType == null) return;
 
         IElementType token = expression.getOperationToken();
@@ -809,6 +959,9 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         DeclarationDescriptor operationDescriptor = bindingContext.get(BindingContext.REFERENCE_TARGET, expression);
         if (!(operationDescriptor instanceof FunctionDescriptor)) return;
 
+        ResolvedCall<?> resolvedCall = CallUtilKt.getResolvedCall(expression, bindingContext);
+        if (resolvedCall != null) recordSamValuesForNewInference(resolvedCall);
+
         boolean isSetter = operationDescriptor.getName().asString().equals("set");
         FunctionDescriptor original = SamCodegenUtil.getOriginalIfSamAdapter((FunctionDescriptor) operationDescriptor);
         if (original == null) return;
@@ -816,7 +969,7 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         List<KtExpression> indexExpressions = expression.getIndexExpressions();
         List<ValueParameterDescriptor> parameters = original.getValueParameters();
         for (ValueParameterDescriptor valueParameter : parameters) {
-            SamType samType = SamType.createByValueParameter(valueParameter);
+            SamType samType = createSamTypeByValueParameter(valueParameter);
             if (samType == null) continue;
 
             if (isSetter && valueParameter.getIndex() == parameters.size() - 1) {
@@ -857,7 +1010,15 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
         ClassDescriptor classDescriptor = (ClassDescriptor) type.getConstructor().getDeclarationDescriptor();
         assert classDescriptor != null : "because it's enum";
 
-        WhenByEnumsMapping mapping = new WhenByEnumsMapping(classDescriptor, currentClassName, fieldNumber);
+        boolean isPublicAbi = false;
+        for (FunctionDescriptor descriptor : functionsStack) {
+            if (descriptor.isInline()) {
+                isPublicAbi = !DescriptorVisibilities.isPrivate(descriptor.getVisibility());
+                break;
+            }
+        }
+
+        WhenByEnumsMapping mapping = new WhenByEnumsMapping(classDescriptor, currentClassName, fieldNumber, isPublicAbi);
 
         for (ConstantValue<?> constant : switchCodegenProvider.getAllConstants(expression)) {
             if (constant instanceof NullValue) continue;
@@ -872,11 +1033,18 @@ class CodegenAnnotatingVisitor extends KtVisitorVoid {
     }
 
     private boolean isWhenWithEnums(@NotNull KtWhenExpression expression) {
-        return WhenChecker.isWhenByEnum(expression, bindingContext) &&
-               switchCodegenProvider.checkAllItemsAreConstantsSatisfying(
-                       expression,
-                       constant -> constant instanceof EnumValue || constant instanceof NullValue
-               );
+        ClassId enumClassId = WhenChecker.getClassIdForEnumSubject(expression, bindingContext);
+        if (enumClassId == null) return false;
+
+        return switchCodegenProvider.checkAllItemsAreConstantsSatisfying(
+                expression,
+                constant -> isEnumEntryOrNull(enumClassId, constant)
+        );
+    }
+
+    private static boolean isEnumEntryOrNull(ClassId enumClassId, ConstantValue<?> constant) {
+        return (constant instanceof EnumValue && ((EnumValue) constant).getEnumClassId().equals(enumClassId)) ||
+               constant instanceof NullValue;
     }
 
     @NotNull

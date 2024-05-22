@@ -12,5 +12,5 @@ fun useJ(j: J) {
 }
 
 fun jj() {
-    useJ(<!TYPE_MISMATCH!>{}<!>)
+    useJ(<!TYPE_MISMATCH!>{<!TYPE_MISMATCH!><!>}<!>)
 }

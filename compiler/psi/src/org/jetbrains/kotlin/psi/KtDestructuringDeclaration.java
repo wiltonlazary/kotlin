@@ -24,12 +24,15 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.KtNodeTypes;
 import org.jetbrains.kotlin.lexer.KtTokens;
+import org.jetbrains.kotlin.psi.psiUtil.KtPsiUtilKt;
 
 import java.util.List;
 
 import static org.jetbrains.kotlin.lexer.KtTokens.*;
 
-public class KtDestructuringDeclaration extends KtDeclarationImpl implements KtValVarKeywordOwner {
+public class KtDestructuringDeclaration extends KtDeclarationImpl implements KtValVarKeywordOwner, KtDeclarationWithInitializer {
+    private static final TokenSet VAL_VAR_KEYWORDS = TokenSet.create(VAL_KEYWORD, VAR_KEYWORD);
+
     public KtDestructuringDeclaration(@NotNull ASTNode node) {
         super(node);
     }
@@ -45,12 +48,18 @@ public class KtDestructuringDeclaration extends KtDeclarationImpl implements KtV
     }
 
     @Nullable
+    @Override
     public KtExpression getInitializer() {
         ASTNode eqNode = getNode().findChildByType(EQ);
         if (eqNode == null) {
             return null;
         }
         return PsiTreeUtil.getNextSiblingOfType(eqNode.getPsi(), KtExpression.class);
+    }
+
+    @Override
+    public boolean hasInitializer() {
+        return getInitializer() != null;
     }
 
     public boolean isVar() {
@@ -60,7 +69,7 @@ public class KtDestructuringDeclaration extends KtDeclarationImpl implements KtV
     @Override
     @Nullable
     public PsiElement getValOrVarKeyword() {
-        return findChildByType(TokenSet.create(VAL_KEYWORD, VAR_KEYWORD));
+        return findChildByType(VAL_VAR_KEYWORDS);
     }
 
     @Nullable
@@ -71,5 +80,10 @@ public class KtDestructuringDeclaration extends KtDeclarationImpl implements KtV
     @Nullable
     public PsiElement getLPar() {
         return findChildByType(KtTokens.LPAR);
+    }
+
+    @Nullable
+    public PsiElement getTrailingComma() {
+        return KtPsiUtilKt.getTrailingCommaByClosingElement(getRPar());
     }
 }

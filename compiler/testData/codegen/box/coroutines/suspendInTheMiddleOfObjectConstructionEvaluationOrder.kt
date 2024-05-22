@@ -1,12 +1,14 @@
-// WITH_RUNTIME
+// WASM_MUTE_REASON: NESTED_OBJECT_INIT
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
+// JVM_ABI_K1_K2_DIFF: KT-63864
+
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 class Controller {
-    suspend fun suspendHere(): String = suspendCoroutineOrReturn { x ->
+    suspend fun suspendHere(): String = suspendCoroutineUninterceptedOrReturn { x ->
         x.resume("K")
         COROUTINE_SUSPENDED
     }

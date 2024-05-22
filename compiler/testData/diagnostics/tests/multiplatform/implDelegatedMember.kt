@@ -1,4 +1,4 @@
-// !LANGUAGE: +MultiPlatformProjects
+// FIR_IDENTICAL
 // MODULE: m1-common
 // FILE: common.kt
 
@@ -6,7 +6,7 @@ expect open class Foo {
     open fun bar(): String
 }
 
-// MODULE: m2-jvm(m1-common)
+// MODULE: m2-jvm()()(m1-common)
 // FILE: jvm.kt
 
 interface Bar {

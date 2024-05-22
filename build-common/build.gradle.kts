@@ -1,4 +1,3 @@
-
 description = "Kotlin Build Common"
 
 plugins {
@@ -8,23 +7,31 @@ plugins {
 
 dependencies {
     compileOnly(project(":core:util.runtime"))
+    compileOnly(project(":compiler:backend.common.jvm"))
     compileOnly(project(":compiler:util"))
     compileOnly(project(":compiler:cli-common"))
     compileOnly(project(":compiler:frontend.java"))
     compileOnly(project(":js:js.serializer"))
-    compileOnly(project(":js:js.frontend"))
-    compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    compileOnly(intellijDep()) { includeJars("annotations", "asm-all", "trove4j", "util") }
-    compileOnly(project(":kotlin-reflect-api"))
+    compileOnly(project(":js:js.config"))
+    compileOnly(project(":kotlin-util-klib-metadata"))
+    compileOnly(commonDependency("org.jetbrains.kotlin:kotlin-reflect")) { isTransitive = false }
+
+    compileOnly(intellijCore())
+    compileOnly(commonDependency("org.jetbrains.intellij.deps:asm-all"))
+    compileOnly(project(":compiler:build-tools:kotlin-build-statistics"))
 
     testCompileOnly(project(":compiler:cli-common"))
-    testCompile(projectTests(":compiler:tests-common"))
-    testCompile(commonDep("junit:junit"))
-    testCompile(protobufFull())
-    testCompile(projectDist(":kotlin-stdlib"))
-    testCompileOnly(intellijDep()) { includeJars("openapi") }
-
-    testRuntime(projectDist(":kotlin-reflect"))
+    testApi(projectTests(":compiler:tests-common"))
+    testApi(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testImplementation(libs.junit.jupiter.params)
+    testImplementation(libs.junit4)
+    testApi(protobufFull())
+    testApi(kotlinStdlib())
+    testImplementation(project(":compiler:build-tools:kotlin-build-statistics"))
+    testImplementation(commonDependency("org.jetbrains.kotlin:kotlin-reflect")) { isTransitive = false }
+    testImplementation("org.reflections:reflections:0.10.2")
 }
 
 sourceSets {
@@ -32,12 +39,16 @@ sourceSets {
     "test" { projectDefault() }
 }
 
+publish()
+
 runtimeJar()
 sourcesJar()
 javadocJar()
 
 testsJar()
 
-projectTest()
+projectTest(parallel = true)
 
-publish()
+projectTest("testJUnit5", jUnitMode = JUnitMode.JUnit5, parallel = true) {
+    useJUnitPlatform()
+}

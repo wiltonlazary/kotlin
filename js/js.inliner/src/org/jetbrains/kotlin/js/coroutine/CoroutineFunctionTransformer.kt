@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.js.coroutine
 
 import com.intellij.psi.PsiElement
+import com.intellij.psi.impl.source.tree.LeafPsiElement
 import org.jetbrains.kotlin.js.backend.ast.*
 import org.jetbrains.kotlin.js.backend.ast.metadata.coroutineMetadata
 import org.jetbrains.kotlin.js.backend.ast.metadata.forceStateMachine
@@ -132,7 +133,8 @@ class CoroutineFunctionTransformer(private val function: JsFunction, name: Strin
         val psiElement = context.metadata.psiElement
 
         val constructor = JsFunction(function.scope.parent, JsBlock(), "Continuation")
-        constructor.source = psiElement?.finalElement
+        constructor.source = psiElement
+        constructor.body.source = psiElement?.finalElement as? LeafPsiElement
         constructor.name = className
         if (context.metadata.hasReceiver) {
             constructor.parameters += JsParameter(context.receiverFieldName)
@@ -202,7 +204,9 @@ class CoroutineFunctionTransformer(private val function: JsFunction, name: Strin
             statements: MutableList<JsStatement>
     ) {
         val resumeFunction = JsFunction(function.scope.parent, JsBlock(), "resume function")
-        resumeFunction.source = context.metadata.psiElement?.finalElement
+        val psi = context.metadata.psiElement
+        resumeFunction.source = psi
+        resumeFunction.body.source = psi?.finalElement as? LeafPsiElement
 
         val coroutineBody = generateCoroutineBody(context, coroutineBlocks)
         functionWithBody.body.statements.clear()
@@ -280,7 +284,18 @@ class CoroutineFunctionTransformer(private val function: JsFunction, name: Strin
                 statements += block.statements
             }
         }
-        val switchStatement = JsSwitch(stateRef.deepCopy(), cases)
+
+        // NOTE: temporary workaround to let tests run without hanging
+        // TODO: probably default statement should be removed asap the issue about nested break & finally is fixed
+        val defaultCase = JsDefault().apply {
+            val block = JsBlock(
+                assignment(stateRef, JsIntLiteral(indexOfGlobalCatch)).makeStmt(),
+                JsThrow(JsNew(JsNameRef("Error"), listOf(JsStringLiteral("State Machine Unreachable execution"))))
+            )
+            statements += block
+        }
+
+        val switchStatement = JsSwitch(stateRef.deepCopy(), cases + defaultCase)
         val loop = JsDoWhile(JsBooleanLiteral(true), JsTry(JsBlock(switchStatement), catch, null))
 
         return listOf(loop)

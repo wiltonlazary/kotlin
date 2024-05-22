@@ -1,13 +1,12 @@
-// IGNORE_BACKEND: JS_IR
-// EXPECTED_REACHABLE_NODES: 1116
-// MODULE: module-1
-// FILE: bar.kt
+// EXPECTED_REACHABLE_NODES: 1284
+// MODULE: module_1
 // MODULE_KIND: AMD
+// FILE: bar.kt
 fun bar() = "bar"
 
-// MODULE: main(module-1)
-// FILE: box.kt
+// MODULE: main(module_1)
 // MODULE_KIND: AMD
+// FILE: box.kt
 fun box(): String {
     assertEquals("bar", bar())
     return "OK"

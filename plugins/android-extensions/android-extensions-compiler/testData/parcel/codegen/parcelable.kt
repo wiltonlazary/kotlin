@@ -1,5 +1,5 @@
 // CURIOUS_ABOUT writeToParcel, createFromParcel, <clinit>
-// WITH_RUNTIME
+// WITH_STDLIB
 
 //FILE: test/JavaClass.java
 package test;
@@ -11,11 +11,19 @@ class JavaClass {
     }
 }
 
+//FILE: android/os/Parcel.java
+package android.os;
+
+public class Parcel {}
+
 //FILE: android/os/Parcelable.java
 package android.os;
 
 public interface Parcelable {
-    public static interface Creator<T> {}
+    public static interface Creator<T> {
+        T createFromParcel(Parcel source);
+        T[] newArray(int size);
+    }
 }
 
 

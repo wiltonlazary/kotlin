@@ -1,22 +1,19 @@
-
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 dependencies {
-    compile(project(":compiler:util"))
-    compile(project(":compiler:backend"))
-    compile(project(":compiler:frontend"))
-    compile(project(":compiler:frontend.java"))
-    compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    compileOnly(intellijDep()) { includeJars("annotations", "asm-all", "trove4j", "guava", rootProject = rootProject) }
+    api(project(":analysis:light-classes-base"))
+    api(project(":compiler:util"))
+    api(project(":compiler:backend"))
+    api(project(":compiler:frontend"))
+    api(project(":compiler:frontend.java"))
+    compileOnly(intellijCore())
+    compileOnly(commonDependency("org.jetbrains.intellij.deps:asm-all"))
+    compileOnly(libs.guava)
 }
 
 sourceSets {
     "main" { projectDefault() }
-    "test" {}
 }
-

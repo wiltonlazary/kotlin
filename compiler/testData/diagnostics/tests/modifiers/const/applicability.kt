@@ -1,4 +1,4 @@
-// !DIAGNOSTICS:-UNUSED_VARIABLE,-CAST_NEVER_SUCCEEDS,-DIVISION_BY_ZERO
+// DIAGNOSTICS: -UNUSED_VARIABLE -CAST_NEVER_SUCCEEDS -DIVISION_BY_ZERO
 
 import kotlin.reflect.KProperty
 
@@ -61,7 +61,7 @@ enum class MyEnum {
 
 class Outer {
     inner class Inner {
-        <!NESTED_CLASS_NOT_ALLOWED(Object)!>object C<!> {
+        <!NESTED_CLASS_NOT_ALLOWED("Object")!>object C<!> {
             const val a = 18
         }
     }
@@ -82,7 +82,6 @@ const val nonConstInitializer9 = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>1.0/0.0
 const val nonConstInitializer10 = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>0/0<!>
 const val nonConstInitializer11 = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>1 % 0<!>
 const val nonConstInitializer12 = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>0 % 0<!>
-const val nonConstInitializer13 = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>0.<!DEPRECATION!>mod<!>(0)<!>
 const val nonConstInitializer14 = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>0.rem(0)<!>
 const val nonConstInitializer15 = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>0.div(0)<!>
 
@@ -99,8 +98,11 @@ const val constInitializer10 = 1.0 % 0
 const val constInitializer11 = 0.0 % 0
 const val constInitializer12 = (-1.0) % 0
 const val constInitializer13 = 1.0.rem(0)
-const val constInitializer14 = 1.0.<!DEPRECATION!>mod<!>(0)
 const val constInitializer15 = 1.0.div(0)
+
+typealias IntAlias = Int
+const val constInitializer16: IntAlias = 1
+const val constInitializer17 = constInitializer16 + 0
 
 // ------------------
 class Delegate {

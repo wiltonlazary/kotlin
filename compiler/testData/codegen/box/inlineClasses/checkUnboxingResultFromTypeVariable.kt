@@ -1,6 +1,9 @@
-// !LANGUAGE: +InlineClasses
+// WITH_STDLIB
+// WORKS_WHEN_VALUE_CLASS
+// LANGUAGE: +ValueClasses
 
-inline class Result<T>(val a: Any?) {
+OPTIONAL_JVM_INLINE_ANNOTATION
+value class Result<T>(val a: Any?) {
     fun typed(): T = a as T
 }
 
@@ -28,13 +31,13 @@ fun box(): String {
     val unboxedResult = asResult.typed()
     val unboxedAsCtor = asResultCtor.typed()
 
-    if (unboxedInt != 19) return "fail"
-    if (unboxedString != "sample") return "fail"
-    if (unboxedResult.typed() != 19) return "fail"
-    if (unboxedAsCtor.typed() != 10) return "fail"
+    if (unboxedInt != 19) return "fail 1"
+    if (unboxedString != "sample") return "fail 2"
+    if (unboxedResult.typed() != 19) return "fail 3"
+    if (unboxedAsCtor.typed() != 10) return "fail 4"
 
-    if (asResult.typed().typed() != 19) return "fail"
-    if (asResultCtor.typed().typed() != 10) return "fail"
+    if (asResult.typed().typed() != 19) return "fail 5"
+    if (asResultCtor.typed().typed() != 10) return "fail 6"
 
     return "OK"
 }

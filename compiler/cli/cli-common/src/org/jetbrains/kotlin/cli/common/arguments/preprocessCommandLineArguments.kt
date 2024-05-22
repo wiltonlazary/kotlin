@@ -1,34 +1,46 @@
 /*
-* Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
-* that can be found in the license/LICENSE.txt file.
-*/
+* Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
+ */
 
 package org.jetbrains.kotlin.cli.common.arguments
 
+import org.jetbrains.annotations.TestOnly
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.Reader
 
-private const val EXPERIMENTAL_ARGFILE_ARGUMENT = "-Xargfile"
+const val ARGFILE_ARGUMENT = "@"
+private const val EXPERIMENTAL_ARGFILE_ARGUMENT = "-Xargfile="
 
-private const val QUOTATION_MARK = '"'
+private const val SINGLE_QUOTE = '\''
+private const val DOUBLE_QUOTE = '"'
 private const val BACKSLASH = '\\'
-private const val WHITESPACE = ' '
-private const val NEWLINE = '\n'
 
 /**
  * Performs initial preprocessing of arguments, passed to the compiler.
  * This is done prior to *any* arguments parsing, and result of preprocessing
  * will be used instead of actual passed arguments.
  */
-internal fun preprocessCommandLineArguments(args: List<String>, errors: ArgumentParseErrors): List<String> =
-    args.flatMap {
-        if (it.isArgumentForArgfile)
-            File(it.argfilePath).expand(errors)
-        else
-            listOf(it)
+fun preprocessCommandLineArguments(args: List<String>, errors: Lazy<ArgumentParseErrors>): List<String> =
+    args.flatMap { arg ->
+        if (arg.isArgfileArgument) {
+            File(arg.argfilePath).expand(errors.value)
+        } else if (arg.isDeprecatedArgfileArgument) {
+            errors.value.deprecatedArguments[EXPERIMENTAL_ARGFILE_ARGUMENT] = ARGFILE_ARGUMENT
+
+            File(arg.deprecatedArgfilePath).expand(errors.value)
+        } else {
+            listOf(arg)
+        }
     }
+
+@TestOnly
+fun readArgumentsFromArgFile(content: String): List<String> {
+    val reader = content.reader()
+    return generateSequence { reader.parseNextArgument() }.toList()
+}
 
 private fun File.expand(errors: ArgumentParseErrors): List<String> {
     return try {
@@ -49,28 +61,29 @@ private fun Reader.parseNextArgument(): String? {
     val sb = StringBuilder()
 
     var r = nextChar()
-    while (r != null && (r == WHITESPACE || r == NEWLINE)) {
+    while (r != null && r.isWhitespace()) {
         r = nextChar()
     }
 
-    loop@ while (r != null) {
-        when (r) {
-            WHITESPACE, NEWLINE -> break@loop
-            QUOTATION_MARK -> consumeRestOfEscapedSequence(sb)
-            BACKSLASH -> nextChar()?.apply(sb::append)
-            else -> sb.append(r)
+    while (r != null) {
+        if (r.isWhitespace()) break
+
+        if (r == DOUBLE_QUOTE || r == SINGLE_QUOTE) {
+            consumeRestOfQuotedSequence(sb, r)
+            return sb.toString()
         }
 
+        sb.append(r)
         r = nextChar()
     }
 
     return sb.toString().takeIf { it.isNotEmpty() }
 }
 
-private fun Reader.consumeRestOfEscapedSequence(sb: StringBuilder) {
+private fun Reader.consumeRestOfQuotedSequence(sb: StringBuilder, quote: Char) {
     var ch = nextChar()
-    while (ch != null && ch != QUOTATION_MARK) {
-        if (ch == BACKSLASH) nextChar()?.apply(sb::append) else sb.append(ch)
+    while (ch != null && ch != quote) {
+        if (ch == BACKSLASH) nextChar()?.let { sb.append(it) } else sb.append(ch)
         ch = nextChar()
     }
 }
@@ -79,9 +92,13 @@ private fun Reader.nextChar(): Char? =
     read().takeUnless { it == -1 }?.toChar()
 
 private val String.argfilePath: String
-    get() = removePrefix("$EXPERIMENTAL_ARGFILE_ARGUMENT=")
+    get() = removePrefix(ARGFILE_ARGUMENT)
 
-// Note that currently we use only experimental syntax for passing argfiles
-// In 1.3 we can support also javac-like syntax `@argfile`
-private val String.isArgumentForArgfile: Boolean
-    get() = startsWith("$EXPERIMENTAL_ARGFILE_ARGUMENT=")
+private val String.isArgfileArgument: Boolean
+    get() = startsWith(ARGFILE_ARGUMENT)
+
+private val String.deprecatedArgfilePath: String
+    get() = removePrefix(EXPERIMENTAL_ARGFILE_ARGUMENT)
+
+private val String.isDeprecatedArgfileArgument: Boolean
+    get() = startsWith(EXPERIMENTAL_ARGFILE_ARGUMENT)

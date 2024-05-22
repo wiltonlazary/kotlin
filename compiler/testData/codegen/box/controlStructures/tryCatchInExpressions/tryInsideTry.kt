@@ -1,3 +1,4 @@
+
 class MyException(message: String): Exception(message)
 
 fun box(): String =

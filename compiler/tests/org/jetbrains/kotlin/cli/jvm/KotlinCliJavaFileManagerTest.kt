@@ -17,7 +17,6 @@
 package org.jetbrains.kotlin.cli.jvm
 
 import com.intellij.core.CoreJavaFileManager
-import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.vfs.StandardFileSystems
 import com.intellij.psi.search.GlobalSearchScope
 import junit.framework.TestCase
@@ -36,6 +35,7 @@ import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.KotlinTestWithEnvironment
 import org.jetbrains.kotlin.test.TestJdkKind
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import java.io.File
 
 class KotlinCliJavaFileManagerTest : KotlinTestWithEnvironment() {
@@ -182,10 +182,10 @@ class KotlinCliJavaFileManagerTest : KotlinTestWithEnvironment() {
     }
 
     override fun createEnvironment(): KotlinCoreEnvironment {
-        javaFilesDir = KotlinTestUtils.tmpDir("java-file-manager-test")
+        javaFilesDir = KtTestUtil.tmpDir("java-file-manager-test")
 
         val configuration = KotlinTestUtils.newConfiguration(
-                ConfigurationKind.JDK_ONLY, TestJdkKind.MOCK_JDK, emptyList(), listOf(javaFilesDir)
+            ConfigurationKind.JDK_ONLY, TestJdkKind.MOCK_JDK, emptyList(), listOf(javaFilesDir)
         )
 
         return KotlinCoreEnvironment.createForTests(testRootDisposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES)
@@ -199,14 +199,14 @@ class KotlinCliJavaFileManagerTest : KotlinTestWithEnvironment() {
 
         @Suppress("UNUSED_VARIABLE") // used to implicitly initialize classpath/index in the manager
         val coreJavaFileFinder = VirtualFileFinder.SERVICE.getInstance(project)
-        val coreJavaFileManager = ServiceManager.getService(project, CoreJavaFileManager::class.java) as KotlinCliJavaFileManagerImpl
+        val coreJavaFileManager = project.getService(CoreJavaFileManager::class.java) as KotlinCliJavaFileManagerImpl
 
         val root = StandardFileSystems.local().findFileByPath(javaFilesDir.path)!!
         coreJavaFileManager.initialize(
-                JvmDependenciesIndexImpl(listOf(JavaRoot(root, JavaRoot.RootType.SOURCE))),
-                emptyList(),
-                SingleJavaFileRootsIndex(emptyList()),
-                useFastClassFilesReading = true
+            JvmDependenciesIndexImpl(listOf(JavaRoot(root, JavaRoot.RootType.SOURCE))),
+            emptyList(),
+            SingleJavaFileRootsIndex(emptyList()),
+            usePsiClassFilesReading = false
         )
 
         return coreJavaFileManager
@@ -215,7 +215,7 @@ class KotlinCliJavaFileManagerTest : KotlinTestWithEnvironment() {
     private fun assertCanFind(manager: KotlinCliJavaFileManagerImpl, packageFQName: String, classFqName: String) {
         val allScope = GlobalSearchScope.allScope(project)
 
-        val classId = ClassId(FqName(packageFQName), FqName(classFqName), false)
+        val classId = ClassId(FqName(packageFQName), FqName(classFqName), isLocal = false)
         val stringRequest = classId.asSingleFqName().asString()
 
         val foundByClassId = (manager.findClass(classId, allScope) as JavaClassImpl).psi
@@ -230,7 +230,7 @@ class KotlinCliJavaFileManagerTest : KotlinTestWithEnvironment() {
     }
 
     private fun assertCannotFind(manager: KotlinCliJavaFileManagerImpl, packageFQName: String, classFqName: String) {
-        val classId = ClassId(FqName(packageFQName), FqName(classFqName), false)
+        val classId = ClassId(FqName(packageFQName), FqName(classFqName), isLocal = false)
         val foundClass = manager.findClass(classId, GlobalSearchScope.allScope(project))
         TestCase.assertNull("Found, but shouldn't have: $classId", foundClass)
     }

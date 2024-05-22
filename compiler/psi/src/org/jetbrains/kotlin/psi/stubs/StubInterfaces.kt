@@ -21,6 +21,7 @@ import com.intellij.psi.stubs.NamedStub
 import com.intellij.psi.stubs.PsiFileStub
 import com.intellij.psi.stubs.StubElement
 import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.*
 
@@ -32,15 +33,23 @@ interface KotlinFileStub : PsiFileStub<KtFile> {
 
 interface KotlinPlaceHolderStub<T : KtElement> : StubElement<T>
 
+interface KotlinPlaceHolderWithTextStub<T : KtElement> : KotlinPlaceHolderStub<T> {
+    fun text(): String
+}
+
 interface KotlinStubWithFqName<T : PsiNamedElement> : NamedStub<T> {
     fun getFqName(): FqName?
 }
 
-interface KotlinTypeAliasStub : KotlinStubWithFqName<KtTypeAlias> {
+interface KotlinClassifierStub {
+    fun getClassId(): ClassId?
+}
+
+interface KotlinTypeAliasStub : KotlinClassifierStub, KotlinStubWithFqName<KtTypeAlias> {
     fun isTopLevel(): Boolean
 }
 
-interface KotlinClassOrObjectStub<T : KtClassOrObject> : KotlinStubWithFqName<T> {
+interface KotlinClassOrObjectStub<T : KtClassOrObject> : KotlinClassifierStub, KotlinStubWithFqName<T> {
     fun isLocal(): Boolean
     fun getSuperNames(): List<String>
     fun isTopLevel(): Boolean
@@ -56,6 +65,12 @@ interface KotlinObjectStub : KotlinClassOrObjectStub<KtObjectDeclaration> {
     fun isObjectLiteral(): Boolean
 }
 
+interface KotlinValueArgumentStub<T : KtValueArgument> : KotlinPlaceHolderStub<T> {
+    fun isSpread(): Boolean
+}
+
+interface KotlinContractEffectStub : KotlinPlaceHolderStub<KtContractEffect> {}
+
 interface KotlinAnnotationEntryStub : StubElement<KtAnnotationEntry> {
     fun getShortName(): String?
     fun hasValueArguments(): Boolean
@@ -69,6 +84,14 @@ interface KotlinFunctionStub : KotlinCallableStubBase<KtNamedFunction> {
     fun hasBlockBody(): Boolean
     fun hasBody(): Boolean
     fun hasTypeParameterListBeforeFunctionName(): Boolean
+    fun mayHaveContract(): Boolean
+}
+
+interface KotlinConstructorStub<T : KtConstructor<T>> :
+    KotlinCallableStubBase<T> {
+    fun hasBody(): Boolean
+    fun isDelegatedCallToThis(): Boolean
+    fun isExplicitDelegationCall(): Boolean
 }
 
 interface KotlinImportAliasStub : StubElement<KtImportAlias> {
@@ -105,6 +128,10 @@ interface KotlinPropertyAccessorStub : StubElement<KtPropertyAccessor> {
     fun hasBlockBody(): Boolean
 }
 
+interface KotlinBackingFieldStub : StubElement<KtBackingField> {
+    fun hasInitializer(): Boolean
+}
+
 interface KotlinPropertyStub : KotlinCallableStubBase<KtProperty> {
     fun isVar(): Boolean
     fun hasDelegate(): Boolean
@@ -123,6 +150,22 @@ interface KotlinTypeParameterStub : KotlinStubWithFqName<KtTypeParameter> {
     fun isOutVariance(): Boolean
 }
 
+enum class ConstantValueKind {
+    NULL,
+    BOOLEAN_CONSTANT,
+    FLOAT_CONSTANT,
+    CHARACTER_CONSTANT,
+    INTEGER_CONSTANT
+}
+
+interface KotlinConstantExpressionStub : StubElement<KtConstantExpression> {
+    fun kind(): ConstantValueKind
+    fun value(): String
+}
+
+interface KotlinClassLiteralExpressionStub : StubElement<KtClassLiteralExpression>
+interface KotlinCollectionLiteralExpressionStub : StubElement<KtCollectionLiteralExpression>
+
 interface KotlinTypeProjectionStub : StubElement<KtTypeProjection> {
     fun getProjectionKind(): KtProjectionKind
 }
@@ -131,4 +174,8 @@ interface KotlinUserTypeStub : StubElement<KtUserType>
 
 interface KotlinScriptStub : KotlinStubWithFqName<KtScript> {
     override fun getFqName(): FqName
+}
+
+interface KotlinContextReceiverStub : StubElement<KtContextReceiver> {
+    fun getLabel(): String?
 }

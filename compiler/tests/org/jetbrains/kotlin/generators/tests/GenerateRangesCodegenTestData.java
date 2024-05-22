@@ -18,16 +18,12 @@ package org.jetbrains.kotlin.generators.tests;
 
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.LineSeparator;
-import com.intellij.util.containers.ContainerUtil;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -35,13 +31,16 @@ public class GenerateRangesCodegenTestData {
     private static final File TEST_DATA_DIR = new File("compiler/testData/codegen/box/ranges");
     private static final File AS_LITERAL_DIR = new File(TEST_DATA_DIR, "literal");
     private static final File AS_EXPRESSION_DIR = new File(TEST_DATA_DIR, "expression");
+    private static final File UNSIGNED_TEST_DATA_DIR = new File(TEST_DATA_DIR, "unsigned");
+    private static final File UNSIGNED_AS_LITERAL_DIR = new File(UNSIGNED_TEST_DATA_DIR, "literal");
+    private static final File UNSIGNED_AS_EXPRESSION_DIR = new File(UNSIGNED_TEST_DATA_DIR, "expression");
     private static final File[] SOURCE_TEST_FILES = {
             new File("libraries/stdlib/test/ranges/RangeIterationTest.kt"),
-            new File("libraries/stdlib/jvm/test/ranges/RangeIterationJVMTest.kt")
     };
 
     private static final Pattern TEST_FUN_PATTERN = Pattern.compile("@Test fun (\\w+)\\(\\) \\{.+?}", Pattern.DOTALL);
-    private static final Pattern SUBTEST_INVOCATION_PATTERN = Pattern.compile("doTest\\(([^,]+), [^,]+, [^,]+, [^,]+,\\s+listOf[\\w<>]*\\(([^\\n]*)\\)\\)", Pattern.DOTALL);
+    private static final Pattern SUBTEST_INVOCATION_PATTERN =
+            Pattern.compile("doTest\\(([^,]+), [^,]+, [^,]+, [^,]+,\\s+listOf[\\w<>]*\\(([^\\n]*)\\)\\)", Pattern.DOTALL);
 
     // $LIST.size() check is needed in order for tests not to run forever
     private static final String LITERAL_TEMPLATE = "    val $LIST = ArrayList<$TYPE>()\n" +
@@ -65,35 +64,71 @@ public class GenerateRangesCodegenTestData {
                                                       "    }\n" +
                                                       "\n";
 
-    private static final Map<String, String> ELEMENT_TYPE_KNOWN_SUBSTRINGS = new ContainerUtil.ImmutableMapBuilder<String, String>()
-            .put("'", "Char")
-            .put("\"", "Char")
-            .put("Float.NaN", "Float")
-            .put("Double.NaN", "Double")
-            .put("MaxL", "Long")
-            .put("MinL", "Long")
-            .put("MaxC", "Char")
-            .put("MinC", "Char")
-            .build();
+    private static final List<String> INTEGER_PRIMITIVES =
+            Arrays.asList("Int", "Byte", "Short", "Long", "Char", "UInt", "UByte", "UShort", "ULong");
+
+    private static final Map<String, String> ELEMENT_TYPE_KNOWN_SUBSTRINGS = new HashMap<>();
+    private static final Map<String, String> MIN_MAX_CONSTANTS = new LinkedHashMap<>();
+
+    private static final List<String> JVM_IR_FAILING_UNSIGNED_LITERAL_TESTS = Collections.emptyList();
+
+    private static final List<String> JVM_IR_FAILING_UNSIGNED_EXPRESSION_TESTS = Collections.emptyList();
+
+    private static final List<String> USE_OLD_MANGLING_IN_UNSIGNED_LITERAL_TESTS = Collections.emptyList();
+
+    private static final List<String> USE_OLD_MANGLING_IN_UNSIGNED_EXPRESSION_TESTS = Collections.emptyList();
+
+    private static final List<String> JS_FAILING_TESTS = Collections.emptyList();
+
+    static {
+        for (String integerType : INTEGER_PRIMITIVES) {
+            String suffix = integerType.substring(0, integerType.startsWith("U") ? 2 : 1);
+            ELEMENT_TYPE_KNOWN_SUBSTRINGS.put("Max" + suffix, integerType);
+            ELEMENT_TYPE_KNOWN_SUBSTRINGS.put("Min" + suffix, integerType);
+            MIN_MAX_CONSTANTS.put("Max" + suffix, integerType + ".MAX_VALUE");
+            MIN_MAX_CONSTANTS.put("Min" + suffix, integerType + ".MIN_VALUE");
+        }
+
+        ELEMENT_TYPE_KNOWN_SUBSTRINGS.put("'", "Char");
+        ELEMENT_TYPE_KNOWN_SUBSTRINGS.put("\"", "Char");
+    }
 
     private static String detectElementType(String rangeExpression) {
         Matcher matcher = Pattern.compile("\\.to(\\w+)").matcher(rangeExpression);
         if (matcher.find()) {
             String elementType = matcher.group(1);
-            return elementType.equals("Byte") || elementType.equals("Short") ? "Int" : elementType;
-        }
-        if (Pattern.compile("\\d\\.\\d").matcher(rangeExpression).find()) {
-            return "Double";
+            return getResultingType(elementType);
         }
         for (String substring : ELEMENT_TYPE_KNOWN_SUBSTRINGS.keySet()) {
             if (rangeExpression.contains(substring)) {
-                return ELEMENT_TYPE_KNOWN_SUBSTRINGS.get(substring);
+                return getResultingType(ELEMENT_TYPE_KNOWN_SUBSTRINGS.get(substring));
             }
+        }
+        if (Pattern.compile("\\duL", Pattern.CASE_INSENSITIVE).matcher(rangeExpression).find()) {
+            return "ULong";
+        }
+        if (Pattern.compile("\\dL").matcher(rangeExpression).find()) {
+            return "Long";
+        }
+        if (Pattern.compile("\\du", Pattern.CASE_INSENSITIVE).matcher(rangeExpression).find()) {
+            return "UInt";
         }
         return "Int";
     }
 
-    private static String renderTemplate(String template, int number, String elementType, String rangeExpression, String expectedListElements) {
+    private static String getResultingType(String operandType) {
+        return operandType.equals("Byte") || operandType.equals("Short") ? "Int" :
+               operandType.equals("UByte") || operandType.equals("UShort") ? "UInt" :
+               operandType;
+    }
+
+    private static String renderTemplate(
+            String template,
+            int number,
+            String elementType,
+            String rangeExpression,
+            String expectedListElements
+    ) {
         return template
                 .replace("$RANGE_EXPR_ESCAPED", StringUtil.escapeStringCharacters(rangeExpression))
                 .replace("$RANGE_EXPR", rangeExpression)
@@ -101,42 +136,22 @@ public class GenerateRangesCodegenTestData {
                 .replace("$LIST", "list" + number)
                 .replace("$RANGE", "range" + number)
                 .replace("$TYPE", elementType)
-                .replace("\n", LineSeparator.getSystemLineSeparator().getSeparatorString());
+                .replace("\n", System.lineSeparator());
     }
-
-    private static final List<String> INTEGER_PRIMITIVES = Arrays.asList("Integer", "Byte", "Short", "Long", "Character");
-
-    private static final List<String> IGNORED_FOR_JS_BACKEND = Arrays.asList(
-            "inexactDownToMinValue.kt",
-            "inexactToMaxValue.kt",
-            "maxValueMinusTwoToMaxValue.kt",
-            "maxValueToMaxValue.kt",
-            "maxValueToMinValue.kt",
-            "progressionDownToMinValue.kt",
-            "progressionMaxValueMinusTwoToMaxValue.kt",
-            "progressionMaxValueToMaxValue.kt",
-            "progressionMaxValueToMinValue.kt",
-            "progressionMinValueToMinValue.kt");
-
-    private static final List<String> IGNORED_FOR_NATIVE_BACKEND = Arrays.asList(
-            "inexactDownToMinValue.kt",
-            "inexactToMaxValue.kt",
-            "maxValueMinusTwoToMaxValue.kt",
-            "maxValueToMaxValue.kt",
-            "maxValueToMinValue.kt",
-            "progressionDownToMinValue.kt",
-            "progressionMaxValueMinusTwoToMaxValue.kt",
-            "progressionMaxValueToMaxValue.kt",
-            "progressionMaxValueToMinValue.kt",
-            "progressionMinValueToMinValue.kt"
-    );
 
     private static void writeIgnoreBackendDirective(PrintWriter out, String backendName) {
         out.printf("// TODO: muted automatically, investigate should it be ran for %s or not%n", backendName);
         out.printf("// IGNORE_BACKEND: %s%n%n", backendName);
     }
 
-    private static void writeToFile(File file, String generatedBody) {
+    private static void writeToFile(
+            File file,
+            String generatedBody,
+            boolean isForUnsigned,
+            boolean ignoreJvmIR,
+            boolean ignoreJs,
+            boolean useOldManglingScheme
+    ) {
         PrintWriter out;
         try {
             //noinspection IOResourceOpenedButNotSafelyClosed
@@ -146,25 +161,39 @@ public class GenerateRangesCodegenTestData {
             throw new AssertionError(e);
         }
 
-        if (IGNORED_FOR_JS_BACKEND.contains(file.getName())) {
-            writeIgnoreBackendDirective(out, "JS");
+        if (ignoreJvmIR) {
+            out.println("// IGNORE_BACKEND: JVM_IR");
         }
-        if (IGNORED_FOR_NATIVE_BACKEND.contains(file.getName())) {
-            writeIgnoreBackendDirective(out, "NATIVE");
+        if (ignoreJs) {
+            out.println("// IGNORE_BACKEND: JS");
         }
-
+        boolean hasRangeUntil = generatedBody.contains("..<");
+        if (hasRangeUntil) {
+            out.println("// DONT_TARGET_EXACT_BACKEND: JVM"); // do not test on old backend new rangeUntil operator
+        }
         out.println("// Auto-generated by " + GenerateRangesCodegenTestData.class.getName() + ". DO NOT EDIT!");
-        out.println("// WITH_RUNTIME");
-        out.println();
-        if (generatedBody.contains("Max") || generatedBody.contains("Min")) {
-            // Import min/max values, but only in case when the generated test case actually uses them (not to clutter tests which don't)
-            out.println();
-            for (String primitive : INTEGER_PRIMITIVES) {
-                out.println("import java.lang." + primitive + ".MAX_VALUE as Max" + primitive.charAt(0));
-                out.println("import java.lang." + primitive + ".MIN_VALUE as Min" + primitive.charAt(0));
-            }
+        if (hasRangeUntil) {
+            out.println("// LANGUAGE: +RangeUntilOperator"); // until rangeUntil is stable
+        }
+        out.println("// WITH_STDLIB");
+        if (useOldManglingScheme) {
+            out.println("// KOTLIN_CONFIGURATION_FLAGS: +JVM.USE_OLD_INLINE_CLASSES_MANGLING_SCHEME");
         }
         out.println();
+        // Import min/max values, but only in case when the generated test case actually uses them (not to clutter tests which don't)
+        out.println();
+        MIN_MAX_CONSTANTS.forEach((name, value) -> {
+            if (generatedBody.contains(name)) {
+                // They are intentionally added as non-const vals rather than direct references to MIN_VALUE/MAX_VALUE
+                // in order to fool constant evaluation.
+                out.printf("val %s = %s", name, value).println();
+            }
+        });
+
+        out.println();
+        if (hasRangeUntil) {
+            out.println("@OptIn(ExperimentalStdlibApi::class)"); // until open-ended ranges are stable
+        }
         out.println("fun box(): String {");
         out.print(generatedBody);
         out.println("    return \"OK\"");
@@ -176,10 +205,16 @@ public class GenerateRangesCodegenTestData {
         try {
             FileUtil.delete(AS_LITERAL_DIR);
             FileUtil.delete(AS_EXPRESSION_DIR);
+            FileUtil.delete(UNSIGNED_AS_LITERAL_DIR);
+            FileUtil.delete(UNSIGNED_AS_EXPRESSION_DIR);
             //noinspection ResultOfMethodCallIgnored
             AS_LITERAL_DIR.mkdirs();
             //noinspection ResultOfMethodCallIgnored
             AS_EXPRESSION_DIR.mkdirs();
+            //noinspection ResultOfMethodCallIgnored
+            UNSIGNED_AS_LITERAL_DIR.mkdirs();
+            //noinspection ResultOfMethodCallIgnored
+            UNSIGNED_AS_EXPRESSION_DIR.mkdirs();
 
             for (File file : SOURCE_TEST_FILES) {
                 String sourceContent = FileUtil.loadFile(file);
@@ -194,24 +229,48 @@ public class GenerateRangesCodegenTestData {
 
                     StringBuilder asLiteralBody = new StringBuilder();
                     StringBuilder asExpressionBody = new StringBuilder();
-                    int index = 0;
+                    StringBuilder unsignedAsLiteralBody = new StringBuilder();
+                    StringBuilder unsignedAsExpressionBody = new StringBuilder();
+                    int signedIndex = 0;
+                    int unsignedIndex = 0;
 
                     Matcher matcher = SUBTEST_INVOCATION_PATTERN.matcher(testFunText);
                     while (matcher.find()) {
-                        index++;
                         String rangeExpression = matcher.group(1);
                         String expectedListElements = matcher.group(2);
                         String elementType = detectElementType(rangeExpression);
-                        asLiteralBody.append(renderTemplate(LITERAL_TEMPLATE, index, elementType, rangeExpression, expectedListElements));
-                        asExpressionBody.append(renderTemplate(EXPRESSION_TEMPLATE, index, elementType, rangeExpression, expectedListElements));
+                        if (elementType.startsWith("U")) {
+                            unsignedIndex++;
+                            unsignedAsLiteralBody
+                                    .append(renderTemplate(LITERAL_TEMPLATE, unsignedIndex, elementType, rangeExpression,
+                                                           expectedListElements));
+                            unsignedAsExpressionBody
+                                    .append(renderTemplate(EXPRESSION_TEMPLATE, unsignedIndex, elementType, rangeExpression,
+                                                           expectedListElements));
+                        }
+                        else {
+                            signedIndex++;
+                            asLiteralBody
+                                    .append(renderTemplate(LITERAL_TEMPLATE, signedIndex, elementType, rangeExpression,
+                                                           expectedListElements));
+                            asExpressionBody
+                                    .append(renderTemplate(EXPRESSION_TEMPLATE, signedIndex, elementType, rangeExpression,
+                                                           expectedListElements));
+                        }
                     }
 
                     String fileName = testFunName + ".kt";
-                    writeToFile(new File(AS_LITERAL_DIR, fileName), asLiteralBody.toString());
-                    writeToFile(new File(AS_EXPRESSION_DIR, fileName), asExpressionBody.toString());
+                    writeToFile(new File(AS_LITERAL_DIR, fileName), asLiteralBody.toString(), false, false, false, false);
+                    writeToFile(new File(AS_EXPRESSION_DIR, fileName), asExpressionBody.toString(), false, false, false, false);
+                    writeToFile(new File(UNSIGNED_AS_LITERAL_DIR, fileName), unsignedAsLiteralBody.toString(), true,
+                                JVM_IR_FAILING_UNSIGNED_LITERAL_TESTS.contains(testFunName),
+                                false, USE_OLD_MANGLING_IN_UNSIGNED_LITERAL_TESTS.contains(testFunName));
+                    writeToFile(new File(UNSIGNED_AS_EXPRESSION_DIR, fileName), unsignedAsExpressionBody.toString(), true,
+                                JVM_IR_FAILING_UNSIGNED_EXPRESSION_TESTS.contains(testFunName),
+                                JS_FAILING_TESTS.contains(testFunName),
+                                USE_OLD_MANGLING_IN_UNSIGNED_EXPRESSION_TESTS.contains(testFunName));
                 }
             }
-
         }
         catch (IOException e) {
             throw new RuntimeException(e);

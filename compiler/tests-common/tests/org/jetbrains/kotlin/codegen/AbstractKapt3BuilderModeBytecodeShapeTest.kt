@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.resolve.jvm.extensions.AnalysisHandlerExtension
 import org.jetbrains.kotlin.resolve.jvm.extensions.PartialAnalysisHandlerExtension
 import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.TargetBackend
 import java.io.File
 
 abstract class AbstractKapt3BuilderModeBytecodeShapeTest : CodegenTestCase() {
@@ -29,9 +30,11 @@ abstract class AbstractKapt3BuilderModeBytecodeShapeTest : CodegenTestCase() {
         }
     }
 
-    override fun doMultiFileTest(wholeFile: File, files: MutableList<TestFile>, javaFilesDir: File?) {
-        val txtFile = File(wholeFile.parentFile, wholeFile.nameWithoutExtension + ".txt")
-        compile(files, javaFilesDir)
+    override fun doMultiFileTest(wholeFile: File, files: List<TestFile>) {
+        compile(files)
+        val irFile = File(wholeFile.parentFile, wholeFile.nameWithoutExtension + ".ir.txt")
+        val nonIrFile = File(wholeFile.parentFile, wholeFile.nameWithoutExtension + ".txt")
+        val txtFile = if (backend == TargetBackend.JVM_IR && irFile.exists()) irFile else nonIrFile
         KotlinTestUtils.assertEqualsToFile(txtFile, BytecodeListingTextCollectingVisitor.getText(classFileFactory))
     }
 

@@ -51,7 +51,7 @@ class FixStackMethodTransformer : MethodTransformer() {
     }
 
     private fun analyzeAndTransformBreakContinueGotos(context: FixStackContext, internalClassName: String, methodNode: MethodNode) {
-        val analyzer = FixStackAnalyzer(internalClassName, methodNode, context)
+        val analyzer = FixStackAnalyzer(internalClassName, methodNode, context, skipBreakContinueGotoEdges = true)
         analyzer.analyze()
 
         methodNode.maxStack = methodNode.maxStack + analyzer.maxExtraStackSize
@@ -106,7 +106,7 @@ class FixStackMethodTransformer : MethodTransformer() {
                     "Label at $labelIndex, jump at $gotoIndex: stack underflow: $expectedStackSize > $actualStackSize"
                 }
                 val actualStackContent = analyzer.getActualStack(gotoNode)
-                        ?: throw AssertionError("Jump at $gotoIndex should be alive")
+                    ?: throw AssertionError("Jump at $gotoIndex should be alive")
                 actions.add { replaceMarkerWithPops(methodNode, gotoNode.previous, expectedStackSize, actualStackContent) }
             } else if (actualStackSize >= 0 && expectedStackSize < 0) {
                 throw AssertionError("Live jump $gotoIndex to dead label $labelIndex")

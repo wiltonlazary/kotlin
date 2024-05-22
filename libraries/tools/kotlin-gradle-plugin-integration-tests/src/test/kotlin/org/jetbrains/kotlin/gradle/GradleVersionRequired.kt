@@ -17,27 +17,44 @@
 package org.jetbrains.kotlin.gradle
 
 import org.gradle.util.GradleVersion
+import org.jetbrains.kotlin.com.google.common.base.Objects
+import org.jetbrains.kotlin.gradle.GradleVersionRequired.Companion.OLDEST_SUPPORTED
+import org.jetbrains.kotlin.gradle.testbase.TestVersions
+import org.jetbrains.kotlin.gradle.utils.minSupportedGradleVersion
 import org.junit.Assume
 
 sealed class GradleVersionRequired(val minVersion: String, val maxVersion: String?) {
     companion object {
-        //TODO once the plugin is compiled with API level 1.0, replace with the really supported one (3.2)
-        // Currently, it will lead to failing tests due to the conflict with the pre-release kotlin-reflect
-        // bundled into Gradle 3.2...3.4
-        const val OLDEST_SUPPORTED = "3.5"
+        const val OLDEST_SUPPORTED = minSupportedGradleVersion
+
+        val FOR_MPP_SUPPORT = AtLeast(TestVersions.Gradle.MAX_SUPPORTED)
     }
 
-    class Exact(version: String) : GradleVersionRequired(version, version)
+    class Exact(version: String) : GradleVersionRequired(version, version) {
+        override fun toString(): String = "Exact(${minVersion})"
+    }
 
-    class AtLeast(version: String) : GradleVersionRequired(version, null)
+    class AtLeast(version: String) : GradleVersionRequired(version, null) {
+        override fun toString(): String = "AtLeast(${minVersion}"
+    }
 
-    object None : GradleVersionRequired(GradleVersionRequired.OLDEST_SUPPORTED, null)
+    class InRange(minVersion: String, maxVersion: String) : GradleVersionRequired(minVersion, maxVersion)
+
+    class Until(maxVersion: String) : GradleVersionRequired(OLDEST_SUPPORTED, maxVersion)
+
+    object None : GradleVersionRequired(OLDEST_SUPPORTED, null)
+
+    override fun equals(other: Any?): Boolean = other is GradleVersionRequired &&
+            minVersion == other.minVersion &&
+            maxVersion == other.maxVersion
+
+    override fun hashCode(): Int = java.util.Objects.hash(minVersion, maxVersion)
 }
 
 
 fun BaseGradleIT.Project.chooseWrapperVersionOrFinishTest(): String {
     val gradleVersionForTests = System.getProperty("kotlin.gradle.version.for.tests")?.toGradleVersion()
-    val minVersion = gradleVersionRequirement.minVersion.toGradleVersion()
+    val minVersion = max(gradleVersionRequirement.minVersion.toGradleVersion(), OLDEST_SUPPORTED.toGradleVersion())
     val maxVersion = gradleVersionRequirement.maxVersion?.toGradleVersion()
 
     if (gradleVersionForTests == null) {
@@ -48,5 +65,7 @@ fun BaseGradleIT.Project.chooseWrapperVersionOrFinishTest(): String {
 
     return gradleVersionForTests.version
 }
+
+private fun <T : Comparable<T>> max(a: T, b: T): T = if (a < b) b else a
 
 private fun String.toGradleVersion() = GradleVersion.version(this)

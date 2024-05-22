@@ -1,5 +1,5 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
+// TARGET_BACKEND: JVM_IR
 
 public open class Test() {
     open public fun test() : Unit {

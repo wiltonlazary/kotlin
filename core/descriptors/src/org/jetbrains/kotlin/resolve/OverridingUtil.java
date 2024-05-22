@@ -18,10 +18,11 @@ package org.jetbrains.kotlin.resolve;
 
 import kotlin.Pair;
 import kotlin.Unit;
+import kotlin.annotations.jvm.Mutable;
 import kotlin.collections.CollectionsKt;
+import kotlin.jvm.functions.Function0;
 import kotlin.jvm.functions.Function1;
 import kotlin.jvm.functions.Function2;
-import org.jetbrains.annotations.Mutable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.descriptors.*;
@@ -29,12 +30,11 @@ import org.jetbrains.kotlin.descriptors.impl.FunctionDescriptorImpl;
 import org.jetbrains.kotlin.descriptors.impl.PropertyAccessorDescriptorImpl;
 import org.jetbrains.kotlin.descriptors.impl.PropertyDescriptorImpl;
 import org.jetbrains.kotlin.name.Name;
-import org.jetbrains.kotlin.types.FlexibleTypesKt;
-import org.jetbrains.kotlin.types.KotlinType;
-import org.jetbrains.kotlin.types.KotlinTypeKt;
-import org.jetbrains.kotlin.types.TypeConstructor;
+import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
+import org.jetbrains.kotlin.types.*;
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker;
-import org.jetbrains.kotlin.types.checker.KotlinTypeCheckerImpl;
+import org.jetbrains.kotlin.types.checker.KotlinTypePreparator;
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner;
 import org.jetbrains.kotlin.utils.SmartSet;
 
 import java.util.*;
@@ -49,22 +49,59 @@ public class OverridingUtil {
                     ExternalOverridabilityCondition.class.getClassLoader()
             ));
 
-    public static final OverridingUtil DEFAULT = new OverridingUtil(new KotlinTypeChecker.TypeConstructorEquality() {
-        @Override
-        public boolean equals(@NotNull TypeConstructor a, @NotNull TypeConstructor b) {
-            return a.equals(b);
-        }
-    });
+    public static final OverridingUtil DEFAULT;
 
-    @NotNull
-    public static OverridingUtil createWithEqualityAxioms(@NotNull KotlinTypeChecker.TypeConstructorEquality equalityAxioms) {
-        return new OverridingUtil(equalityAxioms);
+    private static final KotlinTypeChecker.TypeConstructorEquality DEFAULT_TYPE_CONSTRUCTOR_EQUALITY =
+            new KotlinTypeChecker.TypeConstructorEquality() {
+                @Override
+                public boolean equals(@NotNull TypeConstructor a, @NotNull TypeConstructor b) {
+                    return a.equals(b);
+                }
+            };
+
+    static {
+        DEFAULT = new OverridingUtil(
+                DEFAULT_TYPE_CONSTRUCTOR_EQUALITY, KotlinTypeRefiner.Default.INSTANCE, KotlinTypePreparator.Default.INSTANCE,
+                null
+        );
     }
 
-    private final KotlinTypeChecker.TypeConstructorEquality equalityAxioms;
+    @NotNull
+    public static OverridingUtil createWithTypeRefiner(@NotNull KotlinTypeRefiner kotlinTypeRefiner) {
+        return new OverridingUtil(DEFAULT_TYPE_CONSTRUCTOR_EQUALITY, kotlinTypeRefiner, KotlinTypePreparator.Default.INSTANCE, null);
+    }
 
-    private OverridingUtil(KotlinTypeChecker.TypeConstructorEquality axioms) {
+    @NotNull
+    public static OverridingUtil createWithTypePreparatorAndCustomSubtype(
+            @NotNull KotlinTypePreparator kotlinTypePreparator,
+            @NotNull Function2<KotlinType, KotlinType, Boolean> customSubtype
+    ) {
+        return new OverridingUtil(DEFAULT_TYPE_CONSTRUCTOR_EQUALITY, KotlinTypeRefiner.Default.INSTANCE, kotlinTypePreparator, customSubtype);
+    }
+
+    @NotNull
+    public static OverridingUtil create(
+            @NotNull KotlinTypeRefiner kotlinTypeRefiner,
+            @NotNull KotlinTypeChecker.TypeConstructorEquality equalityAxioms
+    ) {
+        return new OverridingUtil(equalityAxioms, kotlinTypeRefiner, KotlinTypePreparator.Default.INSTANCE, null);
+    }
+
+    private final KotlinTypeRefiner kotlinTypeRefiner;
+    private final KotlinTypePreparator kotlinTypePreparator;
+    private final KotlinTypeChecker.TypeConstructorEquality equalityAxioms;
+    private final Function2<KotlinType, KotlinType, Boolean> customSubtype;
+
+    private OverridingUtil(
+            @NotNull KotlinTypeChecker.TypeConstructorEquality axioms,
+            @NotNull KotlinTypeRefiner kotlinTypeRefiner,
+            @NotNull KotlinTypePreparator kotlinTypePreparator,
+            @Nullable Function2<KotlinType, KotlinType, Boolean> customSubtype
+    ) {
         equalityAxioms = axioms;
+        this.kotlinTypeRefiner = kotlinTypeRefiner;
+        this.kotlinTypePreparator = kotlinTypePreparator;
+        this.customSubtype = customSubtype;
     }
 
     /**
@@ -73,7 +110,11 @@ public class OverridingUtil {
      */
     @NotNull
     public static <D extends CallableDescriptor> Set<D> filterOutOverridden(@NotNull Set<D> candidateSet) {
-        return filterOverrides(candidateSet, new Function2<D, D, Pair<CallableDescriptor, CallableDescriptor>>() {
+        boolean allowDescriptorCopies = !candidateSet.isEmpty() &&
+                                        DescriptorUtilsKt
+                                                .isTypeRefinementEnabled(DescriptorUtilsKt.getModule(candidateSet.iterator().next()));
+
+        return filterOverrides(candidateSet, allowDescriptorCopies, null, new Function2<D, D, Pair<CallableDescriptor, CallableDescriptor>>() {
             @Override
             public Pair<CallableDescriptor, CallableDescriptor> invoke(D a, D b) {
                 return new Pair<CallableDescriptor, CallableDescriptor>(a, b);
@@ -84,6 +125,8 @@ public class OverridingUtil {
     @NotNull
     public static <D> Set<D> filterOverrides(
             @NotNull Set<D> candidateSet,
+            boolean allowDescriptorCopies,
+            @Nullable Function0<?> cancellationCallback,
             @NotNull Function2<? super D, ? super D, Pair<CallableDescriptor, CallableDescriptor>> transformFirst
     ) {
         if (candidateSet.size() <= 1) return candidateSet;
@@ -91,15 +134,18 @@ public class OverridingUtil {
         Set<D> result = new LinkedHashSet<D>();
         outerLoop:
         for (D meD : candidateSet) {
+            if (cancellationCallback != null) {
+                cancellationCallback.invoke();
+            }
             for (Iterator<D> iterator = result.iterator(); iterator.hasNext(); ) {
                 D otherD = iterator.next();
                 Pair<CallableDescriptor, CallableDescriptor> meAndOther = transformFirst.invoke(meD, otherD);
                 CallableDescriptor me = meAndOther.component1();
                 CallableDescriptor other = meAndOther.component2();
-                if (overrides(me, other)) {
+                if (overrides(me, other, allowDescriptorCopies, true)) {
                     iterator.remove();
                 }
-                else if (overrides(other, me)) {
+                else if (overrides(other, me, allowDescriptorCopies, true)) {
                     continue outerLoop;
                 }
             }
@@ -114,7 +160,12 @@ public class OverridingUtil {
     /**
      * @return whether f overrides g
      */
-    public static <D extends CallableDescriptor> boolean overrides(@NotNull D f, @NotNull D g) {
+    public static <D extends CallableDescriptor> boolean overrides(
+            @NotNull D f,
+            @NotNull D g,
+            boolean allowDeclarationCopies,
+            boolean distinguishExpectsAndNonExpects
+    ) {
         // In a multi-module project different "copies" of the same class may be present in different libraries,
         // that's why we use structural equivalence for members (DescriptorEquivalenceForOverrides).
 
@@ -123,11 +174,27 @@ public class OverridingUtil {
         // we'll be getting sets of members that do not override each other, but are structurally equivalent.
         // As other code relies on no equal descriptors passed here, we guard against f == g, but this may not be necessary
         // Note that this is needed for the usage of this function in the IDE code
-        if (!f.equals(g) && DescriptorEquivalenceForOverrides.INSTANCE.areEquivalent(f.getOriginal(), g.getOriginal())) return true;
+        if (!f.equals(g)
+            && DescriptorEquivalenceForOverrides.INSTANCE.areEquivalent(
+                    f.getOriginal(),
+                    g.getOriginal(),
+                    allowDeclarationCopies,
+                    distinguishExpectsAndNonExpects
+            )
+        ) {
+            return true;
+        }
 
         CallableDescriptor originalG = g.getOriginal();
         for (D overriddenFunction : DescriptorUtils.getAllOverriddenDescriptors(f)) {
-            if (DescriptorEquivalenceForOverrides.INSTANCE.areEquivalent(originalG, overriddenFunction)) return true;
+            if (DescriptorEquivalenceForOverrides.INSTANCE.areEquivalent(
+                    originalG,
+                    overriddenFunction,
+                    allowDeclarationCopies,
+                    distinguishExpectsAndNonExpects
+            )) {
+                return true;
+            }
         }
         return false;
     }
@@ -191,8 +258,6 @@ public class OverridingUtil {
                 case OVERRIDABLE:
                     wasSuccess = true;
                     break;
-                case CONFLICT:
-                    return OverrideCompatibilityInfo.conflict("External condition failed");
                 case INCOMPATIBLE:
                     return OverrideCompatibilityInfo.incompatible("External condition");
                 case UNKNOWN:
@@ -213,8 +278,6 @@ public class OverridingUtil {
             ExternalOverridabilityCondition.Result result =
                     externalCondition.isOverridable(superDescriptor, subDescriptor, subClassDescriptor);
             switch (result) {
-                case CONFLICT:
-                    return OverrideCompatibilityInfo.conflict("External condition failed");
                 case INCOMPATIBLE:
                     return OverrideCompatibilityInfo.incompatible("External condition");
                 case OVERRIDABLE:
@@ -254,16 +317,25 @@ public class OverridingUtil {
             return OverrideCompatibilityInfo.conflict("Type parameter number mismatch");
         }
 
-        KotlinTypeChecker typeChecker = createTypeChecker(superTypeParameters, subTypeParameters);
+
+        TypeCheckerState typeCheckerState = createTypeCheckerState(superTypeParameters, subTypeParameters);
 
         for (int i = 0; i < superTypeParameters.size(); i++) {
-            if (!areTypeParametersEquivalent(superTypeParameters.get(i), subTypeParameters.get(i), typeChecker)) {
+            if (!areTypeParametersEquivalent(
+                    superTypeParameters.get(i),
+                    subTypeParameters.get(i),
+                    typeCheckerState
+            )) {
                 return OverrideCompatibilityInfo.incompatible("Type parameter bounds mismatch");
             }
         }
 
         for (int i = 0; i < superValueParameters.size(); i++) {
-            if (!areTypesEquivalent(superValueParameters.get(i), subValueParameters.get(i), typeChecker)) {
+            if (!areTypesEquivalent(
+                    superValueParameters.get(i),
+                    subValueParameters.get(i),
+                    typeCheckerState)
+            ) {
                 return OverrideCompatibilityInfo.incompatible("Value parameter type mismatch");
             }
         }
@@ -279,7 +351,13 @@ public class OverridingUtil {
 
             if (superReturnType != null && subReturnType != null) {
                 boolean bothErrors = KotlinTypeKt.isError(subReturnType) && KotlinTypeKt.isError(superReturnType);
-                if (!bothErrors && !typeChecker.isSubtypeOf(subReturnType, superReturnType)) {
+                if (!bothErrors &&
+                    !AbstractTypeChecker.INSTANCE.isSubtypeOf(
+                            typeCheckerState,
+                            subReturnType.unwrap(),
+                            superReturnType.unwrap()
+                    )
+                ) {
                     return OverrideCompatibilityInfo.conflict("Return type mismatch");
                 }
             }
@@ -316,28 +394,27 @@ public class OverridingUtil {
     }
 
     @NotNull
-    private KotlinTypeChecker createTypeChecker(
+    private TypeCheckerState createTypeCheckerState(
             @NotNull List<TypeParameterDescriptor> firstParameters,
             @NotNull List<TypeParameterDescriptor> secondParameters
     ) {
         assert firstParameters.size() == secondParameters.size() :
                 "Should be the same number of type parameters: " + firstParameters + " vs " + secondParameters;
-        if (firstParameters.isEmpty()) return KotlinTypeCheckerImpl.withAxioms(equalityAxioms);
 
-        final Map<TypeConstructor, TypeConstructor> matchingTypeConstructors = new HashMap<TypeConstructor, TypeConstructor>();
+        if (firstParameters.isEmpty()) {
+            return new OverridingUtilTypeSystemContext(
+                    null, equalityAxioms, kotlinTypeRefiner, kotlinTypePreparator, customSubtype
+            ).newTypeCheckerState(true, true);
+        }
+
+        Map<TypeConstructor, TypeConstructor> matchingTypeConstructors = new HashMap<TypeConstructor, TypeConstructor>();
         for (int i = 0; i < firstParameters.size(); i++) {
             matchingTypeConstructors.put(firstParameters.get(i).getTypeConstructor(), secondParameters.get(i).getTypeConstructor());
         }
 
-        return KotlinTypeCheckerImpl.withAxioms(new KotlinTypeChecker.TypeConstructorEquality() {
-            @Override
-            public boolean equals(@NotNull TypeConstructor a, @NotNull TypeConstructor b) {
-                if (equalityAxioms.equals(a, b)) return true;
-                TypeConstructor img1 = matchingTypeConstructors.get(a);
-                TypeConstructor img2 = matchingTypeConstructors.get(b);
-                return (img1 != null && img1.equals(b)) || (img2 != null && img2.equals(a));
-            }
-        });
+        return new OverridingUtilTypeSystemContext(
+                matchingTypeConstructors, equalityAxioms, kotlinTypeRefiner, kotlinTypePreparator, customSubtype
+        ).newTypeCheckerState(true, true);
     }
 
     @Nullable
@@ -359,18 +436,18 @@ public class OverridingUtil {
     private static boolean areTypesEquivalent(
             @NotNull KotlinType typeInSuper,
             @NotNull KotlinType typeInSub,
-            @NotNull KotlinTypeChecker typeChecker
+            @NotNull TypeCheckerState typeCheckerState
     ) {
         boolean bothErrors = KotlinTypeKt.isError(typeInSuper) && KotlinTypeKt.isError(typeInSub);
-        return bothErrors || typeChecker.equalTypes(typeInSuper, typeInSub);
+        if (bothErrors) return true;
+        return AbstractTypeChecker.INSTANCE.equalTypes(typeCheckerState, typeInSuper.unwrap(), typeInSub.unwrap());
     }
 
     // See JLS 8, 8.4.4 Generic Methods
-    // TODO: use TypeSubstitutor instead
     private static boolean areTypeParametersEquivalent(
             @NotNull TypeParameterDescriptor superTypeParameter,
             @NotNull TypeParameterDescriptor subTypeParameter,
-            @NotNull KotlinTypeChecker typeChecker
+            @NotNull TypeCheckerState typeCheckerState
     ) {
         List<KotlinType> superBounds = superTypeParameter.getUpperBounds();
         List<KotlinType> subBounds = new ArrayList<KotlinType>(subTypeParameter.getUpperBounds());
@@ -381,7 +458,7 @@ public class OverridingUtil {
             ListIterator<KotlinType> it = subBounds.listIterator();
             while (it.hasNext()) {
                 KotlinType subBound = it.next();
-                if (areTypesEquivalent(superBound, subBound, typeChecker)) {
+                if (areTypesEquivalent(superBound, subBound, typeCheckerState)) {
                     it.remove();
                     continue outer;
                 }
@@ -404,7 +481,7 @@ public class OverridingUtil {
         return parameters;
     }
 
-    public static void generateOverridesInFunctionGroup(
+    public void generateOverridesInFunctionGroup(
             @SuppressWarnings("UnusedParameters")
             @NotNull Name name, //DO NOT DELETE THIS PARAMETER: needed to make sure all descriptors have the same name
             @NotNull Collection<? extends CallableMemberDescriptor> membersFromSupertypes,
@@ -423,12 +500,16 @@ public class OverridingUtil {
         createAndBindFakeOverrides(current, notOverridden, strategy);
     }
 
-    public static boolean isVisibleForOverride(@NotNull MemberDescriptor overriding, @NotNull MemberDescriptor fromSuper) {
-        return !Visibilities.isPrivate(fromSuper.getVisibility()) &&
-               Visibilities.isVisibleIgnoringReceiver(fromSuper, overriding);
+    public static boolean isVisibleForOverride(
+            @NotNull MemberDescriptor overriding,
+            @NotNull MemberDescriptor fromSuper,
+            boolean useSpecialRulesForPrivateSealedConstructors
+    ) {
+        return !DescriptorVisibilities.isPrivate(fromSuper.getVisibility()) &&
+               DescriptorVisibilities.isVisibleIgnoringReceiver(fromSuper, overriding, useSpecialRulesForPrivateSealedConstructors);
     }
 
-    private static Collection<CallableMemberDescriptor> extractAndBindOverridesForMember(
+    private Collection<CallableMemberDescriptor> extractAndBindOverridesForMember(
             @NotNull CallableMemberDescriptor fromCurrent,
             @NotNull Collection<? extends CallableMemberDescriptor> descriptorsFromSuper,
             @NotNull ClassDescriptor current,
@@ -437,9 +518,9 @@ public class OverridingUtil {
         Collection<CallableMemberDescriptor> bound = new ArrayList<CallableMemberDescriptor>(descriptorsFromSuper.size());
         Collection<CallableMemberDescriptor> overridden = SmartSet.create();
         for (CallableMemberDescriptor fromSupertype : descriptorsFromSuper) {
-            OverrideCompatibilityInfo.Result result = DEFAULT.isOverridableBy(fromSupertype, fromCurrent, current).getResult();
+            OverrideCompatibilityInfo.Result result = isOverridableBy(fromSupertype, fromCurrent, current).getResult();
 
-            boolean isVisibleForOverride = isVisibleForOverride(fromCurrent, fromSupertype);
+            boolean isVisibleForOverride = isVisibleForOverride(fromCurrent, fromSupertype, false);
 
             switch (result) {
                 case OVERRIDABLE:
@@ -508,10 +589,14 @@ public class OverridingUtil {
 
         if (!isVisibilityMoreSpecific(a, b)) return false;
 
+
+        TypeCheckerState checkerState =
+                DEFAULT.createTypeCheckerState(a.getTypeParameters(), b.getTypeParameters());
+
         if (a instanceof FunctionDescriptor) {
             assert b instanceof FunctionDescriptor : "b is " + b.getClass();
 
-            return isReturnTypeMoreSpecific(a, aReturnType, b, bReturnType);
+            return isReturnTypeMoreSpecific(a, aReturnType, b, bReturnType, checkerState);
         }
         if (a instanceof PropertyDescriptor) {
             assert b instanceof PropertyDescriptor : "b is " + b.getClass();
@@ -522,11 +607,12 @@ public class OverridingUtil {
             if (!isAccessorMoreSpecific(pa.getSetter(), pb.getSetter())) return false;
 
             if (pa.isVar() && pb.isVar()) {
-                return DEFAULT.createTypeChecker(a.getTypeParameters(), b.getTypeParameters()).equalTypes(aReturnType, bReturnType);
+                // TODO(dsavvinov): using DEFAULT here looks suspicious
+                return AbstractTypeChecker.INSTANCE.equalTypes(checkerState, aReturnType.unwrap(), bReturnType.unwrap());
             }
             else {
                 // both vals or var vs val: val can't be more specific then var
-                return !(!pa.isVar() && pb.isVar()) && isReturnTypeMoreSpecific(a, aReturnType, b, bReturnType);
+                return !(!pa.isVar() && pb.isVar()) && isReturnTypeMoreSpecific(a, aReturnType, b, bReturnType, checkerState);
             }
         }
         throw new IllegalArgumentException("Unexpected callable: " + a.getClass());
@@ -536,7 +622,7 @@ public class OverridingUtil {
             @NotNull DeclarationDescriptorWithVisibility a,
             @NotNull DeclarationDescriptorWithVisibility b
     ) {
-        Integer result = Visibilities.compare(a.getVisibility(), b.getVisibility());
+        Integer result = DescriptorVisibilities.compare(a.getVisibility(), b.getVisibility());
         return result == null || result >= 0;
     }
 
@@ -560,10 +646,10 @@ public class OverridingUtil {
             @NotNull CallableDescriptor a,
             @NotNull KotlinType aReturnType,
             @NotNull CallableDescriptor b,
-            @NotNull KotlinType bReturnType
+            @NotNull KotlinType bReturnType,
+            @NotNull TypeCheckerState typeCheckerState
     ) {
-        KotlinTypeChecker typeChecker = DEFAULT.createTypeChecker(a.getTypeParameters(), b.getTypeParameters());
-        return typeChecker.isSubtypeOf(aReturnType, bReturnType);
+        return AbstractTypeChecker.INSTANCE.isSubtypeOf(typeCheckerState, aReturnType.unwrap(), bReturnType.unwrap());
     }
 
     @NotNull
@@ -626,7 +712,7 @@ public class OverridingUtil {
         Collection<CallableMemberDescriptor> effectiveOverridden = allInvisible ? overridables : visibleOverridables;
 
         Modality modality = determineModalityForFakeOverride(effectiveOverridden, current);
-        Visibility visibility = allInvisible ? Visibilities.INVISIBLE_FAKE : Visibilities.INHERITED;
+        DescriptorVisibility visibility = allInvisible ? DescriptorVisibilities.INVISIBLE_FAKE : DescriptorVisibilities.INHERITED;
 
         // FIXME doesn't work as expected for flexible types: should create a refined signature.
         // Current algorithm produces bad results in presence of annotated Java signatures such as:
@@ -715,7 +801,7 @@ public class OverridingUtil {
     }
 
     @NotNull
-    private static Collection<CallableMemberDescriptor> filterVisibleFakeOverrides(
+    public static Collection<CallableMemberDescriptor> filterVisibleFakeOverrides(
             @NotNull final ClassDescriptor current,
             @NotNull Collection<CallableMemberDescriptor> toFilter
     ) {
@@ -723,8 +809,8 @@ public class OverridingUtil {
             @Override
             public Boolean invoke(CallableMemberDescriptor descriptor) {
                 //nested class could capture private member, so check for private visibility added
-                return !Visibilities.isPrivate(descriptor.getVisibility()) &&
-                       Visibilities.isVisibleIgnoringReceiver(descriptor, current);
+                return !DescriptorVisibilities.isPrivate(descriptor.getVisibility()) &&
+                       DescriptorVisibilities.isVisibleIgnoringReceiver(descriptor, current, false);
             }
         });
     }
@@ -807,22 +893,22 @@ public class OverridingUtil {
             @Nullable Function1<CallableMemberDescriptor, Unit> cannotInferVisibility
     ) {
         for (CallableMemberDescriptor descriptor : memberDescriptor.getOverriddenDescriptors()) {
-            if (descriptor.getVisibility() == Visibilities.INHERITED) {
+            if (descriptor.getVisibility() == DescriptorVisibilities.INHERITED) {
                 resolveUnknownVisibilityForMember(descriptor, cannotInferVisibility);
             }
         }
 
-        if (memberDescriptor.getVisibility() != Visibilities.INHERITED) {
+        if (memberDescriptor.getVisibility() != DescriptorVisibilities.INHERITED) {
             return;
         }
 
-        Visibility maxVisibility = computeVisibilityToInherit(memberDescriptor);
-        Visibility visibilityToInherit;
+        DescriptorVisibility maxVisibility = computeVisibilityToInherit(memberDescriptor);
+        DescriptorVisibility visibilityToInherit;
         if (maxVisibility == null) {
             if (cannotInferVisibility != null) {
                 cannotInferVisibility.invoke(memberDescriptor);
             }
-            visibilityToInherit = Visibilities.PUBLIC;
+            visibilityToInherit = DescriptorVisibilities.PUBLIC;
         }
         else {
             visibilityToInherit = maxVisibility;
@@ -849,9 +935,9 @@ public class OverridingUtil {
     }
 
     @Nullable
-    private static Visibility computeVisibilityToInherit(@NotNull CallableMemberDescriptor memberDescriptor) {
+    private static DescriptorVisibility computeVisibilityToInherit(@NotNull CallableMemberDescriptor memberDescriptor) {
         Collection<? extends CallableMemberDescriptor> overriddenDescriptors = memberDescriptor.getOverriddenDescriptors();
-        Visibility maxVisibility = findMaxVisibility(overriddenDescriptors);
+        DescriptorVisibility maxVisibility = findMaxVisibility(overriddenDescriptors);
         if (maxVisibility == null) {
             return null;
         }
@@ -868,19 +954,19 @@ public class OverridingUtil {
     }
 
     @Nullable
-    public static Visibility findMaxVisibility(@NotNull Collection<? extends CallableMemberDescriptor> descriptors) {
+    public static DescriptorVisibility findMaxVisibility(@NotNull Collection<? extends CallableMemberDescriptor> descriptors) {
         if (descriptors.isEmpty()) {
-            return Visibilities.DEFAULT_VISIBILITY;
+            return DescriptorVisibilities.DEFAULT_VISIBILITY;
         }
-        Visibility maxVisibility = null;
+        DescriptorVisibility maxVisibility = null;
         for (CallableMemberDescriptor descriptor : descriptors) {
-            Visibility visibility = descriptor.getVisibility();
-            assert visibility != Visibilities.INHERITED : "Visibility should have been computed for " + descriptor;
+            DescriptorVisibility visibility = descriptor.getVisibility();
+            assert visibility != DescriptorVisibilities.INHERITED : "Visibility should have been computed for " + descriptor;
             if (maxVisibility == null) {
                 maxVisibility = visibility;
                 continue;
             }
-            Integer compareResult = Visibilities.compare(visibility, maxVisibility);
+            Integer compareResult = DescriptorVisibilities.compare(visibility, maxVisibility);
             if (compareResult == null) {
                 maxVisibility = null;
             }
@@ -892,7 +978,7 @@ public class OverridingUtil {
             return null;
         }
         for (CallableMemberDescriptor descriptor : descriptors) {
-            Integer compareResult = Visibilities.compare(maxVisibility, descriptor.getVisibility());
+            Integer compareResult = DescriptorVisibilities.compare(maxVisibility, descriptor.getVisibility());
             if (compareResult == null || compareResult < 0) {
                 return null;
             }
@@ -940,6 +1026,11 @@ public class OverridingUtil {
         @NotNull
         public String getDebugMessage() {
             return debugMessage;
+        }
+
+        @Override
+        public String toString() {
+            return overridable + ": " + debugMessage;
         }
     }
 }

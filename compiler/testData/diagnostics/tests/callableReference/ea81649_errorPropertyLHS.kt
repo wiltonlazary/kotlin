@@ -5,7 +5,7 @@
 // MODULE: m1
 // FILE: bar.kt
 
-fun <T> bar(<!UNUSED_PARAMETER!>ff<!>: <!UNRESOLVED_REFERENCE!>Err<!>.() -> Unit) {
+fun <T> bar(ff: <!UNRESOLVED_REFERENCE!>Err<!>.() -> Unit) {
 }
 
 // MODULE: m2(m1)
@@ -15,6 +15,6 @@ data class User(val surname: String)
 
 fun foo() {
     bar<String> {
-        <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>User<!>::<!OVERLOAD_RESOLUTION_AMBIGUITY!>surname<!>
+        <!DEBUG_INFO_MISSING_UNRESOLVED!>User<!>::<!OVERLOAD_RESOLUTION_AMBIGUITY!>surname<!>
     }
 }

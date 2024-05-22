@@ -1,4 +1,5 @@
-// WITH_RUNTIME
+// FIR_IDENTICAL
+// WITH_STDLIB
 
 interface C {
     val test1: Int

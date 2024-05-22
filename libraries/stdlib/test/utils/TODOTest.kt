@@ -1,16 +1,16 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package test.utils
 
-import kotlin.*
 import kotlin.test.*
 
 class TODOTest {
     private class PartiallyImplementedClass {
         public val prop: String get() = TODO()
+
         @Suppress("UNREACHABLE_CODE", "CAST_NEVER_SUCCEEDS")
         fun method1() = TODO() as String
 
@@ -21,6 +21,7 @@ class TODOTest {
                 TODO("what if false")
             else {
                 if (value.length < 3)
+                    @Suppress("UNREACHABLE_CODE")
                     throw TODO("write message")
             }
 

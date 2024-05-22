@@ -1,3 +1,0 @@
-<node text="p.foo()  (p)" base="true">
-    <node text="q.bar()  (q)"/>
-</node>

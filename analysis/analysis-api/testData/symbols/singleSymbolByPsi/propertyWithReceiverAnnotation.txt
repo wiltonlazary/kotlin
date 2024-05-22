@@ -1,0 +1,114 @@
+KtKotlinPropertySymbol:
+  annotationsList: []
+  backingFieldSymbol: KtBackingFieldSymbol:
+    annotationsList: []
+    callableIdIfNonLocal: null
+    contextReceivers: []
+    isExtension: false
+    name: field
+    origin: PROPERTY_BACKING_FIELD
+    owningProperty: KtKotlinPropertySymbol(/prop)
+    receiverParameter: null
+    returnType: KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: kotlin/Boolean
+    symbolKind: LOCAL
+    typeParameters: []
+    getContainingFileSymbol: KtFileSymbol(propertyWithReceiverAnnotation.kt)
+    getContainingJvmClassName: PropertyWithReceiverAnnotationKt
+    getContainingModule: KtSourceModule "Sources of main"
+    deprecationStatus: null
+  callableIdIfNonLocal: /prop
+  contextReceivers: []
+  getter: KtPropertyGetterSymbol:
+    annotationsList: []
+    callableIdIfNonLocal: null
+    contextReceivers: []
+    hasBody: true
+    hasStableParameterNames: true
+    isDefault: false
+    isExtension: false
+    isInline: false
+    isOverride: false
+    modality: FINAL
+    origin: SOURCE
+    receiverParameter: KtReceiverParameterSymbol:
+      annotationsList: [
+        ReceiverAnnotation()
+          psi: KtAnnotationEntry
+      ]
+      origin: SOURCE
+      owningCallableSymbol: KtKotlinPropertySymbol(/prop)
+      type: KtUsualClassType:
+        annotationsList: [
+          ReceiverTypeAnnotation()
+            psi: KtAnnotationEntry
+        ]
+        ownTypeArguments: []
+        type: @R|ReceiverTypeAnnotation|()  kotlin/Long
+      getContainingFileSymbol: KtFileSymbol(propertyWithReceiverAnnotation.kt)
+      getContainingModule: KtSourceModule "Sources of main"
+      deprecationStatus: null
+    returnType: KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: kotlin/Boolean
+    symbolKind: ACCESSOR
+    typeParameters: []
+    valueParameters: []
+    visibility: Public
+    getContainingFileSymbol: KtFileSymbol(propertyWithReceiverAnnotation.kt)
+    getContainingJvmClassName: PropertyWithReceiverAnnotationKt
+    getContainingModule: KtSourceModule "Sources of main"
+    deprecationStatus: null
+  hasBackingField: false
+  hasGetter: true
+  hasSetter: false
+  initializer: null
+  isActual: false
+  isConst: false
+  isDelegatedProperty: false
+  isExpect: false
+  isExtension: true
+  isFromPrimaryConstructor: false
+  isLateInit: false
+  isOverride: false
+  isStatic: false
+  isVal: true
+  modality: FINAL
+  name: prop
+  origin: SOURCE
+  receiverParameter: KtReceiverParameterSymbol:
+    annotationsList: [
+      ReceiverAnnotation()
+        psi: KtAnnotationEntry
+    ]
+    origin: SOURCE
+    owningCallableSymbol: KtKotlinPropertySymbol(/prop)
+    type: KtUsualClassType:
+      annotationsList: [
+        ReceiverTypeAnnotation()
+          psi: KtAnnotationEntry
+      ]
+      ownTypeArguments: []
+      type: @R|ReceiverTypeAnnotation|()  kotlin/Long
+    getContainingFileSymbol: KtFileSymbol(propertyWithReceiverAnnotation.kt)
+    getContainingModule: KtSourceModule "Sources of main"
+    deprecationStatus: null
+  returnType: KtUsualClassType:
+    annotationsList: []
+    ownTypeArguments: []
+    type: kotlin/Boolean
+  setter: null
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  visibility: Public
+  getContainingFileSymbol: KtFileSymbol(propertyWithReceiverAnnotation.kt)
+  getContainingJvmClassName: PropertyWithReceiverAnnotationKt
+  getContainingModule: KtSourceModule "Sources of main"
+  deprecationStatus: null
+  getterDeprecationStatus: null
+  javaGetterName: getProp
+  javaSetterName: null
+  setterDeprecationStatus: null

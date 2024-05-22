@@ -21,7 +21,9 @@ import org.jetbrains.kotlin.incremental.components.LookupLocation
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.scopes.*
-import org.jetbrains.kotlin.types.ErrorUtils
+import org.jetbrains.kotlin.types.error.ErrorClassDescriptor
+import org.jetbrains.kotlin.types.error.ErrorEntity
+import org.jetbrains.kotlin.types.error.ErrorUtils
 import org.jetbrains.kotlin.util.collectionUtils.concat
 import org.jetbrains.kotlin.utils.Printer
 import org.jetbrains.kotlin.utils.SmartList
@@ -36,8 +38,8 @@ val HierarchicalScope.parents: Sequence<HierarchicalScope>
  * Adds receivers to the list in order of locality, so that the closest (the most local) receiver goes first
  */
 fun LexicalScope.getImplicitReceiversHierarchy(): List<ReceiverParameterDescriptor> = collectFromMeAndParent {
-    (it as? LexicalScope)?.implicitReceiver
-}
+    if (it is LexicalScope) listOfNotNull(it.implicitReceiver) + it.contextReceiversGroup else null
+}.flatten()
 
 fun LexicalScope.getDeclarationsByLabel(labelName: Name): Collection<DeclarationDescriptor> = collectAllFromMeAndParent {
     if (it is LexicalScope && it.isOwnerDescriptorAccessibleByLabel && it.ownerDescriptor.name == labelName) {
@@ -50,7 +52,7 @@ fun LexicalScope.getDeclarationsByLabel(labelName: Name): Collection<Declaration
 // Result is guaranteed to be filtered by kind and name.
 fun HierarchicalScope.collectDescriptorsFiltered(
     kindFilter: DescriptorKindFilter = DescriptorKindFilter.ALL,
-    nameFilter: (Name) -> Boolean = { true },
+    nameFilter: (Name) -> Boolean = MemberScope.ALL_NAME_FILTER,
     changeNamesForAliased: Boolean = false
 ): Collection<DeclarationDescriptor> {
     if (kindFilter.kindMask == 0) return listOf()
@@ -91,8 +93,20 @@ fun DeclarationDescriptor.canBeResolvedWithoutDeprecation(
     location: LookupLocation
 ): Boolean {
     for (scope in scopeForResolution.parentsWithSelf) {
-        val (descriptorFromCurrentScope, isDeprecated) = scope.getContributedClassifierIncludeDeprecated(name, location) ?: continue
-        if (descriptorFromCurrentScope == this && !isDeprecated) return true
+        val hasNonDeprecatedSuitableCandidate = when (this) {
+            // Looking for classifier: fair check via special method in ResolutionScope
+            is ClassifierDescriptor -> scope.getContributedClassifierIncludeDeprecated(name, location)
+                ?.let { it.descriptor == this && !it.isDeprecated }
+
+            // Looking for member: heuristically check only one case, when another descriptor visible through explicit import
+            is VariableDescriptor -> (scope as? ImportingScope)?.getContributedVariables(name, location)?.any { it == this }
+
+            is FunctionDescriptor -> (scope as? ImportingScope)?.getContributedFunctions(name, location)?.any { it == this }
+
+            else -> null
+        }
+
+        if (hasNonDeprecatedSuitableCandidate == true) return true
     }
 
     return false
@@ -249,7 +263,7 @@ fun LexicalScope.replaceImportingScopes(importingScopeChain: ImportingScope?): L
 fun LexicalScope.createScopeForDestructuring(newReceiver: ReceiverParameterDescriptor?): LexicalScope {
     return LexicalScopeImpl(
         parent, ownerDescriptor, isOwnerDescriptorAccessibleByLabel,
-        newReceiver,
+        newReceiver, listOf(),
         LexicalScopeKind.FUNCTION_HEADER_FOR_DESTRUCTURING
     )
 }
@@ -264,7 +278,7 @@ private class LexicalScopeWrapper(
         }
     }
 
-    override val parent: HierarchicalScope by lazy(LazyThreadSafetyMode.NONE) {
+    override val parent: HierarchicalScope by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         assert(delegate !is ImportingScope)
 
         val parent = delegate.parent
@@ -291,7 +305,7 @@ class ErrorLexicalScope : LexicalScope {
         override val parent: HierarchicalScope? = null
 
         override fun printStructure(p: Printer) {
-            p.print("<FAKE PARENT FOR ERROR LEXICAL SCOPE>")
+            p.print(ErrorEntity.PARENT_OF_ERROR_SCOPE.debugText)
         }
 
         override fun getContributedClassifier(name: Name, location: LookupLocation): ClassifierDescriptor? = null
@@ -307,12 +321,14 @@ class ErrorLexicalScope : LexicalScope {
     }
 
     override fun printStructure(p: Printer) {
-        p.print("<ERROR_SCOPE>")
+        p.print(ErrorEntity.ERROR_SCOPE.debugText)
     }
 
-    override val ownerDescriptor: DeclarationDescriptor = ErrorUtils.createErrorClass("<ERROR CLASS FOR ERROR SCOPE>")
+    override val ownerDescriptor: DeclarationDescriptor =
+        ErrorClassDescriptor(Name.special(ErrorEntity.ERROR_CLASS.debugText.format("unknown")))
     override val isOwnerDescriptorAccessibleByLabel: Boolean = false
     override val implicitReceiver: ReceiverParameterDescriptor? = null
+    override val contextReceiversGroup: List<ReceiverParameterDescriptor> = emptyList()
     override val kind: LexicalScopeKind = LexicalScopeKind.THROWING
 
     override fun getContributedClassifier(name: Name, location: LookupLocation): ClassifierDescriptor? = null

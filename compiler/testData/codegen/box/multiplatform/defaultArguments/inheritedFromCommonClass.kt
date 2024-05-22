@@ -1,5 +1,8 @@
-// !LANGUAGE: +MultiPlatformProjects
-// WITH_RUNTIME
+// LANGUAGE: +MultiPlatformProjects
+// IGNORE_BACKEND_K2: ANY
+// FIR status: outdated code (expect and actual in the same module)
+// WITH_STDLIB
+
 // FILE: common.kt
 
 open class A() {

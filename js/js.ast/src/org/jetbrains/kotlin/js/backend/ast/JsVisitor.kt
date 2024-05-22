@@ -51,11 +51,17 @@ abstract class JsVisitor {
     open fun visitCatch(x: JsCatch): Unit =
             visitElement(x)
 
+    open fun visitClass(x: JsClass): Unit =
+            visitElement(x)
+
     open fun visitConditional(x: JsConditional): Unit =
             visitElement(x)
 
     open fun visitContinue(x: JsContinue): Unit =
             visitElement(x)
+
+    open fun visitYield(x: JsYield): Unit =
+        visitElement(x)
 
     open fun visitDebugger(x: JsDebugger): Unit =
             visitElement(x)
@@ -64,7 +70,7 @@ abstract class JsVisitor {
             visitElement(x)
 
     open fun visitDoWhile(x: JsDoWhile): Unit =
-            visitElement(x)
+            visitLoop(x)
 
     open fun visitEmpty(x: JsEmpty): Unit =
             visitElement(x)
@@ -73,10 +79,10 @@ abstract class JsVisitor {
             visitElement(x)
 
     open fun visitFor(x: JsFor): Unit =
-            visitElement(x)
+            visitLoop(x)
 
     open fun visitForIn(x: JsForIn): Unit =
-            visitElement(x)
+            visitLoop(x)
 
     open fun visitFunction(x: JsFunction): Unit =
             visitElement(x)
@@ -89,6 +95,9 @@ abstract class JsVisitor {
 
     open fun visitLabel(x: JsLabel): Unit =
             visitElement(x)
+
+    open fun visitLoop(x: JsLoop): Unit =
+        visitElement(x)
 
     open fun visitNameRef(nameRef: JsNameRef): Unit =
             visitElement(nameRef)
@@ -138,6 +147,9 @@ abstract class JsVisitor {
     open fun visitThis(x: JsThisRef): Unit =
             visitElement(x)
 
+    open fun visitSuper(x: JsSuperRef): Unit =
+            visitElement(x)
+
     open fun visitThrow(x: JsThrow): Unit =
             visitElement(x)
 
@@ -151,10 +163,22 @@ abstract class JsVisitor {
             visitElement(x)
 
     open fun visitWhile(x: JsWhile): Unit =
-            visitElement(x)
+            visitLoop(x)
 
     open fun visitDocComment(comment: JsDocComment): Unit =
             visitElement(comment)
+
+    open fun visitSingleLineComment(comment: JsSingleLineComment): Unit =
+            visitElement(comment)
+
+    open fun visitMultiLineComment(comment: JsMultiLineComment): Unit =
+            visitElement(comment)
+
+    open fun visitExport(export: JsExport): Unit =
+            visitElement(export)
+
+    open fun visitImport(import: JsImport): Unit =
+        visitElement(import)
 
     protected open fun visitElement(node: JsNode) {
     }

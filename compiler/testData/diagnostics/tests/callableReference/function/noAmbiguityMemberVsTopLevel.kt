@@ -1,5 +1,5 @@
-// !CHECK_TYPE
-// !LANGUAGE: +CallableReferencesToClassMembersWithEmptyLHS
+// CHECK_TYPE
+// LANGUAGE: +CallableReferencesToClassMembersWithEmptyLHS
 
 import kotlin.reflect.KFunction0
 
@@ -12,7 +12,7 @@ fun foo(): String = ""
 
 class A {
     fun foo() {}
-    
+
     fun main() {
         val x = ::foo
 

@@ -22,30 +22,34 @@ import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.SmartPsiElementPointer
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.impl.source.codeStyle.CodeEditUtil
+import org.jetbrains.annotations.NonNls
 import org.jetbrains.annotations.TestOnly
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.psiUtil.PsiChildRange
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.parentsWithSelf
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.kotlin.renderer.render
-import java.util.*
 
-fun KtPsiFactory.createExpressionByPattern(pattern: String, vararg args: Any, reformat: Boolean = true): KtExpression =
+fun KtPsiFactory.createExpressionByPattern(@NonNls pattern: String, @NonNls vararg args: Any, reformat: Boolean = true): KtExpression =
     createByPattern(pattern, *args, reformat = reformat) { createExpression(it) }
 
-fun KtPsiFactory.createValueArgumentListByPattern(pattern: String, vararg args: Any, reformat: Boolean = true): KtValueArgumentList =
-    createByPattern(pattern, *args, reformat = reformat) { createCallArguments(it) }
+fun KtPsiFactory.createValueArgumentListByPattern(
+    @NonNls pattern: String,
+    @NonNls vararg args: Any,
+    reformat: Boolean = true
+): KtValueArgumentList = createByPattern(pattern, *args, reformat = reformat) { createCallArguments(it) }
 
 fun <TDeclaration : KtDeclaration> KtPsiFactory.createDeclarationByPattern(
-    pattern: String,
-    vararg args: Any,
+    @NonNls pattern: String,
+    @NonNls vararg args: Any,
     reformat: Boolean = true
-): TDeclaration = createByPattern(pattern, *args, reformat = reformat) { createDeclaration<TDeclaration>(it) }
+): TDeclaration = createByPattern(pattern, *args, reformat = reformat) { createDeclaration(it) }
 
 fun KtPsiFactory.createDestructuringDeclarationByPattern(
-    pattern: String,
-    vararg args: Any,
+    @NonNls pattern: String,
+    @NonNls vararg args: Any,
     reformat: Boolean = true
 ): KtDestructuringDeclaration = createByPattern(pattern, *args, reformat = reformat) { createDestructuringDeclaration(it) }
 
@@ -109,8 +113,9 @@ private val SUPPORTED_ARGUMENT_TYPES = listOf(
     PsiChildRangeArgumentType
 )
 
-@TestOnly
-var CREATEBYPATTERN_MAY_NOT_REFORMAT = false
+@get:TestOnly
+@set:TestOnly
+var CREATE_BY_PATTERN_MAY_NOT_REFORMAT = false
 
 fun <TElement : KtElement> createByPattern(
     pattern: String,
@@ -120,7 +125,10 @@ fun <TElement : KtElement> createByPattern(
 ): TElement {
     val argumentTypes = args.map { arg ->
         SUPPORTED_ARGUMENT_TYPES.firstOrNull { it.klass.isInstance(arg) }
-                ?: throw IllegalArgumentException("Unsupported argument type: ${arg::class.java}, should be one of: ${SUPPORTED_ARGUMENT_TYPES.joinToString { it.klass.simpleName }}")
+            ?: throw IllegalArgumentException(
+                "Unsupported argument type: ${arg::class.java}, should be one of: " +
+                        SUPPORTED_ARGUMENT_TYPES.joinToString { it.klass.simpleName }
+            )
     }
 
     // convert arguments that can be converted into plain text
@@ -128,21 +136,22 @@ fun <TElement : KtElement> createByPattern(
     val args = args.zip(argumentTypes).map {
         val (arg, type) = it
         if (type is PlainTextArgumentType)
-            (type.toPlainText as Function1<Any, String>).invoke(arg) // TODO: see KT-7833
+            @Suppress("UNCHECKED_CAST") // Suppress compiler checks as types checks were done in runtime
+            (type.toPlainText as Function1<Any, String>).invoke(arg)
         else
             arg
     }
 
     val (processedText, allPlaceholders) = processPattern(pattern, args)
 
-    var resultElement = factory(processedText.trim())
+    var resultElement: KtElement = factory(processedText.trim())
     val project = resultElement.project
 
     val start = resultElement.startOffset
 
     val pointerManager = SmartPointerManager.getInstance(project)
 
-    val pointers = HashMap<SmartPsiElementPointer<PsiElement>, Int>()
+    val pointers = LinkedHashMap<SmartPsiElementPointer<PsiElement>, Int>()
 
     PlaceholdersLoop@
     for ((n, placeholders) in allPlaceholders) {
@@ -156,7 +165,7 @@ fun <TElement : KtElement> createByPattern(
                 val elementRange = element.textRange.shiftRight(-start)
                 if (elementRange == range && expectedElementType.isInstance(element)) {
                     val pointer = pointerManager.createSmartPsiElementPointer(element)
-                    pointers.put(pointer, n)
+                    pointers[pointer] = n
                     break
                 }
 
@@ -170,10 +179,10 @@ fun <TElement : KtElement> createByPattern(
     val codeStyleManager = CodeStyleManager.getInstance(project)
 
     if (reformat) {
-        if (CREATEBYPATTERN_MAY_NOT_REFORMAT) {
+        if (CREATE_BY_PATTERN_MAY_NOT_REFORMAT) {
             throw java.lang.IllegalArgumentException("Reformatting is not allowed in the current context; please change the invocation to use reformat=false")
         }
-        val stringPlaceholderRanges = allPlaceholders
+        val stringPlaceholderRanges = allPlaceholders.asSequence()
             .filter { args[it.key] is String }
             .flatMap { it.value }
             .map { it.range }
@@ -182,39 +191,52 @@ fun <TElement : KtElement> createByPattern(
 
         // reformat whole text except for String arguments (as they can contain user's formatting to be preserved)
         resultElement = if (stringPlaceholderRanges.none()) {
-            codeStyleManager.reformat(resultElement, true) as TElement
+            codeStyleManager.reformat(resultElement, true) as KtElement
         } else {
             var bound = resultElement.endOffset - 1
             for (range in stringPlaceholderRanges) {
                 // we extend reformatting range by 1 to the right because otherwise some of spaces are not reformatted
-                resultElement = codeStyleManager.reformatRange(resultElement, range.endOffset + start, bound + 1, true) as TElement
+                resultElement = codeStyleManager.reformatRange(resultElement, range.endOffset + start, bound + 1, true) as KtElement
                 bound = range.startOffset + start
             }
-            codeStyleManager.reformatRange(resultElement, start, bound + 1, true) as TElement
+            codeStyleManager.reformatRange(resultElement, start, bound + 1, true) as KtElement
         }
 
         // do not reformat the whole expression in PostprocessReformattingAspect
         CodeEditUtil.setNodeGeneratedRecursively(resultElement.node, false)
     }
-    for ((pointer, n) in pointers) {
-        var element = pointer.element!!
-        if (element is KtFunctionLiteral) {
-            element = element.parent as KtLambdaExpression
-        }
-        @Suppress("UNCHECKED_CAST")
-        val argumentType = argumentTypes[n] as PsiElementPlaceholderArgumentType<in Any, in PsiElement>
-        val range = argumentType.replacePlaceholderElement(element, args[n], reformat)
 
-        if (element == resultElement) {
-            assert(range.first == range.last)
-            resultElement = range.first as TElement
+    // it is needed to place logical operators first for expressions like `xyz xyz xyz` to become `xyz && xyz`
+    // otherwise if when we place an expression we have to wrap it with extra parenthesis => it becomes `(a != null) xyz xyz`
+    val (left, right) = pointers.entries.partition {
+        val n = it.value
+        val elementType = (args[n] as? KtOperationReferenceExpression)?.getReferencedNameElementType()
+        elementType == KtTokens.ANDAND || elementType == KtTokens.OROR
+    }
+
+    for (partition in listOf(left, right)) {
+        for ((pointer, n) in partition) {
+            var element = pointer.element!!
+
+            if (element is KtFunctionLiteral) {
+                element = element.parent as KtLambdaExpression
+            }
+            @Suppress("UNCHECKED_CAST")
+            val argumentType = argumentTypes[n] as PsiElementPlaceholderArgumentType<in Any, in PsiElement>
+            val range = argumentType.replacePlaceholderElement(element, args[n], reformat)
+
+            if (element == resultElement) {
+                assert(range.first == range.last)
+                resultElement = range.first as KtElement
+            }
         }
     }
 
     if (reformat)
         codeStyleManager.adjustLineIndent(resultElement.containingFile, resultElement.textRange)
 
-    return resultElement
+    @Suppress("UNCHECKED_CAST")
+    return resultElement as TElement
 }
 
 private data class Placeholder(val range: TextRange, val text: String)
@@ -244,7 +266,7 @@ private fun processPattern(pattern: String, args: List<Any>): PatternData {
                 } else {
                     check(nextChar?.isDigit() ?: false, "unclosed '$'")
 
-                    val lastIndex = (i..pattern.length - 1).firstOrNull { !pattern[it].isDigit() } ?: pattern.length
+                    val lastIndex = (i until pattern.length).firstOrNull { !pattern[it].isDigit() } ?: pattern.length
                     val n = pattern.substring(i, lastIndex).toInt()
                     check(n >= 0, "invalid placeholder number: $n")
                     i = lastIndex
@@ -265,7 +287,7 @@ private fun processPattern(pattern: String, args: List<Any>): PatternData {
 
                     append(placeholderText)
                     val range = TextRange(length - placeholderText.length, length)
-                    ranges.getOrPut(n, { ArrayList() }).add(Placeholder(range, placeholderText))
+                    ranges.getOrPut(n) { ArrayList() }.add(Placeholder(range, placeholderText))
                     continue
                 }
             } else {
@@ -276,7 +298,7 @@ private fun processPattern(pattern: String, args: List<Any>): PatternData {
     }
 
     if (!ranges.isEmpty()) {
-        val max = ranges.keys.max()!!
+        val max = ranges.keys.maxOrNull()!!
         for (i in 0..max) {
             check(ranges.contains(i), "no '$$i' placeholder")
         }

@@ -1,35 +1,30 @@
-import org.jetbrains.kotlin.gradle.dsl.Coroutines
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
+project.configureJvmToolchain(JdkMajorVersion.JDK_1_8)
 
 dependencies {
-    compile(project(":kotlin-script-runtime"))
-    compile(projectDist(":kotlin-stdlib"))
-    compile(project(":kotlin-scripting-common"))
+    api(project(":kotlin-script-runtime"))
+    api(kotlinStdlib())
+    api(project(":kotlin-scripting-common"))
+    testImplementation(libs.junit4)
 }
 
 sourceSets {
     "main" { projectDefault() }
-    "test" {}
+    "test" { projectDefault() }
 }
 
-kotlin.experimental.coroutines = Coroutines.ENABLE
-
-val jar = runtimeJar()
-val sourcesJar = sourcesJar()
-val javadocJar = javadocJar()
-
-dist()
-
-ideaPlugin {
-    from(jar, sourcesJar)
+tasks.withType<KotlinJvmCompile>().configureEach {
+    compilerOptions.freeCompilerArgs.add("-Xallow-kotlin-package")
 }
-
-standardPublicJars()
 
 publish()
+
+runtimeJar()
+sourcesJar()
+javadocJar()

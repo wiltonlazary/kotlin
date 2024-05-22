@@ -25,38 +25,37 @@ import org.jetbrains.kotlin.psi.KtFile;
 import java.util.Collection;
 
 public class KotlinCodegenFacade {
-
     public static void compileCorrectFiles(
+            Collection<KtFile> files,
             @NotNull GenerationState state,
-            @NotNull CompilationErrorHandler errorHandler
+            CodegenFactory codegenFactory
     ) {
         ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
 
         state.beforeCompile();
+        state.oldBEInitTrace(files);
 
         ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
 
-        doGenerateFiles(state.getFiles(), state, errorHandler);
-    }
+        CodegenFactory.IrConversionInput psi2irInput = CodegenFactory.IrConversionInput.Companion.fromGenerationStateAndFiles(state, files);
+        CodegenFactory.BackendInput backendInput = codegenFactory.convertToIr(psi2irInput);
 
-    public static void doGenerateFiles(
-            @NotNull Collection<KtFile> files,
-            @NotNull GenerationState state,
-            @NotNull CompilationErrorHandler errorHandler
-    ) {
-        state.getCodegenFactory().generateModule(state, files, errorHandler);
+        ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
+
+        codegenFactory.generateModule(state, backendInput);
 
         CodegenFactory.Companion.doCheckCancelled(state);
         state.getFactory().done();
     }
 
-    public static void generatePackage(
-            @NotNull GenerationState state,
-            @NotNull FqName packageFqName,
-            @NotNull Collection<KtFile> jetFiles,
-            @NotNull CompilationErrorHandler errorHandler
-    ) {
-        DefaultCodegenFactory.INSTANCE.generatePackage(state, packageFqName, jetFiles, errorHandler);
+    // TODO: remove after cleanin up IDE counterpart
+    public static void compileCorrectFiles(@NotNull GenerationState state) {
+        CodegenFactory codegenFactory = state.getCodegenFactory();
+        compileCorrectFiles(state.getFiles(), state, codegenFactory != null ? codegenFactory : DefaultCodegenFactory.INSTANCE);
+    }
+
+    public static void generatePackage(@NotNull GenerationState state, @NotNull FqName packageFqName, @NotNull Collection<KtFile> files) {
+        DefaultCodegenFactory.INSTANCE.generatePackage(state, packageFqName, files);
     }
 
     private KotlinCodegenFacade() {}

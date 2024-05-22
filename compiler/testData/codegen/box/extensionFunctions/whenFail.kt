@@ -1,5 +1,4 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS
+// TARGET_BACKEND: JVM
 
 fun StringBuilder.takeFirst(): Char {
   if (this.length == 0) return 0.toChar()

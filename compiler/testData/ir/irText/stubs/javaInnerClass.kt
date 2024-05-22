@@ -1,4 +1,6 @@
-// !DUMP_DEPENDENCIES
+// FIR_IDENTICAL
+// TARGET_BACKEND: JVM
+// DUMP_EXTERNAL_CLASS: J
 // FILE: J.java
 
 public class J {

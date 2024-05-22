@@ -16,136 +16,151 @@
 
 package org.jetbrains.kotlin.frontend.java.di
 
-import com.intellij.openapi.project.Project
 import com.intellij.psi.search.GlobalSearchScope
-import org.jetbrains.kotlin.builtins.JvmBuiltInsPackageFragmentProvider
-import org.jetbrains.kotlin.config.AnalysisFlag
-import org.jetbrains.kotlin.config.JvmTarget
+import org.jetbrains.kotlin.builtins.jvm.JvmBuiltIns
+import org.jetbrains.kotlin.builtins.jvm.JvmBuiltInsPackageFragmentProvider
+import org.jetbrains.kotlin.config.JvmAnalysisFlags
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.container.*
 import org.jetbrains.kotlin.context.ModuleContext
-import org.jetbrains.kotlin.contracts.ContractDeserializerImpl
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.descriptors.PackagePartProvider
+import org.jetbrains.kotlin.frontend.di.configureIncrementalCompilation
 import org.jetbrains.kotlin.frontend.di.configureModule
+import org.jetbrains.kotlin.frontend.di.configureStandardResolveComponents
+import org.jetbrains.kotlin.incremental.components.EnumWhenTracker
 import org.jetbrains.kotlin.incremental.components.ExpectActualTracker
+import org.jetbrains.kotlin.incremental.components.InlineConstTracker
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.load.java.AbstractJavaClassFinder
 import org.jetbrains.kotlin.load.java.InternalFlexibleTypeTransformer
 import org.jetbrains.kotlin.load.java.JavaClassFinderImpl
 import org.jetbrains.kotlin.load.java.JavaClassesTracker
 import org.jetbrains.kotlin.load.java.components.*
+import org.jetbrains.kotlin.load.java.lazy.JavaResolverSettings
 import org.jetbrains.kotlin.load.java.lazy.ModuleClassResolver
 import org.jetbrains.kotlin.load.kotlin.DeserializationComponentsForJava
+import org.jetbrains.kotlin.load.kotlin.PackagePartProvider
 import org.jetbrains.kotlin.load.kotlin.VirtualFileFinderFactory
-import org.jetbrains.kotlin.platform.JvmBuiltIns
+import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.resolve.*
+import org.jetbrains.kotlin.resolve.calls.tower.ImplicitsExtensionsResolutionFilter
 import org.jetbrains.kotlin.resolve.jvm.JavaDescriptorResolver
-import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
-import org.jetbrains.kotlin.resolve.lazy.KotlinCodeAnalyzer
-import org.jetbrains.kotlin.resolve.lazy.ResolveSession
+import org.jetbrains.kotlin.resolve.jvm.JvmDiagnosticComponents
+import org.jetbrains.kotlin.resolve.jvm.extensions.SyntheticJavaResolveExtension
+import org.jetbrains.kotlin.resolve.jvm.modules.JavaModuleResolver
+import org.jetbrains.kotlin.resolve.jvm.multiplatform.OptionalAnnotationPackageFragmentProvider
+import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatformAnalyzerServices
+import org.jetbrains.kotlin.resolve.lazy.AbsentDescriptorHandler
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory
+import org.jetbrains.kotlin.resolve.scopes.optimization.OptimizingOptions
 
-private fun StorageComponentContainer.configureJavaTopDownAnalysis(
-        moduleContentScope: GlobalSearchScope,
-        project: Project,
-        lookupTracker: LookupTracker,
-        expectActualTracker: ExpectActualTracker
-) {
+fun createContainerForLazyResolveWithJava(
+    jvmPlatform: TargetPlatform,
+    moduleContext: ModuleContext,
+    bindingTrace: BindingTrace,
+    declarationProviderFactory: DeclarationProviderFactory,
+    moduleContentScope: GlobalSearchScope,
+    moduleClassResolver: ModuleClassResolver,
+    targetEnvironment: TargetEnvironment,
+    lookupTracker: LookupTracker,
+    expectActualTracker: ExpectActualTracker,
+    inlineConstTracker: InlineConstTracker,
+    enumWhenTracker: EnumWhenTracker,
+    packagePartProvider: PackagePartProvider,
+    languageVersionSettings: LanguageVersionSettings,
+    useBuiltInsProvider: Boolean,
+    configureJavaClassFinder: (StorageComponentContainer.() -> Unit)? = null,
+    javaClassTracker: JavaClassesTracker? = null,
+    implicitsResolutionFilter: ImplicitsExtensionsResolutionFilter? = null,
+    sealedInheritorsProvider: SealedClassInheritorsProvider = CliSealedClassInheritorsProvider,
+    optimizingOptions: OptimizingOptions? = null,
+    absentDescriptorHandlerClass: Class<out AbsentDescriptorHandler>? = null
+): StorageComponentContainer = createContainer("LazyResolveWithJava", JvmPlatformAnalyzerServices) {
+    configureModule(
+        moduleContext, jvmPlatform, JvmPlatformAnalyzerServices, bindingTrace, languageVersionSettings,
+        sealedInheritorsProvider, optimizingOptions, absentDescriptorHandlerClass
+    )
+
+    configureIncrementalCompilation(lookupTracker, expectActualTracker, inlineConstTracker, enumWhenTracker)
+    configureStandardResolveComponents()
+
     useInstance(moduleContentScope)
-    useInstance(lookupTracker)
-    useInstance(expectActualTracker)
-    useImpl<ResolveSession>()
+    useInstance(packagePartProvider)
+    useInstance(declarationProviderFactory)
+    useInstanceIfNotNull(implicitsResolutionFilter)
 
-    useImpl<LazyTopDownAnalyzer>()
+    useInstance(VirtualFileFinderFactory.getInstance(moduleContext.project).create(moduleContentScope))
+
+    configureJavaSpecificComponents(
+        moduleContext, moduleClassResolver, languageVersionSettings, configureJavaClassFinder,
+        javaClassTracker, useBuiltInsProvider
+    )
+
+    targetEnvironment.configure(this)
+}.apply {
+    initializeJavaSpecificComponents(bindingTrace)
+}
+
+fun StorageComponentContainer.initializeJavaSpecificComponents(bindingTrace: BindingTrace) {
+    get<AbstractJavaClassFinder>().initialize(
+        bindingTrace, codeAnalyzer = get(), languageVersionSettings = get(), jvmTarget = get()
+    )
+}
+
+fun StorageComponentContainer.configureJavaSpecificComponents(
+    moduleContext: ModuleContext,
+    moduleClassResolver: ModuleClassResolver,
+    languageVersionSettings: LanguageVersionSettings,
+    configureJavaClassFinder: (StorageComponentContainer.() -> Unit)?,
+    javaClassTracker: JavaClassesTracker?,
+    useBuiltInsProvider: Boolean
+) {
     useImpl<JavaDescriptorResolver>()
     useImpl<DeserializationComponentsForJava>()
-
-    useInstance(VirtualFileFinderFactory.getInstance(project).create(moduleContentScope))
-
-    useImpl<JavaPropertyInitializerEvaluatorImpl>()
-    useImpl<AnnotationResolverImpl>()
+    useInstance(JavaPropertyInitializerEvaluatorImpl)
     useImpl<SignaturePropagatorImpl>()
     useImpl<TraceBasedErrorReporter>()
     useInstance(InternalFlexibleTypeTransformer)
+    useInstance(JavaDeprecationSettings)
+    useInstance(moduleClassResolver)
 
-    useImpl<CompilerDeserializationConfiguration>()
-}
-
-fun createContainerForLazyResolveWithJava(
-        moduleContext: ModuleContext,
-        bindingTrace: BindingTrace,
-        declarationProviderFactory: DeclarationProviderFactory,
-        moduleContentScope: GlobalSearchScope,
-        moduleClassResolver: ModuleClassResolver,
-        targetEnvironment: TargetEnvironment,
-        lookupTracker: LookupTracker,
-        expectActualTracker: ExpectActualTracker,
-        packagePartProvider: PackagePartProvider,
-        jvmTarget: JvmTarget,
-        languageVersionSettings: LanguageVersionSettings,
-        useBuiltInsProvider: Boolean,
-        configureJavaClassFinder: (StorageComponentContainer.() -> Unit)? = null,
-        javaClassTracker: JavaClassesTracker? = null
-): StorageComponentContainer = createContainer("LazyResolveWithJava", JvmPlatform) {
-    configureModule(moduleContext, JvmPlatform, jvmTarget, bindingTrace)
-    configureJavaTopDownAnalysis(moduleContentScope, moduleContext.project, lookupTracker, expectActualTracker)
+    useInstance(SyntheticJavaResolveExtension.getProvider(moduleContext.project))
 
     if (configureJavaClassFinder != null) {
         configureJavaClassFinder()
-    }
-    else {
+    } else {
         useImpl<JavaClassFinderImpl>()
         useImpl<LazyResolveBasedCache>()
         useImpl<JavaSourceElementFactoryImpl>()
     }
 
-    useInstance(packagePartProvider)
-    useInstance(moduleClassResolver)
-    useInstance(declarationProviderFactory)
+    useInstance(languageVersionSettings.getFlag(JvmAnalysisFlags.javaTypeEnhancementState))
 
-    useInstance(languageVersionSettings)
-
-    useInstance(languageVersionSettings.getFlag(AnalysisFlag.jsr305))
-
-    if (useBuiltInsProvider) {
-        useInstance((moduleContext.module.builtIns as JvmBuiltIns).settings)
+    val builtIns = moduleContext.module.builtIns
+    if (useBuiltInsProvider && builtIns is JvmBuiltIns) {
+        // TODO(dsavvinov): make sure that useBuiltInsProvider == true <=> builtIns is JvmBuiltIns
+        // Currently, that's not the case at least in IDE unit-tests, because they do not set-up
+        // dependency on SDK properly, see KT-43828
+        useInstance(builtIns.customizer)
         useImpl<JvmBuiltInsPackageFragmentProvider>()
     }
+    useImpl<OptionalAnnotationPackageFragmentProvider>()
 
     useInstance(javaClassTracker ?: JavaClassesTracker.Default)
+    useInstance(
+        JavaResolverSettings.create(
+            correctNullabilityForNotNullTypeParameter = languageVersionSettings.supportsFeature(LanguageFeature.ProhibitUsingNullableTypeParameterAgainstNotNullAnnotated),
+            typeEnhancementImprovementsInStrictMode = languageVersionSettings.supportsFeature(LanguageFeature.TypeEnhancementImprovementsInStrictMode),
+            ignoreNullabilityForErasedValueParameters = languageVersionSettings.supportsFeature(LanguageFeature.IgnoreNullabilityForErasedValueParameters),
+            enhancePrimitiveArrays = languageVersionSettings.supportsFeature(LanguageFeature.EnhanceNullabilityOfPrimitiveArrays),
+        )
+    )
+    useInstance(JavaModuleResolver.getInstance(moduleContext.project))
 
-    targetEnvironment.configure(this)
-
-    useImpl<ContractDeserializerImpl>()
     useImpl<FilesByFacadeFqNameIndexer>()
-}.apply {
-    get<AbstractJavaClassFinder>().initialize(bindingTrace, get<KotlinCodeAnalyzer>())
+    useImpl<JvmDiagnosticComponents>()
 }
-
-
-fun createContainerForTopDownAnalyzerForJvm(
-        moduleContext: ModuleContext,
-        bindingTrace: BindingTrace,
-        declarationProviderFactory: DeclarationProviderFactory,
-        moduleContentScope: GlobalSearchScope,
-        lookupTracker: LookupTracker,
-        expectActualTracker: ExpectActualTracker,
-        packagePartProvider: PackagePartProvider,
-        moduleClassResolver: ModuleClassResolver,
-        jvmTarget: JvmTarget,
-        languageVersionSettings: LanguageVersionSettings,
-        configureJavaClassFinder: (StorageComponentContainer.() -> Unit)? = null,
-        javaClassTracker: JavaClassesTracker? = null
-): ComponentProvider = createContainerForLazyResolveWithJava(
-        moduleContext, bindingTrace, declarationProviderFactory, moduleContentScope, moduleClassResolver,
-        CompilerEnvironment, lookupTracker, expectActualTracker, packagePartProvider, jvmTarget, languageVersionSettings,
-        useBuiltInsProvider = true,
-        configureJavaClassFinder = configureJavaClassFinder,
-        javaClassTracker = javaClassTracker
-)
-
 
 fun ComponentProvider.initJvmBuiltInsForTopDownAnalysis() {
     get<JvmBuiltIns>().initialize(get<ModuleDescriptor>(), get<LanguageVersionSettings>())

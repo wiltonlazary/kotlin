@@ -17,7 +17,6 @@
 package org.jetbrains.kotlin.android.synthetic.res
 
 import com.intellij.openapi.module.Module
-import com.intellij.openapi.module.ModuleServiceManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -27,6 +26,7 @@ import com.intellij.psi.PsiManager
 import org.jetbrains.kotlin.android.synthetic.AndroidConst
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
+import org.jetbrains.kotlin.psi.psiUtil.createSmartPointer
 import java.util.*
 
 class AndroidVariantData(val variant: AndroidVariant, val layouts: Map<String, List<PsiFile>>)
@@ -70,7 +70,7 @@ abstract class AndroidLayoutXmlFileManager(val project: Project) {
         val resDirectories = variant.resDirectories.map { fileManager.findFileByUrl("file://$it") }
         val allChildren = resDirectories.flatMap { it?.getAllChildren() ?: listOf() }
 
-        val allLayoutFiles = allChildren.filter { it.parent.name.startsWith("layout") && it.name.toLowerCase().endsWith(".xml") }
+        val allLayoutFiles = allChildren.filter { it.parent.name.startsWith("layout") && it.name.lowercase().endsWith(".xml") }
         val allLayoutPsiFiles = allLayoutFiles.fold(ArrayList<PsiFile>(allLayoutFiles.size)) { list, file ->
             val psiFile = psiManager.findFile(file)
             if (psiFile?.parent != null) {
@@ -93,10 +93,12 @@ abstract class AndroidLayoutXmlFileManager(val project: Project) {
     protected abstract fun doExtractResources(layoutGroup: AndroidLayoutGroupData, module: ModuleDescriptor): AndroidLayoutGroup
 
     protected fun parseAndroidResource(id: ResourceIdentifier, tag: String, sourceElement: PsiElement?): AndroidResource {
+        @Suppress("DEPRECATION")
+        val sourceElementPointer = sourceElement?.createSmartPointer()
         return when (tag) {
-            "fragment" -> AndroidResource.Fragment(id, sourceElement)
-            "include" -> AndroidResource.Widget(id, AndroidConst.VIEW_FQNAME, sourceElement)
-            else -> AndroidResource.Widget(id, tag, sourceElement)
+            "fragment" -> AndroidResource.Fragment(id, sourceElementPointer)
+            "include" -> AndroidResource.Widget(id, AndroidConst.VIEW_FQNAME, sourceElementPointer)
+            else -> AndroidResource.Widget(id, tag, sourceElementPointer)
         }
     }
 
@@ -143,7 +145,8 @@ abstract class AndroidLayoutXmlFileManager(val project: Project) {
 
     companion object {
         fun getInstance(module: Module): AndroidLayoutXmlFileManager? {
-            val service = ModuleServiceManager.getService(module, AndroidLayoutXmlFileManager::class.java)
+            @Suppress("DEPRECATION")
+            val service = com.intellij.openapi.module.ModuleServiceManager.getService(module, AndroidLayoutXmlFileManager::class.java)
             return service ?: module.getComponent(AndroidLayoutXmlFileManager::class.java)
         }
     }

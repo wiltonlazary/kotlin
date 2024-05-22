@@ -1,2 +1,0 @@
-3 fun f(<bold>list: List<String></bold>){
-4 	for(s in <bold>list</bold>){}

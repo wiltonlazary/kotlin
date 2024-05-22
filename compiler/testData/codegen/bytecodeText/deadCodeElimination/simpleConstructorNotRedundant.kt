@@ -8,11 +8,12 @@ fun box() {
     else {
         y = null
     }
-    
+
     y!!
 }
 
 // 0 IFNULL
-// 1 IFNONNULL
-// 1 throwNpe
+// 0 IFNONNULL
 // 0 ATHROW
+// 1 checkNotNull \(Ljava/lang/Object;\)V
+// 0 throwNpe

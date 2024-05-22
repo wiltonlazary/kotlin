@@ -1,3 +1,5 @@
+// FIR_IDENTICAL
+
 annotation class TestAnn(val x: String)
 
 val test1: String

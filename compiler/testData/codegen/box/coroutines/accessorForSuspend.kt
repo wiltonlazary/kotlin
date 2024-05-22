@@ -1,16 +1,15 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 fun builder(c: suspend () -> Unit) {
     c.startCoroutine(EmptyContinuation)
 }
 
 class A {
-    suspend private fun a(): String = suspendCoroutineOrReturn { x ->
+    suspend private fun a(): String = suspendCoroutineUninterceptedOrReturn { x ->
         x.resume("OK")
         COROUTINE_SUSPENDED
     }

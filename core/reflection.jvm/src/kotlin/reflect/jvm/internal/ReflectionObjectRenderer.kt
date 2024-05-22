@@ -16,10 +16,12 @@
 
 package kotlin.reflect.jvm.internal
 
-import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.CallableDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.descriptors.PropertyDescriptor
+import org.jetbrains.kotlin.descriptors.ReceiverParameterDescriptor
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.Variance
 import kotlin.reflect.KParameter
 
 internal object ReflectionObjectRenderer {
@@ -33,7 +35,7 @@ internal object ReflectionObjectRenderer {
     }
 
     private fun StringBuilder.appendReceivers(callable: CallableDescriptor) {
-        val dispatchReceiver = callable.dispatchReceiverParameter
+        val dispatchReceiver = callable.instanceReceiverParameter
         val extensionReceiver = callable.extensionReceiverParameter
 
         appendReceiverType(dispatchReceiver)
@@ -44,7 +46,7 @@ internal object ReflectionObjectRenderer {
         if (addParentheses) append(")")
     }
 
-    fun renderCallable(descriptor: CallableDescriptor): String {
+    private fun renderCallable(descriptor: CallableDescriptor): String {
         return when (descriptor) {
             is PropertyDescriptor -> renderProperty(descriptor)
             is FunctionDescriptor -> renderFunction(descriptor)
@@ -57,7 +59,7 @@ internal object ReflectionObjectRenderer {
         return buildString {
             append(if (descriptor.isVar) "var " else "val ")
             appendReceivers(descriptor)
-            append(renderer.renderName(descriptor.name))
+            append(renderer.renderName(descriptor.name, true))
 
             append(": ")
             append(renderType(descriptor.type))
@@ -68,7 +70,7 @@ internal object ReflectionObjectRenderer {
         return buildString {
             append("fun ")
             appendReceivers(descriptor)
-            append(renderer.renderName(descriptor.name))
+            append(renderer.renderName(descriptor.name, true))
 
             descriptor.valueParameters.joinTo(this, separator = ", ", prefix = "(", postfix = ")") {
                 renderType(it.type) // TODO: vararg
@@ -95,25 +97,13 @@ internal object ReflectionObjectRenderer {
     fun renderParameter(parameter: KParameterImpl): String {
         return buildString {
             when (parameter.kind) {
-                KParameter.Kind.EXTENSION_RECEIVER -> append("extension receiver")
-                KParameter.Kind.INSTANCE -> append("instance")
+                KParameter.Kind.EXTENSION_RECEIVER -> append("extension receiver parameter")
+                KParameter.Kind.INSTANCE -> append("instance parameter")
                 KParameter.Kind.VALUE -> append("parameter #${parameter.index} ${parameter.name}")
             }
 
             append(" of ")
             append(renderCallable(parameter.callable.descriptor))
-        }
-    }
-
-    fun renderTypeParameter(typeParameter: TypeParameterDescriptor): String {
-        return buildString {
-            when (typeParameter.variance) {
-                Variance.INVARIANT -> {}
-                Variance.IN_VARIANCE -> append("in ")
-                Variance.OUT_VARIANCE -> append("out ")
-            }
-
-            append(typeParameter.name)
         }
     }
 

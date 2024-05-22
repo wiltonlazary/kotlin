@@ -17,11 +17,12 @@
 package org.jetbrains.kotlin.android.tests
 
 import com.intellij.openapi.util.Ref
-import org.jetbrains.kotlin.codegen.CodegenTestCase
 import org.jetbrains.kotlin.load.kotlin.PackagePartClassUtils
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.model.TestModule
+import org.jetbrains.kotlin.test.services.TestServices
+import org.jetbrains.kotlin.test.services.sourceFileProvider
 import java.io.File
 import java.util.regex.Pattern
 
@@ -31,85 +32,122 @@ private val packagePattern = Pattern.compile("(?m)^\\s*package[ |\t]+([\\w|\\.]*
 
 private val importPattern = Pattern.compile("import[ |\t]([\\w|]*\\.)")
 
-internal fun patchFiles(
-    file: File,
-    testFiles: List<CodegenTestCase.TestFile>,
-    filesHolder: CodegenTestsOnAndroidGenerator.FilesWriter
-): FqName? {
-    if (testFiles.any { it.name.endsWith(".java") }) {
-        //TODO support java files
-        return null
-    }
-    val ktFiles = testFiles.filter { it.name.endsWith(".kt") }
-    if (ktFiles.isEmpty()) return null
+private data class OldPackageAndNew(val oldFqName: FqName, val newFqName: FqName)
 
-    val newPackagePrefix = file.path.replace("\\\\|-|\\.|/".toRegex(), "_")
+internal fun patchFilesAndAddTest(
+    testFile: File,
+    module: TestModule,
+    services: TestServices,
+    filesHolder: CodegenTestsOnAndroidGenerator.FilesWriter
+): FqName {
+    val newPackagePrefix = testFile.path.replace("\\\\|-|\\.|/".toRegex(), "_")
     val oldPackage = Ref<FqName>()
+    val isJvmName = Ref<Boolean>(false)
+    val testFiles = module.files
     val isSingle = testFiles.size == 1
     val resultFiles = testFiles.map {
-        val fileName = if (isSingle) it.name else file.name.substringBeforeLast(".kt") + "/" + it.name
+        val fileName = if (isSingle) it.name else testFile.name.substringBeforeLast(".kt") + "/" + it.name
+        val content = services.sourceFileProvider.getContentOfSourceFile(it)
         TestClassInfo(
-                fileName,
-                changePackage(newPackagePrefix, it.content, oldPackage),
-                oldPackage.get(),
-                getGeneratedClassName(File(fileName), it.content, newPackagePrefix, oldPackage.get())
+            fileName,
+            changePackage(newPackagePrefix, content, oldPackage, isJvmName),
+            oldPackage.get(),
+            isJvmName.get(),
+            getGeneratedClassName(File(fileName), content, newPackagePrefix, oldPackage.get())
         )
     }
+    val packages =
+        resultFiles.map { OldPackageAndNew(it.oldPackage, it.newPackagePartClassId.parent()) }
+            .sortedByDescending { it.oldFqName.asString().length }
 
-    /*replace all Class.forName*/
-    resultFiles.forEach {
-        file ->
-        file.content = resultFiles.fold(file.content) { r, param ->
-            patchClassForName(param.newClassId, param.oldPackage, r)
+    //If files contain any val or var declaration with same name as any package name
+    // then use old conservative renaming scheme, otherwise use aggressive one
+    // with old package renaming to new one (except some cases for default package)
+    //  Example for conservative switch:
+    //      package foo
+    //      ...
+    //      val foo = ....
+    //      class A(val foo ...)
+    //      fun foo()= { var foo ...}
+    val conservativeRenameScheme = resultFiles.any { file ->
+        packages.any {
+            if (it.oldFqName.isRoot || !it.oldFqName.parent().isRoot) false
+            else file.content.contains("(val|var)\\s+${it.oldFqName.asString()}[^A-Za-z0-9_.]".toRegex())
         }
     }
 
-    /*patch imports and self imports*/
-    resultFiles.forEach {
-        file ->
-        file.content = resultFiles.fold(file.content) { r, param ->
-            r.patchImports(param.oldPackage, param.newPackage)
-        }.patchSelfImports(file.newPackage)
+    if (!conservativeRenameScheme) {
+        /*replace all packages*/
+        resultFiles.forEach { file ->
+            file.content = packages.fold(file.content) { r, param ->
+                patchPackages(param.newFqName, param.oldFqName, r)
+            }
+        }
+    } else {
+        //patch imports
+        resultFiles.forEach { file ->
+            file.content = packages.fold(file.content) { r, param ->
+                r.patchImports(param.oldFqName, param.newFqName)
+            }
+        }
     }
 
-    resultFiles.forEach { resultFile ->
-        if (resultFile.name.endsWith(".kt") || resultFile.name.endsWith(".kts")) {
-            filesHolder.addFile(resultFile.name, resultFile.content)
+    /*replace all Class.forName*/
+    resultFiles.forEach { file ->
+        file.content = resultFiles.fold(file.content) { r, param ->
+            patchClassForName(param.newPackagePartClassId, param.oldPackage, r, conservativeRenameScheme)
+        }
+    }
+
+    //patch self imports
+    resultFiles.forEach { file ->
+        file.content = file.content.patchSelfImports(file.newPackage)
+    }
+
+    //patch root package parts usages in strings
+    resultFiles.forEach { file ->
+        file.content = resultFiles.fold(file.content) { r, param ->
+            patchRootPartNamesInStrings(param.newPackagePartClassId, param.oldPackage, param.isJvmName, r)
         }
     }
 
     val boxFiles = resultFiles.filter { hasBoxMethod(it.content) }
     if (boxFiles.size != 1) {
-        println("Several box methods in $file")
+        println("Several box methods in $testFile")
     }
-    return boxFiles.last().newClassId
+
+    filesHolder.addTest(
+        resultFiles.filter { resultFile -> resultFile.name.endsWith(".kt") || resultFile.name.endsWith(".kts") },
+        TestInfo("", boxFiles.last().newPackagePartClassId, testFile)
+    )
+
+    return boxFiles.last().newPackagePartClassId
 }
 
 private fun hasBoxMethod(text: String): Boolean {
     return text.contains("fun box()")
 }
 
-class TestClassInfo(val name: String, var content: String, val oldPackage: FqName, val newClassId: FqName) {
-    val newPackage = newClassId.parent()
+class TestClassInfo(val name: String, var content: String, val oldPackage: FqName, val isJvmName: Boolean, val newPackagePartClassId: FqName) {
+    val newPackage = newPackagePartClassId.parent()
 }
 
 
-private fun changePackage(newPackagePrefix: String, text: String, oldPackage: Ref<FqName>): String {
+private fun changePackage(newPackagePrefix: String, text: String, oldPackage: Ref<FqName>, isJvmName: Ref<Boolean>): String {
     val matcher = packagePattern.matcher(text)
     if (matcher.find()) {
         val oldPackageName = matcher.toMatchResult().group(1)
         oldPackage.set(FqName(oldPackageName))
         return matcher.replaceAll("package $newPackagePrefix.$oldPackageName")
-    }
-    else {
+    } else {
         oldPackage.set(FqName.ROOT)
         val packageDirective = "package $newPackagePrefix;\n"
         if (text.contains("@file:")) {
             val index = text.lastIndexOf("@file:")
             val packageDirectiveIndex = text.indexOf("\n", index)
+            isJvmName.set(true)
             return text.substring(0, packageDirectiveIndex + 1) + packageDirective + text.substring(packageDirectiveIndex + 1)
-        }
-        else {
+        } else {
             return packageDirective + text
         }
     }
@@ -124,16 +162,47 @@ private fun getGeneratedClassName(file: File, text: String, newPackagePrefix: St
     for (annotation in FILE_NAME_ANNOTATIONS) {
         if (text.contains(annotation)) {
             val indexOf = text.indexOf(annotation)
-            val annotationParameter = text.substring(text.indexOf("(\"", indexOf) + 2, text.indexOf("\")", indexOf))
-            return packageFqName.child(Name.identifier(annotationParameter))
+            val startIndex = text.indexOf("(\"", indexOf)
+            val endIndex = text.indexOf("\")", indexOf)
+            // "start", "end" can be -1 in case when we use some const val in argument place
+            if (startIndex != -1 && endIndex != -1) {
+                val annotationParameter = text.substring(startIndex + 2, endIndex)
+                return packageFqName.child(Name.identifier(annotationParameter))
+            }
         }
     }
 
     return PackagePartClassUtils.getPackagePartFqName(packageFqName, file.name)
 }
 
-private fun patchClassForName(className: FqName, oldPackage: FqName, text: String): String {
-    return text.replace(("Class\\.forName\\(\"" + oldPackage.child(className.shortName()).asString() + "\"\\)").toRegex(), "Class.forName(\"" + className.asString() + "\")")
+private fun patchClassForName(className: FqName, oldPackage: FqName, text: String, conservativeRenameSchemeheme: Boolean): String {
+    if (!conservativeRenameSchemeheme && !oldPackage.isRoot) return text
+    return text.replace(
+        ("Class\\.forName\\(\"" + oldPackage.child(className.shortName()).asString()).toRegex(),
+        "Class.forName(\"" + className.asString()
+    )
+}
+
+private fun patchRootPartNamesInStrings(
+    className: FqName,
+    oldPackage: FqName,
+    isJvmName: Boolean,
+    text: String
+): String {
+    if (!oldPackage.isRoot || isJvmName) return text
+    return text.replace(
+        ("\"" + oldPackage.child(className.shortName()).asString()).toRegex(),
+        "\"" + className.asString()
+    )
+}
+
+private fun patchPackages(newPackage: FqName, oldPackage: FqName, text: String): String {
+    if (oldPackage.isRoot) return text
+
+    val regexp = "([^A-Za-z0-9.])" + (oldPackage.asString() + ".").replace(".", "\\.")
+    return text.replace(
+        regexp.toRegex(), "$1" + newPackage.asString() + "."
+    )
 }
 
 private fun String.patchImports(oldPackage: FqName, newPackage: FqName): String {
@@ -150,7 +219,10 @@ private fun String.patchSelfImports(newPackage: FqName): String {
         val possibleSelfImport = matcher.toMatchResult().group(1)
         val classOrObjectPattern = Pattern.compile("[\\s|^](class|object)\\s$possibleSelfImport[\\s|\\(|{|;|:]")
         if (classOrObjectPattern.matcher(newText).find()) {
-            newText = newText.replace("import " + possibleSelfImport, "import " + newPackage.child(Name.identifier(possibleSelfImport)).asString())
+            newText = newText.replace(
+                "import $possibleSelfImport",
+                "import " + newPackage.child(Name.identifier(possibleSelfImport)).asString()
+            )
         }
     }
     return newText

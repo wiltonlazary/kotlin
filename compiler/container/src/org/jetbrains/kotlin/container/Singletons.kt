@@ -17,8 +17,9 @@
 package org.jetbrains.kotlin.container
 
 import java.io.Closeable
+import java.lang.IllegalStateException
 import java.lang.reflect.Type
-import java.util.ArrayList
+import java.util.*
 
 enum class ComponentState {
     Null,
@@ -120,7 +121,7 @@ open class SingletonTypeComponentDescriptor(container: ComponentContainer, val k
     override fun getRegistrations(): Iterable<Type> = klass.getInfo().registrations
 
     private fun createInstanceOf(klass: Class<*>, context: ValueResolveContext): Any {
-        val binding = klass.bindToConstructor(context)
+        val binding = klass.bindToConstructor(container.containerId, context)
         state = ComponentState.Initializing
         for (argumentDescriptor in binding.argumentDescriptors) {
             if (argumentDescriptor is Closeable && argumentDescriptor !is SingletonDescriptor) {
@@ -131,17 +132,48 @@ open class SingletonTypeComponentDescriptor(container: ComponentContainer, val k
         val constructor = binding.constructor
         val arguments = computeArguments(binding.argumentDescriptors)
 
-        val instance = constructor.newInstance(*arguments.toTypedArray())!!
+        val instance = runWithUnwrappingInvocationException { constructor.newInstance(*arguments.toTypedArray())!! }
         state = ComponentState.Initialized
         return instance
     }
 
     override fun getDependencies(context: ValueResolveContext): Collection<Type> {
         val classInfo = klass.getInfo()
-        return classInfo.constructorInfo?.parameters.orEmpty() + classInfo.setterInfos.flatMap { it.parameters }
+        val constructorParameters = classInfo.constructorInfo?.parameters.orEmpty()
+        val setterInfos = classInfo.setterInfos
+
+        // In most cases, setterInfos is empty (KT-52756)
+        return if (setterInfos.isEmpty())
+            constructorParameters
+        else
+            constructorParameters + setterInfos.flatMap { it.parameters }
     }
 
     override fun toString(): String = "Singleton: ${klass.simpleName}"
+}
+
+internal class ClashResolutionDescriptor<E : PlatformSpecificExtension<E>>(
+    container: ComponentContainer,
+    private val resolver: PlatformExtensionsClashResolver<E>,
+    private val clashedComponents: List<ComponentDescriptor>
+) : SingletonDescriptor(container) {
+
+    override fun createInstance(context: ValueResolveContext): Any {
+        state = ComponentState.Initializing
+        @Suppress("UNCHECKED_CAST")
+        val extensions = computeArguments(clashedComponents) as List<E>
+        val resolution = resolver.resolveExtensionsClash(extensions)
+        state = ComponentState.Initialized
+        return resolution
+    }
+
+    override fun getRegistrations(): Iterable<Type> {
+        throw IllegalStateException("Shouldn't be called")
+    }
+
+    override fun getDependencies(context: ValueResolveContext): Collection<Type> {
+        throw IllegalStateException("Shouldn't be called")
+    }
 }
 
 class ImplicitSingletonTypeComponentDescriptor(container: ComponentContainer, klass: Class<*>) : SingletonTypeComponentDescriptor(container, klass) {

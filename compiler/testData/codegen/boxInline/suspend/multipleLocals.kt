@@ -1,11 +1,15 @@
-// FILE: inlined.kt
-// COMMON_COROUTINES_TEST
-// WITH_RUNTIME
+// WITH_COROUTINES
 // NO_CHECK_LAMBDA_INLINING
-
+// WITH_STDLIB
+// FILE: inlined.kt
 object Result {
     var a: String = ""
     var b: Int = 0
+}
+
+// Needed for JS compatibility
+interface Runnable {
+    fun run(): Unit
 }
 
 suspend inline fun inlineMe(c: suspend () -> Unit) {
@@ -55,22 +59,11 @@ suspend inline fun crossinlineMe(crossinline c: suspend () -> Unit) {
 }
 
 // FILE: inlineSite.kt
-// COMMON_COROUTINES_TEST
-
-import COROUTINES_PACKAGE.*
+import kotlin.coroutines.*
+import helpers.*
 
 fun builder(c: suspend () -> Unit) {
-    c.startCoroutine(object: Continuation<Unit> {
-        override val context: CoroutineContext
-            get() = EmptyCoroutineContext
-
-        override fun resume(value: Unit) {
-        }
-
-        override fun resumeWithException(exception: Throwable) {
-            throw exception
-        }
-    })
+    c.startCoroutine(EmptyContinuation)
 }
 
 suspend fun dummy() {

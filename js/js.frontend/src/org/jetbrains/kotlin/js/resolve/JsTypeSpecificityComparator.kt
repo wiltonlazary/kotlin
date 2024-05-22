@@ -20,18 +20,26 @@ import org.jetbrains.kotlin.resolve.calls.results.TypeSpecificityComparator
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.isDynamic
 import org.jetbrains.kotlin.types.isFlexible
+import org.jetbrains.kotlin.types.model.KotlinTypeMarker
+import org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContext
+import org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContextDelegate
 
-object JsTypeSpecificityComparator: TypeSpecificityComparator {
+// Replacing the TypeSystemInferenceExtensionContextDelegate with
+// TypeSystemInferenceExtensionContext here leads to clashed registrations
+// (for example, when trying to run IrJsTextTestCaseGenerated).
+class JsTypeSpecificityComparator(context: TypeSystemInferenceExtensionContextDelegate) :
+    TypeSpecificityComparator by JsTypeSpecificityComparatorWithoutDelegate(context)
 
-    private fun checkOnlyDynamicFlexibleType(type: KotlinType) {
-        if (type.isFlexible()) {
+class JsTypeSpecificityComparatorWithoutDelegate(val context: TypeSystemInferenceExtensionContext) : TypeSpecificityComparator {
+    private fun TypeSystemInferenceExtensionContext.checkOnlyDynamicFlexibleType(type: KotlinTypeMarker) {
+        if (type.asFlexibleType() != null) {
             assert(type.isDynamic()) {
                 "Unexpected flexible type in Js: $type"
             }
         }
     }
 
-    override fun isDefinitelyLessSpecific(specific: KotlinType, general: KotlinType): Boolean {
+    override fun isDefinitelyLessSpecific(specific: KotlinTypeMarker, general: KotlinTypeMarker): Boolean = with(context) {
         checkOnlyDynamicFlexibleType(specific)
         checkOnlyDynamicFlexibleType(general)
 

@@ -1,5 +1,8 @@
-// WITH_RUNTIME
-// IGNORE_BACKEND: JS, NATIVE
+// WITH_STDLIB
+// TARGET_BACKEND: JVM
+// LAMBDAS: CLASS
+
+package test
 
 interface Z {
     private fun privateFun() = { "OK" }
@@ -57,7 +60,7 @@ fun box(): String {
 
     val nested = Z.Nested::class.java
     val enclosingClass = nested.enclosingClass!!
-    if (enclosingClass.name != "Z") return "fail 9: ${enclosingClass.name}"
+    if (enclosingClass.name != "test.Z") return "fail 9: ${enclosingClass.name}"
 
     return "OK"
 }

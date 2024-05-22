@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.psi.addRemoveModifier
@@ -27,13 +16,13 @@ import org.jetbrains.kotlin.psi.psiUtil.siblings
 private fun KtModifierListOwner.addModifierList(newModifierList: KtModifierList): KtModifierList {
     val anchor = firstChild!!
         .siblings(forward = true)
-        .dropWhile { it is PsiComment || it is PsiWhiteSpace }
+        .dropWhile { it is PsiComment || it is PsiWhiteSpace || it is KtContextReceiverList }
         .first()
     return addBefore(newModifierList, anchor) as KtModifierList
 }
 
 private fun createModifierList(text: String, owner: KtModifierListOwner): KtModifierList {
-    return owner.addModifierList(KtPsiFactory(owner).createModifierList(text))
+    return owner.addModifierList(KtPsiFactory(owner.project).createModifierList(text))
 }
 
 fun KtModifierListOwner.setModifierList(newModifierList: KtModifierList) {
@@ -66,7 +55,7 @@ fun addAnnotationEntry(owner: KtModifierListOwner, annotationEntry: KtAnnotation
 internal fun addModifier(modifierList: KtModifierList, modifier: KtModifierKeywordToken) {
     if (modifierList.hasModifier(modifier)) return
 
-    val newModifier = KtPsiFactory(modifierList).createModifier(modifier)
+    val newModifier = KtPsiFactory(modifierList.project).createModifier(modifier)
     val modifierToReplace = MODIFIERS_TO_REPLACE[modifier]
         ?.mapNotNull { modifierList.getModifier(it) }
         ?.firstOrNull()
@@ -88,14 +77,20 @@ internal fun addModifier(modifierList: KtModifierList, modifier: KtModifierKeywo
 
         fun placeAfter(child: PsiElement): Boolean {
             if (child is PsiWhiteSpace) return false
-            if (child is KtAnnotation) return true // place modifiers after annotations
+            if (child is KtAnnotation || child is KtAnnotationEntry) return true // place modifiers after annotations
             val elementType = child.node!!.elementType
             val order = MODIFIERS_ORDER.indexOf(elementType)
             return newModifierOrder > order
         }
 
         val lastChild = modifierList.lastChild
-        val anchor = lastChild?.siblings(forward = false)?.firstOrNull(::placeAfter)
+        val anchor = lastChild?.siblings(forward = false)?.firstOrNull(::placeAfter).let {
+            when {
+                it?.nextSibling is PsiWhiteSpace && (it is KtAnnotation || it is KtAnnotationEntry || it is PsiComment) -> it.nextSibling
+                it == null && modifierList.firstChild is PsiWhiteSpace -> modifierList.firstChild
+                else -> it
+            }
+        }
         modifierList.addAfter(newModifier, anchor)
 
         if (anchor == lastChild) { // add line break if needed, otherwise visibility keyword may appear on previous line
@@ -113,6 +108,12 @@ fun removeModifier(owner: KtModifierListOwner, modifier: KtModifierKeywordToken)
         it.getModifier(modifier)?.delete()
         if (it.firstChild == null) {
             it.delete()
+            return
+        }
+
+        val lastChild = it.lastChild
+        if (lastChild is PsiComment) {
+            it.addAfter(KtPsiFactory(owner.project).createNewLine(), lastChild)
         }
     }
 }
@@ -151,9 +152,10 @@ val MODIFIERS_ORDER = listOf(
     VARARG_KEYWORD,
     SUSPEND_KEYWORD,
     INNER_KEYWORD,
-    ENUM_KEYWORD, ANNOTATION_KEYWORD,
+    ENUM_KEYWORD, ANNOTATION_KEYWORD, FUN_KEYWORD,
     COMPANION_KEYWORD,
     INLINE_KEYWORD,
+    VALUE_KEYWORD,
     INFIX_KEYWORD,
     OPERATOR_KEYWORD,
     DATA_KEYWORD

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:JvmMultifileClass
@@ -9,9 +9,15 @@
 package kotlin.io
 
 import java.io.*
+import java.nio.ByteBuffer
+import java.nio.CharBuffer
 import java.util.*
 import java.nio.charset.Charset
-import kotlin.internal.*
+import java.nio.charset.CharsetEncoder
+import java.nio.charset.CodingErrorAction
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
+import kotlin.math.ceil
 
 
 /**
@@ -72,7 +78,31 @@ public fun File.readBytes(): ByteArray = inputStream().use { input ->
         remaining -= read
         offset += read
     }
-    if (remaining == 0) result else result.copyOf(offset)
+    if (remaining > 0) return@use result.copyOf(offset)
+
+    val extraByte = input.read()
+    if (extraByte == -1) return@use result
+
+    // allocation estimate: (RS + DBS + max(ES, DBS + 1)) + (RS + ES),
+    // where RS = result.size, ES = extra.size, DBS = DEFAULT_BUFFER_SIZE
+    // when RS = 0, ES >> DBS   => DBS + DBS + 1 + ES + ES = 2DBS + 2ES
+    // when RS >> ES, ES << DBS => RS + DBS + DBS+1 + RS + ES = 2RS + 2DBS + ES
+    val extra = ExposingBufferByteArrayOutputStream(DEFAULT_BUFFER_SIZE + 1)
+    extra.write(extraByte)
+    input.copyTo(extra)
+
+    val resultingSize = result.size + extra.size()
+    if (resultingSize < 0) throw OutOfMemoryError("File $this is too big to fit in memory.")
+
+    return@use extra.buffer.copyInto(
+        destination = result.copyOf(resultingSize),
+        destinationOffset = result.size,
+        startIndex = 0, endIndex = extra.size()
+    )
+}
+
+private class ExposingBufferByteArrayOutputStream(size: Int) : ByteArrayOutputStream(size) {
+    val buffer: ByteArray get() = buf
 }
 
 /**
@@ -98,7 +128,7 @@ public fun File.appendBytes(array: ByteArray): Unit = FileOutputStream(this, tru
  * @param charset character set to use.
  * @return the entire content of this file as a String.
  */
-public fun File.readText(charset: Charset = Charsets.UTF_8): String = readBytes().toString(charset)
+public fun File.readText(charset: Charset = Charsets.UTF_8): String = reader(charset).use { it.readText() }
 
 /**
  * Sets the content of this file as [text] encoded using UTF-8 or specified [charset].
@@ -107,7 +137,8 @@ public fun File.readText(charset: Charset = Charsets.UTF_8): String = readBytes(
  * @param text text to write into file.
  * @param charset character set to use.
  */
-public fun File.writeText(text: String, charset: Charset = Charsets.UTF_8): Unit = writeBytes(text.toByteArray(charset))
+public fun File.writeText(text: String, charset: Charset = Charsets.UTF_8): Unit =
+    FileOutputStream(this).use { it.writeTextImpl(text, charset) }
 
 /**
  * Appends [text] to the content of this file using UTF-8 or the specified [charset].
@@ -115,7 +146,54 @@ public fun File.writeText(text: String, charset: Charset = Charsets.UTF_8): Unit
  * @param text text to append to file.
  * @param charset character set to use.
  */
-public fun File.appendText(text: String, charset: Charset = Charsets.UTF_8): Unit = appendBytes(text.toByteArray(charset))
+public fun File.appendText(text: String, charset: Charset = Charsets.UTF_8): Unit =
+    FileOutputStream(this, true).use { it.writeTextImpl(text, charset) }
+
+internal fun OutputStream.writeTextImpl(text: String, charset: Charset) {
+    val chunkSize = DEFAULT_BUFFER_SIZE
+
+    if (text.length < 2 * chunkSize) {
+        this.write(text.toByteArray(charset))
+        return
+    }
+
+    val encoder = charset.newReplaceEncoder()
+    val charBuffer = CharBuffer.allocate(chunkSize)
+    val byteBuffer = byteBufferForEncoding(chunkSize, encoder)
+
+    var startIndex = 0
+    var leftover = 0
+
+    while (startIndex < text.length) {
+        val copyLength = minOf(chunkSize - leftover, text.length - startIndex)
+        val endIndex = startIndex + copyLength
+
+        text.toCharArray(charBuffer.array(), leftover, startIndex, endIndex)
+        charBuffer.limit(copyLength + leftover)
+        encoder.encode(charBuffer, byteBuffer, /*endOfInput = */endIndex == text.length).also { check(it.isUnderflow) }
+        this.write(byteBuffer.array(), 0, byteBuffer.position())
+
+        if (charBuffer.position() != charBuffer.limit()) {
+            charBuffer.put(0, charBuffer.get()) // the last char is a high surrogate
+            leftover = 1
+        } else {
+            leftover = 0
+        }
+
+        charBuffer.clear()
+        byteBuffer.clear()
+        startIndex = endIndex
+    }
+}
+
+internal fun Charset.newReplaceEncoder() = newEncoder()
+    .onMalformedInput(CodingErrorAction.REPLACE)
+    .onUnmappableCharacter(CodingErrorAction.REPLACE)
+
+internal fun byteBufferForEncoding(chunkSize: Int, encoder: CharsetEncoder): ByteBuffer {
+    val maxBytesPerChar = ceil(encoder.maxBytesPerChar()).toInt() // including replacement sequence
+    return ByteBuffer.allocate(chunkSize * maxBytesPerChar)
+}
 
 /**
  * Reads file by byte blocks and calls [action] for each block read.
@@ -203,6 +281,9 @@ public fun File.readLines(charset: Charset = Charsets.UTF_8): List<String> {
  * @param charset character set to use. By default uses UTF-8 charset.
  * @return the value returned by [block].
  */
-@RequireKotlin("1.2", versionKind = RequireKotlinVersionKind.COMPILER_VERSION, message = "Requires newer compiler version to be inlined correctly.")
-public inline fun <T> File.useLines(charset: Charset = Charsets.UTF_8, block: (Sequence<String>) -> T): T =
-    bufferedReader(charset).use { block(it.lineSequence()) }
+public inline fun <T> File.useLines(charset: Charset = Charsets.UTF_8, block: (Sequence<String>) -> T): T {
+    contract {
+        callsInPlace(block, InvocationKind.EXACTLY_ONCE)
+    }
+    return bufferedReader(charset).use { block(it.lineSequence()) }
+}

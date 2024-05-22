@@ -1,9 +1,5 @@
 package test
 
-sealed class Base
+import kotlin.reflect.*
 
-class Derived : Base()
-
-fun test() {
-    ""::class.isInstance(42)
-}
+abstract class Some : KSuspendFunction0<Unit>

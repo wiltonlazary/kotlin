@@ -1,11 +1,5 @@
-warning: ATTENTION!
-This build uses internal compiler arguments:
-
--XXLanguage:+InlineClasses
-
-This mode is strictly prohibited for production use,
-as no stability/compatibility guarantees are given on
-compiler or generated code. Use it at your own risk!
-
-warning: following manually enabled features will force generation of pre-release binaries: InlineClasses
-OK
+compiler/testData/cli/jvm/internalArgEnableLanguageFeature.kt:9:1: error: class 'Impl' overrides 'var' property 'a' with inherited 'val' property 'public final val /Open.a: kotlin/String
+    public get(): kotlin/String'.
+class Impl : Open(), Interface
+^^^^^^^^^^
+COMPILATION_ERROR

@@ -1,15 +1,20 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package test.collections
 
-import test.assertStaticAndRuntimeTypeIs
+import test.*
 import kotlin.test.*
 import test.collections.behaviors.*
+import test.collections.js.linkedStringMapOf
+import test.collections.js.linkedStringSetOf
+import test.collections.js.stringMapOf
+import test.collections.js.stringSetOf
 import test.comparisons.STRING_CASE_INSENSITIVE_ORDER
-import kotlin.comparisons.*
+import kotlin.math.pow
+import kotlin.random.Random
 
 class CollectionTest {
 
@@ -46,6 +51,27 @@ class CollectionTest {
         assertStaticAndRuntimeTypeIs<List<String>>(foo)
     }
 
+
+    @Test fun flatMap() {
+        val source = listOf(null, "foo", "bar")
+        val result1 = source.flatMap { it.orEmpty().asSequence() }
+        val result2 = source.flatMap { it.orEmpty().asIterable() }
+
+        val expected = "foobar".toList()
+        assertEquals(expected, result1)
+        assertEquals(expected, result2)
+    }
+
+    @Test fun flatMapIndexed() {
+        val source = listOf(null, "foo", "bar")
+        val result1 = source.flatMapIndexed { index, it -> it.orEmpty().take(index + 1).asSequence() }
+        val result2 = source.flatMapIndexed { index, it -> it.orEmpty().take(index + 1).asIterable() }
+
+        val expected = "fobar".toList()
+        assertEquals(expected, result1)
+        assertEquals(expected, result2)
+    }
+
     /*
     @Test fun mapNotNull() {
         val data = listOf(null, "foo", null, "bar")
@@ -69,6 +95,18 @@ class CollectionTest {
 
         val l3: List<String> = listOfNotNull("value1", null, "value2")
         assertEquals(listOf("value1", "value2"), l3)
+    }
+
+    @Test fun setOfNotNull() {
+        val l1: Set<Int> = setOfNotNull(null)
+        assertTrue(l1.isEmpty())
+
+        val s: String? = "value"
+        val l2: Set<String> = setOfNotNull(s)
+        assertEquals(s, l2.single())
+
+        val l3: Set<String> = setOfNotNull("value1", null, "value2")
+        assertEquals(setOf("value1", "value2"), l3)
     }
 
     @Test fun filterIntoSet() {
@@ -284,6 +322,24 @@ class CollectionTest {
         }
     }
 
+    @Test fun reduceIndexedOrNull() {
+        expect("123") {
+            val list = listOf("1", "2", "3", "4")
+            list.reduceIndexedOrNull { index, a, b -> if (index == 3) a else a + b }
+        }
+
+        expect(5) {
+            listOf(2, 3).reduceIndexedOrNull { index, acc: Number, e ->
+                assertEquals(1, index)
+                assertEquals(2, acc)
+                assertEquals(3, e)
+                acc.toInt() + e
+            }
+        }
+
+        expect(null, { arrayListOf<Int>().reduceIndexedOrNull { index, a, b -> index + a + b } })
+    }
+
     @Test fun reduceRightIndexed() {
         expect("234") {
             val list = listOf("1", "2", "3", "4")
@@ -304,6 +360,24 @@ class CollectionTest {
         }
     }
 
+    @Test fun reduceRightIndexedOrNull() {
+        expect("234") {
+            val list = listOf("1", "2", "3", "4")
+            list.reduceRightIndexedOrNull { index, a, b -> if (index == 0) b else a + b }
+        }
+
+        expect(1) {
+            listOf(2, 3).reduceRightIndexedOrNull { index, e, acc: Number ->
+                assertEquals(0, index)
+                assertEquals(3, acc)
+                assertEquals(2, e)
+                acc.toInt() - e
+            }
+        }
+
+        expect(null, { arrayListOf<Int>().reduceRightIndexedOrNull { index, a, b -> index + a + b } })
+    }
+
     @Test fun reduce() {
         expect("1234") {
             val list = listOf("1", "2", "3", "4")
@@ -315,6 +389,15 @@ class CollectionTest {
         }
     }
 
+    @Test fun reduceOrNull() {
+        expect("1234") {
+            val list = listOf("1", "2", "3", "4")
+            list.reduceOrNull { a, b -> a + b }
+        }
+
+        expect(null, { arrayListOf<Int>().reduceOrNull { a, b -> a + b } })
+    }
+
     @Test fun reduceRight() {
         expect("1234") {
             val list = listOf("1", "2", "3", "4")
@@ -323,6 +406,49 @@ class CollectionTest {
 
         assertFailsWith<UnsupportedOperationException> {
             arrayListOf<Int>().reduceRight { a, b -> a + b }
+        }
+    }
+
+    @Test fun reduceRightOrNull() {
+        expect("1234") {
+            val list = listOf("1", "2", "3", "4")
+            list.reduceRightOrNull { a, b -> a + b }
+        }
+
+        expect(null, { arrayListOf<Int>().reduceRightOrNull { a, b -> a + b } })
+    }
+
+    @Test
+    fun scan() {
+        for (size in 0 until 4) {
+            val expected = listOf("", "0", "01", "012", "0123").take(size + 1)
+            assertEquals(expected, List(size) { it }.scan("") { acc, e -> acc + e })
+            assertEquals(expected, List(size) { it }.runningFold("") { acc, e -> acc + e })
+        }
+    }
+
+    @Test
+    fun scanIndexed() {
+        for (size in 0 until 4) {
+            val expected = listOf("+", "+[0: a]", "+[0: a][1: b]", "+[0: a][1: b][2: c]", "+[0: a][1: b][2: c][3: d]").take(size + 1)
+            assertEquals(expected, List(size) { 'a' + it }.scanIndexed("+") { index, acc, e -> "$acc[$index: $e]" })
+            assertEquals(expected, List(size) { 'a' + it }.runningFoldIndexed("+") { index, acc, e -> "$acc[$index: $e]" })
+        }
+    }
+
+    @Test
+    fun runningReduce() {
+        for (size in 0 until 4) {
+            val expected = listOf(0, 1, 3, 6).take(size)
+            assertEquals(expected, List(size) { it }.runningReduce { acc, e -> acc + e })
+        }
+    }
+
+    @Test
+    fun runningReduceIndexed() {
+        for (size in 0 until 4) {
+            val expected = listOf(0, 1, 6, 27).take(size)
+            assertEquals(expected, List(size) { it }.runningReduceIndexed { index, acc, e -> index * (acc + e) })
         }
     }
 
@@ -356,6 +482,18 @@ class CollectionTest {
 
         val mutableNamesByTeam = nameToTeam.groupByTo(HashMap(), { it.second }, { it.first })
         assertEquals(namesByTeam, mutableNamesByTeam)
+    }
+
+    @Test fun associateWith() {
+        val items = listOf("Alice", "Bob", "Carol")
+        val itemsWithTheirLength = items.associateWith { it.length }
+
+        assertEquals(mapOf("Alice" to 5, "Bob" to 3, "Carol" to 5), itemsWithTheirLength)
+
+        val updatedLength =
+            items.drop(1).associateWithTo(itemsWithTheirLength.toMutableMap()) { name -> name.lowercase().count { it in "aeuio" }}
+
+        assertEquals(mapOf("Alice" to 5, "Bob" to 1, "Carol" to 2), updatedLength)
     }
 
     @Test fun plusRanges() {
@@ -608,6 +746,56 @@ class CollectionTest {
         assertFails { arrayListOf<Int>().last() }
     }
 
+    @Test fun random() {
+        val list = List(100) { it }
+        val set = list.toSet()
+        listOf(list, set).forEach { collection: Collection<Int> ->
+            val tosses = List(10) { collection.random() }
+            assertTrue(tosses.distinct().size > 1, "Should be some distinct elements in $tosses")
+
+            val seed = Random.nextInt()
+            val random1 = Random(seed)
+            val random2 = Random(seed)
+
+            val tosses1 = List(10) { collection.random(random1) }
+            val tosses2 = List(10) { collection.random(random2) }
+
+            assertEquals(tosses1, tosses2)
+        }
+
+        listOf("x").let { singletonList ->
+            val tosses = List(10) { singletonList.random() }
+            assertEquals(singletonList, tosses.distinct())
+        }
+
+        assertFailsWith<NoSuchElementException> { emptyList<Any>().random() }
+    }
+
+    @Test fun randomOrNull() {
+        val list = List(100) { it }
+        val set = list.toSet()
+        listOf(list, set).forEach { collection: Collection<Int> ->
+            val tosses = List(10) { collection.randomOrNull() }
+            assertTrue(tosses.distinct().size > 1, "Should be some distinct elements in $tosses")
+
+            val seed = Random.nextInt()
+            val random1 = Random(seed)
+            val random2 = Random(seed)
+
+            val tosses1 = List(10) { collection.randomOrNull(random1) }
+            val tosses2 = List(10) { collection.randomOrNull(random2) }
+
+            assertEquals(tosses1, tosses2)
+        }
+
+        listOf("x").let { singletonList ->
+            val tosses = List(10) { singletonList.randomOrNull() }
+            assertEquals(singletonList, tosses.distinct())
+        }
+
+        assertNull(emptyList<Any>().randomOrNull())
+    }
+
     @Test fun subscript() {
         val list = arrayListOf("foo", "bar")
         assertEquals("foo", list[0])
@@ -647,79 +835,145 @@ class CollectionTest {
         assertTrue(hashSetOf(45, 14, 13).toIterable().contains(14))
     }
 
-    @Test fun min() {
-        expect(null, { listOf<Int>().min() })
-        expect(1, { listOf(1).min() })
-        expect(2, { listOf(2, 3).min() })
-        expect(2000000000000, { listOf(3000000000000, 2000000000000).min() })
-        expect('a', { listOf('a', 'b').min() })
-        expect("a", { listOf("a", "b").min() })
-        expect(null, { listOf<Int>().asSequence().min() })
-        expect(2, { listOf(2, 3).asSequence().min() })
+    @Test fun minOrNull() {
+        expect(null, { listOf<Int>().minOrNull() })
+        expect(1, { listOf(1).minOrNull() })
+        expect(2, { listOf(2, 3).minOrNull() })
+        expect(2000000000000, { listOf(3000000000000, 2000000000000).minOrNull() })
+        expect('a', { listOf('a', 'b').minOrNull() })
+        expect("a", { listOf("a", "b").minOrNull() })
+        expect(null, { listOf<Int>().asSequence().minOrNull() })
+        expect(2, { listOf(2, 3).asSequence().minOrNull() })
+
+        assertIsNegativeZero(listOf(0.0, -0.0).shuffled().minOrNull()!!)
+        assertIsNegativeZero(listOf(0.0F, -0.0F).shuffled().minOrNull()!!.toDouble())
     }
 
     @Test fun max() {
-        expect(null, { listOf<Int>().max() })
-        expect(1, { listOf(1).max() })
-        expect(3, { listOf(2, 3).max() })
-        expect(3000000000000, { listOf(3000000000000, 2000000000000).max() })
-        expect('b', { listOf('a', 'b').max() })
-        expect("b", { listOf("a", "b").max() })
-        expect(null, { listOf<Int>().asSequence().max() })
-        expect(3, { listOf(2, 3).asSequence().max() })
+        expect(null, { listOf<Int>().maxOrNull() })
+        expect(1, { listOf(1).maxOrNull() })
+        expect(3, { listOf(2, 3).maxOrNull() })
+        expect(3000000000000, { listOf(3000000000000, 2000000000000).maxOrNull() })
+        expect('b', { listOf('a', 'b').maxOrNull() })
+        expect("b", { listOf("a", "b").maxOrNull() })
+        expect(null, { listOf<Int>().asSequence().maxOrNull() })
+        expect(3, { listOf(2, 3).asSequence().maxOrNull() })
+
+        assertIsPositiveZero(listOf(0.0, -0.0).shuffled().maxOrNull()!!)
+        assertIsPositiveZero(listOf(0.0F, -0.0F).shuffled().maxOrNull()!!.toDouble())
     }
 
-    @Test fun minWith() {
-        expect(null, { listOf<Int>().minWith(naturalOrder()) })
-        expect(1, { listOf(1).minWith(naturalOrder()) })
-        expect("a", { listOf("a", "B").minWith(STRING_CASE_INSENSITIVE_ORDER) })
-        expect("a", { listOf("a", "B").asSequence().minWith(STRING_CASE_INSENSITIVE_ORDER) })
+    @Test fun minWithOrNull() {
+        expect(null, { listOf<Int>().minWithOrNull(naturalOrder()) })
+        expect(1, { listOf(1).minWithOrNull(naturalOrder()) })
+        expect("a", { listOf("a", "B").minWithOrNull(STRING_CASE_INSENSITIVE_ORDER) })
+        expect("a", { listOf("a", "B").asSequence().minWithOrNull(STRING_CASE_INSENSITIVE_ORDER) })
     }
 
-    @Test fun maxWith() {
-        expect(null, { listOf<Int>().maxWith(naturalOrder()) })
-        expect(1, { listOf(1).maxWith(naturalOrder()) })
-        expect("B", { listOf("a", "B").maxWith(STRING_CASE_INSENSITIVE_ORDER) })
-        expect("B", { listOf("a", "B").asSequence().maxWith(STRING_CASE_INSENSITIVE_ORDER) })
+    @Test fun maxWithOrNull() {
+        expect(null, { listOf<Int>().maxWithOrNull(naturalOrder()) })
+        expect(1, { listOf(1).maxWithOrNull(naturalOrder()) })
+        expect("B", { listOf("a", "B").maxWithOrNull(STRING_CASE_INSENSITIVE_ORDER) })
+        expect("B", { listOf("a", "B").asSequence().maxWithOrNull(STRING_CASE_INSENSITIVE_ORDER) })
     }
 
-    @Test fun minBy() {
-        expect(null, { listOf<Int>().minBy { it } })
-        expect(1, { listOf(1).minBy { it } })
-        expect(3, { listOf(2, 3).minBy { -it } })
-        expect('a', { listOf('a', 'b').minBy { "x$it" } })
-        expect("b", { listOf("b", "abc").minBy { it.length } })
-        expect(null, { listOf<Int>().asSequence().minBy { it } })
-        expect(3, { listOf(2, 3).asSequence().minBy { -it } })
+    @Test fun minByOrNull() {
+        expect(null, { listOf<Int>().minByOrNull { it } })
+        expect(1, { listOf(1).minByOrNull { it } })
+        expect(3, { listOf(2, 3).minByOrNull { -it } })
+        expect('a', { listOf('a', 'b').minByOrNull { "x$it" } })
+        expect("b", { listOf("b", "abc").minByOrNull { it.length } })
+        expect(null, { listOf<Int>().asSequence().minByOrNull { it } })
+        expect(3, { listOf(2, 3).asSequence().minByOrNull { -it } })
     }
 
-    @Test fun maxBy() {
-        expect(null, { listOf<Int>().maxBy { it } })
-        expect(1, { listOf(1).maxBy { it } })
-        expect(2, { listOf(2, 3).maxBy { -it } })
-        expect('b', { listOf('a', 'b').maxBy { "x$it" } })
-        expect("abc", { listOf("b", "abc").maxBy { it.length } })
-        expect(null, { listOf<Int>().asSequence().maxBy { it } })
-        expect(2, { listOf(2, 3).asSequence().maxBy { -it } })
+    @Test fun maxByOrNull() {
+        expect(null, { listOf<Int>().maxByOrNull { it } })
+        expect(1, { listOf(1).maxByOrNull { it } })
+        expect(2, { listOf(2, 3).maxByOrNull { -it } })
+        expect('b', { listOf('a', 'b').maxByOrNull { "x$it" } })
+        expect("abc", { listOf("b", "abc").maxByOrNull { it.length } })
+        expect(null, { listOf<Int>().asSequence().maxByOrNull { it } })
+        expect(2, { listOf(2, 3).asSequence().maxByOrNull { -it } })
     }
 
-    @Test fun minByEvaluateOnce() {
+    @Test fun minByOrNullEvaluateOnce() {
         var c = 0
-        expect(1, { listOf(5, 4, 3, 2, 1).minBy { c++; it * it } })
+        expect(1, { listOf(5, 4, 3, 2, 1).minByOrNull { c++; it * it } })
         assertEquals(5, c)
         c = 0
-        expect(1, { listOf(5, 4, 3, 2, 1).asSequence().minBy { c++; it * it } })
+        expect(1, { listOf(5, 4, 3, 2, 1).asSequence().minByOrNull { c++; it * it } })
         assertEquals(5, c)
     }
 
-    @Test fun maxByEvaluateOnce() {
+    @Test fun maxByOrNullEvaluateOnce() {
         var c = 0
-        expect(5, { listOf(5, 4, 3, 2, 1).maxBy { c++; it * it } })
+        expect(5, { listOf(5, 4, 3, 2, 1).maxByOrNull { c++; it * it } })
         assertEquals(5, c)
         c = 0
-        expect(5, { listOf(5, 4, 3, 2, 1).asSequence().maxBy { c++; it * it } })
+        expect(5, { listOf(5, 4, 3, 2, 1).asSequence().maxByOrNull { c++; it * it } })
         assertEquals(5, c)
     }
+
+    @Test fun minOf() {
+        assertEquals(null, emptyList<Int>().minOfOrNull { it } )
+        assertFailsWith<NoSuchElementException> { emptyList<Int>().minOf { it } }
+
+        assertEquals(1, listOf(1).minOf { it })
+        assertEquals(-3, listOf(2, 3).minOf { -it })
+        assertEquals("xa", listOf('a', 'b').minOf { "x$it" })
+        assertEquals(1, listOf("b", "abc").minOf { it.length })
+
+        assertEquals(-32.0, listOf(1, 2, 3, 4, 5).minOf { (-2.0).pow(it) })
+        assertEquals(-32.0F, listOf(1, 2, 3, 4, 5).minOf { (-2.0F).pow(it) })
+
+        assertEquals(Double.NaN, listOf(1, -1, 0).minOf { it.toDouble().pow(0.5) })
+        assertEquals(Float.NaN, listOf(1, -1, 0).minOf { it.toFloat().pow(0.5F) })
+
+        assertIsNegativeZero(listOf(1.0, -1.0).shuffled().minOf { it * 0.0 })
+        assertIsNegativeZero(listOf(1.0F, -1.0F).shuffled().minOf { it * 0.0F }.toDouble())
+    }
+
+    @Test fun minOfWith() {
+        val data = listOf("abca", "bcaa", "cabb")
+        val result = data.minOfWith(compareBy { it.reversed() }) { it.take(3) }
+        val resultOrNull = data.minOfWithOrNull(compareBy { it.reversed() }) { it.take(3) }
+        assertEquals("bca", result)
+        assertEquals(result, resultOrNull)
+
+        assertEquals(null, emptyList<Int>().minOfWithOrNull(naturalOrder()) { it })
+        // TODO: investigate why no unit-coercion happens here and an explicit 'Unit' is required
+        assertFailsWith<NoSuchElementException> { emptyList<Int>().minOfWith(naturalOrder()) { it }; Unit }
+    }
+
+    @Test fun maxOf() {
+        assertEquals(null, emptyList<Int>().maxOfOrNull { it } )
+        assertFailsWith<NoSuchElementException> { emptyList<Int>().maxOf { it } }
+
+        assertEquals(1, listOf(1).maxOf { it })
+        assertEquals(-2, listOf(2, 3).maxOf { -it })
+        assertEquals("xb", listOf('a', 'b').maxOf { "x$it" })
+        assertEquals(3, listOf("b", "abc").maxOf { it.length })
+
+        assertEquals(16.0, listOf(1, 2, 3, 4, 5).maxOf { (-2.0).pow(it) })
+        assertEquals(16.0F, listOf(1, 2, 3, 4, 5).maxOf { (-2.0F).pow(it) })
+
+        assertIsPositiveZero(listOf(1.0, -1.0).shuffled().maxOf { it * 0.0 })
+        assertIsPositiveZero(listOf(1.0F, -1.0F).shuffled().maxOf { it * 0.0F }.toDouble())
+    }
+
+    @Test fun maxOfWith() {
+        val data = listOf("abca", "bcaa", "cabb")
+        val result = data.maxOfWith(compareBy { it.reversed() }) { it.take(3) }
+        val resultOrNull = data.maxOfWithOrNull(compareBy { it.reversed() }) { it.take(3) }
+        assertEquals("abc", result)
+        assertEquals(result, resultOrNull)
+
+        assertEquals(null, emptyList<Int>().maxOfWithOrNull(naturalOrder()) { it })
+        // TODO: investigate why no unit-coercion happens here and an explicit 'Unit' is required
+        assertFailsWith<NoSuchElementException> { emptyList<Int>().maxOfWith(naturalOrder()) { it }; Unit }
+    }
+
 
     @Test fun sum() {
         expect(0) { arrayListOf<Int>().sum() }
@@ -728,6 +982,22 @@ class CollectionTest {
         expect(3000000000000) { arrayListOf<Long>(1000000000000, 2000000000000).sum() }
         expect(3.0.toFloat()) { arrayListOf<Float>(1.0.toFloat(), 2.0.toFloat()).sum() }
         expect(3.0.toFloat()) { sequenceOf<Float>(1.0.toFloat(), 2.0.toFloat()).sum() }
+    }
+
+    @Test fun sumOf() {
+        assertEquals(0, emptyList<Nothing>().sumOf { 1.toInt() })
+        assertEquals(0L, emptyList<Nothing>().sumOf { 1L })
+        assertEquals(0U, emptyList<Nothing>().sumOf { 1U.toUInt() })
+        assertEquals(0UL, emptyList<Nothing>().sumOf { 1UL })
+        assertEquals(0.0, emptyList<Nothing>().sumOf { 1.0 })
+
+        val items = listOf("", "a", "bc", "de", "fgh", "klmnop")
+        assertEquals(items.size + 14, items.sumOf { it.length + 1 })
+        assertEquals(14L, items.sumOf { it.length.toLong() })
+        assertEquals(items.size.toUInt(), items.sumOf { 1U.toUInt() })
+        assertEquals(14UL, items.sumOf { it.length.toULong() })
+        assertEquals(14.0, items.sumOf { it.length.toDouble() })
+        assertEquals(Double.NaN, items.sumOf { 0.0 / it.length })
     }
 
     @Test fun average() {
@@ -791,6 +1061,21 @@ class CollectionTest {
         assertEquals(listOf("aa" to 20, "aa" to 3, "ab" to 3), data)
     }
 
+    @Test fun sortStable() {
+        val keyRange = 'A'..'D'
+        for (size in listOf(10, 100, 2000)) {
+            val list = MutableList(size) { index -> Sortable(keyRange.random(), index) }
+
+            list.sorted().assertStableSorted()
+            list.sortedDescending().assertStableSorted(descending = true)
+
+            list.sort()
+            list.assertStableSorted()
+            list.sortDescending()
+            list.assertStableSorted(descending = true)
+        }
+    }
+
     @Test fun sortedBy() {
         assertEquals(listOf("two" to 3, "three" to 20), listOf("three" to 20, "two" to 3).sortedBy { it.second })
         assertEquals(listOf("three" to 20, "two" to 3), listOf("three" to 20, "two" to 3).sortedBy { it.first })
@@ -816,12 +1101,54 @@ class CollectionTest {
     }
 
     @Test fun sortedWith() {
-        val comparator = compareBy<String> { it.toUpperCase().reversed() }
+        val comparator = compareBy<String> { it.uppercase().reversed() }
         val data = listOf("cat", "dad", "BAD")
 
         expect(listOf("BAD", "dad", "cat")) { data.sortedWith(comparator) }
         expect(listOf("cat", "dad", "BAD")) { data.sortedWith(comparator.reversed()) }
         expect(listOf("BAD", "dad", "cat")) { data.sortedWith(comparator.reversed().reversed()) }
+    }
+
+    @Test fun sortByStable() {
+        val keyRange = 'A'..'D'
+        for (size in listOf(10, 100, 2000)) {
+            val list = MutableList(size) { index -> Sortable(keyRange.random(), index) }
+
+            list.sortedBy { it.key }.assertStableSorted()
+            list.sortedByDescending { it.key }.assertStableSorted(descending = true)
+
+            list.sortBy { it.key }
+            list.assertStableSorted()
+
+            list.sortByDescending { it.key }
+            list.assertStableSorted(descending = true)
+        }
+    }
+
+    @Test fun shuffled() {
+        val data = List(100) { it }
+        val list = data.toMutableList()
+        val shuffled = list.shuffled()
+
+        assertEquals(data, list)
+        assertNotEquals(list, shuffled)
+        assertEquals(list.toSet(), shuffled.toSet())
+        assertEquals(list.size, shuffled.distinct().size)
+    }
+
+    @Test fun shuffledPredictably() {
+        val data = List(10) { it }
+        val list = data.toMutableList()
+        val shuffled1 = list.shuffled(Random(1))
+        val shuffled11 = list.shuffled(Random(1))
+
+        assertEquals(data, list)
+
+        assertEquals(shuffled1, shuffled11)
+        assertEquals("[1, 4, 0, 6, 2, 8, 9, 7, 3, 5]", shuffled1.toString())
+
+        val shuffled2 = list.shuffled(Random(42))
+        assertEquals("[5, 0, 4, 9, 2, 8, 1, 7, 6, 3]", shuffled2.toString())
     }
 
     @Test fun decomposeFirst() {
@@ -886,17 +1213,72 @@ class CollectionTest {
         compare(linkedSetOf<Int>(), setOf<Int>()) { setBehavior() }
         compare(hashSetOf<Double>(), emptySet<Double>()) { setBehavior() }
         compare(listOf("value").toMutableSet(), setOf("value")) { setBehavior() }
+        compare(stringSetOf("value"), setOf("value")) { setBehavior() }
+        compare(linkedStringSetOf("value"), setOf("value")) { setBehavior() }
     }
 
     @Test fun specialMaps() {
         compare(hashMapOf<String, Int>(), mapOf<String, Int>()) { mapBehavior() }
         compare(linkedMapOf<Int, String>(), emptyMap<Int, String>()) { mapBehavior() }
         compare(linkedMapOf(2 to 3), mapOf(2 to 3)) { mapBehavior() }
+        compare(stringMapOf("2" to 3), mapOf("2" to 3)) { mapBehavior() }
+        compare(linkedStringMapOf("2" to 3), mapOf("2" to 3)) { mapBehavior() }
     }
 
     @Test fun toStringTest() {
         // we need toString() inside pattern because of KT-8666
         assertEquals("[1, a, null, ${Long.MAX_VALUE.toString()}]", listOf(1, "a", null, Long.MAX_VALUE).toString())
+    }
+
+    @Test fun toStringContainingThis() = testExceptOn(TestPlatform.Js) {
+        // resulting string is platform-dependent, but shouldn't throw
+        arrayOf<Any>("a", "b", "c").apply { this[1] = this }.toString()
+
+        assertEquals(
+            "[a, (this Collection), c]",
+            arrayListOf<Any>("a", "b", "c").apply { this[1] = this }.toString()
+        )
+        assertEquals(
+            "[a, (this Collection), c]",
+            buildList<Any> {
+                addAll(listOf("a", "b", "c"))
+                this[1] = this
+            }.toString()
+        )
+
+        assertEquals(
+            "[a, (this Collection), c]",
+            linkedSetOf<Any>().apply {
+                add("a")
+                add(this)
+                add("c")
+            }.toString()
+        )
+        assertEquals(
+            "[a, (this Collection), c]",
+            buildSet<Any> {
+                add("a")
+                add(this)
+                add("c")
+            }.toString()
+        )
+
+        assertEquals(
+            "{a=1, (this Map)=(this Map), c=3}",
+            linkedMapOf<Any, Any>().apply {
+                put("a", "1")
+                put(this, this)
+                put("c", "3")
+            }.toString()
+        )
+        assertEquals(
+            "{a=1, (this Map)=(this Map), c=3}",
+            buildMap<Any, Any> {
+                put("a", "1")
+                put(this, this)
+                put("c", "3")
+            }.toString()
+        )
     }
 
     @Test fun randomAccess() {
@@ -929,6 +1311,59 @@ class CollectionTest {
         assertTrue("toArray1" in coll.invocations || "toArray2" in coll.invocations)
 
         val arr2: Array<String> = coll.toArray(Array(coll.size + 1) { "" })
-        assertEquals(data + listOf(null), arr2.asList())
+        testOnlyOn(TestPlatform.Jvm) {
+            assertEquals(data + listOf(null), arr2.asList())
+        }
+        testExceptOn(TestPlatform.Jvm) {
+            assertEquals(data + listOf(""), arr2.asList())
+        }
+    }
+
+    @Test
+    fun ensureCapacity() {
+        ArrayList<String>().ensureCapacity(-1) // negative argument is ignored
+    }
+
+    @Test
+    fun constructorWithCapacity() {
+        assertFailsWith<IllegalArgumentException> {
+            ArrayList<String>(/*initialCapacity = */-1)
+        }
+        assertEquals(0, ArrayList<String>(/*initialCapacity = */0).size)
+        assertEquals(0, ArrayList<String>(/*initialCapacity = */10).size)
+
+        assertFailsWith<IllegalArgumentException> {
+            HashSet<String>(/*initialCapacity = */-1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            HashSet<String>(/*initialCapacity = */-1, /*loadFactor = */0.5f)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            HashSet<String>(/*initialCapacity = */10, /*loadFactor = */0.0f)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            HashSet<String>(/*initialCapacity = */10, /*loadFactor = */Float.NaN)
+        }
+        assertEquals(0, HashSet<String>(/*initialCapacity = */0).size)
+        assertEquals(0, HashSet<String>(/*initialCapacity = */10).size)
+        assertEquals(0, HashSet<String>(/*initialCapacity = */0, /*loadFactor = */0.5f).size)
+        assertEquals(0, HashSet<String>(/*initialCapacity = */10, /*loadFactor = */1.5f).size)
+
+        assertFailsWith<IllegalArgumentException> {
+            LinkedHashSet<String>(/*initialCapacity = */-1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LinkedHashSet<String>(/*initialCapacity = */-1, /*loadFactor = */0.5f)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LinkedHashSet<String>(/*initialCapacity = */10, /*loadFactor = */0.0f)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LinkedHashSet<String>(/*initialCapacity = */10, /*loadFactor = */Float.NaN)
+        }
+        assertEquals(0, LinkedHashSet<String>(/*initialCapacity = */0).size)
+        assertEquals(0, LinkedHashSet<String>(/*initialCapacity = */10).size)
+        assertEquals(0, LinkedHashSet<String>(/*initialCapacity = */0, /*loadFactor = */0.5f).size)
+        assertEquals(0, LinkedHashSet<String>(/*initialCapacity = */10, /*loadFactor = */1.5f).size)
     }
 }

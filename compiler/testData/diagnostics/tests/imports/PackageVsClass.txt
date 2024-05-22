@@ -24,7 +24,6 @@ package a {
     }
 }
 
-
 // -- Module: <m2> --
 package
 
@@ -48,7 +47,6 @@ package a {
     }
 }
 
-
 // -- Module: <m3> --
 package
 
@@ -58,11 +56,7 @@ public fun test2(/*0*/ ab_c: a.b.c): kotlin.Unit
 package a {
     public fun test(/*0*/ a_b: a.b): kotlin.Unit
     public fun test2(/*0*/ ab_c: a.b.c): kotlin.Unit
-
-    package a.b {
-    }
 }
-
 
 // -- Module: <m4> --
 package
@@ -73,7 +67,5 @@ public fun test2(/*0*/ ab_c: a.b.c): kotlin.Unit
 package a {
     public fun test(/*0*/ a_b: a.b): kotlin.Unit
     public fun test2(/*0*/ ab_c: a.b.c): kotlin.Unit
-
-    package a.b {
-    }
 }
+

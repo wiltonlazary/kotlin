@@ -1,5 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_ANONYMOUS_PARAMETER -UNUSED_VARIABLE
-// !WITH_NEW_INFERENCE
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_ANONYMOUS_PARAMETER -UNUSED_VARIABLE
 // NI_EXPECTED_FILE
 
 class Controller<T> {
@@ -8,21 +8,21 @@ class Controller<T> {
 
 fun <S> generate(g: suspend Controller<S>.() -> Unit): S = TODO()
 
-val test1 = <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>generate<!> {
+val test1 = generate {
     apply {
         yield(4)
     }
 }
 
-val test2 = <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>generate<!> {
+val test2 = generate {
     yield(B)
     apply {
         yield(C)
     }
 }
 
-val test3 = <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>generate<!> {
-    this.<!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>let<!> {
+val test3 = generate {
+    this.let {
         yield(B)
     }
 

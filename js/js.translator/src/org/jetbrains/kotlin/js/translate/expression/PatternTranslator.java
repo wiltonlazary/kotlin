@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.js.translate.expression;
@@ -34,7 +23,10 @@ import org.jetbrains.kotlin.js.translate.general.Translation;
 import org.jetbrains.kotlin.js.translate.intrinsic.functions.factories.ArrayFIF;
 import org.jetbrains.kotlin.js.translate.intrinsic.functions.factories.TopLevelFIF;
 import org.jetbrains.kotlin.js.translate.reference.ReferenceTranslator;
-import org.jetbrains.kotlin.js.translate.utils.*;
+import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils;
+import org.jetbrains.kotlin.js.translate.utils.JsAstUtils;
+import org.jetbrains.kotlin.js.translate.utils.TranslationUtils;
+import org.jetbrains.kotlin.js.translate.utils.UtilsKt;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS;
 import org.jetbrains.kotlin.psi.KtExpression;
@@ -42,12 +34,16 @@ import org.jetbrains.kotlin.psi.KtIsExpression;
 import org.jetbrains.kotlin.psi.KtTypeReference;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
 import org.jetbrains.kotlin.resolve.checkers.PrimitiveNumericComparisonInfo;
+import org.jetbrains.kotlin.types.IntersectionTypeConstructor;
 import org.jetbrains.kotlin.types.KotlinType;
+import org.jetbrains.kotlin.types.TypeConstructor;
 
+import java.util.Collection;
 import java.util.Collections;
 
 import static org.jetbrains.kotlin.builtins.FunctionTypesKt.isFunctionTypeOrSubtype;
 import static org.jetbrains.kotlin.builtins.KotlinBuiltIns.isArray;
+import static org.jetbrains.kotlin.builtins.KotlinBuiltIns.isNotNullOrNullableFunctionSupertype;
 import static org.jetbrains.kotlin.js.descriptorUtils.DescriptorUtilsKt.getNameIfStandardType;
 import static org.jetbrains.kotlin.js.translate.utils.BindingUtils.getTypeByReference;
 import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.equality;
@@ -178,14 +174,12 @@ public final class PatternTranslator extends AbstractTranslator {
                 return getIsTypeCheckCallableForReifiedType(typeParameterDescriptor);
             }
 
-            JsExpression result = null;
-            for (KotlinType upperBound : typeParameterDescriptor.getUpperBounds()) {
-                JsExpression next = doGetIsTypeCheckCallable(upperBound);
-                if (next != null) {
-                    result = result != null ? namer().andPredicate(result, next) : next;
-                }
-            }
-            return result;
+            return getIsTypeCheckForAll(typeParameterDescriptor.getUpperBounds());
+        }
+
+        TypeConstructor typeConstructor = type.getConstructor();
+        if (typeConstructor instanceof IntersectionTypeConstructor) {
+            return getIsTypeCheckForAll(typeConstructor.getSupertypes());
         }
 
         ClassDescriptor referencedClass = DescriptorUtils.getClassDescriptorForType(type);
@@ -194,8 +188,22 @@ public final class PatternTranslator extends AbstractTranslator {
     }
 
     @Nullable
+    private JsExpression getIsTypeCheckForAll(Collection<KotlinType> typesToCheck) {
+        JsExpression result = null;
+        for (KotlinType type : typesToCheck) {
+            JsExpression next = doGetIsTypeCheckCallable(type);
+            if (next != null) {
+                result = result != null ? namer().andPredicate(result, next) : next;
+            }
+        }
+        return result;
+    }
+
+    @Nullable
     private JsExpression getIsTypeCheckCallableForBuiltin(@NotNull KotlinType type) {
-        if (isFunctionTypeOrSubtype(type) && !ReflectionTypes.isNumberedKPropertyOrKMutablePropertyType(type)) {
+        if ((isNotNullOrNullableFunctionSupertype(type) || isFunctionTypeOrSubtype(type)) &&
+            !ReflectionTypes.isNumberedKPropertyOrKMutablePropertyType(type)
+        ) {
             return namer().isTypeOf(new JsStringLiteral("function"));
         }
 
@@ -270,31 +278,32 @@ public final class PatternTranslator extends AbstractTranslator {
 
     @NotNull
     public JsExpression translateExpressionPattern(
-            @NotNull KtExpression subjectExpression,
+            @NotNull KotlinType subjectType,
             @NotNull JsExpression expressionToMatch,
             @NotNull KtExpression patternExpression
     ) {
         PrimitiveNumericComparisonInfo ieeeInfo = UtilsKt.getPrimitiveNumericComparisonInfo(context(), patternExpression);
 
-        KotlinType subjectType, patternType;
+        KotlinType actualSubjectType;
+        KotlinType patternType;
         if (ieeeInfo != null) {
-            subjectType = ieeeInfo.getLeftType();
+            actualSubjectType = ieeeInfo.getLeftType();
             patternType = ieeeInfo.getRightType();
         } else {
-            subjectType = UtilsKt.getPrecisePrimitiveTypeNotNull(context(), subjectExpression);
+            actualSubjectType = UtilsKt.refineType(subjectType);
             patternType = UtilsKt.getPrecisePrimitiveTypeNotNull(context(), patternExpression);
         }
 
-        EqualityType matchEquality = equalityType(subjectType);
+        EqualityType matchEquality = equalityType(actualSubjectType);
         EqualityType patternEquality = equalityType(patternType);
 
-        JsExpression expressionToMatchAgainst = TranslationUtils.coerce(context(), translateExpressionForExpressionPattern(patternExpression), subjectType);
+        JsExpression expressionToMatchAgainst = TranslationUtils.coerce(context(), translateExpressionForExpressionPattern(patternExpression), actualSubjectType);
 
         if (matchEquality == EqualityType.PRIMITIVE && patternEquality == EqualityType.PRIMITIVE) {
             return equality(expressionToMatch, expressionToMatchAgainst);
         }
         else if (expressionToMatchAgainst instanceof JsNullLiteral) {
-            return TranslationUtils.nullCheck(subjectExpression, expressionToMatch, context(), false);
+            return TranslationUtils.nullCheck(actualSubjectType, expressionToMatch, context(), false);
         }
         else {
             return TopLevelFIF.KOTLIN_EQUALS.apply(expressionToMatch, Collections.singletonList(expressionToMatchAgainst), context());

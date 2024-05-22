@@ -16,8 +16,6 @@
 
 package org.jetbrains.kotlin.modules
 
-import com.intellij.openapi.util.io.FileUtil.toSystemIndependentName
-import com.intellij.openapi.util.text.StringUtil.escapeXml
 import org.jetbrains.kotlin.build.JvmSourceRoot
 import org.jetbrains.kotlin.cli.common.modules.ModuleXmlParser.*
 import org.jetbrains.kotlin.config.IncrementalCompilation
@@ -33,17 +31,48 @@ class KotlinModuleXmlBuilder {
         openTag(p, MODULES)
     }
 
+    @Deprecated(message = "State of IC should be set explicitly")
     fun addModule(
-            moduleName: String,
-            outputDir: String,
-            sourceFiles: Iterable<File>,
-            javaSourceRoots: Iterable<JvmSourceRoot>,
-            classpathRoots: Iterable<File>,
-            modularJdkRoot: File?,
-            targetTypeId: String,
-            isTests: Boolean,
-            directoriesToFilterOut: Set<File>,
-            friendDirs: Iterable<File>): KotlinModuleXmlBuilder {
+        moduleName: String,
+        outputDir: String,
+        sourceFiles: Iterable<File>,
+        javaSourceRoots: Iterable<JvmSourceRoot>,
+        classpathRoots: Iterable<File>,
+        commonSourceFiles: Iterable<File>,
+        modularJdkRoot: File?,
+        targetTypeId: String,
+        isTests: Boolean,
+        directoriesToFilterOut: Set<File>,
+        friendDirs: Iterable<File>
+    ) = addModule(
+        moduleName,
+        outputDir,
+        sourceFiles,
+        javaSourceRoots,
+        classpathRoots,
+        commonSourceFiles,
+        modularJdkRoot,
+        targetTypeId,
+        isTests,
+        directoriesToFilterOut,
+        friendDirs,
+        IncrementalCompilation.isEnabledForJvm()
+    )
+
+    fun addModule(
+        moduleName: String,
+        outputDir: String,
+        sourceFiles: Iterable<File>,
+        javaSourceRoots: Iterable<JvmSourceRoot>,
+        classpathRoots: Iterable<File>,
+        commonSourceFiles: Iterable<File>,
+        modularJdkRoot: File?,
+        targetTypeId: String,
+        isTests: Boolean,
+        directoriesToFilterOut: Set<File>,
+        friendDirs: Iterable<File>,
+        isIncrementalCompilation: Boolean
+    ): KotlinModuleXmlBuilder {
         assert(!done) { "Already done" }
 
         p.println("<!-- Module script for ${if (isTests) "tests" else "production"} -->")
@@ -62,8 +91,12 @@ class KotlinModuleXmlBuilder {
             p.println("<", SOURCES, " ", PATH, "=\"", getEscapedPath(sourceFile), "\"/>")
         }
 
+        for (commonSourceFile in commonSourceFiles) {
+            p.println("<", COMMON_SOURCES, " ", PATH, "=\"", getEscapedPath(commonSourceFile), "\"/>")
+        }
+
         processJavaSourceRoots(javaSourceRoots)
-        processClasspath(classpathRoots, directoriesToFilterOut)
+        processClasspath(classpathRoots, directoriesToFilterOut, isIncrementalCompilation)
 
         if (modularJdkRoot != null) {
             p.println("<", MODULAR_JDK_ROOT, " ", PATH, "=\"", getEscapedPath(modularJdkRoot), "\"/>")
@@ -75,10 +108,11 @@ class KotlinModuleXmlBuilder {
 
     private fun processClasspath(
             files: Iterable<File>,
-            directoriesToFilterOut: Set<File>) {
+            directoriesToFilterOut: Set<File>,
+            isIncrementalCompilation: Boolean) {
         p.println("<!-- Classpath -->")
         for (file in files) {
-            val isOutput = directoriesToFilterOut.contains(file) && !IncrementalCompilation.isEnabled()
+            val isOutput = directoriesToFilterOut.contains(file) && !isIncrementalCompilation
             if (isOutput) {
                 // For IDEA's make (incremental compilation) purposes, output directories of the current module and its dependencies
                 // appear on the class path, so we are at risk of seeing the results of the previous build, i.e. if some class was
@@ -131,6 +165,13 @@ class KotlinModuleXmlBuilder {
     }
 
     private fun getEscapedPath(sourceFile: File): String {
-        return escapeXml(toSystemIndependentName(sourceFile.path))
+        return escapeXml(sourceFile.invariantSeparatorsPath)
+    }
+
+    private companion object {
+        private val xmlEscapeReplacement = mapOf("<" to "&lt;", ">" to "&gt;", "&" to "&amp;", "'" to "&#39;", "\"" to "&quot;")
+        private val xmlEscapeRegex = Regex(xmlEscapeReplacement.keys.joinToString("|", "(?:", ")") { Regex.escape(it) })
+
+        private fun escapeXml(string: String) = string.replace(xmlEscapeRegex) { xmlEscapeReplacement.getValue(it.value) }
     }
 }

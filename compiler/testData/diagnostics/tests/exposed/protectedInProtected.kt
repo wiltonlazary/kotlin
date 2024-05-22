@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // See KT-9540 
 
 // all protected should have lower bound that is more permissive than private
@@ -10,3 +11,12 @@ open class A {
     }
 }
 
+open class Owner {
+    protected open class A : Owner() {
+        protected open class ProtectedInA
+    }
+
+    protected abstract class B : A() {
+        protected abstract fun foo(): ProtectedInA
+    }
+}

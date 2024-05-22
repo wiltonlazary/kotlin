@@ -1,14 +1,13 @@
-// WITH_RUNTIME
+// WITH_STDLIB
 // WITH_COROUTINES
-// COMMON_COROUTINES_TEST
 import helpers.*
-import COROUTINES_PACKAGE.*
-import COROUTINES_PACKAGE.intrinsics.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 abstract class A(val v: String) {
     suspend abstract fun foo(v: String): String
 
-    suspend fun suspendThere(v: String): String = suspendCoroutineOrReturn { x ->
+    suspend fun suspendThere(v: String): String = suspendCoroutineUninterceptedOrReturn { x ->
         x.resume(v)
         COROUTINE_SUSPENDED
     }
@@ -17,7 +16,7 @@ abstract class A(val v: String) {
 }
 
 class B(v: String) : A(v) {
-    override suspend fun foo(v: String): String = suspendCoroutineOrReturn { x ->
+    override suspend fun foo(v: String): String = suspendCoroutineUninterceptedOrReturn { x ->
         x.resume(v)
         COROUTINE_SUSPENDED
     }

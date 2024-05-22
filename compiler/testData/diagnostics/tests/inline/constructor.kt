@@ -1,4 +1,5 @@
-class Z(<!UNUSED_PARAMETER!>s<!>: (Int) -> Int) {
+// FIR_IDENTICAL
+class Z(s: (Int) -> Int) {
 
 }
 

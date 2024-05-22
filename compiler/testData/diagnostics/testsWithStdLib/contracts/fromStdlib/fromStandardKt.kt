@@ -1,5 +1,5 @@
-// !LANGUAGE: +ReadDeserializedContracts +UseCallsInPlaceEffect
-// !DIAGNOSTICS: -INVISIBLE_REFERENCE -INVISIBLE_MEMBER
+// LANGUAGE: +ReadDeserializedContracts +UseCallsInPlaceEffect
+// DIAGNOSTICS: -INVISIBLE_REFERENCE -INVISIBLE_MEMBER
 
 fun testRunWithUnitReturn() {
     val x: Int
@@ -85,7 +85,7 @@ fun testTakeUnless(x: Int?) {
 fun testRepeatOnVal(x: Int) {
     val y: Int
     repeat(x) {
-        // reassignment instead of captured val initalization
+        // reassignment instead of captured val initialization
         <!VAL_REASSIGNMENT!>y<!> = 42
     }
     println(<!UNINITIALIZED_VARIABLE!>y<!>)

@@ -18,8 +18,9 @@ package org.jetbrains.kotlin.extensions
 
 import org.jetbrains.kotlin.container.StorageComponentContainer
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.resolve.TargetPlatform
+import org.jetbrains.kotlin.platform.TargetPlatform
 
+@JvmDefaultWithCompatibility
 interface StorageComponentContainerContributor {
     companion object : ProjectExtensionDescriptor<StorageComponentContainerContributor>(
         "org.jetbrains.kotlin.storageComponentContainerContributor", StorageComponentContainerContributor::class.java

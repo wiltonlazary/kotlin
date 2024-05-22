@@ -1,4 +1,4 @@
-// !DIAGNOSTICS: -UNUSED_VARIABLE
+// DIAGNOSTICS: -UNUSED_VARIABLE
 
 object X {
     interface A
@@ -32,8 +32,8 @@ fun testY() {
 
 fun test(x: X) {
     val interface_as_fun = x.<!RESOLUTION_TO_CLASSIFIER!>A<!>()
-    val interface_as_val = x.<!NO_COMPANION_OBJECT, NESTED_CLASS_ACCESSED_VIA_INSTANCE_REFERENCE!>A<!>
+    val interface_as_val = x.<!NESTED_CLASS_ACCESSED_VIA_INSTANCE_REFERENCE, NO_COMPANION_OBJECT!>A<!>
 
     val object_as_fun = x.<!RESOLUTION_TO_CLASSIFIER!>B<!>()
-    val class_as_val = x.<!NO_COMPANION_OBJECT, NESTED_CLASS_ACCESSED_VIA_INSTANCE_REFERENCE!>C<!>
+    val class_as_val = x.<!NESTED_CLASS_ACCESSED_VIA_INSTANCE_REFERENCE, NO_COMPANION_OBJECT!>C<!>
 }

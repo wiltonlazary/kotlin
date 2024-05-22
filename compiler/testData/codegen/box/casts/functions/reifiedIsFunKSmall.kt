@@ -1,7 +1,9 @@
+// IGNORE_BACKEND: JS_IR
+// IGNORE_BACKEND: JS_IR_ES6
 // TODO: muted automatically, investigate should it be ran for JS or not
 // IGNORE_BACKEND: JS
 
-// WITH_RUNTIME
+// WITH_STDLIB
 
 fun fn0() {}
 fun fn1(x: Any) {}
@@ -14,7 +16,7 @@ inline fun <reified T> assertReifiedIs(x: Any, type: String) {
     catch (e: Throwable) {
         throw AssertionError("$x is $type: should not throw exceptions, got $e")
     }
-    assert(answer) { "$x is $type: failed" }
+    require(answer) { "$x is $type: failed" }
 }
 
 inline fun <reified T> assertReifiedIsNot(x: Any, type: String) {
@@ -25,7 +27,7 @@ inline fun <reified T> assertReifiedIsNot(x: Any, type: String) {
     catch (e: Throwable) {
         throw AssertionError("$x !is $type: should not throw exceptions, got $e")
     }
-    assert(answer) { "$x !is $type: failed" }
+    require(answer) { "$x !is $type: failed" }
 }
 
 fun box(): String {

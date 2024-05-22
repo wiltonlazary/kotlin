@@ -4,12 +4,10 @@ plugins {
 }
 
 dependencies {
-    compile(project(":kotlin-scripting-jvm"))
-    compile(project(":kotlin-scripting-misc"))
-    compile(project(":kotlin-script-util"))
-    runtime("com.jcabi:jcabi-aether:0.10.1")
-    runtime("org.sonatype.aether:aether-api:1.13.1")
-    runtime("org.apache.maven:maven-core:3.0.3")
+    api(project(":kotlin-scripting-jvm"))
+    api(project(":kotlin-scripting-dependencies"))
+    api(project(":kotlin-scripting-dependencies-maven"))
+    api(commonDependency("org.jetbrains.kotlinx", "kotlinx-coroutines-core"))
 }
 
 sourceSets {

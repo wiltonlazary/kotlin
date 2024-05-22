@@ -1,18 +1,22 @@
 /*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.binding;
 
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
+import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.codegen.JvmCodegenUtil;
-import org.jetbrains.kotlin.codegen.SamType;
+import org.jetbrains.kotlin.backend.common.SamType;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
 import org.jetbrains.kotlin.codegen.when.WhenByEnumsMapping;
 import org.jetbrains.kotlin.descriptors.*;
+import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.psi.psiUtil.PsiUtilsKt;
@@ -26,6 +30,8 @@ import org.jetbrains.kotlin.utils.KotlinExceptionWithAttachments;
 import org.jetbrains.org.objectweb.asm.Type;
 
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.jetbrains.kotlin.resolve.BindingContext.*;
 
@@ -52,18 +58,30 @@ public class CodegenBinding {
     public static final WritableSlice<FunctionDescriptor, FunctionDescriptor> SUSPEND_FUNCTION_TO_JVM_VIEW =
             Slices.createSimpleSlice();
 
-    public static final WritableSlice<FunctionDescriptor, Boolean> CAPTURES_CROSSINLINE_SUSPEND_LAMBDA =
+    public static final WritableSlice<FunctionDescriptor, Boolean> CAPTURES_CROSSINLINE_LAMBDA =
+            Slices.createSimpleSlice();
+
+    public static final WritableSlice<ValueParameterDescriptor, Boolean> CALL_SITE_IS_SUSPEND_FOR_CROSSINLINE_LAMBDA =
+            Slices.createSimpleSlice();
+
+    public static final WritableSlice<ClassDescriptor, Boolean> RECURSIVE_SUSPEND_CALLABLE_REFERENCE =
             Slices.createSimpleSlice();
 
     public static final WritableSlice<ValueParameterDescriptor, ValueParameterDescriptor> PARAMETER_SYNONYM =
             Slices.createSimpleSlice();
 
-    public static final WritableSlice<Type, List<VariableDescriptorWithAccessors>> DELEGATED_PROPERTIES =
+    public static final WritableSlice<Type, List<VariableDescriptorWithAccessors>> DELEGATED_PROPERTIES_WITH_METADATA =
             Slices.createSimpleSlice();
     public static final WritableSlice<VariableDescriptorWithAccessors, Type> DELEGATED_PROPERTY_METADATA_OWNER =
             Slices.createSimpleSlice();
     public static final WritableSlice<VariableDescriptor, VariableDescriptor> LOCAL_VARIABLE_PROPERTY_METADATA =
             Slices.createSimpleSlice();
+    public static final WritableSlice<FunctionDescriptor, Boolean> PROPERTY_METADATA_REQUIRED_FOR_OPERATOR_CALL =
+            Slices.createSimpleSlice();
+    public static final WritableSlice<VariableDescriptorWithAccessors, Boolean> DELEGATED_PROPERTY_WITH_OPTIMIZED_METADATA =
+            Slices.createSimpleSlice();
+
+    public static final WritableSlice<FunctionDescriptor, String> CALL_LABEL_FOR_LAMBDA_ARGUMENT = Slices.createSimpleSlice();
 
     static {
         BasicWritableSlice.initSliceDebugNames(CodegenBinding.class);
@@ -72,11 +90,22 @@ public class CodegenBinding {
     private CodegenBinding() {
     }
 
-    public static void initTrace(@NotNull GenerationState state) {
+    @Nullable
+    public static List<LocalVariableDescriptor> getLocalDelegatedProperties(@NotNull BindingContext bindingContext, @NotNull Type owner) {
+        List<VariableDescriptorWithAccessors> properties = bindingContext.get(DELEGATED_PROPERTIES_WITH_METADATA, owner);
+        return properties == null ? null : CollectionsKt.filterIsInstance(properties, LocalVariableDescriptor.class);
+    }
+
+    public static void initTrace(@NotNull GenerationState state, Collection<KtFile> files) {
         CodegenAnnotatingVisitor visitor = new CodegenAnnotatingVisitor(state);
-        for (KtFile file : allFilesInPackages(state.getBindingContext(), state.getFiles())) {
-            file.accept(visitor);
-        }
+        Collection<KtFile> allFiles = allFilesInPackages(state.getBindingContext(), files);
+        Stream<PsiFile> codeFragmentFiles = allFiles.stream()
+                .filter(file -> file instanceof KtCodeFragment)
+                .map(file -> {
+                    PsiFile contextFile = ((KtCodeFragment) file).getContextContainingFile();
+                    return contextFile != null ? contextFile : file;
+                });
+        Stream.concat(allFiles.stream(), codeFragmentFiles).distinct().forEach(file -> file.accept(visitor));
     }
 
     public static boolean enumEntryNeedSubclass(BindingContext bindingContext, KtEnumEntry enumEntry) {
@@ -88,19 +117,11 @@ public class CodegenBinding {
     }
 
     @NotNull
-    public static ClassDescriptor anonymousClassForCallable(
-            @NotNull BindingContext bindingContext,
-            @NotNull CallableDescriptor descriptor
-    ) {
-        //noinspection ConstantConditions
-        return bindingContext.get(CLASS_FOR_CALLABLE, descriptor);
-    }
-
-    @NotNull
     public static Type asmTypeForAnonymousClass(@NotNull BindingContext bindingContext, @NotNull KtElement expression) {
         Type result = asmTypeForAnonymousClassOrNull(bindingContext, expression);
         if (result == null) {
-            throw new IllegalStateException("Type must not be null: " + expression.getText());
+            throw new KotlinExceptionWithAttachments("Couldn't compute ASM type for expression")
+                    .withPsiAttachment("expression.kt", expression);
         }
 
         return result;
@@ -127,8 +148,7 @@ public class CodegenBinding {
             return asmTypeForAnonymousClassOrNull(bindingContext, variableDescriptor);
         }
 
-        throw new KotlinExceptionWithAttachments("Couldn't compute ASM type for expression")
-              .withAttachment("expression.kt", PsiUtilsKt.getElementTextWithContext(expression));
+        return null;
     }
 
     @NotNull
@@ -143,7 +163,11 @@ public class CodegenBinding {
 
     @Nullable
     public static Type asmTypeForAnonymousClassOrNull(@NotNull BindingContext bindingContext, @NotNull CallableDescriptor descriptor) {
-        return bindingContext.get(ASM_TYPE, anonymousClassForCallable(bindingContext, descriptor));
+        ClassDescriptor classForCallable = bindingContext.get(CLASS_FOR_CALLABLE, descriptor);
+        if (classForCallable == null) {
+            return null;
+        }
+        return bindingContext.get(ASM_TYPE, classForCallable);
     }
 
     public static boolean canHaveOuter(@NotNull BindingContext bindingContext, @NotNull ClassDescriptor classDescriptor) {
@@ -175,7 +199,7 @@ public class CodegenBinding {
         MutableClosure closure = new MutableClosure(classDescriptor, enclosing);
 
         if (classDescriptor.isInner()) {
-            closure.setCaptureThis();
+            closure.setNeedsCaptureOuterClass();
         }
 
         trace.record(ASM_TYPE, classDescriptor, asmType);
@@ -219,9 +243,9 @@ public class CodegenBinding {
         answer.addAll(files);
 
         for (FqName name : names) {
-            Collection<KtFile> jetFiles = bindingContext.get(PACKAGE_TO_FILES, name);
-            if (jetFiles != null) {
-                answer.addAll(jetFiles);
+            Collection<KtFile> ktFiles = bindingContext.get(PACKAGE_TO_FILES, name);
+            if (ktFiles != null) {
+                answer.addAll(ktFiles);
             }
         }
 

@@ -1,5 +1,4 @@
 // TODO: muted automatically, investigate should it be ran for JS or not
-// DONT_RUN_GENERATED_CODE: JS
 // IGNORE_BACKEND: JS
 
 class A {
@@ -15,7 +14,7 @@ class A {
         }
     }
 
-    <!NO_TAIL_CALLS_FOUND!>tailrec fun f3(a : A)<!> {
+    <!NO_TAIL_CALLS_FOUND!>tailrec<!> fun f3(a : A) {
         a.<!NON_TAIL_RECURSIVE_CALL!>f3<!>(a) // non-tail recursion, could be potentially resolved by condition if (a == this) f3() else a.f3()
     }
 }

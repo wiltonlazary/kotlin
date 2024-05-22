@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.psi.synthetics
@@ -9,6 +9,7 @@ import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.ClassDescriptorBase
+import org.jetbrains.kotlin.mpp.K1SyntheticClassifierSymbolMarker
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -17,6 +18,8 @@ import org.jetbrains.kotlin.resolve.DescriptorFactory
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.lazy.LazyClassContext
 import org.jetbrains.kotlin.resolve.lazy.data.KtClassLikeInfo
+import org.jetbrains.kotlin.resolve.lazy.data.KtClassOrObjectInfo
+import org.jetbrains.kotlin.resolve.lazy.data.KtScriptInfo
 import org.jetbrains.kotlin.resolve.lazy.declarations.ClassMemberDeclarationProvider
 import org.jetbrains.kotlin.resolve.lazy.descriptors.ClassResolutionScopesSupport
 import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyClassMemberScope
@@ -26,8 +29,9 @@ import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.types.AbstractClassTypeConstructor
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.SimpleType
 import org.jetbrains.kotlin.types.TypeConstructor
-import java.lang.IllegalStateException
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
 
 /*
  * This class introduces all attributes that are needed for synthetic classes/object so far.
@@ -35,23 +39,27 @@ import java.lang.IllegalStateException
  * This class has its own synthetic declaration inside.
  */
 class SyntheticClassOrObjectDescriptor(
-    c: LazyClassContext,
-    parentClassOrObject: KtPureClassOrObject,
-    containingDeclaration: DeclarationDescriptor,
-    name: Name,
-    source: SourceElement,
-    outerScope: LexicalScope,
-    private val modality: Modality,
-    private val visibility: Visibility,
-    constructorVisibility: Visibility,
-    private val kind: ClassKind,
-    private val isCompanionObject: Boolean
-) : ClassDescriptorBase(c.storageManager, containingDeclaration, name, source, false), ClassDescriptorWithResolutionScopes {
+        c: LazyClassContext,
+        parentClassOrObject: KtPureClassOrObject,
+        containingDeclaration: DeclarationDescriptor,
+        name: Name,
+        source: SourceElement,
+        outerScope: LexicalScope,
+        private val modality: Modality,
+        private val visibility: DescriptorVisibility,
+        override val annotations: Annotations,
+        constructorVisibility: DescriptorVisibility,
+        private val kind: ClassKind,
+        private val isCompanionObject: Boolean
+) : ClassDescriptorBase(c.storageManager, containingDeclaration, name, source, false), ClassDescriptorWithResolutionScopes,
+    K1SyntheticClassifierSymbolMarker {
     val syntheticDeclaration: KtPureClassOrObject = SyntheticDeclaration(parentClassOrObject, name.asString())
 
     private val thisDescriptor: SyntheticClassOrObjectDescriptor get() = this // code readability
 
     private lateinit var typeParameters: List<TypeParameterDescriptor>
+    public var secondaryConstructors: List<ClassConstructorDescriptor> = emptyList()
+
     private val typeConstructor = SyntheticTypeConstructor(c.storageManager)
     private val resolutionScopesSupport = ClassResolutionScopesSupport(thisDescriptor, c.storageManager, c.languageVersionSettings, { outerScope })
     private val syntheticSupertypes =
@@ -62,11 +70,11 @@ class SyntheticClassOrObjectDescriptor(
         c.storageManager.createLazyValue { createUnsubstitutedPrimaryConstructor(constructorVisibility) }
 
     @JvmOverloads
-    fun initialize(typeParameters: List<TypeParameterDescriptor> = emptyList()) {
+    fun initialize(
+        typeParameters: List<TypeParameterDescriptor> = emptyList()
+    ) {
         this.typeParameters = typeParameters
     }
-
-    override val annotations: Annotations get() = Annotations.EMPTY
 
     override fun getModality() = modality
     override fun getVisibility() = visibility
@@ -77,15 +85,18 @@ class SyntheticClassOrObjectDescriptor(
     override fun isInline() = false
     override fun isExpect() = false
     override fun isActual() = false
+    override fun isFun() = false
+    override fun isValue() = false
 
     override fun getCompanionObjectDescriptor(): ClassDescriptorWithResolutionScopes? = null
     override fun getTypeConstructor(): TypeConstructor = typeConstructor
     override fun getUnsubstitutedPrimaryConstructor() = _unsubstitutedPrimaryConstructor()
-    override fun getConstructors() = listOf(_unsubstitutedPrimaryConstructor())
+    override fun getConstructors() = listOf(_unsubstitutedPrimaryConstructor()) + secondaryConstructors
     override fun getDeclaredTypeParameters() = typeParameters
     override fun getStaticScope() = MemberScope.Empty
-    override fun getUnsubstitutedMemberScope() = unsubstitutedMemberScope
+    override fun getUnsubstitutedMemberScope(kotlinTypeRefiner: KotlinTypeRefiner) = unsubstitutedMemberScope
     override fun getSealedSubclasses() = emptyList<ClassDescriptor>()
+    override fun getValueClassRepresentation(): ValueClassRepresentation<SimpleType>? = null
 
     init {
         assert(modality != Modality.SEALED) { "Implement getSealedSubclasses() for this class: ${this::class.java}" }
@@ -110,7 +121,7 @@ class SyntheticClassOrObjectDescriptor(
 
     override fun toString(): String = "synthetic class " + name.toString() + " in " + containingDeclaration
 
-    private fun createUnsubstitutedPrimaryConstructor(constructorVisibility: Visibility): ClassConstructorDescriptor {
+    private fun createUnsubstitutedPrimaryConstructor(constructorVisibility: DescriptorVisibility): ClassConstructorDescriptor {
         val constructor = DescriptorFactory.createPrimaryConstructorForObject(thisDescriptor, source)
         constructor.visibility = constructorVisibility
         constructor.returnType = getDefaultType()
@@ -133,7 +144,8 @@ class SyntheticClassOrObjectDescriptor(
         override fun getFunctionDeclarations(name: Name): Collection<KtNamedFunction> = emptyList()
         override fun getPropertyDeclarations(name: Name): Collection<KtProperty> = emptyList()
         override fun getDestructuringDeclarationsEntries(name: Name): Collection<KtDestructuringDeclarationEntry> = emptyList()
-        override fun getClassOrObjectDeclarations(name: Name): Collection<KtClassLikeInfo> = emptyList()
+        override fun getClassOrObjectDeclarations(name: Name): Collection<KtClassOrObjectInfo<*>> = emptyList()
+        override fun getScriptDeclarations(name: Name): Collection<KtScriptInfo> = emptyList()
         override fun getTypeAliasDeclarations(name: Name): Collection<KtTypeAlias> = emptyList()
         override fun getDeclarationNames() = emptySet<Name>()
     }
@@ -157,13 +169,16 @@ class SyntheticClassOrObjectDescriptor(
         override fun getPrimaryConstructorModifierList(): KtModifierList? = null
         override fun getPrimaryConstructorParameters(): List<KtParameter> = emptyList()
         override fun getSecondaryConstructors(): List<KtSecondaryConstructor> = emptyList()
+        override fun getContextReceivers(): List<KtContextReceiver> = emptyList()
 
         override fun getPsiOrParent() = _parent.psiOrParent
         override fun getParent() = _parent.psiOrParent
+        @Suppress("USELESS_ELVIS")
         override fun getContainingKtFile() =
         // in theory `containingKtFile` is `@NotNull` but in practice EA-114080
             _parent.containingKtFile ?: throw IllegalStateException("containingKtFile was null for $_parent of ${_parent.javaClass}")
 
+        override fun getBody(): KtClassBody? = null
     }
 }
 

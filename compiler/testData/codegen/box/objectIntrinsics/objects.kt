@@ -1,3 +1,4 @@
+
 package foo
 
 fun box(): String {

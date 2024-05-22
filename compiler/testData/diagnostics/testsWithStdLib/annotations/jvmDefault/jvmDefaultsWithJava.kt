@@ -1,6 +1,6 @@
-// !API_VERSION: 1.3
-// !JVM_DEFAULT_MODE: enable
-// !JVM_TARGET: 1.8
+// FIR_IDENTICAL
+// JVM_DEFAULT_MODE: all
+// JVM_TARGET: 1.8
 // FILE: JavaInterface.java
 
 public interface JavaInterface {
@@ -16,7 +16,6 @@ public interface JavaInterface {
 // FILE: 1.kt
 
 interface KotlinInterface : JavaInterface {
-    @JvmDefault
     fun fooo() {
         super.test()
 
@@ -27,7 +26,6 @@ interface KotlinInterface : JavaInterface {
         }
     }
 
-    @JvmDefault
     val propertyy: String
         get() {
             super.test()
@@ -40,14 +38,12 @@ interface KotlinInterface : JavaInterface {
             return ""
         }
 
-    @JvmDefault
     override fun testOverride(): String {
         return "OK";
     }
 }
 
 interface KotlinInterfaceIndirectInheritance : KotlinInterface {
-    @JvmDefault
     fun foooo() {
         super.test()
 
@@ -58,7 +54,6 @@ interface KotlinInterfaceIndirectInheritance : KotlinInterface {
         }
     }
 
-    @JvmDefault
     val propertyyy: String
         get() {
             super.test()

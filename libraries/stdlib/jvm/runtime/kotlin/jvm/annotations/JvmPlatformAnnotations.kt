@@ -1,9 +1,7 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
-
-@file:Suppress("ACTUAL_WITHOUT_EXPECT") // for building kotlin-runtime
 
 package kotlin.jvm
 
@@ -18,7 +16,7 @@ import kotlin.reflect.KClass
 @Target(AnnotationTarget.FUNCTION, AnnotationTarget.CONSTRUCTOR)
 @Retention(AnnotationRetention.BINARY)
 @MustBeDocumented
-public annotation class JvmOverloads
+public actual annotation class JvmOverloads
 
 /**
  * Specifies that an additional static method needs to be generated from this element if it's a function.
@@ -30,7 +28,7 @@ public annotation class JvmOverloads
 @Target(AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY, AnnotationTarget.PROPERTY_GETTER, AnnotationTarget.PROPERTY_SETTER)
 @Retention(AnnotationRetention.RUNTIME)
 @MustBeDocumented
-public annotation class JvmStatic
+public actual annotation class JvmStatic
 
 /**
  * Specifies the name for the Java class or method which is generated from this element.
@@ -63,11 +61,20 @@ public actual annotation class JvmMultifileClass
 @Retention(AnnotationRetention.SOURCE)
 @MustBeDocumented
 @SinceKotlin("1.2")
-internal annotation class JvmPackageName(val name: String)
+internal actual annotation class JvmPackageName(actual val name: String)
 
-@Target(AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY_GETTER, AnnotationTarget.PROPERTY_SETTER, AnnotationTarget.FIELD)
+/**
+ * Sets `ACC_SYNTHETIC` flag on the annotated target in the Java bytecode.
+ *
+ * Synthetic targets become inaccessible for Java sources at compile time while still being accessible for Kotlin sources.
+ * Marking target as synthetic is a binary compatible change, already compiled Java code will be able to access such target.
+ *
+ * This annotation is intended for *rare cases* when API designer needs to hide Kotlin-specific target from Java API
+ * while keeping it a part of Kotlin API so the resulting API is idiomatic for both languages.
+ */
+@Target(AnnotationTarget.FILE, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY_GETTER, AnnotationTarget.PROPERTY_SETTER, AnnotationTarget.FIELD)
 @Retention(AnnotationRetention.SOURCE)
-public annotation class JvmSynthetic
+public actual annotation class JvmSynthetic
 
 /**
  * This annotation indicates what exceptions should be declared by a function when compiled to a JVM method.
@@ -91,6 +98,29 @@ public annotation class JvmSynthetic
 @Retention(AnnotationRetention.SOURCE)
 public annotation class Throws(vararg val exceptionClasses: KClass<out Throwable>)
 
+/**
+ * This annotation marks Kotlin `expect` declarations that are implicitly actualized by Java.
+ *
+ * # Safety Risks
+ *
+ * Implicit actualization bypasses safety features, potentially leading to errors or unexpected behavior. If you use this annotation, some
+ * of the expect-actual invariants are not checked.
+ *
+ * Use this annotation only as a last resort. The annotation might stop working in future Kotlin versions without prior notice.
+ *
+ * If you use this annotation, consider describing your use cases in [KT-58545](https://youtrack.jetbrains.com/issue/KT-58545) comments.
+ *
+ * # Migration
+ *
+ * Rewrite the code using explicit `actual typealias`. Unfortunately, it requires you to move your expect declarations into another
+ * package. Refer to [KT-58545](https://youtrack.jetbrains.com/issue/KT-58545) for more detailed migration example.
+ */
+@Retention(AnnotationRetention.BINARY)
+@Target(AnnotationTarget.CLASS)
+@ExperimentalMultiplatform
+@MustBeDocumented
+@SinceKotlin("1.9")
+public actual annotation class ImplicitlyActualizedByJvmDeclaration
 
 /**
  * Instructs the Kotlin compiler not to generate getters/setters for this property and expose it as a field.
@@ -104,25 +134,53 @@ public annotation class Throws(vararg val exceptionClasses: KClass<out Throwable
 public actual annotation class JvmField
 
 /**
- * Instructs compiler to generate or omit wildcards for type arguments corresponding to parameters with
- * declaration-site variance, for example such as `Collection<out T>` has.
+ * Instructs the compiler to generate or omit wildcards for type arguments corresponding to parameters with declaration-site variance,
+ * for example such as `E` of `kotlin.collections.Collection` which is declared with an `out` variance.
  *
- * If the innermost applied `@JvmSuppressWildcards` has `suppress=true`, the type is generated without wildcards.
- * If the innermost applied `@JvmSuppressWildcards` has `suppress=false`, the type is generated with wildcards.
+ * - If the innermost applied `@JvmSuppressWildcards` has `suppress=true` and the type is not annotated with `@JvmWildcard`, the type is
+ * generated without wildcards.
+ * - If the innermost applied `@JvmSuppressWildcards` has `suppress=false`, the type is generated with wildcards.
  *
  * It may be helpful only if declaration seems to be inconvenient to use from Java.
+ *
+ * See the [Kotlin language documentation](https://kotlinlang.org/docs/java-to-kotlin-interop.html#variant-generics)
+ * for more information.
  */
 @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY, AnnotationTarget.TYPE)
 @Retention(AnnotationRetention.BINARY)
 @MustBeDocumented
-public annotation class JvmSuppressWildcards(val suppress: Boolean = true)
+public actual annotation class JvmSuppressWildcards(actual val suppress: Boolean = true)
 
 /**
- * Instructs compiler to generate wildcard for annotated type arguments corresponding to parameters with declaration-site variance.
+ * Instructs the compiler to generate wildcard for annotated type arguments corresponding to parameters with declaration-site variance.
  *
  * It may be helpful only if declaration seems to be inconvenient to use from Java without wildcard.
+ *
+ * See the [Kotlin language documentation](https://kotlinlang.org/docs/java-to-kotlin-interop.html#variant-generics)
+ * for more information.
  */
 @Target(AnnotationTarget.TYPE)
 @Retention(AnnotationRetention.BINARY)
 @MustBeDocumented
-public annotation class JvmWildcard
+public actual annotation class JvmWildcard
+
+/**
+ * Specifies that given value class is inline class.
+ *
+ * Adding and removing the annotation is binary incompatible change, since inline classes' methods and functions with inline classes
+ * in their signature are mangled.
+ */
+@Target(AnnotationTarget.CLASS)
+@Retention(AnnotationRetention.RUNTIME)
+@MustBeDocumented
+@SinceKotlin("1.5")
+public actual annotation class JvmInline
+
+/**
+ * Instructs compiler to mark the class as a record and generate relevant toString/equals/hashCode methods
+ */
+@Target(AnnotationTarget.CLASS)
+@Retention(AnnotationRetention.SOURCE)
+@MustBeDocumented
+@SinceKotlin("1.5")
+public actual annotation class JvmRecord

@@ -17,29 +17,25 @@
 package org.jetbrains.kotlin.descriptors.annotations
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
-import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.MemberDescriptor
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.name.ClassId
-import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.constants.AnnotationValue
 import org.jetbrains.kotlin.resolve.constants.ArrayValue
 import org.jetbrains.kotlin.resolve.constants.EnumValue
 import org.jetbrains.kotlin.resolve.constants.StringValue
 import org.jetbrains.kotlin.types.Variance
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 fun KotlinBuiltIns.createDeprecatedAnnotation(
         message: String,
         replaceWith: String = "",
-        level: String = "WARNING"
+        level: String = "WARNING",
+        forcePropagationDeprecationToOverrides: Boolean = false,
 ): AnnotationDescriptor {
     val replaceWithAnnotation = BuiltInAnnotationDescriptor(
-            this,
-            KotlinBuiltIns.FQ_NAMES.replaceWith,
-            mapOf(
+        this,
+        StandardNames.FqNames.replaceWith,
+        mapOf(
                     REPLACE_WITH_EXPRESSION_NAME to StringValue(replaceWith),
                     REPLACE_WITH_IMPORTS_NAME to ArrayValue(emptyList()) { module ->
                         module.builtIns.getArrayType(Variance.INVARIANT, stringType)
@@ -48,16 +44,17 @@ fun KotlinBuiltIns.createDeprecatedAnnotation(
     )
 
     return BuiltInAnnotationDescriptor(
-            this,
-            KotlinBuiltIns.FQ_NAMES.deprecated,
-            mapOf(
+        this,
+        StandardNames.FqNames.deprecated,
+        mapOf(
                     DEPRECATED_MESSAGE_NAME to StringValue(message),
                     DEPRECATED_REPLACE_WITH_NAME to AnnotationValue(replaceWithAnnotation),
                     DEPRECATED_LEVEL_NAME to EnumValue(
-                            ClassId.topLevel(KotlinBuiltIns.FQ_NAMES.deprecationLevel),
-                            Name.identifier(level)
+                        ClassId.topLevel(StandardNames.FqNames.deprecationLevel),
+                        Name.identifier(level)
                     )
-            )
+            ),
+        forcePropagationDeprecationToOverrides,
     )
 }
 
@@ -66,22 +63,3 @@ private val DEPRECATED_REPLACE_WITH_NAME = Name.identifier("replaceWith")
 private val DEPRECATED_LEVEL_NAME = Name.identifier("level")
 private val REPLACE_WITH_EXPRESSION_NAME = Name.identifier("expression")
 private val REPLACE_WITH_IMPORTS_NAME = Name.identifier("imports")
-
-private val INLINE_ONLY_ANNOTATION_FQ_NAME = FqName("kotlin.internal.InlineOnly")
-
-fun MemberDescriptor.isInlineOnlyOrReifiable(): Boolean =
-        this is CallableMemberDescriptor && (isReifiable() || DescriptorUtils.getDirectMember(this).isReifiable() || isInlineOnly())
-
-fun MemberDescriptor.isEffectivelyInlineOnly(): Boolean =
-        isInlineOnlyOrReifiable() || safeAs<FunctionDescriptor>()?.let { it.isSuspend && it.isInline } == true
-
-fun MemberDescriptor.isInlineOnly(): Boolean {
-    if (this !is FunctionDescriptor ||
-        !(hasInlineOnlyAnnotation() || DescriptorUtils.getDirectMember(this).hasInlineOnlyAnnotation())) return false
-    assert(isInline) { "Function is not inline: $this" }
-    return true
-}
-
-private fun CallableMemberDescriptor.isReifiable() = typeParameters.any { it.isReified }
-
-private fun CallableMemberDescriptor.hasInlineOnlyAnnotation() = annotations.hasAnnotation(INLINE_ONLY_ANNOTATION_FQ_NAME)

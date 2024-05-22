@@ -1,21 +1,11 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.js.resolve.diagnostics
 
+import org.jetbrains.kotlin.diagnostics.rendering.CommonRenderers.STRING
 import org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages
 import org.jetbrains.kotlin.diagnostics.rendering.DiagnosticFactoryToRendererMap
 import org.jetbrains.kotlin.diagnostics.rendering.Renderers
@@ -26,26 +16,33 @@ private val DIAGNOSTIC_FACTORY_TO_RENDERER by lazy {
 
         put(ErrorsJs.NATIVE_ANNOTATIONS_ALLOWED_ONLY_ON_MEMBER_OR_EXTENSION_FUN,
             "Annotation ''{0}'' is allowed only on member functions of declaration annotated as ''kotlin.js.native'' or on toplevel extension functions", RENDER_TYPE)
-        put(ErrorsJs.NATIVE_INDEXER_KEY_SHOULD_BE_STRING_OR_NUMBER, "Native {0}''s first parameter type should be ''kotlin.String'' or subtype of ''kotlin.Number''", Renderers.STRING)
-        put(ErrorsJs.NATIVE_INDEXER_CAN_NOT_HAVE_DEFAULT_ARGUMENTS, "Native {0}''s parameter can not have default value", Renderers.STRING)
+        put(ErrorsJs.NATIVE_INDEXER_KEY_SHOULD_BE_STRING_OR_NUMBER, "Native {0}''s first parameter type should be ''kotlin.String'' or subtype of ''kotlin.Number''", STRING)
+        put(ErrorsJs.NATIVE_INDEXER_CAN_NOT_HAVE_DEFAULT_ARGUMENTS, "Native {0}''s parameter can not have default value", STRING)
         put(ErrorsJs.NATIVE_GETTER_RETURN_TYPE_SHOULD_BE_NULLABLE, "Native getter's return type should be nullable")
         put(ErrorsJs.NATIVE_SETTER_WRONG_RETURN_TYPE, "Native setter's return type should be 'Unit' or a supertype of the second parameter's type")
-        put(ErrorsJs.NATIVE_INDEXER_WRONG_PARAMETER_COUNT, "Expected {0} parameters for native {1}", Renderers.TO_STRING, Renderers.STRING)
+        put(ErrorsJs.NATIVE_INDEXER_WRONG_PARAMETER_COUNT, "Expected {0} parameters for native {1}", Renderers.TO_STRING, STRING)
         put(ErrorsJs.JSCODE_ERROR, "JavaScript: {0}", JsCallDataTextRenderer)
         put(ErrorsJs.JSCODE_WARNING, "JavaScript: {0}", JsCallDataTextRenderer)
         put(ErrorsJs.JSCODE_ARGUMENT_SHOULD_BE_CONSTANT, "Argument must be string constant")
+        put(ErrorsJs.JSCODE_ARGUMENT_NON_CONST_EXPRESSION, "Using not constant variables in js() argument expression becomes deprecated and will be an error in future releases")
         put(ErrorsJs.NOT_SUPPORTED, "Cannot translate (not supported yet): ''{0}''", RenderFirstLineOfElementText)
         put(ErrorsJs.JSCODE_NO_JAVASCRIPT_PRODUCED, "Argument must be non-empty JavaScript code")
         put(ErrorsJs.NESTED_EXTERNAL_DECLARATION, "Non top-level `external` declaration")
-        put(ErrorsJs.WRONG_EXTERNAL_DECLARATION, "Declaration of such kind ({0}) can't be external", Renderers.STRING)
+        put(ErrorsJs.WRONG_EXTERNAL_DECLARATION, "Declaration of such kind ({0}) can''t be external", STRING)
         put(ErrorsJs.EXTENSION_FUNCTION_IN_EXTERNAL_DECLARATION, "Function types with receiver are prohibited in external declarations")
+        put(ErrorsJs.INLINE_CLASS_IN_EXTERNAL_DECLARATION, "Using value classes as parameter type or return type of external declarations is not supported")
+        put(ErrorsJs.INLINE_CLASS_IN_EXTERNAL_DECLARATION_WARNING, "Using value classes as parameter type or return type of external declarations is experimental")
+        put(ErrorsJs.ENUM_CLASS_IN_EXTERNAL_DECLARATION_WARNING, "Using enum classes with an `external` qualifier becomes deprecated and will be an error in future releases")
+
+        put(ErrorsJs.NAMED_COMPANION_IN_EXTERNAL_INTERFACE, "Named companions are not allowed inside external interfaces")
+        put(ErrorsJs.NAMED_COMPANION_IN_EXPORTED_INTERFACE, "Named companions are not allowed inside exported interfaces")
 
         put(ErrorsJs.JS_NAME_CLASH, "JavaScript name ({0}) generated for this declaration clashes with another declaration: {1}",
-            Renderers.STRING, Renderers.COMPACT)
+            STRING, Renderers.COMPACT)
         put(ErrorsJs.JS_FAKE_NAME_CLASH, "JavaScript name {0} is generated for different inherited members: {1} and {2}",
-            Renderers.STRING, Renderers.COMPACT, Renderers.COMPACT)
+            STRING, Renderers.COMPACT, Renderers.COMPACT)
         put(ErrorsJs.JS_BUILTIN_NAME_CLASH, "JavaScript name generated for this declaration clashes with built-in declaration {1}",
-            Renderers.STRING)
+            STRING)
         put(ErrorsJs.JS_NAME_ON_PRIMARY_CONSTRUCTOR_PROHIBITED, "@JsName annotation is prohibited for primary constructors")
         put(ErrorsJs.JS_NAME_ON_ACCESSOR_AND_PROPERTY, "@JsName can be either on a property or its accessors, not both of them")
         put(ErrorsJs.JS_NAME_IS_NOT_ON_ALL_ACCESSORS, "@JsName should be on all of the property accessors")
@@ -77,7 +74,7 @@ private val DIAGNOSTIC_FACTORY_TO_RENDERER by lazy {
         put(ErrorsJs.EXTERNAL_INTERFACE_AS_CLASS_LITERAL, "Can't refer to external interface from class literal")
         put(ErrorsJs.EXTERNAL_TYPE_EXTENDS_NON_EXTERNAL_TYPE, "External type extends non-external type")
 
-        put(ErrorsJs.WRONG_OPERATION_WITH_DYNAMIC, "Wrong operation with dynamic value: {0}", Renderers.STRING)
+        put(ErrorsJs.WRONG_OPERATION_WITH_DYNAMIC, "Wrong operation with dynamic value: {0}", STRING)
         put(ErrorsJs.SPREAD_OPERATOR_IN_DYNAMIC_CALL, "Can't apply spread operator in dynamic call")
         put(ErrorsJs.DELEGATION_BY_DYNAMIC, "Can't delegate to dynamic value")
         put(ErrorsJs.PROPERTY_DELEGATION_BY_DYNAMIC, "Can't apply property delegation by dynamic handler")
@@ -107,8 +104,23 @@ private val DIAGNOSTIC_FACTORY_TO_RENDERER by lazy {
         put(ErrorsJs.CALL_TO_DEFINED_EXTERNALLY_FROM_NON_EXTERNAL_DECLARATION, "This property can only be used from external declarations")
 
         put(ErrorsJs.WRONG_MULTIPLE_INHERITANCE,
-            "Can't apply multiple inheritance here, since it's impossible to generate bridge for system function {0}",
+            "Can''t apply multiple inheritance here, since it''s impossible to generate bridge for system function {0}",
             Renderers.DECLARATION_NAME_WITH_KIND)
+
+        put(ErrorsJs.NESTED_JS_EXPORT, "@JsExport is only allowed on files and top-level declarations")
+        put(ErrorsJs.WRONG_EXPORTED_DECLARATION, "Declaration of such kind ({0}) can''t be exported to JS", STRING)
+        put(ErrorsJs.NON_EXPORTABLE_TYPE, "Exported declaration uses non-exportable {0} type: {1}", STRING, RENDER_TYPE)
+
+        put(ErrorsJs.NON_CONSUMABLE_EXPORTED_IDENTIFIER, "Exported declaration contains non-consumable identifier '${0}', that can't be represented inside TS definitions and ESM", STRING)
+
+        put(ErrorsJs.JS_EXTERNAL_INHERITORS_ONLY,
+            "External {0} can''t be a parent of non-external {1}",
+            Renderers.DECLARATION_NAME_WITH_KIND,
+            Renderers.DECLARATION_NAME_WITH_KIND)
+
+        put(ErrorsJs.JS_EXTERNAL_ARGUMENT,
+            "Expected argument with external type, but type {0} is non-external",
+            Renderers.RENDER_TYPE)
 
         this
     }

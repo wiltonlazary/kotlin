@@ -1,12 +1,9 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.collections
-
-import kotlin.*
-import kotlin.coroutines.experimental.buildIterator
 
 internal fun checkWindowSizeStep(size: Int, step: Int) {
     require(size > 0 && step > 0) {
@@ -24,10 +21,11 @@ internal fun <T> Sequence<T>.windowedSequence(size: Int, step: Int, partialWindo
 
 internal fun <T> windowedIterator(iterator: Iterator<T>, size: Int, step: Int, partialWindows: Boolean, reuseBuffer: Boolean): Iterator<List<T>> {
     if (!iterator.hasNext()) return EmptyIterator
-    return buildIterator<List<T>> {
+    return iterator<List<T>> {
+        val bufferInitialCapacity = size.coerceAtMost(1024)
         val gap = step - size
         if (gap >= 0) {
-            var buffer = ArrayList<T>(size)
+            var buffer = ArrayList<T>(bufferInitialCapacity)
             var skip = 0
             for (e in iterator) {
                 if (skip > 0) { skip -= 1; continue }
@@ -42,10 +40,12 @@ internal fun <T> windowedIterator(iterator: Iterator<T>, size: Int, step: Int, p
                 if (partialWindows || buffer.size == size) yield(buffer)
             }
         } else {
-            val buffer = RingBuffer<T>(size)
+            var buffer = RingBuffer<T>(bufferInitialCapacity)
             for (e in iterator) {
                 buffer.add(e)
                 if (buffer.isFull()) {
+                    if (buffer.size < size) { buffer = buffer.expanded(maxCapacity = size); continue }
+
                     yield(if (reuseBuffer) buffer else ArrayList(buffer))
                     buffer.removeFirst(step)
                 }
@@ -86,15 +86,18 @@ internal class MovingSubList<out E>(private val list: List<E>) : AbstractList<E>
  *
  * Buffer overflow is not allowed so [add] doesn't overwrite tail but raises an exception.
  */
-private class RingBuffer<T>(val capacity: Int) : AbstractList<T>(), RandomAccess {
+private class RingBuffer<T>(private val buffer: Array<Any?>, filledSize: Int) : AbstractList<T>(), RandomAccess {
     init {
-        require(capacity >= 0) { "ring buffer capacity should not be negative but it is $capacity" }
+        require(filledSize >= 0) { "ring buffer filled size should not be negative but it is $filledSize" }
+        require(filledSize <= buffer.size) { "ring buffer filled size: $filledSize cannot be larger than the buffer size: ${buffer.size}" }
     }
 
-    private val buffer = arrayOfNulls<Any?>(capacity)
+    constructor(capacity: Int) : this(arrayOfNulls<Any?>(capacity), 0)
+
+    private val capacity = buffer.size
     private var startIndex: Int = 0
 
-    override var size: Int = 0
+    override var size: Int = filledSize
         private set
 
     override fun get(index: Int): T {
@@ -143,13 +146,22 @@ private class RingBuffer<T>(val capacity: Int) : AbstractList<T>(), RandomAccess
             widx++
             idx++
         }
-        if (result.size > this.size) result[this.size] = null
 
-        return result as Array<T>
+        return terminateCollectionToArray(size, result) as Array<T>
     }
 
     override fun toArray(): Array<Any?> {
         return toArray(arrayOfNulls(size))
+    }
+
+    /**
+     * Creates a new ring buffer with the capacity equal to the minimum of [maxCapacity] and 1.5 * [capacity].
+     * The returned ring buffer contains the same elements as this ring buffer.
+     */
+    fun expanded(maxCapacity: Int): RingBuffer<T> {
+        val newCapacity = (capacity + (capacity shr 1) + 1).coerceAtMost(maxCapacity)
+        val newBuffer = if (startIndex == 0) buffer.copyOf(newCapacity) else toArray(arrayOfNulls(newCapacity))
+        return RingBuffer(newBuffer, size)
     }
 
     /**
@@ -190,11 +202,4 @@ private class RingBuffer<T>(val capacity: Int) : AbstractList<T>(), RandomAccess
 
     @Suppress("NOTHING_TO_INLINE")
     private inline fun Int.forward(n: Int): Int = (this + n) % capacity
-
-    // TODO: replace with Array.fill from stdlib when available in common
-    private fun <T> Array<T>.fill(element: T, fromIndex: Int = 0, toIndex: Int = size): Unit {
-        for (idx in fromIndex until toIndex) {
-            this[idx] = element
-        }
-    }
 }

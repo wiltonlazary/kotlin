@@ -1,6 +1,3 @@
-
-import org.gradle.jvm.tasks.Jar
-
 description = "Kotlin Android Extensions Compiler"
 
 plugins {
@@ -14,9 +11,12 @@ dependencies {
     compileOnly(project(":compiler:frontend.java"))
     compileOnly(project(":compiler:backend"))
     compileOnly(project(":kotlin-android-extensions-runtime"))
-    runtime(projectRuntimeJar(":kotlin-compiler-embeddable"))
-    compileOnly(commonDep("com.google.android", "android"))
-    compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
+    runtimeOnly(project(":kotlin-compiler-embeddable"))
+    compileOnly(commonDependency("com.google.android", "android"))
+    compileOnly(intellijCore())
+
+    embedded(project(":plugins:android-extensions-compiler")) { isTransitive = false }
+    embedded(project(":kotlin-android-extensions-runtime")) { isTransitive = false }
 }
 
 sourceSets {
@@ -24,18 +24,11 @@ sourceSets {
     "test" {}
 }
 
-// fixes a deadlock in projects evaluation order for :plugins:android-extensions-compiler
-evaluationDependsOn(":plugins")
+publish()
 
-val jar: Jar by tasks
-jar.apply {
-    from(getSourceSetsFrom(":plugins:android-extensions-compiler")["main"].output)
-    from(getSourceSetsFrom(":kotlin-android-extensions-runtime")["main"].output)
-    duplicatesStrategy = DuplicatesStrategy.FAIL
-}
+runtimeJar(rewriteDefaultJarDepsToShadedCompiler())
 
-runtimeJar(rewriteDepsToShadedCompiler(jar))
 sourcesJar()
+
 javadocJar()
 
-publish()

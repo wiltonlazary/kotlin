@@ -1,4 +1,4 @@
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 // WITH_REFLECT
 
 import kotlin.reflect.KClass
@@ -12,6 +12,9 @@ fun box(): String {
     assertEquals(Void::class.java, Void::class.javaObjectType)
     assertEquals(Void.TYPE, Void.TYPE.kotlin.javaPrimitiveType)
     assertEquals(Void::class.java, Void.TYPE.kotlin.javaObjectType)
+
+    assertEquals("Void", Void::class.simpleName)
+    assertEquals("java.lang.Void", Void::class.qualifiedName)
 
     return "OK"
 }

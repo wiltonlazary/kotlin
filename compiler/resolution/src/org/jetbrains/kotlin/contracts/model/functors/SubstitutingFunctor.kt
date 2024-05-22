@@ -16,35 +16,28 @@
 
 package org.jetbrains.kotlin.contracts.model.functors
 
-import org.jetbrains.kotlin.contracts.model.structure.ESCalls
-import org.jetbrains.kotlin.contracts.model.structure.ESReturns
-import org.jetbrains.kotlin.contracts.model.structure.ESConstant
-import org.jetbrains.kotlin.contracts.model.ESValue
-import org.jetbrains.kotlin.contracts.model.structure.ESVariable
-import org.jetbrains.kotlin.contracts.model.ConditionalEffect
-import org.jetbrains.kotlin.contracts.model.ESEffect
-import org.jetbrains.kotlin.contracts.model.SimpleEffect
-import org.jetbrains.kotlin.contracts.model.Computation
+import org.jetbrains.kotlin.contracts.model.*
+import org.jetbrains.kotlin.contracts.model.structure.*
+import org.jetbrains.kotlin.contracts.model.visitors.Reducer
 import org.jetbrains.kotlin.contracts.model.visitors.Substitutor
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.descriptors.ReceiverParameterDescriptor
 import org.jetbrains.kotlin.descriptors.ValueDescriptor
+import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitClassReceiver
 import org.jetbrains.kotlin.utils.addIfNotNull
 
-class SubstitutingFunctor(private val basicEffects: List<ESEffect>, private val ownerFunction: FunctionDescriptor) :
-    AbstractReducingFunctor() {
-    override fun doInvocation(arguments: List<Computation>): List<ESEffect> {
+class SubstitutingFunctor(
+    private val basicEffects: List<ESEffect>,
+    private val ownerFunction: FunctionDescriptor
+) : AbstractFunctor() {
+    override fun doInvocation(arguments: List<Computation>, typeSubstitution: ESTypeSubstitution, reducer: Reducer): List<ESEffect> {
         if (basicEffects.isEmpty()) return emptyList()
 
-        val receiver =
-            listOfNotNull(ownerFunction.dispatchReceiverParameter?.toESVariable(), ownerFunction.extensionReceiverParameter?.toESVariable())
-        val parameters = receiver + ownerFunction.valueParameters.map { it.toESVariable() }
-
-        assert(parameters.size == arguments.size) {
-            "Arguments and parameters size mismatch: arguments.size = ${arguments.size}, parameters.size = ${parameters.size}"
-        }
+        val parameters = computeParameters(arguments)
 
         val substitutions = parameters.zip(arguments).toMap()
-        val substitutor = Substitutor(substitutions)
+        val substitutor = Substitutor(substitutions, typeSubstitution, reducer)
         val substitutedClauses = mutableListOf<ESEffect>()
 
         effectsLoop@ for (effect in basicEffects) {
@@ -54,8 +47,8 @@ class SubstitutingFunctor(private val basicEffects: List<ESEffect>, private val 
                 }
 
                 is ESCalls -> {
-                    val subsitutionForCallable = substitutions[effect.callable] as? ESValue ?: continue@effectsLoop
-                    substitutedClauses += ESCalls(subsitutionForCallable, effect.kind)
+                    val substitutionForCallable = substitutions[effect.callable] as? ESValue ?: continue@effectsLoop
+                    substitutedClauses += ESCalls(substitutionForCallable, effect.kind)
                 }
 
                 else -> substitutedClauses += effect
@@ -65,13 +58,45 @@ class SubstitutingFunctor(private val basicEffects: List<ESEffect>, private val 
         return substitutedClauses
     }
 
+    private fun computeParameters(arguments: List<Computation>): List<ESVariable> {
+        val dispatchReceiver = ownerFunction.dispatchReceiverParameter?.toESVariable()
+        val extensionReceiver = ownerFunction.extensionReceiverParameter?.toESVariable()
+        val receivers = listOfNotNull(dispatchReceiver, extensionReceiver)
+        val valueParameters = ownerFunction.valueParameters.map { it.toESVariable() }
+        val parameters = receivers + valueParameters
+
+        if (parameters.size == arguments.size) {
+            return parameters
+        }
+
+        fun fail(): Nothing {
+            error("Arguments and parameters size mismatch: arguments.size = ${arguments.size}, parameters.size = ${parameters.size}")
+        }
+
+        val dispatchParameterDescriptor = dispatchReceiver?.descriptor ?: fail()
+        if (dispatchParameterDescriptor is ReceiverParameterDescriptor) {
+            val classDescriptor = (dispatchParameterDescriptor.value as? ImplicitClassReceiver)?.classDescriptor ?: fail()
+            if (classDescriptor.kind == ClassKind.OBJECT) {
+                val parametersWithoutDispatch = buildList {
+                    extensionReceiver?.let { add(it) }
+                    addAll(valueParameters)
+                }
+                if (parametersWithoutDispatch.size != arguments.size) {
+                    fail()
+                }
+                return parametersWithoutDispatch
+            }
+        }
+        fail()
+    }
+
     private fun combine(effect: SimpleEffect, substitutedCondition: ESEffect): ESEffect? {
         if (substitutedCondition !is ConditionalEffect) return null
 
         val effectFromCondition = substitutedCondition.simpleEffect
-        if (effectFromCondition !is ESReturns || effectFromCondition.value == ESConstant.WILDCARD) return substitutedCondition
+        if (effectFromCondition !is ESReturns || effectFromCondition.value.isWildcard) return substitutedCondition
 
-        if (effectFromCondition.value != ESConstant.TRUE) return null
+        if (!effectFromCondition.value.isTrue) return null
 
         return ConditionalEffect(substitutedCondition.condition, effect)
     }

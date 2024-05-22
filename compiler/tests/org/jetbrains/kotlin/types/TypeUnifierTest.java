@@ -16,13 +16,12 @@
 
 package org.jetbrains.kotlin.types;
 
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import kotlin.Unit;
 import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
+import org.jetbrains.kotlin.builtins.StandardNames;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.container.ComponentProvider;
 import org.jetbrains.kotlin.container.DslKt;
@@ -31,17 +30,20 @@ import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
 import org.jetbrains.kotlin.descriptors.impl.TypeParameterDescriptorImpl;
 import org.jetbrains.kotlin.name.Name;
-import org.jetbrains.kotlin.psi.KtPsiFactoryKt;
+import org.jetbrains.kotlin.psi.KtPsiFactory;
 import org.jetbrains.kotlin.psi.KtTypeProjection;
 import org.jetbrains.kotlin.psi.KtTypeReference;
 import org.jetbrains.kotlin.resolve.TypeResolver;
 import org.jetbrains.kotlin.resolve.lazy.JvmResolveUtil;
 import org.jetbrains.kotlin.resolve.scopes.*;
 import org.jetbrains.kotlin.resolve.scopes.utils.ScopeUtilsKt;
+import org.jetbrains.kotlin.storage.LockBasedStorageManager;
 import org.jetbrains.kotlin.test.ConfigurationKind;
-import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.DummyTraces;
 import org.jetbrains.kotlin.test.KotlinTestWithEnvironment;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -67,7 +69,7 @@ public class TypeUnifierTest extends KotlinTestWithEnvironment {
         module = DslKt.getService(container, ModuleDescriptor.class);
 
         builtinsImportingScope = ScopeUtilsKt.chainImportingScopes(
-                CollectionsKt.map(KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAMES,
+                CollectionsKt.map(StandardNames.BUILT_INS_PACKAGE_FQ_NAMES,
                                   fqName -> ScopeUtilsKt.memberScopeAsImportingScope(module.getPackage(fqName).getMemberScope())), null);
         typeResolver = DslKt.getService(container, TypeResolver.class);
         x = createTypeVariable("X");
@@ -77,7 +79,8 @@ public class TypeUnifierTest extends KotlinTestWithEnvironment {
 
     private TypeParameterDescriptor createTypeVariable(String name) {
         return TypeParameterDescriptorImpl.createWithDefaultBound(
-                module, Annotations.Companion.getEMPTY(), false, Variance.INVARIANT, Name.identifier(name), 0
+                module, Annotations.Companion.getEMPTY(), false, Variance.INVARIANT,
+                Name.identifier(name), 0, LockBasedStorageManager.NO_LOCKS
         );
     }
 
@@ -163,7 +166,7 @@ public class TypeUnifierTest extends KotlinTestWithEnvironment {
     }
 
     private static Map<String, String> expect(boolean success, String... strs) {
-        Map<String, String> map = Maps.newHashMap();
+        Map<String, String> map = new HashMap<>();
         putResult(map, success);
         for (int i = 0; i < strs.length; i += 2) {
             String key = strs[i];
@@ -180,7 +183,7 @@ public class TypeUnifierTest extends KotlinTestWithEnvironment {
 
     @Nullable
     private static Map<String, String> toStrings(TypeUnifier.UnificationResult map) {
-        Map<String, String> result = Maps.newHashMap();
+        Map<String, String> result = new HashMap<>();
         putResult(result, map.isSuccess());
         for (Map.Entry<TypeConstructor, TypeProjection> entry : map.getSubstitution().entrySet()) {
             result.put(entry.getKey().toString(), entry.getValue().toString());
@@ -195,7 +198,7 @@ public class TypeUnifierTest extends KotlinTestWithEnvironment {
     private TypeProjection makeType(String typeStr) {
         LexicalScope withX = new LexicalScopeImpl(
                 builtinsImportingScope, module,
-                false, null, LexicalScopeKind.SYNTHETIC, LocalRedeclarationChecker.DO_NOTHING.INSTANCE,
+                false, null, Collections.emptyList(), LexicalScopeKind.SYNTHETIC, LocalRedeclarationChecker.DO_NOTHING.INSTANCE,
                 handler -> {
                     handler.addClassifierDescriptor(x);
                     handler.addClassifierDescriptor(y);
@@ -203,12 +206,11 @@ public class TypeUnifierTest extends KotlinTestWithEnvironment {
                 }
         );
 
-        KtTypeProjection projection = KtPsiFactoryKt
-                .KtPsiFactory(getProject()).createTypeArguments("<" + typeStr + ">").getArguments().get(0);
+        KtTypeProjection projection = new KtPsiFactory(getProject()).createTypeArguments("<" + typeStr + ">").getArguments().get(0);
 
         KtTypeReference typeReference = projection.getTypeReference();
         assert typeReference != null;
-        KotlinType type = typeResolver.resolveType(withX, typeReference, KotlinTestUtils.DUMMY_TRACE, true);
+        KotlinType type = typeResolver.resolveType(withX, typeReference, DummyTraces.DUMMY_TRACE, true);
 
         return new TypeProjectionImpl(getProjectionKind(typeStr, projection), type);
     }

@@ -1,8 +1,9 @@
+// FIR_IDENTICAL
 // FULL_JDK
 
 abstract class A : MutableList<String> {
     override fun sort(/*0*/ p0: java.util.Comparator<in String>) {
-        super.<!DEFAULT_METHOD_CALL_FROM_JAVA6_TARGET_ERROR!>sort<!>(p0)
+        super.sort(p0)
     }
 }
 

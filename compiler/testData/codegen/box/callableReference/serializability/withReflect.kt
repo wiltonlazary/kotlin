@@ -1,4 +1,5 @@
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
+// FULL_JDK
 // WITH_REFLECT
 
 import java.io.*

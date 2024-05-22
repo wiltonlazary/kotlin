@@ -33,13 +33,18 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.module
 // it's hard to do it unintentionally.
 fun generateSignature(descriptor: DeclarationDescriptor): String? {
     if (DescriptorUtils.isDescriptorWithLocalVisibility(descriptor)) return null
-    if (descriptor is DeclarationDescriptorWithVisibility && descriptor.visibility == Visibilities.PRIVATE &&
+    if (descriptor is DeclarationDescriptorWithVisibility && descriptor.visibility == DescriptorVisibilities.PRIVATE &&
         !AnnotationsUtils.isNativeObject(descriptor) && !AnnotationsUtils.isLibraryObject(descriptor)
     ) {
         return null
     }
     return when (descriptor) {
         is CallableDescriptor -> {
+            // Should correspond to inner name generation
+            if (descriptor is ConstructorDescriptor && descriptor.isPrimary) {
+                return generateSignature(descriptor.constructedClass)
+            }
+
             val parent = generateSignature(descriptor.containingDeclaration) ?: return null
             if (descriptor !is VariableAccessorDescriptor && descriptor !is ConstructorDescriptor && descriptor.name.isSpecial) {
                 return null

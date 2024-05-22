@@ -17,7 +17,6 @@
 package org.jetbrains.kotlin.incremental.testingUtils
 
 import com.intellij.openapi.util.io.FileUtil
-import com.sun.xml.internal.messaging.saaj.util.ByteOutputStream
 import org.jetbrains.kotlin.incremental.LocalFileKotlinClass
 import org.jetbrains.kotlin.js.parser.sourcemaps.SourceMapError
 import org.jetbrains.kotlin.js.parser.sourcemaps.SourceMapParser
@@ -27,6 +26,7 @@ import org.jetbrains.kotlin.metadata.DebugProtoBuf
 import org.jetbrains.kotlin.metadata.js.DebugJsProtoBuf
 import org.jetbrains.kotlin.metadata.jvm.DebugJvmProtoBuf
 import org.jetbrains.kotlin.metadata.jvm.deserialization.BitEncoding
+import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmMetadataVersion
 import org.jetbrains.kotlin.protobuf.ExtensionRegistry
 import org.jetbrains.kotlin.serialization.js.JsSerializerProtocol
 import org.jetbrains.kotlin.serialization.js.KotlinJavascriptSerializationUtil
@@ -37,6 +37,7 @@ import org.jetbrains.org.objectweb.asm.ClassReader
 import org.jetbrains.org.objectweb.asm.util.TraceClassVisitor
 import org.junit.Assert
 import org.junit.Assert.assertNotNull
+import org.junit.ComparisonFailure
 import java.io.*
 import java.util.*
 import java.util.zip.CRC32
@@ -45,7 +46,24 @@ import java.util.zip.GZIPInputStream
 // Set this to true if you want to dump all bytecode (test will fail in this case)
 private val DUMP_ALL = System.getProperty("comparison.dump.all") == "true"
 
-fun assertEqualDirectories(expected: File, actual: File, forgiveExtraFiles: Boolean) {
+fun assertEqualDirectoriesIgnoringDotFiles(
+    expected: File,
+    actual: File,
+    forgiveOtherExtraFiles: Boolean,
+) = assertEqualDirectories(
+    expected,
+    actual,
+    forgiveExtraFiles = forgiveOtherExtraFiles,
+    // e.g. ignore .DS_Store on macOS
+    filter = { !it.name.startsWith(".") },
+)
+
+fun assertEqualDirectories(
+    expected: File,
+    actual: File,
+    forgiveExtraFiles: Boolean,
+    filter: (File) -> (Boolean) = { true },
+) {
     val pathsInExpected = getAllRelativePaths(expected)
     val pathsInActual = getAllRelativePaths(actual)
 
@@ -54,8 +72,8 @@ fun assertEqualDirectories(expected: File, actual: File, forgiveExtraFiles: Bool
             .filter { DUMP_ALL || !Arrays.equals(File(expected, it).readBytes(), File(actual, it).readBytes()) }
             .sorted()
 
-    val expectedString = getDirectoryString(expected, changedPaths)
-    val actualString = getDirectoryString(actual, changedPaths)
+    val expectedString = getDirectoryString(expected, changedPaths, filter)
+    val actualString = getDirectoryString(actual, changedPaths, filter)
 
     if (DUMP_ALL) {
         Assert.assertEquals(expectedString, actualString + " ")
@@ -72,7 +90,15 @@ fun assertEqualDirectories(expected: File, actual: File, forgiveExtraFiles: Bool
         }
     }
 
-    Assert.assertEquals(expectedString, actualString)
+    if (expectedString != actualString) {
+        val message: String? = null
+        throw ComparisonFailure(
+            message,
+            expectedString.replaceFirst(DIR_ROOT_PLACEHOLDER, expected.canonicalPath),
+            actualString.replaceFirst(DIR_ROOT_PLACEHOLDER, actual.canonicalPath)
+        )
+    }
+
 }
 
 private fun File.checksumString(): String {
@@ -81,7 +107,13 @@ private fun File.checksumString(): String {
     return java.lang.Long.toHexString(crc32.value)
 }
 
-private fun getDirectoryString(dir: File, interestingPaths: List<String>): String {
+private const val DIR_ROOT_PLACEHOLDER = "<DIR_ROOT_PLACEHOLDER>"
+
+private fun getDirectoryString(
+    dir: File,
+    interestingPaths: List<String>,
+    predicate: (File) -> (Boolean),
+): String {
     val buf = StringBuilder()
     val p = Printer(buf)
 
@@ -89,7 +121,7 @@ private fun getDirectoryString(dir: File, interestingPaths: List<String>): Strin
     fun addDirContent(dir: File) {
         p.pushIndent()
 
-        val listFiles = dir.listFiles()
+        val listFiles = dir.listFiles()?.filter(predicate)
         assertNotNull("$dir does not exist", listFiles)
 
         val children = listFiles!!.sortedWith(compareBy({ it.isDirectory }, { it.name }))
@@ -109,7 +141,7 @@ private fun getDirectoryString(dir: File, interestingPaths: List<String>): Strin
     }
 
 
-    p.println(".")
+    p.println(DIR_ROOT_PLACEHOLDER)
     addDirContent(dir)
 
     for (path in interestingPaths) {
@@ -141,29 +173,35 @@ private fun classFileToString(classFile: File): String {
     val traceVisitor = TraceClassVisitor(PrintWriter(out))
     ClassReader(classFile.readBytes()).accept(traceVisitor, 0)
 
-    val classHeader = LocalFileKotlinClass.create(classFile)?.classHeader
+    val classHeader = LocalFileKotlinClass.create(classFile, JvmMetadataVersion.INSTANCE)?.classHeader ?: return ""
+    if (!classHeader.metadataVersion.isCompatibleWithCurrentCompilerVersion()) {
+        error("Incompatible class ($classHeader): $classFile")
+    }
 
-    val annotationDataEncoded = classHeader?.data
-    if (annotationDataEncoded != null) {
-        ByteArrayInputStream(BitEncoding.decodeBytes(annotationDataEncoded)).use {
-            input ->
+    when (classHeader.kind) {
+        KotlinClassHeader.Kind.FILE_FACADE, KotlinClassHeader.Kind.CLASS, KotlinClassHeader.Kind.MULTIFILE_CLASS_PART -> {
+            ByteArrayInputStream(BitEncoding.decodeBytes(classHeader.data!!)).use { input ->
+                out.write("\n------ string table types proto -----\n${DebugJvmProtoBuf.StringTableTypes.parseDelimitedFrom(input)}")
 
-            out.write("\n------ string table types proto -----\n${DebugJvmProtoBuf.StringTableTypes.parseDelimitedFrom(input)}")
-
-            if (!classHeader.metadataVersion.isCompatible()) {
-                error("Incompatible class ($classHeader): $classFile")
-            }
-
-            when (classHeader.kind) {
-                KotlinClassHeader.Kind.FILE_FACADE ->
-                    out.write("\n------ file facade proto -----\n${DebugProtoBuf.Package.parseFrom(input, getExtensionRegistry())}")
-                KotlinClassHeader.Kind.CLASS ->
-                    out.write("\n------ class proto -----\n${DebugProtoBuf.Class.parseFrom(input, getExtensionRegistry())}")
-                KotlinClassHeader.Kind.MULTIFILE_CLASS_PART ->
-                    out.write("\n------ multi-file part proto -----\n${DebugProtoBuf.Package.parseFrom(input, getExtensionRegistry())}")
-                else -> throw IllegalStateException()
+                when (classHeader.kind) {
+                    KotlinClassHeader.Kind.FILE_FACADE ->
+                        out.write("\n------ file facade proto -----\n${DebugProtoBuf.Package.parseFrom(input, getExtensionRegistry())}")
+                    KotlinClassHeader.Kind.CLASS ->
+                        out.write("\n------ class proto -----\n${DebugProtoBuf.Class.parseFrom(input, getExtensionRegistry())}")
+                    KotlinClassHeader.Kind.MULTIFILE_CLASS_PART ->
+                        out.write("\n------ multi-file part proto -----\n${DebugProtoBuf.Package.parseFrom(input, getExtensionRegistry())}")
+                    else -> error(classHeader.kind)
+                }
             }
         }
+        KotlinClassHeader.Kind.MULTIFILE_CLASS -> {
+            out.write("\n------ multi-file facade data -----\n")
+            out.write(classHeader.data!!.joinToString("\n"))
+        }
+        KotlinClassHeader.Kind.SYNTHETIC_CLASS -> {
+            // Synthetic class has no metadata, thus there can be no differences in it.
+        }
+        KotlinClassHeader.Kind.UNKNOWN -> error("Should not meet unknown classes here: $classFile")
     }
 
     return out.toString()
@@ -205,7 +243,7 @@ private fun kjsmToString(kjsmFile: File): String {
 }
 
 private fun sourceMapFileToString(sourceMapFile: File, generatedJsFile: File): String {
-    val sourceMapParseResult = SourceMapParser.parse(StringReader(sourceMapFile.readText()))
+    val sourceMapParseResult = SourceMapParser.parse(sourceMapFile.readText())
     return when (sourceMapParseResult) {
         is SourceMapSuccess -> {
             val bytesOut = ByteArrayOutputStream()

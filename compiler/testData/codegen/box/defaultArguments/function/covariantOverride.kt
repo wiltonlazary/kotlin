@@ -1,3 +1,4 @@
+
 open class Foo {
     open fun foo(x: CharSequence = "O"): CharSequence = x
 }

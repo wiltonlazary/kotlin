@@ -17,6 +17,7 @@
 package org.jetbrains.kotlin.resolve
 
 import com.intellij.util.SmartList
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.incremental.components.LookupLocation
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
@@ -24,15 +25,17 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.scopes.BaseImportingScope
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
+import org.jetbrains.kotlin.utils.CallOnceFunction
 import org.jetbrains.kotlin.utils.Printer
 import org.jetbrains.kotlin.utils.addIfNotNull
 
 class LazyExplicitImportScope(
+    private val languageVersionSettings: LanguageVersionSettings,
     private val packageOrClassDescriptor: DeclarationDescriptor,
     private val packageFragmentForVisibilityCheck: PackageFragmentDescriptor?,
     private val declaredName: Name,
     private val aliasName: Name,
-    private val storeReferences: (Collection<DeclarationDescriptor>) -> Unit
+    private val storeReferences: CallOnceFunction<Collection<DeclarationDescriptor>, Unit>
 ) : BaseImportingScope(null) {
 
     override fun getContributedClassifier(name: Name, location: LookupLocation): ClassifierDescriptor? {
@@ -64,9 +67,15 @@ class LazyExplicitImportScope(
     ): Collection<DeclarationDescriptor> {
         val descriptors = SmartList<DeclarationDescriptor>()
 
-        descriptors.addIfNotNull(getContributedClassifier(aliasName, NoLookupLocation.WHEN_GET_ALL_DESCRIPTORS))
-        descriptors.addAll(getContributedFunctions(aliasName, NoLookupLocation.WHEN_GET_ALL_DESCRIPTORS))
-        descriptors.addAll(getContributedVariables(aliasName, NoLookupLocation.WHEN_GET_ALL_DESCRIPTORS))
+        if (kindFilter.acceptsKinds(DescriptorKindFilter.CLASSIFIERS_MASK)) {
+            descriptors.addIfNotNull(getContributedClassifier(aliasName, NoLookupLocation.WHEN_GET_ALL_DESCRIPTORS))
+        }
+        if (kindFilter.acceptsKinds(DescriptorKindFilter.FUNCTIONS_MASK)) {
+            descriptors.addAll(getContributedFunctions(aliasName, NoLookupLocation.WHEN_GET_ALL_DESCRIPTORS))
+        }
+        if (kindFilter.acceptsKinds(DescriptorKindFilter.VARIABLES_MASK)) {
+            descriptors.addAll(getContributedVariables(aliasName, NoLookupLocation.WHEN_GET_ALL_DESCRIPTORS))
+        }
 
         if (changeNamesForAliased && aliasName != declaredName) {
             for (i in descriptors.indices) {
@@ -147,6 +156,8 @@ class LazyExplicitImportScope(
         else -> null
     }
 
-    private fun <D : CallableMemberDescriptor> Collection<D>.choseOnlyVisibleOrAll() =
-        filter { isVisible(it, packageFragmentForVisibilityCheck, position = QualifierPosition.IMPORT) }.takeIf { it.isNotEmpty() } ?: this
+    private fun <D : CallableMemberDescriptor> Collection<D>.choseOnlyVisibleOrAll(): Collection<D> =
+        filter { isVisible(it, packageFragmentForVisibilityCheck, position = QualifierPosition.IMPORT, languageVersionSettings) }
+            .takeIf { it.isNotEmpty() }
+            ?: this
 }

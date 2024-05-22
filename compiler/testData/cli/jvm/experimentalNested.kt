@@ -1,7 +1,8 @@
 package org.test
 
 class Outer {
-    @Experimental
+    @RequiresOptIn
+    @Retention(AnnotationRetention.BINARY)
     annotation class Nested
 }
 

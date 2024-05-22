@@ -1,10 +1,12 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package test.collections
 
+import kotlin.random.Random
+import kotlin.random.nextInt
 import kotlin.test.*
 
 
@@ -35,6 +37,59 @@ class MutableCollectionTest {
             assertAdd { addAll(data.toTypedArray()) }
             assertAdd { addAll(data.toTypedArray().asIterable()) }
             assertAdd { addAll(data.asSequence()) }
+        }
+    }
+
+    private fun <T> forAllStandardMutableLists(data: List<T>, block: (MutableList<T>) -> Unit) {
+        block(data.toMutableList())
+        block(ArrayDeque(data))
+        buildList {
+            addAll(data)
+            block(this)
+        }
+    }
+
+    @Test fun addAllAtIndex() {
+        val original = List(15000) { Random.nextInt() }
+        for (insertSize in listOf(0, 1, 10, 1000, 20000)) {
+            val insertion = List(insertSize) { Random.nextInt() }
+            for (index in listOf(0, original.size) + List(10) { Random.nextInt(original.indices) }) {
+                forAllStandardMutableLists(original) { mutable ->
+                    mutable.addAll(index, insertion)
+
+                    assertEquals(original.size + insertSize, mutable.size)
+                    val tailIndex = index + insertSize
+                    for (i in 0..<index) {
+                        assertEquals(original[i], mutable[i])
+                    }
+                    for (i in index..<tailIndex) {
+                        assertEquals(insertion[i - index], mutable[i])
+                    }
+                    for (i in tailIndex..<mutable.size) {
+                        assertEquals(original[i - insertSize], mutable[i])
+                    }
+                }
+            }
+        }
+    }
+
+    @Test fun removeFirst() {
+        forAllStandardMutableLists(listOf("first", "second")) { list ->
+            assertEquals("first", list.removeFirst())
+            assertEquals("second", list.removeFirstOrNull())
+
+            assertNull(list.removeFirstOrNull())
+            assertFailsWith<NoSuchElementException> { list.removeFirst() }
+        }
+    }
+
+    @Test fun removeLast() {
+        forAllStandardMutableLists(listOf("first", "second")) { list ->
+            assertEquals("second", list.removeLast())
+            assertEquals("first", list.removeLastOrNull())
+
+            assertNull(list.removeLastOrNull())
+            assertFailsWith<NoSuchElementException> { list.removeLast() }
         }
     }
 
@@ -100,18 +155,35 @@ class MutableCollectionTest {
     }
 
     @Test fun listFill() {
-        val list = MutableList(3) { it }
-        list.fill(42)
-        assertEquals(listOf(42, 42, 42), list)
+        forAllStandardMutableLists(List(3) { it }) { list ->
+            list.fill(42)
+            assertEquals(listOf(42, 42, 42), list)
+        }
     }
 
-    @Test fun shuffled() {
-        val list = MutableList(100) { it }
-        val shuffled = list.shuffled()
+    @Test fun shuffle() {
+        val list = List(100) { it }
+        forAllStandardMutableLists(list) { shuffled ->
+            shuffled.shuffle()
+            assertNotEquals(list, shuffled)
+            assertEquals(list.toSet(), shuffled.toSet())
+            assertEquals(list.size, shuffled.distinct().size)
+        }
+    }
 
-        assertNotEquals(list, shuffled)
-        assertEquals(list.toSet(), shuffled.toSet())
-        assertEquals(list.size, shuffled.distinct().size)
+    @Test fun shufflePredictably() {
+        val list = List(10) { it }
+        repeat(2) {
+            forAllStandardMutableLists(list) { shuffled1 ->
+                shuffled1.shuffle(Random(1))
+                assertEquals("[1, 4, 0, 6, 2, 8, 9, 7, 3, 5]", shuffled1.toString())
+            }
+        }
+
+        forAllStandardMutableLists(list) { shuffled2 ->
+            shuffled2.shuffle(Random(42))
+            assertEquals("[5, 0, 4, 9, 2, 8, 1, 7, 6, 3]", shuffled2.toString())
+        }
     }
 
 }

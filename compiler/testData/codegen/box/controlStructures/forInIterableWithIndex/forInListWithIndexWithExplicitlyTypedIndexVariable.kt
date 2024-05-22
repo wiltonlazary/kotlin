@@ -1,4 +1,5 @@
-// WITH_RUNTIME
+// WITH_STDLIB
+// KT-55458
 
 val xs = listOf("a", "b", "c", "d")
 

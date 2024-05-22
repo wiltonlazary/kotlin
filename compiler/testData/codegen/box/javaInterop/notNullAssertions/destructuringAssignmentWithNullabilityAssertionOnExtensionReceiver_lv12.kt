@@ -1,7 +1,7 @@
 // TARGET_BACKEND: JVM
-// WITH_RUNTIME
-// FILE: test.kt
-// LANGUAGE_VERSION: 1.2
+// WITH_STDLIB
+// FILE: destructuringAssignmentWithNullabilityAssertionOnExtensionReceiver_lv12.kt
+
 import kotlin.test.*
 
 var component1Evaluated = false
@@ -14,7 +14,7 @@ private operator fun J.component2() = 2
 fun use(x: Any) {}
 
 fun box(): String {
-    assertFailsWith<IllegalArgumentException> {
+    assertFailsWith<NullPointerException> {
         val (a, b) = J.j()
     }
     if (!component1Evaluated) return "component1 should be evaluated"

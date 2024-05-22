@@ -1,5 +1,4 @@
-// TODO: muted automatically, investigate should it be ran for JS or not
-// IGNORE_BACKEND: JS, NATIVE
+// TARGET_BACKEND: JVM
 
 // KT-5123
 
@@ -11,6 +10,6 @@ fun box(): String {
     numbers.add(1)
     numbers.add(2)
     numbers.add(3)
-    (Collections::rotate)(numbers, 1)
+    (Collections::rotate).let { it(numbers, 1) }
     return if ("$numbers" == "[3, 1, 2]") "OK" else "Fail $numbers"
 }

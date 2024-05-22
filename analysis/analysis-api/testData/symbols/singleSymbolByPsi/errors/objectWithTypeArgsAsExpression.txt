@@ -1,0 +1,20 @@
+KtAnonymousObjectSymbol:
+  annotationsList: []
+  classIdIfNonLocal: null
+  classKind: ANONYMOUS_OBJECT
+  isActual: false
+  isExpect: false
+  name: null
+  origin: SOURCE
+  superTypes: [
+    KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: []
+      type: kotlin/Any
+  ]
+  symbolKind: LOCAL
+  typeParameters: []
+  getContainingFileSymbol: KtFileSymbol(objectWithTypeArgsAsExpression.kt)
+  getContainingModule: KtSourceModule "Sources of main"
+  annotationApplicableTargets: null
+  deprecationStatus: null

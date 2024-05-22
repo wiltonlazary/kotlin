@@ -25,14 +25,14 @@ import java.net.URLClassLoader
 import java.util.jar.Attributes
 import java.util.jar.JarFile
 
-class RunnerException(message: String) : RuntimeException(message)
+class RunnerException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
 
 abstract class AbstractRunner : Runner {
     protected abstract val className: String
 
     protected abstract fun createClassLoader(classpath: List<URL>): ClassLoader
 
-    override fun run(classpath: List<URL>, arguments: List<String>) {
+    override fun run(classpath: List<URL>, compilerArguments: List<String>, arguments: List<String>, compilerClasspath: List<URL>) {
         val classLoader = createClassLoader(classpath)
 
         val mainClass = try {
@@ -40,6 +40,12 @@ abstract class AbstractRunner : Runner {
         }
         catch (e: ClassNotFoundException) {
             throw RunnerException("could not find or load main class $className")
+        } catch (e: NoClassDefFoundError) {
+            val message = """
+                could not find or load main class $className
+                Caused by: $e
+            """.trimIndent()
+            throw RunnerException(message)
         }
 
         val main = try {
@@ -57,6 +63,9 @@ abstract class AbstractRunner : Runner {
             )
         }
 
+        Thread.currentThread().contextClassLoader = classLoader
+        val savedClasspathProperty = System.setProperty("java.class.path", classpath.joinToString(File.pathSeparator))
+
         try {
             main.invoke(null, arguments.toTypedArray())
         }
@@ -66,55 +75,105 @@ abstract class AbstractRunner : Runner {
         catch (e: InvocationTargetException) {
             throw e.targetException
         }
+        finally {
+            if (savedClasspathProperty == null) System.clearProperty("java.class.path")
+            else System.setProperty("java.class.path", savedClasspathProperty)
+        }
     }
 }
 
 class MainClassRunner(override val className: String) : AbstractRunner() {
     override fun createClassLoader(classpath: List<URL>): ClassLoader =
-            URLClassLoader(classpath.toTypedArray(), null)
+        URLClassLoader(classpath.toTypedArray(), getPlatformClassLoader())
 }
 
 class JarRunner(private val path: String) : AbstractRunner() {
     override val className: String =
-            try {
-                val jar = JarFile(path)
-                try {
-                    jar.manifest.mainAttributes.getValue(Attributes.Name.MAIN_CLASS)
-                }
-                finally {
-                    jar.close()
-                }
+        try {
+            JarFile(path).use { jar ->
+                jar.manifest.mainAttributes.getValue(Attributes.Name.MAIN_CLASS)
             }
-            catch (e: IOException) {
-                throw RunnerException("could not read manifest from " + path + ": " + e.message)
-            }
-            ?: throw RunnerException("no Main-Class entry found in manifest in $path")
+        } catch (e: IOException) {
+            throw RunnerException("could not read manifest from " + path + ": " + e.message)
+        } ?: throw RunnerException("no Main-Class entry found in manifest in $path")
 
     override fun createClassLoader(classpath: List<URL>): ClassLoader {
         // 'kotlin *.jar' ignores the passed classpath as 'java -jar' does
         // TODO: warn on non-empty classpath?
 
-        return URLClassLoader(arrayOf(File(path).toURI().toURL()), null)
+        return URLClassLoader(arrayOf(File(path).toURI().toURL()), getPlatformClassLoader())
     }
 }
 
-class ReplRunner : Runner {
-    override fun run(classpath: List<URL>, arguments: List<String>) {
-        // TODO: run REPL instead
-        throw RunnerException("please specify at least one name or file to run")
+abstract class RunnerWithCompiler : Runner {
+
+    fun runCompiler(compilerClasspath: List<URL>, arguments: List<String>) {
+        val classLoader =
+            if (arguments.isEmpty()) RunnerWithCompiler::class.java.classLoader
+            else URLClassLoader(compilerClasspath.toTypedArray(), null)
+        val compilerClass = classLoader.loadClass("org.jetbrains.kotlin.cli.jvm.K2JVMCompiler")
+        val mainMethod = compilerClass.getMethod("main", Array<String>::class.java)
+        mainMethod.invoke(null, arguments.toTypedArray())
     }
 }
 
-class ScriptRunner(private val path: String) : Runner {
-    override fun run(classpath: List<URL>, arguments: List<String>) {
-        // TODO
-        throw RunnerException("running Kotlin scripts is not yet supported")
+private fun MutableList<String>.addClasspathArgIfNeeded(classpath: List<URL>) {
+    if (classpath.isNotEmpty()) {
+        add("-cp")
+        add(classpath.map {
+            if (it.protocol == "file") it.path
+            else it.toExternalForm()
+        }.joinToString(File.pathSeparator))
     }
 }
 
-class ExpressionRunner(private val code: String) : Runner {
-    override fun run(classpath: List<URL>, arguments: List<String>) {
-        // TODO
-        throw RunnerException("evaluating expressions is not yet supported")
+private fun ArrayList<String>.addScriptArguments(arguments: List<String>) {
+    if (arguments.isNotEmpty() && arguments.first() != "--") {
+        add("--")
+    }
+    addAll(arguments)
+}
+
+class ReplRunner : RunnerWithCompiler() {
+    override fun run(classpath: List<URL>, compilerArguments: List<String>, arguments: List<String>, compilerClasspath: List<URL>) {
+        val compilerArgs = ArrayList<String>().apply {
+            addClasspathArgIfNeeded(classpath)
+            addAll(compilerArguments)
+            addScriptArguments(arguments)
+        }
+        runCompiler(compilerClasspath, compilerArgs)
     }
 }
+
+class ScriptRunner(private val path: String) : RunnerWithCompiler() {
+    override fun run(classpath: List<URL>, compilerArguments: List<String>, arguments: List<String>, compilerClasspath: List<URL>) {
+        val compilerArgs = ArrayList<String>().apply {
+            addClasspathArgIfNeeded(classpath)
+            addAll(compilerArguments)
+            add("-script")
+            add(path)
+            addScriptArguments(arguments)
+        }
+        runCompiler(compilerClasspath, compilerArgs)
+    }
+}
+
+class ExpressionRunner(private val code: String) : RunnerWithCompiler() {
+    override fun run(classpath: List<URL>, compilerArguments: List<String>, arguments: List<String>, compilerClasspath: List<URL>) {
+        val compilerArgs = ArrayList<String>().apply {
+            addClasspathArgIfNeeded(classpath)
+            addAll(compilerArguments)
+            add("-expression")
+            add(code)
+            addScriptArguments(arguments)
+        }
+        runCompiler(compilerClasspath, compilerArgs)
+    }
+}
+
+private fun getPlatformClassLoader(): ClassLoader? =
+    try {
+        ClassLoader::class.java.getDeclaredMethod("getPlatformClassLoader")?.invoke(null) as? ClassLoader?
+    } catch (_: Exception) {
+        null
+    }

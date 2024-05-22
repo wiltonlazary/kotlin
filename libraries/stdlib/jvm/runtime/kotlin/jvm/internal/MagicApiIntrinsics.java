@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin.jvm.internal;
@@ -9,6 +9,16 @@ import kotlin.SinceKotlin;
 
 @SinceKotlin(version = "1.2")
 public class MagicApiIntrinsics {
+
+    /**
+     * This method is used as a reified marker for plugin-defined compiler intrinsics.
+     * See JvmIrIntrinsicExtension.kt in the compiler:backend:jvm:codegen
+     *
+     * @param data Arbitrary data to pass to plugin. Must be string constant (loaded by LDC instruction).
+     */
+    public static void voidMagicApiCall(Object data) {
+    }
+
     public static <T> T anyMagicApiCall(int id) {
         return null;
     }
@@ -22,9 +32,6 @@ public class MagicApiIntrinsics {
 
     public static <T> T anyMagicApiCall(Object data) {
         return null;
-    }
-
-    public static void voidMagicApiCall(Object data) {
     }
 
     public static int intMagicApiCall(Object data) {

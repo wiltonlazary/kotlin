@@ -19,6 +19,7 @@
 package org.jetbrains.kotlin.js.translate.expression
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.backend.ast.*
 import org.jetbrains.kotlin.js.translate.callTranslator.CallTranslator
@@ -38,12 +39,11 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils.getFunctionByName
 import org.jetbrains.kotlin.resolve.DescriptorUtils.getPropertyByName
-import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.util.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver
-import org.jetbrains.kotlin.types.KotlinType
 
 fun createWhile(doWhile: Boolean, expression: KtWhileExpressionBase, context: TranslationContext): JsNode {
     val conditionExpression = expression.condition ?:
@@ -99,7 +99,10 @@ private val indicesFqName = FqName("kotlin.collections.indices")
 private val sequenceFqName = FqName("kotlin.sequences.Sequence")
 
 fun translateForExpression(expression: KtForExpression, context: TranslationContext): JsStatement {
-    val loopRange = KtPsiUtil.deparenthesize(getLoopRange(expression))!!
+    val loopRange = getLoopRange(expression).let {
+        val deparenthesized = KtPsiUtil.deparenthesize(it)!!
+        if (deparenthesized is KtStringTemplateExpression) it else deparenthesized
+    }
     val rangeType = getTypeForExpression(context.bindingContext(), loopRange)
 
     fun isForOverRange(): Boolean {
@@ -313,7 +316,7 @@ fun translateForExpression(expression: KtForExpression, context: TranslationCont
     }
 
     fun findCollection() =
-            context.currentModule.findClassAcrossModuleDependencies(ClassId.topLevel(KotlinBuiltIns.FQ_NAMES.collection))!!
+            context.currentModule.findClassAcrossModuleDependencies(ClassId.topLevel(StandardNames.FqNames.collection))!!
 
     fun translateForOverCollectionIndices(info: WithIndexInfo): JsStatement {
         val range = context.cacheExpressionIfNeeded(info.range)
@@ -334,7 +337,7 @@ fun translateForExpression(expression: KtForExpression, context: TranslationCont
     }
 
     fun findIterable() =
-        context.currentModule.findClassAcrossModuleDependencies(ClassId.topLevel(KotlinBuiltIns.FQ_NAMES.iterable))!!
+        context.currentModule.findClassAcrossModuleDependencies(ClassId.topLevel(StandardNames.FqNames.iterable))!!
 
     fun findSequence() =
             context.currentModule.findClassAcrossModuleDependencies(ClassId.topLevel(sequenceFqName))!!

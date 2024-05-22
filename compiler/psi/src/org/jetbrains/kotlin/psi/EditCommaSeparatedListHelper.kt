@@ -28,6 +28,7 @@ object EditCommaSeparatedListHelper {
         return addItemBefore(list, allItems, item, null, prefix)
     }
 
+    @Suppress("UNCHECKED_CAST")
     @JvmOverloads
     fun <TItem : KtElement> addItemAfter(
         list: KtElement,
@@ -44,7 +45,7 @@ object EditCommaSeparatedListHelper {
                 list.add(item) as TItem
             }
         } else {
-            var comma = KtPsiFactory(list).createComma()
+            var comma = KtPsiFactory(list.project).createComma()
             return if (anchor != null) {
                 comma = list.addAfter(comma, anchor)
                 list.addAfter(item, comma) as TItem

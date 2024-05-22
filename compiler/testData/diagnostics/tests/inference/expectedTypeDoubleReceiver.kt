@@ -1,5 +1,4 @@
-// !WITH_NEW_INFERENCE
-// !LANGUAGE: +ExpectedTypeFromCast
+// LANGUAGE: +ExpectedTypeFromCast
 
 fun <T> foo(): T = TODO()
 
@@ -9,12 +8,11 @@ class A {
 
 fun <V> id(value: V) = value
 
-val asA = <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>foo<!>().<!NI;UNRESOLVED_REFERENCE, OI;DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>fooA<!>() as A
+val asA = <!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>foo<!>().<!DEBUG_INFO_MISSING_UNRESOLVED!>fooA<!>() as A
 
-val receiverParenthesized = (<!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>foo<!>()).<!NI;UNRESOLVED_REFERENCE, OI;DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>fooA<!>() as A
-val no2A = A().<!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>fooA<!>().<!NI;UNRESOLVED_REFERENCE, OI;DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE!>fooA<!>() as A
+val receiverParenthesized = (<!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>foo<!>()).<!DEBUG_INFO_MISSING_UNRESOLVED!>fooA<!>() as A
+val no2A = A().<!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>fooA<!>().<!DEBUG_INFO_MISSING_UNRESOLVED!>fooA<!>() as A
 
 val correct1 = A().fooA() as A
 val correct2 = foo<A>().fooA() as A
 val correct3 = A().fooA<A>().fooA() as A
-

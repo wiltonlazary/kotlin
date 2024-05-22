@@ -1,6 +1,5 @@
-// !WITH_NEW_INFERENCE
-// !CHECK_TYPE
-// !DIAGNOSTICS: -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_PARAMETER -UNUSED_VARIABLE
+// CHECK_TYPE
+// DIAGNOSTICS: -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_PARAMETER -UNUSED_VARIABLE
 // JAVAC_EXPECTED_FILE
 import java.util.*
 
@@ -29,9 +28,9 @@ fun <E> commonSupertype(x: E, y: E): E = x
 
 fun foo() {
     var myIt = A<String>().iterator()
-    myIt = <!TYPE_MISMATCH!>A<Int>().<!NI;TYPE_MISMATCH!>iterator()<!><!>
+    myIt = <!TYPE_MISMATCH!>A<Int>().iterator()<!>
 
     val csIt: Iterator<CharSequence> = A<String>().iterator()
 
-    commonSupertype(A<String>().iterator(), A<Int>().iterator()).checkType { <!NI;DEBUG_INFO_UNRESOLVED_WITH_TARGET, NI;UNRESOLVED_REFERENCE_WRONG_RECEIVER!>_<!><A<out Any>.MyIt>() }
+    commonSupertype(A<String>().iterator(), A<Int>().iterator()).checkType { <!UNRESOLVED_REFERENCE_WRONG_RECEIVER!>_<!><A<out Any>.MyIt>() }
 }

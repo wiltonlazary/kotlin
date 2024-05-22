@@ -17,12 +17,7 @@
 package org.jetbrains.kotlin.js.config;
 
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.vfs.StandardFileSystems;
-import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.vfs.VirtualFileManager;
-import com.intellij.openapi.vfs.VirtualFileSystem;
 import com.intellij.util.SmartList;
-import com.intellij.util.io.URLUtil;
 import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -30,13 +25,11 @@ import org.jetbrains.kotlin.config.*;
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider;
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl;
 import org.jetbrains.kotlin.incremental.components.LookupTracker;
-import org.jetbrains.kotlin.js.resolve.JsPlatform;
+import org.jetbrains.kotlin.js.resolve.JsPlatformAnalyzerServices;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.resolve.CompilerDeserializationConfiguration;
-import org.jetbrains.kotlin.serialization.js.JsModuleDescriptor;
-import org.jetbrains.kotlin.serialization.js.KotlinJavaScriptLibraryParts;
-import org.jetbrains.kotlin.serialization.js.KotlinJavascriptSerializationUtil;
-import org.jetbrains.kotlin.serialization.js.ModuleKind;
+import org.jetbrains.kotlin.resolve.TargetEnvironment;
+import org.jetbrains.kotlin.serialization.js.*;
 import org.jetbrains.kotlin.storage.LockBasedStorageManager;
 import org.jetbrains.kotlin.utils.JsMetadataVersion;
 import org.jetbrains.kotlin.utils.KotlinJavascriptMetadata;
@@ -45,30 +38,20 @@ import org.jetbrains.kotlin.utils.KotlinJavascriptMetadataUtils;
 import java.io.File;
 import java.util.*;
 
-import static org.jetbrains.kotlin.config.CommonConfigurationKeysKt.getLanguageVersionSettings;
 import static org.jetbrains.kotlin.utils.PathUtil.getKotlinPathsForDistDirectory;
 
 public class JsConfig {
-    public static final List<String> JS_STDLIB =
-            Collections.singletonList(getKotlinPathsForDistDirectory().getJsStdLibJarPath().getAbsolutePath());
-
-    public static final List<String> JS_KOTLIN_TEST =
-            Collections.singletonList(getKotlinPathsForDistDirectory().getJsKotlinTestJarPath().getAbsolutePath());
-
     public static final String UNKNOWN_EXTERNAL_MODULE_NAME = "<unknown>";
 
     private final Project project;
     private final CompilerConfiguration configuration;
-    private final LockBasedStorageManager storageManager = new LockBasedStorageManager();
+    private final LockBasedStorageManager storageManager = new LockBasedStorageManager("JsConfig");
 
     private final List<KotlinJavascriptMetadata> metadata = new SmartList<>();
     private final List<KotlinJavascriptMetadata> friends = new SmartList<>();
 
-    @Nullable
-    private List<JsModuleDescriptor<ModuleDescriptorImpl>> moduleDescriptors = null;
-
-    @Nullable
-    private List<JsModuleDescriptor<ModuleDescriptorImpl>> friendModuleDescriptors = null;
+    private List<ModuleDescriptorImpl> moduleDescriptors;
+    private List<ModuleDescriptorImpl> friendModuleDescriptors;
 
     private boolean initialized = false;
 
@@ -78,17 +61,22 @@ public class JsConfig {
     @Nullable
     private final Set<String> librariesToSkip;
 
-    public JsConfig(@NotNull Project project, @NotNull CompilerConfiguration configuration) {
-        this(project, configuration, null, null);
+    public final TargetEnvironment targetEnvironment;
+
+    public JsConfig(@NotNull Project project, @NotNull CompilerConfiguration configuration, @NotNull TargetEnvironment targetEnvironment) {
+        this(project, configuration, targetEnvironment, null, null);
     }
 
-    public JsConfig(@NotNull Project project, @NotNull CompilerConfiguration configuration,
+    public JsConfig(
+            @NotNull Project project,
+            @NotNull CompilerConfiguration configuration,
+            @NotNull TargetEnvironment targetEnvironment,
             @Nullable List<JsModuleDescriptor<KotlinJavaScriptLibraryParts>> metadataCache,
-            @Nullable Set<String> librariesToSkip) {
+            @Nullable Set<String> librariesToSkip
+    ) {
         this.project = project;
         this.configuration = configuration.copy();
-        CommonConfigurationKeysKt.setLanguageVersionSettings(this.configuration, new ReleaseCoroutinesDisabledLanguageVersionSettings(
-                CommonConfigurationKeysKt.getLanguageVersionSettings(this.configuration)));
+        this.targetEnvironment = targetEnvironment;
         this.metadataCache = metadataCache;
         this.librariesToSkip = librariesToSkip;
     }
@@ -143,6 +131,11 @@ public class JsConfig {
         return getConfiguration().getList(JSConfigurationKeys.FRIEND_PATHS);
     }
 
+    @NotNull
+    public LanguageVersionSettings getLanguageVersionSettings() {
+        return CommonConfigurationKeysKt.getLanguageVersionSettings(configuration);
+    }
+
     public boolean isAtLeast(@NotNull LanguageVersion expected) {
         LanguageVersion actual = CommonConfigurationKeysKt.getLanguageVersionSettings(configuration).getLanguageVersion();
         return actual.getMajor() > expected.getMajor() ||
@@ -168,33 +161,16 @@ public class JsConfig {
             return false;
         }
 
-        VirtualFileSystem fileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL);
-        VirtualFileSystem jarFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.JAR_PROTOCOL);
-
         Set<String> modules = new HashSet<>();
 
-        boolean skipMetadataVersionCheck = getLanguageVersionSettings(configuration).getFlag(AnalysisFlag.getSkipMetadataVersionCheck());
+        boolean skipMetadataVersionCheck = getLanguageVersionSettings().getFlag(AnalysisFlags.getSkipMetadataVersionCheck());
 
         for (String path : libraries) {
             if (librariesToSkip != null && librariesToSkip.contains(path)) continue;
 
-            VirtualFile file;
-
             File filePath = new File(path);
             if (!filePath.exists()) {
                 report.error("Path '" + path + "' does not exist");
-                return true;
-            }
-
-            if (path.endsWith(".jar") || path.endsWith(".zip")) {
-                file = jarFileSystem.findFileByPath(path + URLUtil.JAR_SEPARATOR);
-            }
-            else {
-                file = fileSystem.findFileByPath(path);
-            }
-
-            if (file == null) {
-                report.error("File '" + path + "' does not exist or could not be read");
                 return true;
             }
 
@@ -207,7 +183,7 @@ public class JsConfig {
             Set<String> moduleNames = new LinkedHashSet<>();
 
             for (KotlinJavascriptMetadata metadata : metadataList) {
-                if (!metadata.getVersion().isCompatible() && !skipMetadataVersionCheck) {
+                if (!metadata.getVersion().isCompatibleWithCurrentCompilerVersion() && !skipMetadataVersionCheck) {
                     report.error("File '" + path + "' was compiled with an incompatible version of Kotlin. " +
                                  "The binary version of its metadata is " + metadata.getVersion() +
                                  ", expected version is " + JsMetadataVersion.INSTANCE);
@@ -239,69 +215,47 @@ public class JsConfig {
     }
 
     @NotNull
-    public List<JsModuleDescriptor<ModuleDescriptorImpl>> getModuleDescriptors() {
+    public List<ModuleDescriptorImpl> getModuleDescriptors() {
         init();
         return moduleDescriptors;
     }
 
     @NotNull
-    private List<JsModuleDescriptor<ModuleDescriptorImpl>> createModuleDescriptors() {
-        List<JsModuleDescriptor<ModuleDescriptorImpl>> moduleDescriptors = new SmartList<>();
-        List<ModuleDescriptorImpl> kotlinModuleDescriptors = new ArrayList<>();
+    private List<ModuleDescriptorImpl> createModuleDescriptors() {
+        List<ModuleDescriptorImpl> moduleDescriptors = new SmartList<>();
         for (KotlinJavascriptMetadata metadataEntry : metadata) {
-            JsModuleDescriptor<ModuleDescriptorImpl> descriptor = createModuleDescriptor(metadataEntry);
-            moduleDescriptors.add(descriptor);
-            kotlinModuleDescriptors.add(descriptor.getData());
+            moduleDescriptors.add(createModuleDescriptor(metadataEntry));
         }
 
         if (metadataCache != null) {
             LanguageVersionSettings languageVersionSettings = CommonConfigurationKeysKt.getLanguageVersionSettings(configuration);
             for (JsModuleDescriptor<KotlinJavaScriptLibraryParts> cached : metadataCache) {
                 ModuleDescriptorImpl moduleDescriptor = new ModuleDescriptorImpl(
-                        Name.special("<" + cached.getName() + ">"), storageManager, JsPlatform.INSTANCE.getBuiltIns()
+                        Name.special("<" + cached.getName() + ">"), storageManager, JsPlatformAnalyzerServices.INSTANCE.getBuiltIns()
                 );
 
-                JsModuleDescriptor<PackageFragmentProvider> rawDescriptor = KotlinJavascriptSerializationUtil.readModuleFromProto(
-                        cached, storageManager, moduleDescriptor,
+                KotlinJavaScriptLibraryParts parts = cached.getData();
+                PackageFragmentProvider provider = KotlinJavascriptPackageFragmentProviderKt.createKotlinJavascriptPackageFragmentProvider(
+                        storageManager, moduleDescriptor, parts.getHeader(), parts.getBody(), parts.getMetadataVersion(),
                         new CompilerDeserializationConfiguration(languageVersionSettings),
                         LookupTracker.DO_NOTHING.INSTANCE
                 );
 
-                PackageFragmentProvider provider = rawDescriptor.getData();
-                moduleDescriptor.initialize(provider != null ? provider : PackageFragmentProvider.Empty.INSTANCE);
-
-                JsModuleDescriptor<ModuleDescriptorImpl> jsModuleDescriptor = cached.copy(moduleDescriptor);
-                moduleDescriptors.add(jsModuleDescriptor);
-                kotlinModuleDescriptors.add(jsModuleDescriptor.getData());
+                moduleDescriptor.initialize(provider);
+                moduleDescriptors.add(moduleDescriptor);
             }
         }
 
-        for (JsModuleDescriptor<ModuleDescriptorImpl> module : moduleDescriptors) {
-            // TODO: remove downcast
-            setDependencies(module.getData(), kotlinModuleDescriptors);
+        for (ModuleDescriptorImpl module : moduleDescriptors) {
+            setDependencies(module, moduleDescriptors);
         }
 
-        moduleDescriptors = Collections.unmodifiableList(moduleDescriptors);
-
-        return moduleDescriptors;
+        return Collections.unmodifiableList(moduleDescriptors);
     }
 
     @NotNull
-    public List<JsModuleDescriptor<ModuleDescriptorImpl>> getFriendModuleDescriptors() {
+    public List<ModuleDescriptorImpl> getFriendModuleDescriptors() {
         init();
-        return friendModuleDescriptors;
-    }
-
-    @NotNull
-    private List<JsModuleDescriptor<ModuleDescriptorImpl>> createFriendModuleDescriptors() {
-        List<JsModuleDescriptor<ModuleDescriptorImpl>> friendModuleDescriptors = new SmartList<>();
-        for (KotlinJavascriptMetadata metadataEntry : friends) {
-            JsModuleDescriptor<ModuleDescriptorImpl> descriptor = createModuleDescriptor(metadataEntry);
-            friendModuleDescriptors.add(descriptor);
-        }
-
-        friendModuleDescriptors = Collections.unmodifiableList(friendModuleDescriptors);
-
         return friendModuleDescriptors;
     }
 
@@ -322,38 +276,37 @@ public class JsConfig {
         }
 
         if (friendModuleDescriptors == null) {
-            friendModuleDescriptors = createFriendModuleDescriptors();
+            friendModuleDescriptors = CollectionsKt.map(friends, this::createModuleDescriptor);
         }
     }
 
-    private final IdentityHashMap<KotlinJavascriptMetadata, JsModuleDescriptor<ModuleDescriptorImpl>> factoryMap = new IdentityHashMap<>();
+    private final IdentityHashMap<KotlinJavascriptMetadata, ModuleDescriptorImpl> factoryMap = new IdentityHashMap<>();
 
-    private JsModuleDescriptor<ModuleDescriptorImpl> createModuleDescriptor(KotlinJavascriptMetadata metadata) {
+    private ModuleDescriptorImpl createModuleDescriptor(KotlinJavascriptMetadata metadata) {
         return factoryMap.computeIfAbsent(metadata, m -> {
             LanguageVersionSettings languageVersionSettings = CommonConfigurationKeysKt.getLanguageVersionSettings(configuration);
-            assert m.getVersion().isCompatible() ||
-                   languageVersionSettings.getFlag(AnalysisFlag.getSkipMetadataVersionCheck()) :
+            assert m.getVersion().isCompatibleWithCurrentCompilerVersion() ||
+                   languageVersionSettings.getFlag(AnalysisFlags.getSkipMetadataVersionCheck()) :
                     "Expected JS metadata version " + JsMetadataVersion.INSTANCE + ", but actual metadata version is " + m.getVersion();
 
             ModuleDescriptorImpl moduleDescriptor = new ModuleDescriptorImpl(
-                    Name.special("<" + m.getModuleName() + ">"), storageManager, JsPlatform.INSTANCE.getBuiltIns()
+                    Name.special("<" + m.getModuleName() + ">"), storageManager, JsPlatformAnalyzerServices.INSTANCE.getBuiltIns()
             );
 
             LookupTracker lookupTracker = configuration.get(CommonConfigurationKeys.LOOKUP_TRACKER, LookupTracker.DO_NOTHING.INSTANCE);
-            JsModuleDescriptor<PackageFragmentProvider> rawDescriptor = KotlinJavascriptSerializationUtil.readModule(
-                    m.getBody(), storageManager, moduleDescriptor,
+            KotlinJavaScriptLibraryParts parts = KotlinJavascriptSerializationUtil.readModuleAsProto(m.getBody(), m.getVersion());
+            PackageFragmentProvider provider = KotlinJavascriptPackageFragmentProviderKt.createKotlinJavascriptPackageFragmentProvider(
+                    storageManager, moduleDescriptor, parts.getHeader(), parts.getBody(), m.getVersion(),
                     new CompilerDeserializationConfiguration(languageVersionSettings),
                     lookupTracker
             );
 
-            PackageFragmentProvider provider = rawDescriptor.getData();
-            moduleDescriptor.initialize(provider != null ? provider : PackageFragmentProvider.Empty.INSTANCE);
-
-            return rawDescriptor.copy(moduleDescriptor);
+            moduleDescriptor.initialize(provider);
+            return moduleDescriptor;
         });
     }
 
     private static void setDependencies(ModuleDescriptorImpl module, List<ModuleDescriptorImpl> modules) {
-        module.setDependencies(CollectionsKt.plus(modules, JsPlatform.INSTANCE.getBuiltIns().getBuiltInsModule()));
+        module.setDependencies(CollectionsKt.plus(modules, JsPlatformAnalyzerServices.INSTANCE.getBuiltIns().getBuiltInsModule()));
     }
 }

@@ -1,4 +1,5 @@
-// !DIAGNOSTICS: -UNUSED_EXPRESSION
+// FIR_IDENTICAL
+// DIAGNOSTICS: -UNUSED_EXPRESSION
 inline public fun reg(converter: (Any) -> Any, flag: Boolean) {
     flag
     converter("")

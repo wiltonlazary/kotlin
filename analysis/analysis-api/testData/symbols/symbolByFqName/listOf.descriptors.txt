@@ -1,0 +1,35 @@
+KtNamedClassOrObjectSymbol:
+  annotationsList: []
+  classIdIfNonLocal: kotlin/io/FileWalkDirection
+  classKind: ENUM_CLASS
+  companionObject: null
+  contextReceivers: []
+  isActual: false
+  isData: false
+  isExpect: false
+  isExternal: false
+  isFun: false
+  isInline: false
+  isInner: false
+  modality: FINAL
+  name: FileWalkDirection
+  origin: LIBRARY
+  superTypes: [
+    KtUsualClassType:
+      annotationsList: []
+      ownTypeArguments: [
+        KtUsualClassType:
+          annotationsList: []
+          ownTypeArguments: []
+          type: kotlin/io/FileWalkDirection
+      ]
+      type: kotlin/Enum<kotlin/io/FileWalkDirection>
+  ]
+  symbolKind: TOP_LEVEL
+  typeParameters: []
+  visibility: Public
+  getContainingFileSymbol: null
+  getContainingModule: Could not render due to kotlin.NotImplementedError: An operation is not implemented: org.jetbrains.kotlin.analysis.api.descriptors.symbols.descriptorBased.KaFe10DescNamedClassOrObjectSymbol
+
+  annotationApplicableTargets: null
+  deprecationStatus: null
